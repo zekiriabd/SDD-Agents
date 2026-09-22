@@ -7,10 +7,16 @@ Ce hook ne juge pas le contenu du run : il vérifie qu'il en reste quelque chose
 
 Trois refus, par ordre de gravité décroissante :
   aucune trace                -> le run n'a pas eu lieu, pour la gate
-  trace présente mais muette  -> ni `run_start` ni `run_end` : on ne peut ni
-                                 mesurer la latence, ni affirmer que le run a fini
-  événements mal formés       -> un champ absent rend la mesure impossible plus tard,
+  trace présente mais muette  -> aucun span racine `sdda.run`, ou pas de fin : on
+                                 ne peut ni mesurer la latence, ni affirmer que
+                                 le run a terminé
+  spans mal formés            -> un champ absent rend la mesure impossible plus tard,
                                  quand plus personne ne saura le reconstituer
+
+Le format attendu est celui des spans OTel-GenAI (`observability/otel-genai.md`),
+le seul que l'application génère. Une trace à l'ancienne grammaire d'événements
+est refusée explicitement plutôt que lue à moitié : elle ne porte ni profondeur
+de délégation, ni agent responsable d'un appel d'outil.
 """
 from __future__ import annotations
 
@@ -36,7 +42,7 @@ def check(root: Path, data: dict) -> int:
     run_id = str(data.get("runId") or data.get("run_id") or "").strip()
     if run_id:
         summaries = [tracing.summarize(tracing.trace_path(root, run_id))]
-        if summaries[0].events == 0:
+        if summaries[0].spans == 0:
             return deny(HOOK, "TRACE_MISSING", f"run `{run_id}` : aucune trace sur disque",
                         "câbler la stack d'observabilité (`observability/*.md`) : un run sans trace "
                         "n'est pas débogable, et son coût n'est pas mesurable (P6)")

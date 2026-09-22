@@ -115,9 +115,18 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
 
 ## STEP 6 — Trace du run, smoke
 
-Chaque run émet : `run_start`, un span par nœud traversé (avec `hops` courant),
-`handoff`, `bound_exceeded`, `run_end` (coût total, tokens, latence, terminal
-atteint). C'est sur ces spans que l'ORCH GATE mesure trajectoires, hops et budget.
+Chaque run émet **un span racine `sdda.run`** qui s'ouvre au début et se ferme à
+la fin — il n'y a pas de couple d'événements `run_start` / `run_end` : la durée
+et le verdict du run sont ceux de ce span. Sous lui, un span par nœud traversé
+(`invoke_agent`, avec `hops` courant), et les bornes atteintes en événements
+`sdda.bound_exceeded` sur le span de l'agent concerné.
+
+**La hiérarchie porte l'information** : un sous-agent est un `invoke_agent`
+enfant, donc la profondeur de délégation se LIT dans l'arbre
+(`observability/otel-genai.md §3.1`). Un `execute_tool` doit être enfant de
+l'`invoke_agent` qui l'a déclenché, sinon l'appel n'est rattaché à aucun agent
+et l'audit de scope (G7) ne peut plus dire de quel périmètre il relevait.
+C'est sur ces spans que l'ORCH GATE mesure trajectoires, hops et budget.
 
 Smoke avec agents **mockés** : le graphe démarre, atteint un terminal sur le
 chemin nominal, et atteint le repli quand on force `hops >= maxHops`. Tu ne
