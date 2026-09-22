@@ -30,7 +30,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
 Exécute (0 token) :
 ```bash
-python .sdda/sdda.py trajectory-report --mission {n} --traces workspace/traces/runs --ir workspace/.sys/.ir/{n}-system.ir.json --out workspace/.sys/.validation/trajectories-{n}.json
+python .sdda/sdda.py trajectory-report --mission {n} --traces workspace/.sys/traces/runs --ir workspace/.sys/.ir/{n}-system.ir.json --out workspace/.sys/.validation/trajectories-{n}.json
 ```
 
 > ⏳ **Planifié** (ROADMAP Lot 5) — `trajectory_report.py` n'existe pas encore.
@@ -46,10 +46,10 @@ matrice de confusion du routeur par classe, séquences d'outils par agent,
 cycles observés et leur longueur.
 
 Read **uniquement** :
-- ce rapport et `workspace/evals/reports/{n}/L5-*.json`, `L7-*.json` ;
+- ce rapport et `workspace/.sys/reports/{n}/L5-*.json`, `L7-*.json` ;
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `agents[].bounds`, `agents[].handoff` ;
-- `workspace/topology/{n}-topology.md` et `.mmd` — le dessin, les justifications P7, l'alternative écartée, le budget estimé ;
-- `workspace/contracts/agents/{n}-*.agent.md §13` — contrats de handoff ;
+- `workspace/feats/topology/{n}-topology.md` et `.mmd` — le dessin, les justifications P7, l'alternative écartée, le budget estimé ;
+- `workspace/feats/contracts/agents/{n}-*.agent.md §13` — contrats de handoff ;
 - `workspace/.sys/.validation/reports/cost-latency-{n}.md` **si présent** — la queue qu'il t'a signalée.
 
 Traces insuffisantes → `[MEASUREMENT_MISSING]`, STOP (même règle que `review-cost`).

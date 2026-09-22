@@ -30,15 +30,15 @@ demo-architect:
   reads:
     - workspace/.sys/.context/packs/demo-architect.md
     - workspace/stack/STACK.md
-    - workspace/missions/{n}-*.md
-    - workspace/caps/{n}-*-*.md
+    - workspace/feats/missions/{n}-*.md
+    - workspace/feats/caps/{n}-*-*.md
   pack_sources:
     - .sdda/docs/pattern-a.md
     - .sdda/docs/pattern-b.md
   pack_policy: |
     Tranché par rôle : il choisit, il n'implémente pas.
   writes:
-    - workspace/topology/{n}-topology.md
+    - workspace/feats/topology/{n}-topology.md
 
 tiny-agent:
   model_tier: fast
@@ -50,7 +50,7 @@ per-agent-dev:
   model_tier: balanced
   budget_bytes: 100000
   reads:
-    - workspace/prompts/{agent}.system.md
+    - workspace/src/prompts/{agent}.system.md
 
 stack-aware-dev:
   model_tier: balanced
@@ -133,7 +133,7 @@ def test_a_pattern_matching_nothing_is_reported_not_silently_dropped(project: Pa
     context_pack.main(["build", "--agent", "demo-architect", "--root", str(project)])
     code, payload = _json(project, ["resolve", "--agent", "demo-architect", "--mission", "9"])
     assert code == 0  # ce n'est pas bloquant : c'est un avertissement, mais il existe
-    assert "workspace/missions/{n}-*.md" in payload["data"]["missing"]
+    assert "workspace/feats/missions/{n}-*.md" in payload["data"]["missing"]
     assert any(w["class"] == "CONFIG_UNKNOWN_KEY" for w in payload["warnings"])
 
 
@@ -161,7 +161,7 @@ def test_unknown_agent_is_an_error_listing_the_known_ones(project: Path) -> None
 def test_the_target_agent_placeholder_is_substituted(project: Path) -> None:
     code, payload = _json(project, ["resolve", "--agent", "per-agent-dev", "--target", "billing-specialist"])
     assert code == 0
-    assert [f["path"] for f in payload["data"]["files"] if "prompts" in f["path"]] == ["workspace/prompts/billing-specialist.system.md"]
+    assert [f["path"] for f in payload["data"]["files"] if "prompts" in f["path"]] == ["workspace/src/prompts/billing-specialist.system.md"]
     assert payload["data"]["widenedPlaceholders"] == []
 
 

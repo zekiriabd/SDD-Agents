@@ -16,7 +16,7 @@ from sdda_lib import paths
 from sdda_scripts import ir_compiler, run_retrieval_eval
 from sdda_scripts.run_retrieval_eval import ReplayExecutor
 
-GOLDEN = "workspace/datasets/golden/contracts-index-v1.jsonl"
+GOLDEN = "workspace/proof/datasets/golden/contracts-index-v1.jsonl"
 
 
 def _golden_items(n: int = 6) -> list[dict]:
@@ -53,7 +53,7 @@ def _ir(root: Path) -> dict:
 
 
 def _replay(root: Path, rows: list[dict]) -> ReplayExecutor:
-    path = root / "workspace/evals/runs/retrieval.jsonl"
+    path = root / "workspace/.sys/reports/runs/retrieval.jsonl"
     _write_jsonl(path, rows)
     return ReplayExecutor.from_file(path)
 
@@ -185,9 +185,9 @@ def test_bypass_downgrades_errors_but_leaves_the_verdict_red_and_audits(project_
 # ---------------------------------------------------------------------------
 def test_cli_json_carries_the_payload(project_with_golden: Path) -> None:
     root = project_with_golden
-    _write_jsonl(root / "workspace/evals/runs/retrieval.jsonl", _perfect())
+    _write_jsonl(root / "workspace/.sys/reports/runs/retrieval.jsonl", _perfect())
     code, out = run_main(run_retrieval_eval.main, [
-        "--root", str(root), "--mission", "1", "--replay", "workspace/evals/runs/retrieval.jsonl",
+        "--root", str(root), "--mission", "1", "--replay", "workspace/.sys/reports/runs/retrieval.jsonl",
         "--retriever", "1-contracts-index", "--json", "--no-report",
     ])
     payload = json.loads(out)

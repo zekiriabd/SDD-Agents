@@ -148,7 +148,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from {AppName}.tools.spec import ToolSpec, ToolDeclaredError
 
-SPEC = ToolSpec.from_contract("1-invoice-lookup")   # lit workspace/contracts/tools/1-invoice-lookup.tool.md → name, description, side_effect_class, trust, timeout_s, errors
+SPEC = ToolSpec.from_contract("1-invoice-lookup")   # lit workspace/feats/contracts/tools/1-invoice-lookup.tool.md → name, description, side_effect_class, trust, timeout_s, errors
 
 
 class InvoiceLookupInput(BaseModel):

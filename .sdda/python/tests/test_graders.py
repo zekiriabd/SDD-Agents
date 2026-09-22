@@ -481,7 +481,7 @@ def test_list_graders_caps_mode_on_fixture(project: Path) -> None:
 
 
 def test_list_graders_caps_mode_flags_unknown_grader(project: Path) -> None:
-    cap = project / "workspace/caps/1-1-ClassifyIntent.md"
+    cap = project / "workspace/feats/caps/1-1-ClassifyIntent.md"
     cap.write_text(cap.read_text(encoding="utf-8").replace("grader: exact", "grader: vibes"), encoding="utf-8")
     code, out = run_main(list_graders.main, ["--caps", "--root", str(project)])
     assert code == 1 and "[AC_GRADER_UNKNOWN]" in out

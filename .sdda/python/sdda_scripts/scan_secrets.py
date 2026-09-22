@@ -18,7 +18,7 @@ Le scan lit des fichiers susceptibles de contenir des secrets. Il n'en recopie
 et la ligne. Un rapport de gate n'est pas gitignoré partout.
 
 Usage :
-    python .sdda/sdda.py scan-secrets --paths workspace/prompts workspace/traces workspace/datasets workspace/src --json
+    python .sdda/sdda.py scan-secrets --paths workspace/src/prompts workspace/.sys/traces workspace/proof/datasets workspace/src --json
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
-DEFAULT_PATHS = ("workspace/prompts", "workspace/traces", "workspace/datasets", "workspace/src")
+DEFAULT_PATHS = ("workspace/src/prompts", "workspace/.sys/traces", "workspace/proof/datasets", "workspace/src")
 
 #: Motifs à préfixe connu — sûrs, quasiment sans faux positif.
 PREFIXED = {

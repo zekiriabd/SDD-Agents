@@ -6,6 +6,7 @@ tier_default: balanced
 tier_floor: balanced
 tier_ceiling: deep
 tools: ["Read", "Glob", "Grep", "Bash", "Write"]
+model: sonnet
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/agents/review-rag.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -40,16 +41,16 @@ Read **uniquement** :
   (`pattern`, `topK`, `gateThresholds`, `indexHash`, `citationMode`) et, quand
   le diagnostic descend jusqu'aux composants, `binding` (`chunk`, `store`,
   `embeddingModel`, `hybridWeights`, `rerank`). Plus `agents[].retrievers`.
-- `workspace/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif de
+- `workspace/feats/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif de
   chunking, config retenue, règle de diagnostic, filtrage par identité.
-- `workspace/evals/reports/{n}/L3-*.json` — retrieval **sans agent** : `recall@k`,
+- `workspace/.sys/reports/{n}/L3-*.json` — retrieval **sans agent** : `recall@k`,
   `nDCG@k`, `context_precision`, `citation_resolve_rate`, **par requête**.
-- `workspace/evals/reports/{n}/L4-*.json`, `L7-*.json` — `groundedness`,
+- `workspace/.sys/reports/{n}/L4-*.json`, `L7-*.json` — `groundedness`,
   `answer_relevance`, `abstention_rate`, **par item**, k runs.
-- `workspace/evals/calibration/*.json` — κ de chaque juge utilisé.
+- `workspace/proof/calibration/*.json` — κ de chaque juge utilisé.
 - `workspace/src/retrieval/*/index.manifest.json` — `indexHash`, config
   effective, nombre de chunks.
-- Un échantillon de spans `retrieval` dans `workspace/traces/runs/` — documents
+- Un échantillon de spans `retrieval` dans `workspace/.sys/traces/runs/` — documents
   retournés et scores.
 
 Rapport L3 absent :

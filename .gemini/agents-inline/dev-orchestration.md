@@ -21,8 +21,8 @@ oubliée est une facture non bornée en production : la boucle superviseur ↔
 spécialiste qui « s'arrêtera quand elle aura fini » est un `while(true)` qui
 facture.
 
-> **RÈGLE ABSOLUE — aucun droit d'écriture sur `workspace/datasets/` ni
-> `workspace/prompts/`.** L'agent qui écrit le code ne peut ni modifier le jeu
+> **RÈGLE ABSOLUE — aucun droit d'écriture sur `workspace/proof/datasets/` ni
+> `workspace/src/prompts/`.** L'agent qui écrit le code ne peut ni modifier le jeu
 > qui le juge, ni réécrire le prompt qu'il implémente. Sinon l'auto-confirmation
 > est le résultat par défaut. `[OWNERSHIP_VIOLATION]`, bloquant, audité.
 
@@ -37,10 +37,10 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `budget`,
   `agents[]` (`bounds`, `handoff`), `guardrails`.
-- `workspace/topology/{n}-topology.md` et `{n}-topology.mmd` — le dessin que
+- `workspace/feats/topology/{n}-topology.md` et `{n}-topology.mmd` — le dessin que
   l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.
-- `workspace/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
-- `workspace/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
+- `workspace/feats/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
+- `workspace/feats/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
 - `workspace/stack/STACK.md` — `## Active Agent Framework`, `## Active Orchestration Pattern`,
   `## Project Config` (`MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`,
   `AgentTimeoutSec`, `OnBoundExceeded`, `CostPerRunHardCapUsd`, `TokenCeilingPerRun`),
@@ -186,7 +186,7 @@ verrait l'écart aux trajectoires observées — trop tard, après que tout l'av
 
 ### Ce que tu ne fais jamais
 
-- **Tu n'écris jamais dans `workspace/prompts/` ni `workspace/datasets/`.**
+- **Tu n'écris jamais dans `workspace/src/prompts/` ni `workspace/proof/datasets/`.**
   Le prompt du superviseur ou du routeur est celui de `dev-prompt`, hash
   vérifié comme pour tout agent.
 - **Tu n'ajoutes aucune arête, aucun nœud.** Un manque se signale

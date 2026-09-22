@@ -89,7 +89,7 @@ Schéma canonique : `.sdda/registry/ir.schema.json`. Structure :
     {
       "id": "1-billing-specialist",
       "servesCaps": ["1-2-ExplainInvoiceLine", "1-4-IssueRefundTicket"],
-      "promptRef": "workspace/prompts/billing-specialist.system.md",
+      "promptRef": "workspace/src/prompts/billing-specialist.system.md",
       "promptHash": "sha256:…",
       "modelTier": "balanced",
       "tools": ["1-invoice-lookup", "1-zendesk-create-ticket"],
@@ -119,7 +119,7 @@ Schéma canonique : `.sdda/registry/ir.schema.json`. Structure :
       "authEnv": "ZENDESK_TOKEN",
       "timeoutSec": 10,
       "trust": "trusted",
-      "contractTestsRef": "workspace/evals/suites/tool-1-zendesk-create-ticket.yaml"
+      "contractTestsRef": "workspace/proof/suites/tool-1-zendesk-create-ticket.yaml"
     }
   ],
 
@@ -165,12 +165,12 @@ Schéma canonique : `.sdda/registry/ir.schema.json`. Structure :
   "evaluation": {
     "suites": [
       { "id": "1-2-groundedness", "level": "L4", "capRef": "1-2-ExplainInvoiceLine",
-        "dataset": "workspace/datasets/golden/billing-v1.jsonl",
-        "grader": "llm-judge", "judgeCalibrationRef": "workspace/evals/calibration/groundedness.json",
+        "dataset": "workspace/proof/datasets/golden/billing-v1.jsonl",
+        "grader": "llm-judge", "judgeCalibrationRef": "workspace/proof/calibration/groundedness.json",
         "threshold": 0.85, "runs": 3 }
     ],
-    "holdout": "workspace/datasets/holdout/mission-1-v1.jsonl",
-    "baselineRef": "workspace/evals/baselines/1-system.json"
+    "holdout": "workspace/proof/datasets/holdout/mission-1-v1.jsonl",
+    "baselineRef": "workspace/proof/baselines/1-system.json"
   },
 
   "traceability": {
@@ -267,4 +267,4 @@ dériver son plan d'appel complet **sans jamais lire `binding`**, et ce plan doi
   reste un fichier lisible et reviewable (P1).
 - Aucun secret — seulement des noms de variables d'environnement.
 - Aucun résultat de mesure — l'IR décrit l'intention ; les résultats vivent dans
-  `workspace/evals/reports/`.
+  `workspace/.sys/reports/`.

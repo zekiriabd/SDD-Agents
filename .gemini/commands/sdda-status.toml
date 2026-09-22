@@ -25,10 +25,10 @@ variance, budget estimé vs mesuré, bypasses actifs, résultats périmés.
 ## STEP 1 — Portée
 
 `{n}` fourni → mode mono-MISSION ; sinon multi (toutes les
-`workspace/missions/*.md`). Si aucune MISSION :
+`workspace/feats/missions/*.md`). Si aucune MISSION :
 
 ```
-Aucune MISSION dans workspace/missions/. Lancer /sdda-mission {Name} pour démarrer.
+Aucune MISSION dans workspace/feats/missions/. Lancer /sdda-mission {Name} pour démarrer.
 ```
 STOP.
 
@@ -104,7 +104,7 @@ Tâches humaines : 3 (2 bloquantes)
   ⚠️ [findings] MISSION 1 — Assumer ou corriger le jaune G5 sur `1-2-ExplainInvoiceLine`
        → corriger puis relancer la gate G5 ; ou l'assumer nominativement par --force
      [labels  ] MISSION 1 — Labelliser 12 item(s) pour le juge `groundedness`
-       → écrire des paires {id, human, judge} dans workspace/datasets/calibration/groundedness-v1.jsonl
+       → écrire des paires {id, human, judge} dans workspace/proof/datasets/calibration/groundedness-v1.jsonl
 ```
 
 Le bloc `Tâches humaines` est la sortie texte de `human_tasks.py`, reprise
@@ -130,14 +130,14 @@ MISSION 1-SupportAssistant                                        Evaluated  �
   prompts     2 · hashés · lint ✅
   épinglage   prompt ✅  model ✅  index ✅  tool_schema ✅  dataset ✅   (frais)
   datasets    golden 120 · holdout 40 · calibration 50 (2 juges : 1 calibré, 1 advisory) · adversarial 41
-  traces      workspace/traces/runs/ — 187 runs · dernier 2026-09-19T14:02Z
+  traces      workspace/.sys/traces/runs/ — 187 runs · dernier 2026-09-19T14:02Z
   bypasses    G5 jaune assumé (--force, 2026-09-19, jdoe, « variance connue, dataset v2 en cours »)
   dernier run 2026-09-19T14:02Z /sdda-build · build_agents items 3/4 pass (routing 🔴)
   rapports    .sys/.validation/1-G0..G7-*.json · evals/reports/1-{run}.md
 
   Tâches humaines : 1 (0 bloquante)
      [labels  ] Labelliser 12 item(s) pour le juge `groundedness`
-       → écrire des paires {id, human, judge} dans workspace/datasets/calibration/groundedness-v1.jsonl
+       → écrire des paires {id, human, judge} dans workspace/proof/datasets/calibration/groundedness-v1.jsonl
 ```
 
 Cas à flagger explicitement (`⚠️`) :
@@ -175,7 +175,7 @@ Déduite de l'état dérivé de la MISSION la plus avancée non `Approved` :
 | `Evaluated` 🟡 | `→ lire les AC jaunes ; livrer maintenant est un pari sur le prochain tirage` |
 | `Blocked` | `→ corriger [{CLASS}] ({rapport}) puis /sdda-full {n} --resume` |
 | stale | `→ /sdda-eval {n} --run-only pour ré-exécuter les résultats périmés` |
-| tout `Approved` | `Pipeline complet. Inspecter workspace/src/ et workspace/evals/reports/.` |
+| tout `Approved` | `Pipeline complet. Inspecter workspace/src/ et workspace/.sys/reports/.` |
 
 ---
 

@@ -122,28 +122,82 @@ SDD-Agents/
 │       │                              #   les câble TOUS, aucune table en dur
 │       └── tests/
 │
-└── workspace/                         # ── LE PROJET ──────────────────────────
-    ├── stack/STACK.md                 # gitignored (secrets en clair)
-    ├── missions/        {n}-{Name}.md
-    ├── caps/            {n}-{m}-{Name}.md
-    ├── topology/        {n}-topology.md   + {n}-topology.mmd (graphe Mermaid)
-    ├── contracts/
-    │   ├── agents/      {n}-{agent}.agent.md
-    │   ├── tools/       {n}-{tool}.tool.md
-    │   ├── retrieval/   {n}-{index}.retrieval.md
-    │   └── memory/      {n}-memory.md
-    ├── prompts/         {agent}.system.md        # hashés, chargés au runtime
-    ├── datasets/        golden/ · holdout/ · calibration/ · adversarial/
-    ├── evals/           suites/ · baselines/ · reports/
-    ├── traces/          runs/{run-id}.jsonl
-    ├── src/             application agentic générée
-    ├── docs/
-    └── .sys/
-        ├── .ir/         {n}-system.ir.json      # Agentic IR compilé depuis les contrats
+└── workspace/                         # ── LE PROJET — quatre entrées, cf. §2.ter
+    │
+    ├── stack/                         # ── CE QU'ON CONFIGURE ─────────────────
+    │   ├── STACK.md                   # gitignored (secrets en clair)
+    │   └── sources/ · topology/       # manifestes VERSIONNÉS (sources, roster)
+    │
+    ├── feats/                         # ── CE QU'ON SPÉCIFIE ──────────────────
+    │   ├── missions/    {n}-{Name}.md
+    │   ├── caps/        {n}-{m}-{Name}.md
+    │   ├── topology/    {n}-topology.md   + {n}-topology.mmd (graphe Mermaid)
+    │   ├── contracts/
+    │   │   ├── agents/      {n}-{agent}.agent.md
+    │   │   ├── tools/       {n}-{tool}.tool.md
+    │   │   ├── retrieval/   {n}-{index}.retrieval.md
+    │   │   ├── memory/      {n}-memory.md
+    │   │   └── dataaccess/schemas/     # schémas figés des sources déclarées
+    │   ├── decisions/  ADR-{ts}-{slug}.md   # UN seul endroit (cf. §2.ter)
+    │   └── briefs/                     # matière première d'une MISSION
+    │
+    ├── src/                           # ── CE QU'ON PRODUIT ───────────────────
+    │   ├── prompts/     {agent}.system.md   # hashés — actif d'EXÉCUTION
+    │   └── {AppName}/                       # l'application agentic générée
+    │
+    ├── proof/                         # ── CE QUI JUGE ────────────────────────
+    │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/
+    │   ├── suites/      les suites d'évaluation
+    │   ├── baselines/   la référence de non-régression
+    │   └── calibration/ κ de chaque juge LLM
+    │                    # AUCUN `dev-*` n'écrit ici. Jamais.
+    │
+    └── .sys/                          # ── ÉTAT INTERNE ET SORTIES DE RUN ─────
+        ├── .ir/         {n}-system.ir.json  # Agentic IR compilé depuis les contrats
         ├── .context/ · .state/ · .validation/ · .audit/
-        └── workspace.json                       # workspaceVersion — écrit par bootstrap,
-                                                 #   monté par sdda_scripts/migrate_workspace.py
+        ├── reports/     {n}-{run-id}.json   # rapports d'eval
+        ├── traces/runs/ {run-id}.jsonl
+        └── workspace.json                   # workspaceVersion — écrit par bootstrap,
+                                             #   monté par sdda_scripts/migrate_workspace.py
 ```
+
+### 2.ter Quatre entrées, quatre natures
+
+L'arbre a porté douze répertoires au même niveau. Rien n'y disait qu'ils ne sont
+pas de même nature : un lecteur voyait `caps/` et `traces/` côte à côte sans
+pouvoir deviner que l'un se relit en revue et que l'autre se supprime sans
+perte.
+
+| Entrée | Nature | Écrite par | Régénérable |
+|---|---|---|---|
+| `stack/` | configuration | l'humain | non |
+| `feats/` | **spécification** — l'ENTRÉE de la génération | humain, PO, architectes | non |
+| `src/` | code généré, prompts compris | les six `dev-*`, `qa-tests` | oui |
+| `proof/` | **ce qui juge** | `qa-evals` et les scripts, **jamais** un `dev-*` | non |
+| `.sys/` | état interne et sorties de run | les scripts | oui |
+
+**La seule frontière qui ne souffre aucune exception est celle de `proof/`.**
+L'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni à la
+référence contre laquelle sa régression est mesurée. Ranger ces jeux sous
+`src/` les ferait tomber dans la zone d'écriture des six agents développeurs, et
+il faudrait creuser une exception à l'intérieur de leur propre périmètre. Une
+exception dans un glob d'ownership est une exception qu'on oublie.
+
+Deux conséquences se lisent directement dans l'arbre :
+
+- **Les prompts sont sous `src/`** parce qu'un prompt système est un actif
+  d'exécution. Rangé au même rang que les specs, il ne part pas avec le code :
+  l'application livrée en exécutable ou en conteneur cherchait ses prompts dans
+  un répertoire resté dans le dépôt.
+- **Les ADR ont UN emplacement**, `feats/decisions/`. Ils en avaient deux —
+  `docs/adr/` que citait le gabarit, `.sys/.context/adrs/` que déclarait la
+  matrice d'ownership — et le script des tâches humaines cherchait dans les
+  deux. La question « cet ADR a-t-il été écrit ? » avait donc deux réponses
+  possibles, et c'est celle que personne ne relisait qui gouvernait.
+
+Un workspace d'une version antérieure monte par
+`python .sdda/sdda.py migrate-workspace`, qui **déplace** le contenu plutôt que
+de créer le nouvel arbre à côté de l'ancien.
 
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
 annoncé, pas encore écrit. La règle vaut surtout pour `stacks/` —
@@ -226,12 +280,12 @@ compilée, régénérable, jamais éditée à la main. Détail et schéma :
 ## 3. Le pipeline forward
 
 ```
- PHASE 0   ELICITATION        po-elicitor            -> missions/{n}-{Name}.md
+ PHASE 0   ELICITATION        po-elicitor            -> feats/missions/{n}-{Name}.md
    |                                                         [MISSION GATE]
- PHASE 1   CAPABILITIES       po-capabilities        -> caps/{n}-{m}-*.md
+ PHASE 1   CAPABILITIES       po-capabilities        -> feats/caps/{n}-{m}-*.md
    |                                                         [CAP GATE]
- PHASE 2   TOPOLOGIE          architect-topology          -> topology/{n}-topology.md
-   |         + architect-rag, architect-data,          + contracts/**
+ PHASE 2   TOPOLOGIE          architect-topology          -> feats/topology/{n}-topology.md
+   |         + architect-rag, architect-data,          + feats/contracts/**
    |           architect-memory, architect-tools  (parallèle)
    | PHASE 2.9 COMPILATION IR  ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
    |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
@@ -374,21 +428,21 @@ artefacts agentic. Extrait :
 
 | Chemin | Owner exclusif | Mode |
 |---|---|---|
-| `workspace/missions/{n}-*.md` | `po-elicitor` | Create puis append-only |
-| `workspace/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) |
-| `workspace/topology/{n}-*.md` | `architect-topology` | Create exclusif |
-| `workspace/contracts/tools/*` | `architect-tools` | Create exclusif |
-| `workspace/contracts/retrieval/*` | `architect-rag` | Create exclusif |
-| `workspace/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif |
+| `workspace/feats/missions/{n}-*.md` | `po-elicitor` | Create puis append-only |
+| `workspace/feats/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) |
+| `workspace/feats/topology/{n}-*.md` | `architect-topology` | Create exclusif |
+| `workspace/feats/contracts/tools/*` | `architect-tools` | Create exclusif |
+| `workspace/feats/contracts/retrieval/*` | `architect-rag` | Create exclusif |
+| `workspace/src/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif |
 | `workspace/src/**/agents/{agent}/**` | `dev-agent` (1 instance par agent) | Edit-augment exclusif |
 | `workspace/src/**/tools/**` | `dev-tools` | Edit-augment exclusif |
 | `workspace/src/**/retrieval/**` | `dev-retrieval` | Edit-augment exclusif |
 | `workspace/src/**/orchestration/**` | `dev-orchestration` | Create + Edit exclusif |
-| `workspace/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
-| `workspace/evals/baselines/**` | script déterministe uniquement | Write atomique |
+| `workspace/proof/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
+| `workspace/proof/baselines/**` | script déterministe uniquement | Write atomique |
 
 > **Règle critique, propre à l'agentic** : `dev-agent` n'a **aucun** droit
-> d'écriture sur `workspace/datasets/` ni sur `workspace/prompts/`. L'agent qui
+> d'écriture sur `workspace/proof/datasets/` ni sur `workspace/src/prompts/`. L'agent qui
 > écrit le code ne peut ni modifier le jeu qui le juge, ni réécrire le prompt qu'il
 > est censé implémenter. Sans cette séparation, l'auto-confirmation est garantie —
 > c'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de SDD_Pro.
@@ -409,7 +463,7 @@ est ce qu'il **sait faire**. Détail : `rules/ownership.md §2.2`.
 ## 8. Observabilité : artefact de première classe
 
 Tout run — de construction comme d'exécution du produit — émet une trace de spans
-**OTel-GenAI** dans `workspace/traces/runs/{run-id}.jsonl`, une ligne par span :
+**OTel-GenAI** dans `workspace/.sys/traces/runs/{run-id}.jsonl`, une ligne par span :
 tour d'agent, appel d'outil (args redigés), requête de retrieval (+ documents
 retournés + scores), appel LLM (modèle, tokens in/out/cache, coût, latence),
 franchissement de gate.
@@ -454,7 +508,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->370<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->378<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

@@ -6,6 +6,7 @@ tier_default: balanced
 tier_floor: fast
 tier_ceiling: balanced
 tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+model: sonnet
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/agents/dev-api.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -39,7 +40,7 @@ Read **uniquement** :
 - `workspace/stack/STACK.md` — `## Active Serving Surface` (`ServingLocalPort`,
   `StreamingEnabled`, `HumanInTheLoopEnabled`), `## Active Language & Runtime`,
   `## Active Observability`, `## Active Secrets` (**noms**).
-- `workspace/missions/{n}-*.md` — `## Actors` : qui appelle, avec quelle identité.
+- `workspace/feats/missions/{n}-*.md` — `## Actors` : qui appelle, avec quelle identité.
 - `.sdda/stacks/serving/{surface}.md` + `.libs.json`, `.sdda/stacks/lang/{lang}.md`.
 - `workspace/src/orchestration/**` — **en lecture** : le point d'entrée du run.
 - `workspace/src/serving/**` existant — Edit-augment.
@@ -86,7 +87,7 @@ acteur anonyme, et alors l'identité est explicitement `anonymous`, filtrée com
   un message utilisateur **issu de la Failure Policy** — pas une stack trace,
   pas un « something went wrong ».
 - `run_id` est retourné à l'appelant ; la trace complète du run est dans
-  `workspace/traces/runs/{run-id}.jsonl` selon `TracePIIPolicy`. Une surface
+  `workspace/.sys/traces/runs/{run-id}.jsonl` selon `TracePIIPolicy`. Une surface
   qui ne rend pas le `run_id` rend le système non débogable depuis l'extérieur.
 - Aucun secret dans les logs, les en-têtes de réponse, les messages d'erreur.
 
@@ -128,7 +129,7 @@ schéma + `run_id` ; requête sans identité → refus ; run qui lève
 - **Tu n'appelles jamais un outil, un retriever ou un LLM directement.** Tout
   passe par le run d'orchestration ; une surface qui « raccourcit » contourne
   toutes les bornes et tous les guardrails.
-- **Tu n'écris ni dans `workspace/prompts/`, ni dans `workspace/datasets/`.**
+- **Tu n'écris ni dans `workspace/src/prompts/`, ni dans `workspace/proof/datasets/`.**
 - **Tu n'introduis aucun mode « debug » qui désactive l'identité** ou le
   schéma, même derrière un flag.
 

@@ -50,7 +50,7 @@ FIX: recloner le dépôt depuis le template SDD_Agents (intact), vérifier Pytho
 
 ## STEP 2 — Détection de l'état du projet
 
-Glob `workspace/missions/*.md` et test `workspace/stack/STACK.md` :
+Glob `workspace/feats/missions/*.md` et test `workspace/stack/STACK.md` :
 
 | État | Conditions | Action |
 |---|---|---|
@@ -98,7 +98,7 @@ Lancer : python bootstrap.py --force
 
 **Cas partial :**
 ```
-🟡 [BOOTSTRAP/WARN] {M} MISSION(s) dans workspace/missions/ mais aucun STACK.md.
+🟡 [BOOTSTRAP/WARN] {M} MISSION(s) dans workspace/feats/missions/ mais aucun STACK.md.
 Toutes les commandes du pipeline émettront [STACK_MISSING].
 Lancer : python bootstrap.py (sans --force : les MISSIONs sont conservées)
 ```

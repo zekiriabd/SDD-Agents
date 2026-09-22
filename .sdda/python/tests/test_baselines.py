@@ -24,7 +24,7 @@ FIXED_AT = "2026-09-20T10:00:00Z"
 sid_routing = "1-1-routing_accuracy"
 sid_citations = "1-2-citation_resolve_rate"
 sid_groundedness = "1-2-groundedness"
-BASELINE = "workspace/evals/baselines/1-system.json"
+BASELINE = "workspace/proof/baselines/1-system.json"
 
 
 class ScoredExecutor:
@@ -58,7 +58,7 @@ def _promote(root: Path, *extra: str) -> tuple[int, str]:
 
 
 def _edit_prompt(root: Path, slug: str = "intent-classifier") -> None:
-    p = root / f"workspace/prompts/{slug}.system.md"
+    p = root / f"workspace/src/prompts/{slug}.system.md"
     p.write_text(p.read_text(encoding="utf-8") + "\nUne ligne de plus.\n", encoding="utf-8")
 
 
@@ -87,7 +87,7 @@ def test_promote_green_writes_baseline_atomically_with_pins_and_label(compiled) 
     entry = raw["baselines"][sid_routing]
     assert entry["label"] == "après correction du chunking" and entry["verdict"] == "green" and entry["forced"] is False
     assert entry["pins"] == next(s for s in payload["suites"] if s["suiteId"] == sid_routing)["pins"]
-    assert entry["sourceReport"] == "workspace/evals/reports/1-G.json" and entry["pinDigest"].startswith("sha256:")
+    assert entry["sourceReport"] == "workspace/.sys/reports/1-G.json" and entry["pinDigest"].startswith("sha256:")
     loaded = load_baselines(bpath)
     assert loaded[sid_routing].mean == 1.0 and loaded[sid_routing].pins.promptHash.startswith("sha256:")
 
@@ -185,7 +185,7 @@ def test_edited_dataset_moves_the_dataset_dimension(compiled) -> None:
     root, ir = compiled
     _run(root, ir, 1.0, "G")
     assert _promote(root, "--run", "G", "--label", "base")[0] == 0
-    ds = root / "workspace/datasets/golden/billing-v1.jsonl"
+    ds = root / "workspace/proof/datasets/golden/billing-v1.jsonl"
     ds.write_text(ds.read_text(encoding="utf-8") + json.dumps({"id": "billing-new", "input": {"question": "?"}, "expected": {"answer_contains": "x"}}) + "\n", encoding="utf-8")
     code, out = run_main(check_baseline_freshness.main, ["--root", str(root), "--mission", "1"])
     assert code == 1 and "[EVAL_BASELINE_STALE]" in out and "datasetHash" in out and sid_citations in out
@@ -195,7 +195,7 @@ def test_reordering_a_dataset_does_not_stale_the_baseline(compiled) -> None:
     root, ir = compiled
     _run(root, ir, 1.0, "G")
     assert _promote(root, "--run", "G", "--label", "base")[0] == 0
-    ds = root / "workspace/datasets/golden/routing-v1.jsonl"
+    ds = root / "workspace/proof/datasets/golden/routing-v1.jsonl"
     lines = [l for l in ds.read_text(encoding="utf-8").splitlines() if l.strip()]
     ds.write_text("\n".join(reversed(lines)) + "\n", encoding="utf-8")
     code, out = run_main(check_baseline_freshness.main, ["--root", str(root), "--mission", "1"])
@@ -283,15 +283,15 @@ def test_regression_honours_metric_direction(compiled) -> None:
     root, ir = compiled
     pins = {"promptHash": "sha256:" + "a" * 64, "modelId": "m", "indexHash": "", "toolSchemaHash": "", "datasetHash": "sha256:" + "b" * 64}
     ir["evaluation"]["suites"] = [
-        {"id": "lat", "level": "L7", "dataset": "workspace/datasets/golden/billing-v1.jsonl", "grader": "latency", "threshold": "<= 300", "runs": 3},
-        {"id": "acc", "level": "L7", "dataset": "workspace/datasets/golden/billing-v1.jsonl", "grader": "exact", "threshold": ">= 0.9", "runs": 3},
+        {"id": "lat", "level": "L7", "dataset": "workspace/proof/datasets/golden/billing-v1.jsonl", "grader": "latency", "threshold": "<= 300", "runs": 3},
+        {"id": "acc", "level": "L7", "dataset": "workspace/proof/datasets/golden/billing-v1.jsonl", "grader": "exact", "threshold": ">= 0.9", "runs": 3},
     ]
     paths.ir_path(root, 1).write_bytes(ir_compiler.dump_ir(ir))
     atomic_write_json(root / BASELINE, {"baselines": {
         "lat": {"metric": "latency_ms", "mean": 200.0, "stddev": 0, "pass_rate": 1, "verdict": "green", "pins": pins},
         "acc": {"metric": "accuracy", "mean": 1.0, "stddev": 0, "pass_rate": 1, "verdict": "green", "pins": pins},
     }})
-    report = root / "workspace/evals/reports/1-DIR.json"
+    report = root / "workspace/.sys/reports/1-DIR.json"
     atomic_write_json(report, {"missionId": "1-SupportAssistant", "runId": "DIR", "suites": [
         {"suiteId": "lat", "metric": "latency_ms", "mean": 180.0, "threshold": "<= 300", "pins": pins, "advisory": False},
         {"suiteId": "acc", "metric": "accuracy", "mean": 0.9, "threshold": ">= 0.9", "pins": pins, "advisory": False},
@@ -307,13 +307,13 @@ def _pins_and_baseline(root: Path, ir, *, stddev: float) -> dict:
     """Une baseline `acc` à 1.0 avec l'écart-type demandé, et un rapport à 0.95 (-5 %)."""
     pins = {"promptHash": "sha256:" + "a" * 64, "modelId": "m", "indexHash": "", "toolSchemaHash": "", "datasetHash": "sha256:" + "b" * 64}
     ir["evaluation"]["suites"] = [
-        {"id": "acc", "level": "L7", "dataset": "workspace/datasets/golden/billing-v1.jsonl", "grader": "exact", "threshold": ">= 0.9", "runs": 3},
+        {"id": "acc", "level": "L7", "dataset": "workspace/proof/datasets/golden/billing-v1.jsonl", "grader": "exact", "threshold": ">= 0.9", "runs": 3},
     ]
     paths.ir_path(root, 1).write_bytes(ir_compiler.dump_ir(ir))
     atomic_write_json(root / BASELINE, {"baselines": {
         "acc": {"metric": "accuracy", "mean": 1.0, "stddev": stddev, "pass_rate": 1, "verdict": "green", "pins": pins},
     }})
-    atomic_write_json(root / "workspace/evals/reports/1-NOISE.json", {"missionId": "1-SupportAssistant", "runId": "NOISE", "suites": [
+    atomic_write_json(root / "workspace/.sys/reports/1-NOISE.json", {"missionId": "1-SupportAssistant", "runId": "NOISE", "suites": [
         {"suiteId": "acc", "metric": "accuracy", "mean": 0.95, "threshold": ">= 0.9", "pins": pins, "advisory": False},
     ]})
     return pins

@@ -12,7 +12,7 @@ import pytest
 
 from sdda_lib.mermaid import MermaidEdge, parse
 
-FIXTURE = Path(__file__).resolve().parent / "fixtures/project_ok/workspace/topology/1-topology.mmd"
+FIXTURE = Path(__file__).resolve().parent / "fixtures/project_ok/workspace/feats/topology/1-topology.mmd"
 
 
 def edges_of(text: str) -> list[tuple[str, str, str]]:

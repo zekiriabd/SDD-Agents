@@ -89,6 +89,23 @@ harnesses:
       mcp: native
       structured_output: native
     memory_file: CLAUDE.md
+    # Tier déclaré par l'agent -> SÉLECTEUR DE MODÈLE DU HARNAIS.
+    #
+    # Distinct de `tier_map` des providers, et volontairement : `.sdda/providers/*.yaml`
+    # résout un tier vers un *identifiant d'API* pour les modèles du PRODUIT, quand
+    # ce bloc résout le même tier vers le mot que le HARNAIS accepte dans le
+    # frontmatter d'un sous-agent (ARCHITECTURE §6 : harness, build models et
+    # runtime models sont trois choses indépendantes).
+    #
+    # Sans ce bloc, `harness_build` n'émettait que `model_tier:`, que Claude Code
+    # ne lit pas : les 22 agents héritaient tous du modèle du fil parent. Le
+    # mécanisme de tiers existait, était testé, borné par agent-bounds.yaml — et
+    # ne changeait aucun appel. Un `fast` facturé au prix d'un `deep` ne se voit
+    # sur aucune gate, seulement sur la facture.
+    tier_models:
+      deep: opus
+      balanced: sonnet
+      fast: haiku
     notes: |
       Harnais de référence. Toutes les gates s'appliquent au runtime. Les mesures
       de coût et de latence du pipeline de construction sont calibrées ici.

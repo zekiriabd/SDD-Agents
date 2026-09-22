@@ -1,0 +1,48 @@
+# GÉNÉRÉ par gen_app_skeleton.py — ne pas éditer à la main.
+#
+# Les dépendances sont AJOUTÉES par les stacks actives (`uv add --project …`,
+# blocs CORE_PACKAGES des fiches), jamais écrites ici : une liste tenue à deux
+# endroits diverge, et c'est `uv.lock` que la gate compare aux `.libs.json`.
+# Ce fichier ne porte que ce qui ne dépend d'aucune stack — l'identité du
+# paquet et son point d'entrée console.
+
+[project]
+name = "{AppName}"
+version = "0.1.0"
+description = "{AppName} — application agentic générée par SDD_Agents."
+requires-python = ">=3.12"
+dependencies = []
+
+# Le livrable par défaut est `cli-exe` : un programme qu'on lance, une entrée,
+# une sortie, un code de retour. C'est aussi la surface que le runner d'eval
+# invoque en L5/L7 — donc ce qu'on mesure est ce qu'on livre.
+[project.scripts]
+{AppName} = "{AppName}.serving.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{AppName}"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+# `T20` (print) : la sortie machine passe par `sys.stdout.write` en NDJSON, et
+# le diagnostic par `stderr`. Un `print` égaré casse le contrat `--json`.
+select = ["E", "F", "I", "B", "ASYNC", "S", "T20"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "network: exige une dépendance joignable ; exclu du smoke",
+  "eval: suite d'évaluation (k runs) ; jamais relancée sur échec — cela masquerait la variance",
+]

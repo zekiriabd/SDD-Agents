@@ -74,7 +74,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import hashing, paths, tracing  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_json, now_iso, run_id_now  # noqa: E402
-from sdda_scripts._common import add_common_args, ensure_utf8_stdout, resolve_root  # noqa: E402
+from sdda_scripts._common import add_common_args, ensure_utf8_stdout, load_config, resolve_root  # noqa: E402
 
 #: Les phases canoniques du pipeline, DANS L'ORDRE. C'est cette liste que
 #: `/sdda-full --resume` parcourt ; elle est la seule définition de « avant » et
@@ -345,6 +345,43 @@ def item_statuses(run: dict[str, Any], phase: str) -> dict[str, dict[str, Any]]:
             out[item] = {"status": str(event.get("status") or ""),
                          "inputsHash": event.get("inputsHash"), "at": event.get("at")}
     return out
+
+
+def item_attempts(run: dict[str, Any], phase: str, item: str) -> int:
+    """Nombre de tentatives déjà enregistrées pour cet item, verdicts compris."""
+    canonical = canonical_phase(phase)
+    return sum(1 for e in (run.get("items") or [])
+               if canonical_phase(str(e.get("phase") or "")) == canonical
+               and str(e.get("item") or "") == item)
+
+
+def should_retry_item(run: dict[str, Any], phase: str, item: str, *,
+                      max_iter: int, max_cost_usd: float) -> tuple[bool, str, str]:
+    """(rejouer ?, classe, raison) — la boucle `build_loop`, appliquée.
+
+    `BuildLoopMaxIter` et `BuildLoopMaxCostUsd` existaient dans `config.base.yml`
+    et dans la prose du prompt envoyé à l'agent. Aucun script ne les lisait :
+    la borne était donc tenue par le modèle qu'elle est censée borner, ce qui
+    n'est pas une borne mais une suggestion. Une boucle de correction qui
+    s'emballe ne se voit pas dans les gates — toutes finissent par passer — elle
+    se voit sur la facture, après.
+
+    Trois conditions d'arrêt, dans l'ordre de `budget-and-loop.md §6` : succès,
+    itérations épuisées, budget épuisé. Le succès est traité par l'appelant
+    (`should_skip_item`), les deux autres ici.
+    """
+    attempts = item_attempts(run, phase, item)
+    if attempts >= max_iter:
+        return False, "BUILD_LOOP_EXHAUSTED", (
+            f"`{item}` : {attempts} tentative(s) pour un plafond BuildLoopMaxIter={max_iter}. "
+            "Relancer à l'identique achète le même échec : corriger la cause (contrat, prompt, "
+            "borne) fait repartir le compteur d'un run neuf")
+    spent = float(run.get("costUsd") or 0.0)
+    if max_cost_usd > 0 and spent >= max_cost_usd:
+        return False, "BUILD_LOOP_BUDGET_EXHAUSTED", (
+            f"`{item}` : ${spent:.2f} cumulés sur le run pour un plafond BuildLoopMaxCostUsd="
+            f"${max_cost_usd:.2f}")
+    return True, "", f"{attempts} tentative(s) sur {max_iter}"
 
 
 def should_skip_item(run: dict[str, Any], phase: str, item: str, inputs_hash: str | None) -> tuple[bool, str]:
@@ -618,6 +655,15 @@ def build_parser() -> argparse.ArgumentParser:
     skipi.add_argument("--inputs-hash", default=None, help="hash courant des entrées ; sans lui, un pass sans hash suffit")
     add_common_args(skipi)
 
+    retry = sub.add_parser("should-retry-item",
+                           help="exit 0 = une nouvelle tentative est autorisée, exit 1 = build_loop épuisé")
+    retry.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
+    retry.add_argument("--phase", required=True)
+    retry.add_argument("--item", required=True)
+    retry.add_argument("--max-iter", type=int, default=None, help="défaut : BuildLoopMaxIter du Project Config")
+    retry.add_argument("--max-cost-usd", type=float, default=None, help="défaut : BuildLoopMaxCostUsd")
+    add_common_args(retry)
+
     done = sub.add_parser("done-items", help="écrire les items `pass` d'une phase, un par ligne")
     done.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
     done.add_argument("--phase", required=True)
@@ -747,7 +793,7 @@ def main(argv: list[str] | None = None) -> int:
             print(digest)
         return 0
 
-    if args.cmd in ("set-item", "should-skip-item", "done-items"):
+    if args.cmd in ("set-item", "should-skip-item", "should-retry-item", "done-items"):
         rid = _resolve_run_id(args, root)
         run = load_run(root, rid) if rid else None
         if run is None:
@@ -772,6 +818,26 @@ def main(argv: list[str] | None = None) -> int:
                            inputs_hash=args.inputs_hash, payload=payload)
             summary = run_summary(root, run)
             print(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True) if args.json else render_run_line(summary))
+            return 0
+
+        if args.cmd == "should-retry-item":
+            config = load_config(root, report)
+            max_iter = args.max_iter if args.max_iter is not None else (config.get_int("BuildLoopMaxIter", 3) if config else 3)
+            max_cost = args.max_cost_usd if args.max_cost_usd is not None else (
+                config.get_float("BuildLoopMaxCostUsd", 15.0) if config else 15.0)
+            allowed, cls, why = should_retry_item(run, args.phase, args.item,
+                                                  max_iter=max_iter, max_cost_usd=max_cost)
+            if not allowed:
+                report.error(cls, why,
+                             "corriger la CAUSE avant de relancer — la boucle s'arrête à la première des "
+                             "trois conditions : succès, itérations épuisées, budget épuisé "
+                             "(budget-and-loop.md §6)", f"{args.phase}/{args.item}")
+                return _fail(report, args)
+            if args.json:
+                print(json.dumps({"runId": run["runId"], "phase": args.phase, "item": args.item,
+                                  "retry": True, "reason": why}, ensure_ascii=False, sort_keys=True))
+            else:
+                sys.stderr.write(f"[state] {args.phase}/{args.item} : RETRY autorisé — {why}\n")
             return 0
 
         if args.cmd == "should-skip-item":

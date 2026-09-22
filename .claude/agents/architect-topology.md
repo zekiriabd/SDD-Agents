@@ -1,11 +1,12 @@
 ---
 name: architect-topology
-description: Matérialise l'architecture DÉCLARÉE PAR L'ARCHITECTE dans `## 2. Roster déclaré` — il ne choisit ni le nombre d'agents, ni leurs rôles, ni le pattern. Vérifie la complétude de la déclaration pour le pattern actif de STACK.md, alloue les CAPs au roster déclaré, dessine le graphe, borne, estime le budget, produit les contrats. Lit workspace/missions/{n}-*.md, workspace/caps/{n}-*-*.md et le roster ; écrit workspace/topology/{n}-topology.md et {n}-topology.mmd.
+description: Matérialise l'architecture DÉCLARÉE PAR L'ARCHITECTE dans `## 2. Roster déclaré` — il ne choisit ni le nombre d'agents, ni leurs rôles, ni le pattern. Vérifie la complétude de la déclaration pour le pattern actif de STACK.md, alloue les CAPs au roster déclaré, dessine le graphe, borne, estime le budget, produit les contrats. Lit workspace/feats/missions/{n}-*.md, workspace/feats/caps/{n}-*-*.md et le roster ; écrit workspace/feats/topology/{n}-topology.md et {n}-topology.mmd.
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
 tier_ceiling: deep
 tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+model: opus
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/agents/architect-topology.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -55,8 +56,8 @@ FIX: relancer /sdda-topology {n} avec n entier
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/missions/{n}-*.md` — 1 fichier. 0 → `[MISSION_NOT_FOUND]`, >1 → `[MISSION_AMBIGUOUS]`.
-- `workspace/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
+- `workspace/feats/missions/{n}-*.md` — 1 fichier. 0 → `[MISSION_NOT_FOUND]`, >1 → `[MISSION_AMBIGUOUS]`.
+- `workspace/feats/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
 - `workspace/stack/STACK.md` — sections `## Active Agent Framework`,
   `## Active Orchestration Pattern`, `## Active RAG Pattern`,
   `## Active Data Access`, `## Runtime Models`, `## Project Config`,
@@ -187,7 +188,7 @@ Règles dures :
 
 ## STEP 6 — Dessiner le graphe
 
-Écrire `workspace/topology/{n}-topology.mmd` (Mermaid `flowchart TD`) :
+Écrire `workspace/feats/topology/{n}-topology.mmd` (Mermaid `flowchart TD`) :
 tous les nœuds, toutes les arêtes, les conditions, le nœud d'entrée, les nœuds
 terminaux, le chemin de repli.
 
@@ -216,13 +217,21 @@ Défauts hérités de `STACK.md`. Les desserrer est une décision, pas un réfle
 
 ## STEP 8 — Estimer le budget, avant toute génération
 
-Exécute (0 token) :
-```bash
-python .sdda/sdda.py estimate-budget --feat-number {n} --from-draft
-```
+**Ici tu estimes à la main, et c'est voulu.** `estimate-budget` travaille sur
+l'IR, qui n'existe pas encore : il est compilé en PHASE 2.9, après les quatre
+architectes. Ton chiffre est donc une **HYPOTHÈSE** au sens d'ARCHITECTURE §5,
+pas un fait — et c'est précisément pour cela qu'il doit être écrit maintenant :
+un budget qu'on découvre après avoir payé les contrats, les prompts et les
+agents ne sert plus à décider, seulement à constater.
 
 Remplis le tableau §5 du template : chemin **nominal** et **pire cas**
-(`maxHops` atteint), en appels LLM, tokens, coût, latence.
+(`maxHops` atteint), en appels LLM, tokens, coût, latence. Parcours le graphe
+que tu viens de dessiner, agent par agent, et compte les appels.
+
+Le fait viendra après toi, sans toi : `python .sdda/sdda.py estimate-budget
+--mission {n}` s'exécute sur l'IR compilé et écrit la part `budget` de G2. S'il
+contredit ton estimation, c'est lui qui a raison — et l'écart est une
+information sur ton modèle mental, pas une erreur du script.
 
 Compare au budget déclaré dans la MISSION :
 
@@ -260,7 +269,7 @@ même quand elle ne change rien.
 
 ## STEP 10 — Produire les contrats
 
-Écrire `workspace/topology/{n}-topology.md` depuis le template, puis remplir le
+Écrire `workspace/feats/topology/{n}-topology.md` depuis le template, puis remplir le
 champ `Allocated To` de chaque CAP (Edit ciblé, tu es l'owner de ce champ).
 
 Déclarer les contrats à produire par les agents de la phase 2 en parallèle :

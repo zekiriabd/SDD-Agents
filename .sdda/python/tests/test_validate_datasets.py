@@ -19,10 +19,10 @@ def test_project_ok_datasets_are_valid(project: Path) -> None:
     assert code == 0, out
     data = json.loads(out)
     assert data["data"]["holdoutOverlaps"] == 0
-    assert set(data["data"]["itemCounts"]) >= {"workspace/datasets/golden/billing-v1.jsonl", "workspace/datasets/holdout/mission-1-v1.jsonl"}
+    assert set(data["data"]["itemCounts"]) >= {"workspace/proof/datasets/golden/billing-v1.jsonl", "workspace/proof/datasets/holdout/mission-1-v1.jsonl"}
     rep = json.loads((paths.validation_dir(project) / "G8-1-SupportAssistant.datasets.json").read_text(encoding="utf-8"))
     assert rep["ok"] and rep["part"] == "datasets"
-    assert "dataset:workspace/datasets/holdout/mission-1-v1.jsonl" in rep["pinnedHashes"]
+    assert "dataset:workspace/proof/datasets/holdout/mission-1-v1.jsonl" in rep["pinnedHashes"]
 
 
 def test_golden_holdout_overlap_by_input_hash_is_rejected(tmp_path: Path) -> None:
@@ -53,7 +53,7 @@ def test_dataset_below_minimum_size_is_rejected(project: Path) -> None:
 
 
 def test_invalid_item_is_rejected(project: Path) -> None:
-    ds = project / "workspace/datasets/golden/routing-v1.jsonl"
+    ds = project / "workspace/proof/datasets/golden/routing-v1.jsonl"
     with ds.open("a", encoding="utf-8") as fh:
         fh.write('{"id": "BAD ID", "input": {"question": "x"}}\n')
         fh.write("ceci n'est pas du JSON\n")
@@ -63,7 +63,7 @@ def test_invalid_item_is_rejected(project: Path) -> None:
 
 
 def test_duplicate_id_is_rejected(project: Path) -> None:
-    ds = project / "workspace/datasets/golden/routing-v1.jsonl"
+    ds = project / "workspace/proof/datasets/golden/routing-v1.jsonl"
     with ds.open("a", encoding="utf-8") as fh:
         fh.write('{"id": "routing-billing-001", "input": {"question": "Une toute autre question"}, "expected": {"intent": "billing"}, "metadata": {"source": "synthetic", "difficulty": "easy", "class": "billing"}}\n')
     code, out = _run(project, "--no-report")
@@ -71,13 +71,13 @@ def test_duplicate_id_is_rejected(project: Path) -> None:
 
 
 def test_ac_pointing_at_missing_dataset_is_rejected(project: Path) -> None:
-    (project / "workspace/datasets/golden/routing-v1.jsonl").unlink()
+    (project / "workspace/proof/datasets/golden/routing-v1.jsonl").unlink()
     code, out = _run(project, "--no-report")
     assert code == 1 and "[EVAL_DATASET_MISSING]" in out and "routing-v1" in out
 
 
 def test_ac_iterating_on_holdout_is_rejected(project: Path) -> None:
-    cap = project / "workspace/caps/1-1-ClassifyIntent.md"
-    cap.write_text(cap.read_text(encoding="utf-8").replace("workspace/datasets/golden/routing-v1.jsonl", "workspace/datasets/holdout/mission-1-v1.jsonl"), encoding="utf-8")
+    cap = project / "workspace/feats/caps/1-1-ClassifyIntent.md"
+    cap.write_text(cap.read_text(encoding="utf-8").replace("workspace/proof/datasets/golden/routing-v1.jsonl", "workspace/proof/datasets/holdout/mission-1-v1.jsonl"), encoding="utf-8")
     code, out = _run(project, "--no-report")
     assert code == 1 and "[AC_DATASET_IS_HOLDOUT]" in out

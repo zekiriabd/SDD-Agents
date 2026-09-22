@@ -65,8 +65,8 @@ Trois méritent une note sur l'élargissement :
   embedding, stratégie d'accès base, guardrails, observabilité, eval, serving).
 
 - **Matrice d'ownership** : reprise, avec **une règle nouvelle et non
-  négociable** — `dev-agent` n'a aucun droit d'écriture sur `workspace/datasets/`
-  ni `workspace/prompts/`. L'agent qui écrit le code ne peut ni modifier le jeu
+  négociable** — `dev-agent` n'a aucun droit d'écriture sur `workspace/proof/datasets/`
+  ni `workspace/src/prompts/`. L'agent qui écrit le code ne peut ni modifier le jeu
   qui le juge, ni réécrire le prompt qu'il est censé implémenter. C'est le
   pendant agentic de `[QA_OWNERSHIP_VIOLATION]`, et c'est plus grave ici : sans
   cette barrière, l'auto-confirmation n'est pas un risque, c'est le résultat par

@@ -36,7 +36,7 @@ commandes par cœur.
 
 Si `{n}` sans MISSION correspondante :
 ```
-Aucune MISSION {n} dans workspace/missions/.
+Aucune MISSION {n} dans workspace/feats/missions/.
 Pour la créer : /sdda-mission {Name}   (ou /sdda-full {Name} pour enchaîner tout le pipeline)
 ```
 
@@ -117,9 +117,9 @@ Matcher l'argument (minuscules) contre les mots-clés. Premier match → répons
 | `ir`, `intermediate`, `IR_STALE`, `recompile` | `workspace/.sys/.ir/{n}-system.ir.json` = projection compilée des contrats Markdown (jamais éditée à la main). Périmé → `/sdda-topology {n} --recompile-only`. La TOPOLOGY GATE s'exécute sur l'IR, pas sur la prose. |
 | `retrieval`, `rag`, `recall`, `hallucine`, `RETRIEVAL_BELOW_THRESHOLD` | La RETRIEVAL GATE (G4) mesure le retrieval **sans agent** (L3) avant l'AGENT GATE. Un recall à 0.4 se présente comme « l'agent hallucine ». Corriger le contrat (chunking, hybride, rerank), jamais le prompt. Bypass `SDDA_BYPASS_RETRIEVAL_GATE=1`, porté jusqu'en G7. |
 | `outil`, `tool`, `effet de bord`, `side effect`, `SIDE_EFFECT_UNDECLARED` | Tout outil déclare `sideEffectClass` ∈ `read-only / write-scoped / write-destructive / external-side-effect` ; les trois derniers exigent une `safetyStrategy` (dry-run, clé d'idempotence, confirmation, allowlist, plafond). G3 vérifie contrat + tests + connectivité live. |
-| `prompt`, `inline`, `PROMPT_INLINE_DETECTED`, `f-string` | Les prompts vivent dans `workspace/prompts/{agent}.system.md`, hashés, chargés au runtime (P1). Un prompt dans une f-string est un changement de comportement invisible. Owner : `dev-prompt` ; `dev-agent` n'a aucun droit d'écriture dessus. |
+| `prompt`, `inline`, `PROMPT_INLINE_DETECTED`, `f-string` | Les prompts vivent dans `workspace/src/prompts/{agent}.system.md`, hashés, chargés au runtime (P1). Un prompt dans une f-string est un changement de comportement invisible. Owner : `dev-prompt` ; `dev-agent` n'a aucun droit d'écriture dessus. |
 | `dataset`, `golden`, `holdout`, `HOLDOUT_NOT_DISJOINT` | `golden/` = ajustement (≥ 50), `holdout/` = verdict (≥ 30), disjoints par hash. On n'itère **jamais** contre le holdout : seule `/sdda-eval --acceptance` le lit. Owner exclusif : `qa-evals`, jamais un `dev-*`. |
-| `juge`, `judge`, `llm-judge`, `kappa`, `calibr`, `advisory` | Un juge LLM est calibré contre ≥ 50 labels humains (κ ≥ 0.6) avant de bloquer (P9). Sous le seuil il devient `advisory` : score informatif, non bloquant, et la CAP ne peut pas être 🟢. Rapport : `workspace/evals/calibration/{grader}.json`. |
+| `juge`, `judge`, `llm-judge`, `kappa`, `calibr`, `advisory` | Un juge LLM est calibré contre ≥ 50 labels humains (κ ≥ 0.6) avant de bloquer (P9). Sous le seuil il devient `advisory` : score informatif, non bloquant, et la CAP ne peut pas être 🟢. Rapport : `workspace/proof/calibration/{grader}.json`. |
 | `jaune`, `yellow`, `variance`, `k runs`, `pass_rate` | Toute eval LLM tourne k fois (défaut 3, 5 si critical) et rapporte moyenne + écart-type + pass_rate (P3). 🟢 = seuil ∧ pass_rate 1.0 ∧ variance ≤ `EvalVarianceWarnPct`. 🟡 = seuil en moyenne mais instable : livrer est un pari. |
 | `stale`, `périmé`, `EVAL_STALE`, `hash`, `épinglage`, `pinning` | Un résultat est indexé par `(prompt_hash, model_id, index_hash, tool_schema_hash, dataset_hash)` (P10). Un hash bouge → périmé, la MISSION redescend à `Implemented` (R2), `/sdda-eval {n} --run-only` ré-exécute. |
 | `injection`, `sécurité`, `safety`, `INJECTION_SUCCEEDED`, `adversarial` | Tout texte non maîtrisé est contenu, jamais instruction (P8). Tout agent avec une entrée `untrusted` porte une suite d'injection (directe + indirecte), exécutée contre le système **vivant** à l'étage C. `[INJECTION_SUCCEEDED]` et `[SECRET_LEAK]` n'ont **aucun** bypass. |
@@ -157,7 +157,7 @@ SDD_Agents — MISSION 1 SupportAssistant : Specified (G1 🟢), aucune topologi
 ```
 SDD_Agents — MISSION 1 : Blocked · G4 [RETRIEVAL_BELOW_THRESHOLD] recall@8 0.61 < 0.80.
 
-→ éditer workspace/contracts/retrieval/1-contracts-index.retrieval.md (chunking, hybridWeights, rerank)
+→ éditer workspace/feats/contracts/retrieval/1-contracts-index.retrieval.md (chunking, hybridWeights, rerank)
 → /sdda-topology 1 --recompile-only puis /sdda-build 1 --layer socle
    Ne pas compenser côté prompt : un retriever faible se déguise en agent qui hallucine.
 ```
@@ -165,7 +165,7 @@ SDD_Agents — MISSION 1 : Blocked · G4 [RETRIEVAL_BELOW_THRESHOLD] recall@8 0.
 ```
 SDD_Agents — MISSION 2 : Evaluated 🟡 · CAP 2-3 groundedness 0.86 ±0.09 (k=3), juge advisory (κ 0.52).
 
-→ faire labelliser 50 items dans workspace/datasets/calibration/groundedness.jsonl, puis /sdda-eval 2 --run-only
+→ faire labelliser 50 items dans workspace/proof/datasets/calibration/groundedness.jsonl, puis /sdda-eval 2 --run-only
    (sans juge calibré, la CAP ne peut pas être 🟢 — on mesure la complaisance d'un modèle envers un autre)
 ```
 

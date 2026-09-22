@@ -33,34 +33,108 @@ def workspace(root: Path) -> Path:
     return root / "workspace"
 
 
+#: Les quatre entrées du workspace, et ce qui les sépare.
+#:
+#: L'arbre portait douze répertoires au même niveau, qui mélangeaient quatre
+#: NATURES sans le dire : ce qu'on spécifie, ce qu'on configure, ce qu'on
+#: produit, et ce qui juge. Un lecteur ne pouvait pas deviner, en regardant
+#: `caps/` et `traces/` côte à côte, que l'un se relit en revue et que l'autre
+#: se supprime sans perte.
+#:
+#:   feats/   la SPÉCIFICATION — missions, caps, topologie, contrats, décisions.
+#:            Éditée par l'humain et les agents de spécification, relue en revue,
+#:            versionnée. C'est l'ENTRÉE de la génération, jamais sa sortie.
+#:   stack/   la CONFIGURATION technique. Gitignorée : elle porte des secrets.
+#:   src/     le CODE GÉNÉRÉ, prompts compris. Un prompt est un actif
+#:            d'exécution : hors du paquet, l'application livrée part sans lui.
+#:   proof/   ce qui JUGE — jeux, suites, baselines, calibration. Aucun `dev-*`
+#:            n'y écrit jamais. C'est la seule frontière du framework qui ne
+#:            souffre aucune exception : l'agent qui écrit le code ne peut pas
+#:            toucher au jeu qui le note ni à la référence qui mesure sa
+#:            régression.
+#:   .sys/    l'ÉTAT INTERNE et les sorties de run — IR, validation, traces,
+#:            rapports. Intégralement régénérable, donc effaçable.
+FEATS = "feats"
+PROOF = "proof"
+
+
+def feats_dir(root: Path) -> Path:
+    return workspace(root) / FEATS
+
+
 def missions_dir(root: Path) -> Path:
-    return workspace(root) / "missions"
+    return feats_dir(root) / "missions"
 
 
 def caps_dir(root: Path) -> Path:
-    return workspace(root) / "caps"
+    return feats_dir(root) / "caps"
 
 
 def topology_dir(root: Path) -> Path:
-    return workspace(root) / "topology"
+    return feats_dir(root) / "topology"
 
 
 def contracts_dir(root: Path, kind: str) -> Path:
     """kind ∈ {agents, tools, retrieval, memory}."""
-    return workspace(root) / "contracts" / kind
+    return feats_dir(root) / "contracts" / kind
+
+
+def decisions_dir(root: Path) -> Path:
+    """Les ADR. UN seul endroit.
+
+    Ils vivaient à deux : `docs/adr/` que citait le gabarit, et
+    `.sys/.context/adrs/` que déclarait la matrice d'ownership. Le script des
+    tâches humaines cherchait dans les deux — c'est-à-dire que la question
+    « cet ADR a-t-il été écrit ? » avait deux réponses possibles, et que celle
+    qui gouvernait était celle que personne ne relisait.
+    """
+    return feats_dir(root) / "decisions"
 
 
 def prompts_dir(root: Path) -> Path:
-    return workspace(root) / "prompts"
+    """Sous `src/` : un prompt système est un actif d'EXÉCUTION.
+
+    Rangé au même rang que les specs, il ne part pas avec le code : une
+    application livrée en exécutable ou en conteneur cherchait ses prompts dans
+    un répertoire resté dans le dépôt, et ne les trouvait qu'en développement.
+
+    Ce chemin est le PRÉ-REQUIS du packaging, pas le packaging lui-même : c'est
+    `gen_app_skeleton` qui devra les embarquer dans la distribution. Le dire
+    plutôt que le laisser croire, parce qu'un prompt absent à l'exécution ne
+    produit pas une erreur claire — il produit un agent sans consigne.
+
+    Ce que l'ownership protégeait reste protégé : `dev-agent` ne réécrit pas le
+    prompt qu'il implémente. Cela tient à un chemin interdit dans la matrice,
+    pas à un répertoire de premier niveau.
+    """
+    return workspace(root) / "src" / "prompts"
+
+
+def proof_dir(root: Path) -> Path:
+    return workspace(root) / PROOF
 
 
 def datasets_dir(root: Path, kind: str | None = None) -> Path:
-    base = workspace(root) / "datasets"
+    base = proof_dir(root) / "datasets"
     return base / kind if kind else base
 
 
 def evals_dir(root: Path) -> Path:
-    return workspace(root) / "evals"
+    return proof_dir(root)
+
+
+def reports_dir(root: Path) -> Path:
+    """Les rapports d'eval. Sous `.sys/` parce qu'ils sont une SORTIE DE RUN.
+
+    Ils grossissent à chaque exécution et se régénèrent intégralement : les
+    ranger à côté des jeux et des baselines mettait au même rang ce qui juge
+    (et qu'on ne peut pas perdre) et ce qui est jugé (et qu'on jette).
+    """
+    return workspace(root) / ".sys" / "reports"
+
+
+def traces_dir(root: Path) -> Path:
+    return workspace(root) / ".sys" / "traces" / "runs"
 
 
 def ir_dir(root: Path) -> Path:

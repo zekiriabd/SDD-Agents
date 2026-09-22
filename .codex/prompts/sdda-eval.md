@@ -22,7 +22,7 @@ qa-evals  ∥  qa-tests                 (parallèle, chemins disjoints)
         ↓ datasets FIGÉS (hash)
 eval_runner.py  L0 → L7                          (script, k runs, variance)
         ↓
-rapport trois couleurs  workspace/evals/reports/{n}-{run-id}.md
+rapport trois couleurs  workspace/.sys/reports/{n}-{run-id}.md
 ```
 
 **Un test assert, une eval score** (TESTING-AND-EVAL.md). Les confondre produit
@@ -87,14 +87,14 @@ Si `--run-only` → STEP 5. Si `--acceptance` → STEP 7.
 
 | Agent | Tier | Écrit dans (Create exclusif) | Skippé si |
 |---|:-:|---|---|
-| `qa-evals` | **deep** | `workspace/datasets/**`, `workspace/evals/{suites,calibration}/**` | jamais |
+| `qa-evals` | **deep** | `workspace/proof/datasets/**`, `workspace/proof/{suites,calibration}/**` | jamais |
 | `qa-tests` | balanced | `workspace/src/**/tests/**` (L0→L2) | `--datasets-only` |
 
 Un seul message multi-`Agent` (2 ≤ `MaxParallel`). Chemins disjoints.
 
 Prompt `qa-evals` :
 ```
-MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/caps/{n}-*.md), produire :
+MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/feats/caps/{n}-*.md), produire :
 - golden/{dataset}.jsonl  (≥ 50 items, schéma .sdda/templates/golden-set.schema.json)
 - holdout/mission-{n}-v{k}.jsonl  (≥ 30 items, DISJOINT du golden — vérifié par hash)
 - calibration/{grader}.jsonl  (≥ {JudgeCalibrationMinItems} items labellisés HUMAINEMENT — signaler
@@ -149,7 +149,7 @@ Pour chaque grader `llm-judge` des suites :
 
 ```bash
 python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json \
-  > workspace/evals/calibration/{g}.json
+  > workspace/proof/calibration/{g}.json
 ```
 
 | Résultat | Effet |
@@ -167,9 +167,13 @@ mesure la complaisance d'un modèle envers un autre.
 ```bash
 python .sdda/sdda.py eval-runner --mission {n} \
   --levels ${LEVELS:-L0,L1,L2,L3,L4,L5,L6,L7} --runs ${RUNS:-EvalRuns} \
-  --report workspace/evals/reports/{n}-{RUN_ID}.md --json \
+  --executor {module}:{Executor} --json \
   > workspace/.sys/.validation/{n}-eval.json
 ```
+
+Le rapport complet est écrit par le script lui-même, en JSON, sous
+`workspace/.sys/reports/{n}-{RUN_ID}.json` — c'est ce fichier que lisent les
+reviewers de l'étage B. La redirection ci-dessus ne sert qu'au récap.
 
 | Niveau | Contenu | Coût | Gate rejouée |
 |---|---|---|---|
@@ -227,7 +231,7 @@ Coût par CAP : {n}-1 ${…} · {n}-2 ${…} · …   (où part l'argent)
 Abstention  : {rate} sur le golden  (un système qui ne dit jamais « je ne sais pas » ment mieux)
 Top outils en échec : {tool} ({e} erreurs) · …
 
-Rapport complet : workspace/evals/reports/{n}-{RUN_ID}.md
+Rapport complet : workspace/.sys/reports/{n}-{RUN_ID}.md
 Run trace       : {RUN_ID}
 
 Prochaine étape :
@@ -252,14 +256,27 @@ franchies (`--require-gate G7`) ; sinon ERROR `[SAFETY_GATE_NOT_PASSED]`.
 
 ```bash
 python .sdda/sdda.py check-baseline-freshness --mission {n} --strict
-python .sdda/sdda.py eval-runner --mission {n} --level L7 --dataset holdout \
-  --runs ${RUNS:-EvalRuns} --json > workspace/.sys/.validation/{n}-G8-acceptance.json
-python .sdda/sdda.py eval-runner --mission {n} --level L9 \
-  --baseline workspace/evals/baselines/{n}-system.json --json \
-  >> workspace/.sys/.validation/{n}-G8-acceptance.json
+python .sdda/sdda.py eval-runner --mission {n} --level L9 --dataset holdout \
+  --executor {module}:{Executor} --runs ${RUNS:-EvalRuns} \
+  --baseline workspace/proof/baselines/{n}-system.json --json \
+  > workspace/.sys/.validation/{n}-G8-acceptance.recap.json
 python .sdda/sdda.py check-regression --mission {n} --run {RUN_ID} --json \
   > workspace/.sys/.validation/regression-{n}.json
 ```
+
+> **Un seul appel, niveau L9.** Il y en avait deux : un `--level L7 --dataset
+> holdout`, puis un `--level L9`, concaténés par `>>` dans le même fichier. Les
+> trois choses étaient fausses ensemble : `L7` est mappé sur **G6**, pas G8, donc
+> le premier appel écrasait un verdict d'orchestration en croyant mesurer
+> l'acceptation ; faire itérer une suite L7 sur le holdout est exactement ce que
+> `[AC_DATASET_IS_HOLDOUT]` refuse ; et deux JSON concaténés ne se relisent pas.
+> Le holdout n'est mesuré que par la suite `{n}-acceptance` (L9), compilée depuis
+> `## Quantified Goal` de la MISSION.
+
+`--executor` est **obligatoire** : `eval_runner` n'appelle aucun LLM lui-même.
+Sans lui il sort `[EVAL_EXECUTOR_MISSING]` plutôt que de supposer une mesure.
+Le squelette généré expose `{AppName}.evals.executor:CliExecutor` (bout-en-bout,
+la surface console) et `:InProcessExecutor` (isolé, outils mockés).
 
 `check_regression.py` rend le contrôle 3. Il lit la **tolérance** (`RegressionTolerancePct`)
 **et l'écart-type de la baseline** (`RegressionNoiseSigma`) : une baisse au-delà de
@@ -295,7 +312,7 @@ FIX: NE PAS itérer contre le holdout ; corriger sur le golden (/sdda-build, /sd
 ## Règles de cette commande
 
 - **Deux agents au plus**, en parallèle, chemins disjoints ; aucun spawn imbriqué.
-- **`qa-evals` est le seul** à écrire sous `workspace/datasets/`. Jamais un `dev-*`.
+- **`qa-evals` est le seul** à écrire sous `workspace/proof/datasets/`. Jamais un `dev-*`.
 - **Datasets figés avant exécution** — barrière AGENT-ROSTER.md §4.
 - **k runs, jamais 1** hors dev local ; **variance rapportée**, jamais aplatie.
 - **Juge non calibré = advisory**, dit explicitement.

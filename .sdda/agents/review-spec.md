@@ -32,12 +32,12 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/missions/{n}-*.md` — BR, AC système, Quantified Goal, Failure Policy, out_of_scope.
-- `workspace/caps/{n}-*-*.md` — chaque AC (metric, threshold, dataset, grader, runs, notes), `covers`, `failure_behavior`.
+- `workspace/feats/missions/{n}-*.md` — BR, AC système, Quantified Goal, Failure Policy, out_of_scope.
+- `workspace/feats/caps/{n}-*-*.md` — chaque AC (metric, threshold, dataset, grader, runs, notes), `covers`, `failure_behavior`.
 - `workspace/.sys/.ir/{n}-system.ir.json` — `traceability`, `evaluation.suites`, `agents[].servesCaps`, `tools[]`.
-- `workspace/evals/suites/*.yaml` et `workspace/evals/reports/{n}/**` — définitions et derniers résultats.
-- `workspace/evals/calibration/*.json` — statut de chaque juge.
-- `workspace/datasets/**` — **en lecture** : schéma des items, métadonnées, tailles ; jamais le contenu du holdout item par item.
+- `workspace/proof/suites/*.yaml` et `workspace/.sys/reports/{n}/**` — définitions et derniers résultats.
+- `workspace/proof/calibration/*.json` — statut de chaque juge.
+- `workspace/proof/datasets/**` — **en lecture** : schéma des items, métadonnées, tailles ; jamais le contenu du holdout item par item.
 - `workspace/.sys/.validation/gates/{n}/**` — rapports G3→G6.
 
 ---

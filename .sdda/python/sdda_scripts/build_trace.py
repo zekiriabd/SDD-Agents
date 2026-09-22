@@ -8,7 +8,7 @@ pas ce que le framework coûte à la fabriquer — alors que c'est la facture qu
 l'utilisateur voit en premier, et la seule que `MaxCostPerRun` prétend plafonner.
 
 Ce script écrit des spans dans la trace du run courant
-(`workspace/traces/runs/{run_id}.jsonl`), au MÊME format que l'application :
+(`workspace/.sys/traces/runs/{run_id}.jsonl`), au MÊME format que l'application :
 
     sdda.build.agent {agent}    une invocation de Developer Agent
     sdda.gate {gate}            un franchissement de gate
@@ -24,7 +24,10 @@ Quatre grandeurs, et pourquoi celles-là :
                       recalculé : nous ne voyons pas les tokens d'un sous-agent.
                       Il reste donc séparé du coût du produit, qui vient des
                       tokens — les additionner ferait passer un chiffre
-                      invérifiable pour une mesure.
+                      invérifiable pour une mesure. Ce même chiffre alimente le
+                      cumul du run (`sdda_state add-cost`), seul nombre que
+                      `preflight_cost_cap` sait lire : un span qui n'alimente
+                      aucun cumul laisse `MaxCostPerRun` autoriser à l'infini.
     duration-ms       la latence réelle, celle qu'on attend devant son terminal.
     iterations        les tours de `build_loop` consommés vs `BuildLoopMaxIter` :
                       un agent qui boucle trois fois pour un résultat que le
@@ -144,6 +147,31 @@ def main(argv: list[str] | None = None) -> int:
             tracing.A_BUDGET_BYTES: args.budget_bytes,
             tracing.A_BUDGET_BYTES_USED: args.budget_bytes_used,
         }, duration_ms=args.duration_ms, status=args.status)
+        # Le coût déclaré alimente AUSSI le cumul du run, dans le même appel.
+        #
+        # `sdda_state.add_cost` existait, `preflight_cost_cap` lisait `costUsd`,
+        # et aucune commande n'appelait la primitive : le hook trouvait toujours
+        # 0,00 $ et autorisait toujours. `MaxCostPerRun` était donc un plafond
+        # décoratif, ce que le docstring d'`add_cost` dit lui-même être pire
+        # qu'un plafond absent.
+        #
+        # Le brancher ici plutôt que d'ajouter une seconde commande à chaque
+        # STEP est délibéré : un appel qu'il faut penser à faire est un appel
+        # qu'on oublie, et on ne s'en aperçoit qu'en relisant la facture. Le
+        # span et le cumul viennent désormais du même chiffre, au même moment.
+        if args.cost_usd:
+            try:
+                from sdda_scripts import sdda_state  # noqa: E402  (import tardif : coût de démarrage)
+
+                run = sdda_state.add_cost(root, run_id, usd=float(args.cost_usd),
+                                          label=f"{args.agent}{f'/{args.item}' if args.item else ''}")
+                report.data["cumulativeUsd"] = run.get("costUsd")
+            except KeyError:
+                report.warn("STATE_RUN_NOT_FOUND",
+                            f"run `{run_id}` absent de l'état : le span est écrit, le cumul ne l'est pas",
+                            "ouvrir le run avec `python .sdda/sdda.py state new-run` avant d'invoquer un agent — "
+                            "sans cumul, MaxCostPerRun ne plafonne rien", run_id)
+
         if args.budget_bytes and args.budget_bytes_used and args.budget_bytes_used > args.budget_bytes:
             report.warn("CONTEXT_BUDGET_EXCEEDED",
                         f"`{args.agent}` : {args.budget_bytes_used} octets chargés pour un budget de {args.budget_bytes}",

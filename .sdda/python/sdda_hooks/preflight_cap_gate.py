@@ -19,7 +19,7 @@ HOOK = "preflight_cap_gate"
 #: Restreint aux architectes de phase 2 : avant eux, aucune gate ne peut être
 #: verte, et se prononcer sur tout `Task` refuserait le premier agent du
 #: pipeline.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": PHASE2_ARCHITECTS}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": PHASE2_ARCHITECTS}
 
 
 def check(root: Path, data: dict) -> int:

@@ -140,6 +140,19 @@ STACK_PLACEHOLDERS: dict[str, str] = {
     "dataaccess": "Active Data Access",
     "memory": "Active Memory Strategy",
     "serving": "Active Serving Surface",
+    # Les catégories restantes. Deux d'entre elles partagent une section —
+    # `## Active Retrieval Stack` déclare à la fois le store et l'embedding —
+    # et c'est sans conséquence : chaque motif est ancré sur SON répertoire,
+    # donc l'expansion croisée (`vectorstore/voyage.md`) ne désigne aucun
+    # fichier et ne coûte rien. Ce qui compte est qu'aucun agent ne reçoive
+    # plus un catalogue entier là où le projet n'a activé qu'une fiche.
+    "vectorstore": "Active Retrieval Stack",
+    "embedding": "Active Retrieval Stack",
+    "rerank": "Active Reranker",
+    "tools": "Active Tools & Integrations",
+    "guardrails": "Active Guardrails",
+    "observability": "Active Observability",
+    "eval": "Active Eval Stack",
 }
 
 

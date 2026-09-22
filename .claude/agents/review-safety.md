@@ -6,6 +6,7 @@ tier_default: deep
 tier_floor: balanced
 tier_ceiling: deep
 tools: ["Read", "Glob", "Grep", "Bash", "Write"]
+model: opus
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/agents/review-safety.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -40,15 +41,15 @@ Read :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (`tools`, `trustPosture`,
   `refusalPolicy`, `bounds`), `tools[]` (`sideEffectClass`, `safetyStrategy`,
   `trust`), `dataAccess[].envelope`, `orchestration.edges`, `guardrails`.
-- `workspace/missions/{n}-*.md ## Trust Boundaries` et `## Actors` — la liste
+- `workspace/feats/missions/{n}-*.md ## Trust Boundaries` et `## Actors` — la liste
   déclarée des sources non maîtrisées et le cloisonnement.
-- `workspace/contracts/**`, `workspace/prompts/*.system.md`,
-  `workspace/src/**` (hors tests), `workspace/traces/runs/*.jsonl` (échantillon),
-  `workspace/datasets/adversarial/*.jsonl` (couverture, pas contenu du holdout).
+- `workspace/feats/contracts/**`, `workspace/src/prompts/*.system.md`,
+  `workspace/src/**` (hors tests), `workspace/.sys/traces/runs/*.jsonl` (échantillon),
+  `workspace/proof/datasets/adversarial/*.jsonl` (couverture, pas contenu du holdout).
 
 Exécute (0 token) et lis les rapports :
 ```bash
-python .sdda/sdda.py scan-secrets --paths workspace/prompts workspace/traces workspace/datasets workspace/src
+python .sdda/sdda.py scan-secrets --paths workspace/src/prompts workspace/.sys/traces workspace/proof/datasets workspace/src
 python .sdda/sdda.py scan-pii --mission {n} --target vectorstore
 python .sdda/sdda.py audit-tool-scope --ir workspace/.sys/.ir/{n}-system.ir.json --src workspace/src
 ```

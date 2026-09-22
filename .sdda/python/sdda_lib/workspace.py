@@ -30,7 +30,7 @@ from sdda_lib import __version__ as _LIB_VERSION
 #: Version courante de l'arborescence `workspace/`. Historique :
 #:   1 — première version datée : tree canonique de `smoke_check.WORKSPACE_TREE`,
 #:       retrait des répertoires fantômes `.sys/.routing`, `.sys/.cache`, `.sys/.reverse`.
-WORKSPACE_VERSION: int = 1
+WORKSPACE_VERSION: int = 2
 
 WORKSPACE_JSON_REL = "workspace/.sys/workspace.json"
 

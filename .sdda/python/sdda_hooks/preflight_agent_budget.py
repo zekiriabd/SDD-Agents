@@ -19,7 +19,7 @@ HOOK = "preflight_agent_budget"
 
 #: Câblage — lu par `harness_build.py`. Tout spawn : chaque agent a un budget
 #: de contexte dans loader.yml, et c'est avant le spawn qu'il faut le vérifier.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": ()}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": ()}
 
 
 def check(root: Path, data: dict) -> int:

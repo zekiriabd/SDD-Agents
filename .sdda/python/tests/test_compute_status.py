@@ -81,7 +81,7 @@ def test_g2_needs_all_three_parts(project: Path) -> None:
 # -- R1 : un Status non étayé est écrasé --------------------------------------------------
 def test_unbacked_status_is_reported_and_overwritten(tmp_path: Path) -> None:
     root = make_project(tmp_path, "project_status_unbacked")
-    cap = root / "workspace/caps/1-1-ClassifyIntent.md"
+    cap = root / "workspace/feats/caps/1-1-ClassifyIntent.md"
     assert "Status: Tested" in cap.read_text(encoding="utf-8")
     code, out = run_main(compute_status.main, ["--root", str(root)])
     assert code == 1
@@ -94,14 +94,14 @@ def test_unbacked_status_is_reported_and_overwritten(tmp_path: Path) -> None:
 
 def test_no_write_keeps_the_file_but_still_reports(tmp_path: Path) -> None:
     root = make_project(tmp_path, "project_status_unbacked")
-    cap = root / "workspace/caps/1-1-ClassifyIntent.md"
+    cap = root / "workspace/feats/caps/1-1-ClassifyIntent.md"
     code, out = run_main(compute_status.main, ["--root", str(root), "--no-write"])
     assert code == 1 and "[STATUS_UNBACKED]" in out
     assert "Status: Tested" in cap.read_text(encoding="utf-8")
 
 
 def test_human_decision_states_are_honored(project: Path) -> None:
-    cap = project / "workspace/caps/1-1-ClassifyIntent.md"
+    cap = project / "workspace/feats/caps/1-1-ClassifyIntent.md"
     cap.write_text(cap.read_text(encoding="utf-8").replace("Status: Draft", "Status: Deferred"), encoding="utf-8")
     code, data = _status(project)
     assert code == 0
@@ -111,7 +111,7 @@ def test_human_decision_states_are_honored(project: Path) -> None:
 # -- R2 : un hash épinglé qui bouge périme le rapport -----------------------------------------
 def test_pinned_hash_move_regresses_state(project: Path) -> None:
     _pass_g0_g1(project)
-    cap = project / "workspace/caps/1-2-ExplainInvoiceLine.md"
+    cap = project / "workspace/feats/caps/1-2-ExplainInvoiceLine.md"
     cap.write_text(cap.read_text(encoding="utf-8").replace("ne couvre pas les factures multi-devises", "ne couvre pas les avoirs"), encoding="utf-8")
     code, data = _status(project)
     m = _mission(data)
@@ -151,7 +151,7 @@ def test_a_green_g8_datasets_part_alone_does_not_approve(project: Path) -> None:
 
 # -- R4 / --require-gate ----------------------------------------------------------------------------
 def test_confidence_escalation_is_flagged(project: Path) -> None:
-    mission = project / "workspace/missions/1-SupportAssistant.md"
+    mission = project / "workspace/feats/missions/1-SupportAssistant.md"
     mission.write_text(mission.read_text(encoding="utf-8").replace("Confidence: high", "Confidence: medium"), encoding="utf-8")
     _, data = _status(project)
     assert any(w["class"] == "CONFIDENCE_ESCALATION" for w in data["warnings"])

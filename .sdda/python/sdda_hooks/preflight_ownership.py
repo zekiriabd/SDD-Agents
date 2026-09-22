@@ -6,7 +6,7 @@ et chaque `Edit`. Le parallélisme des `dev-*` n'est sûr que parce que leurs
 répertoires sont disjoints ; rien au runtime ne l'impose — sinon ce contrôle.
 
 Le cas qui coûte le plus cher n'est pas la collision, qui se voit : c'est le
-`dev-agent` qui retouche `workspace/datasets/` ou `workspace/prompts/`,
+`dev-agent` qui retouche `workspace/proof/datasets/` ou `workspace/src/prompts/`,
 c'est-à-dire qui modifie le jeu qui le juge ou le prompt qu'il implémente. La
 note devient invérifiable, et personne ne s'en aperçoit avant l'acceptation.
 """
@@ -27,12 +27,27 @@ HOOK = "preflight_ownership"
 WIRING = {"event": "PreToolUse", "matcher": "Write|Edit", "applies_to": ()}
 
 
+#: Zone que personne n'écrit avec un outil d'édition, quel qu'en soit l'auteur.
+#:
+#: `workspace/proof/baselines/` est déclarée « script déterministe uniquement,
+#: Write atomique » par la matrice d'ownership. `promote_baseline.py` y écrit en
+#: E/S Python, jamais par l'outil `Write` — donc un `Write`/`Edit` sur ce chemin
+#: est fautif sans qu'on ait besoin de savoir QUI le tente. C'est le seul
+#: contrôle d'ownership qui ne dépend pas de l'identification de l'auteur, et
+#: c'est pour cela qu'il est joué avant elle : une baseline retouchée à la main
+#: rend toute non-régression tautologique, et rien en aval ne le rattrape.
+IDENTITY_FREE_ZONE = "workspace/proof/baselines"
+
+
+def _relative(root: Path, target: str) -> str:
+    try:
+        return Path(str(target)).resolve().relative_to(root).as_posix()
+    except ValueError:
+        return str(target).replace("\\", "/")
+
+
 def check(root: Path, data: dict) -> int:
     agent = agent_of(data)
-    if not agent:
-        # Écriture par le fil principal (l'humain, ou une commande) : la matrice
-        # ne régit que les agents. Refuser ici bloquerait l'utilisateur.
-        return ALLOW
 
     target = (data.get("tool_input") or {}).get("file_path") or data.get("file_path")
     if not target:
@@ -42,10 +57,18 @@ def check(root: Path, data: dict) -> int:
     from sdda_lib.errors import Report  # noqa: E402
     from sdda_scripts import audit_ownership as ao  # noqa: E402
 
-    try:
-        rel = Path(str(target)).resolve().relative_to(root).as_posix()
-    except ValueError:
-        rel = str(target).replace("\\", "/")
+    rel = _relative(root, str(target))
+
+    if rel == IDENTITY_FREE_ZONE or rel.startswith(IDENTITY_FREE_ZONE + "/"):
+        return deny(HOOK, "BASELINE_OWNERSHIP_VIOLATION",
+                    f"`{rel}` édité à la main{f' par `{agent}`' if agent else ''}",
+                    "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
+                    "déplacer la référence rend toute non-régression tautologique")
+
+    if not agent:
+        # Écriture par le fil principal (l'humain, ou une commande) : la matrice
+        # ne régit que les agents. Refuser ici bloquerait l'utilisateur.
+        return ALLOW
 
     report = Report(name="OWNERSHIP-HOOK", target=str(root))
     loader = ao.load_loader(root)

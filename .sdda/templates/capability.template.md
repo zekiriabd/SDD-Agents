@@ -24,7 +24,7 @@ Le système doit pouvoir <action observable et discrète>.
   - metric: <groundedness | routing_accuracy | exact_match | recall@k | schema_valid
              | trajectory_match | cost_usd | latency_ms | abstention_rate | …>
   - threshold: <ex. >= 0.85>
-  - dataset: <workspace/datasets/golden/{nom}.jsonl>
+  - dataset: <workspace/proof/datasets/golden/{nom}.jsonl>
   - grader: <exact | regex | schema | numeric-tolerance | semantic-similarity
              | llm-judge | trajectory | cost | latency>
   - runs: <3, ou 5 si criticality = critical>

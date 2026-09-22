@@ -265,8 +265,8 @@ def _substitute_all(patterns: Any, mission: str | None, target: str | None) -> l
 
     Laisser `{n}` dans un prompt revient à demander à l'agent de deviner son
     propre périmètre d'écriture — et il devinera. Mais `{m}` et `{other}` ne
-    s'élargissent PAS en `*` : `workspace/missions/{m}-*.md` veut dire « les
-    autres MISSIONs », et le transformer en `workspace/missions/*-*.md`
+    s'élargissent PAS en `*` : `workspace/feats/missions/{m}-*.md` veut dire « les
+    autres MISSIONs », et le transformer en `workspace/feats/missions/*-*.md`
     interdirait à l'agent de lire la sienne. Un élargissement qui inverse le
     sens d'une règle est pire que le placeholder qu'il remplace.
     """

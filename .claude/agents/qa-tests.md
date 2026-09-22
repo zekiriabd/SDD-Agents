@@ -6,6 +6,7 @@ tier_default: balanced
 tier_floor: fast
 tier_ceiling: balanced
 tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+model: sonnet
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/agents/qa-tests.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -38,7 +39,7 @@ Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `tools[]` (erreurs, safetyStrategy,
   timeoutSec, contractTestsRef), `retrievers[].binding.chunk`, `agents[].bounds`,
   `orchestration` (maxHops, edges), `dataAccess[].envelope`.
-- `workspace/contracts/tools/{n}-*.tool.md` §4 (erreurs) et §8 (checklist L2).
+- `workspace/feats/contracts/tools/{n}-*.tool.md` §4 (erreurs) et §8 (checklist L2).
 - `workspace/src/**` **hors** `tests/` — les interfaces que tu testes.
 - `workspace/stack/STACK.md` — `## Active Language & Runtime`, `## Active Eval Stack`
   (runner de tests), `## Active Tools & Integrations` (endpoints pour `network`).
@@ -157,7 +158,7 @@ propriété à tolérer par `retry`.
 ### Ce que tu ne fais jamais
 
 - **Tu n'appelles jamais un modèle.** Ni pour un test, ni pour « vérifier vite ».
-- **Tu n'écris ni dans `workspace/datasets/`, ni dans `workspace/prompts/`,
+- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/prompts/`,
   ni dans le code testé.** Un test qui échoue est un fait rapporté, pas un
   motif de correction en douce.
 - **Tu ne marques jamais un test `skip` ou `xfail`** pour faire passer une gate.

@@ -146,7 +146,7 @@ def test_the_tool_gate_bypass_works_but_never_on_side_effects(
 # ---------------------------------------------------------------------------
 def test_a_dev_agent_cannot_write_a_dataset(project: Path) -> None:
     code, err = call(preflight_ownership, project, subagent_type="dev-agent",
-                     tool_input={"file_path": str(project / "workspace/datasets/golden/billing-v1.jsonl")})
+                     tool_input={"file_path": str(project / "workspace/proof/datasets/golden/billing-v1.jsonl")})
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
 
 
@@ -159,13 +159,13 @@ def test_a_dev_agent_writing_in_its_own_zone_passes(project: Path) -> None:
 def test_a_write_from_the_main_thread_is_never_blocked(project: Path) -> None:
     """La matrice régit les agents ; refuser ici bloquerait l'utilisateur."""
     code, _ = call(preflight_ownership, project,
-                   tool_input={"file_path": str(project / "workspace/datasets/golden/x.jsonl")})
+                   tool_input={"file_path": str(project / "workspace/proof/datasets/golden/x.jsonl")})
     assert code == ALLOW
 
 
 def test_an_agent_outside_the_matrix_is_not_the_hooks_call(project: Path) -> None:
     code, _ = call(preflight_ownership, project, subagent_type="un-agent-tiers",
-                   tool_input={"file_path": str(project / "workspace/datasets/golden/x.jsonl")})
+                   tool_input={"file_path": str(project / "workspace/proof/datasets/golden/x.jsonl")})
     assert code == ALLOW
 
 

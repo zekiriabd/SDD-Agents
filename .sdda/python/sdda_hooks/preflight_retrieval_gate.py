@@ -18,7 +18,7 @@ HOOK = "preflight_retrieval_gate"
 
 #: Câblage — lu par `harness_build.py`. `dev-retrieval` est hors périmètre pour la
 #: même raison que `dev-tools` en G3 : c'est lui qui rend la gate verte.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": AGENT_BUILDERS}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": AGENT_BUILDERS}
 
 
 def _no_retrieval(root: Path) -> bool:

@@ -17,7 +17,7 @@ from sdda_scripts import roster
 from sdda_scripts import validate_architecture as va
 
 MANIFEST = "workspace/stack/topology/1-roster.yml"
-TOPOLOGY = "workspace/topology/1-topology.md"
+TOPOLOGY = "workspace/feats/topology/1-topology.md"
 STACK = "workspace/stack/STACK.md"
 
 COMPLETE = """\

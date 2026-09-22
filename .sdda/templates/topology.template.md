@@ -114,7 +114,7 @@ de P7 :
 
 ## 4. Le graphe
 
-Fichier : `workspace/topology/{n}-topology.mmd` (Mermaid).
+Fichier : `workspace/feats/topology/{n}-topology.mmd` (Mermaid).
 
 ```mermaid
 flowchart TD
@@ -159,10 +159,10 @@ flowchart TD
 
 | Type | Fichier |
 |---|---|
-| agent | `workspace/contracts/agents/{n}-{agent}.agent.md` |
-| tool | `workspace/contracts/tools/{n}-{tool}.tool.md` |
-| retrieval | `workspace/contracts/retrieval/{n}-{index}.retrieval.md` |
-| memory | `workspace/contracts/memory/{n}-memory.md` |
+| agent | `workspace/feats/contracts/agents/{n}-{agent}.agent.md` |
+| tool | `workspace/feats/contracts/tools/{n}-{tool}.tool.md` |
+| retrieval | `workspace/feats/contracts/retrieval/{n}-{index}.retrieval.md` |
+| memory | `workspace/feats/contracts/memory/{n}-memory.md` |
 
 ---
 

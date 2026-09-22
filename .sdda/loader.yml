@@ -76,7 +76,7 @@ cross_agent_reads:
 #
 # Une zone partagée sans mode déclaré est [OWNERSHIP_ZONE_CONTESTED].
 shared_writes:
-  - path: workspace/.sys/.context/adrs/ADR-*.md
+  - path: workspace/feats/decisions/ADR-*.md
     agents: [architect-topology, architect-data]
     mode: disjoint-by-timestamp
     why: numérotation atomique par horodatage — deux ADR ne portent jamais le même nom
@@ -86,7 +86,7 @@ shared_writes:
     mode: append-only
     why: §1-§3 en phase 0, §3 en phase 1 ; ajout par section, jamais de réécriture
 
-  - path: workspace/contracts/agents/{n}-*.agent.md
+  - path: workspace/feats/contracts/agents/{n}-*.agent.md
     agents: [architect-topology, dev-prompt]
     mode: serialized
     why: squelette en phase 2, section `## Prompt` en phase 4 — jamais simultanés
@@ -133,12 +133,12 @@ po-elicitor:
     - .sdda/digests/error-classification.po-elicitor.md  # stable
     - workspace/.sys/.context/constitution.md        # semi — si présent
   writes:
-    - workspace/missions/{n}-*.md
+    - workspace/feats/missions/{n}-*.md
     - workspace/.sys/.context/constitution.md        # append-only §1-§3
   forbidden_reads:
     - workspace/stack/STACK.md      # le choix technique ne le regarde pas
     - workspace/src/**
-    - workspace/caps/**
+    - workspace/feats/caps/**
 
 # ---------------------------------------------------------------------------
 # Phase 1 — capabilities
@@ -150,15 +150,15 @@ po-capabilities:
     - .sdda/templates/capability.template.md         # stable
     - .sdda/digests/error-classification.po-capabilities.md  # stable
     - workspace/.sys/.context/constitution.md        # semi
-    - workspace/missions/{n}-*.md                    # volatile — 1 fichier
+    - workspace/feats/missions/{n}-*.md                    # volatile — 1 fichier
   writes:
-    - workspace/caps/{n}-{m}-*.md
+    - workspace/feats/caps/{n}-{m}-*.md
     - workspace/.sys/.context/constitution.md        # append-only §3
   forbidden_reads:
     - workspace/stack/STACK.md      # une CAP qui mentionne une techno a fui son altitude
     - workspace/src/**
-    - workspace/topology/**
-    - workspace/missions/{other}-*.md   # autres MISSIONs — {m} désigne l index de CAP ailleurs
+    - workspace/feats/topology/**
+    - workspace/feats/missions/{other}-*.md   # autres MISSIONs — {m} désigne l index de CAP ailleurs
 
 # ---------------------------------------------------------------------------
 # Phase 2 — architecture
@@ -172,15 +172,23 @@ architect-topology:
     - workspace/.sys/.context/packs/architect-topology.md       # stable — LE PACK
     - workspace/stack/STACK.md                       # semi
     - workspace/stack/topology/{n}-roster.yml        # semi — LE ROSTER déclaré par l'architecte (P7)
-    - workspace/missions/{n}-*.md                    # volatile
-    - workspace/caps/{n}-*-*.md                      # volatile — toutes les CAPs
+    - workspace/feats/missions/{n}-*.md                    # volatile
+    - workspace/feats/caps/{n}-*-*.md                      # volatile — toutes les CAPs
   # Sources DONT le pack est construit. Bloc distinct par nécessité : `reads:`
   # désigne le pack, et le constructeur ne peut pas y lire ses propres entrées
   # sans circularité (un pack ne peut pas être sa propre source).
   pack_sources:
     - .sdda/docs/ORCHESTRATION-PATTERNS.md
-    - .sdda/registry/patterns.registry.json
-    - .sdda/stacks/orchestration/*.md
+    # Tranché comme celui d'`architect-rag`, et pour la même raison : cet agent
+    # choisit et borne une TOPOLOGIE. Les familles `rag`, `chunking`,
+    # `dataaccess` et `grader` appartiennent à des agents qui décident
+    # justement ce qu'il ne décide pas — les lui donner faisait entrer 35 Ko
+    # dans un pack déjà à 93 % de son budget avec un workspace VIDE, donc un
+    # refus de spawn à la première MISSION réelle. `memory` reste : la
+    # topologie déclare l'état partagé entre agents, et un pattern d'état qu'on
+    # n'a pas lu se réinvente.
+    - .sdda/registry/patterns.registry.json#families=orchestration,memory
+    - .sdda/stacks/orchestration/{orchestration}.md
   pack_policy: |
     Le pack est tranché par rôle : `architect-topology` choisit et borne, il
     n'implémente pas. Sont retirés les détails d'implémentation par framework
@@ -190,15 +198,15 @@ architect-topology:
     jamais retirée : une décision de packing n'écrase pas une décision d'auteur.
     Pack absent ou périmé -> [PACK_UNUSABLE], ERREUR bloquante.
   writes:
-    - workspace/topology/{n}-topology.md
-    - workspace/topology/{n}-topology.mmd
-    - workspace/contracts/agents/{n}-*.agent.md      # squelette
-    - workspace/caps/{n}-*-*.md                      # Edit narrow : champ `Allocated To`
-    - workspace/.sys/.context/adrs/ADR-*.md
+    - workspace/feats/topology/{n}-topology.md
+    - workspace/feats/topology/{n}-topology.mmd
+    - workspace/feats/contracts/agents/{n}-*.agent.md      # squelette
+    - workspace/feats/caps/{n}-*-*.md                      # Edit narrow : champ `Allocated To`
+    - workspace/feats/decisions/ADR-*.md
   forbidden_reads:
     - workspace/src/**
-    - workspace/prompts/**
-    - workspace/datasets/**
+    - workspace/src/prompts/**
+    - workspace/proof/datasets/**
 
 architect-tools:
   model_tier: balanced
@@ -206,12 +214,12 @@ architect-tools:
   reads:
     - .sdda/templates/tool-contract.template.md      # stable
     - .sdda/rules/prompt-authoring.md                # stable — la description EST un prompt
-    - .sdda/stacks/tools/*.md                        # stable
+    - .sdda/stacks/tools/{tools}.md                        # stable
     - workspace/stack/STACK.md                       # semi
-    - workspace/topology/{n}-topology.md             # volatile
-    - workspace/caps/{n}-*-*.md                      # volatile
+    - workspace/feats/topology/{n}-topology.md             # volatile
+    - workspace/feats/caps/{n}-*-*.md                      # volatile
   writes:
-    - workspace/contracts/tools/{n}-*.tool.md
+    - workspace/feats/contracts/tools/{n}-*.tool.md
   forbidden_reads:
     - workspace/src/**
 
@@ -235,22 +243,22 @@ architect-rag:
     - .sdda/templates/retrieval-contract.template.md # stable
     - workspace/.sys/.context/packs/architect-rag.md # stable — pack RAG
     - workspace/stack/STACK.md                       # semi
-    - workspace/topology/{n}-topology.md             # volatile
-    - workspace/caps/{n}-*-*.md                      # volatile
+    - workspace/feats/topology/{n}-topology.md             # volatile
+    - workspace/feats/caps/{n}-*-*.md                      # volatile
   pack_sources:
     - .sdda/docs/RAG-PATTERNS.md
     # Deux familles sur six : cet agent ne décide ni de l'orchestration, ni de
     # l'accès aux données, ni des graders. Le retrait est DÉCLARÉ au manifeste
     # du pack, pour qu'une famille absente ne se lise pas comme inexistante.
     - .sdda/registry/patterns.registry.json#families=rag,chunking
-    - .sdda/stacks/rag/*.md
-    - .sdda/stacks/vectorstore/*.md
-    - .sdda/stacks/embedding/*.md
-    - .sdda/stacks/rerank/*.md
+    - .sdda/stacks/rag/{rag}.md
+    - .sdda/stacks/vectorstore/{vectorstore}.md
+    - .sdda/stacks/embedding/{embedding}.md
+    - .sdda/stacks/rerank/{rerank}.md
   writes:
-    - workspace/contracts/retrieval/{n}-*.retrieval.md
+    - workspace/feats/contracts/retrieval/{n}-*.retrieval.md
   forbidden_reads:
-    - workspace/datasets/**    # il DÉCLARE le golden set, il ne le construit pas
+    - workspace/proof/datasets/**    # il DÉCLARE le golden set, il ne le construit pas
 
 architect-data:
   model_tier: balanced
@@ -261,28 +269,28 @@ architect-data:
   reads:
     - .sdda/docs/DATA-ACCESS.md                      # stable
     - .sdda/docs/DATA-SOURCES.md                     # stable — sources hors base
-    - .sdda/stacks/dataaccess/*.md                   # stable
+    - .sdda/stacks/dataaccess/{dataaccess}.md                   # stable
     - workspace/stack/STACK.md                       # semi
     - workspace/stack/sources/*.yml                  # semi — manifestes de sources
     - workspace/stack/sources/*.json                 # semi
-    - workspace/topology/{n}-topology.md             # volatile
+    - workspace/feats/topology/{n}-topology.md             # volatile
   writes:
-    - workspace/contracts/tools/{n}-data-*.tool.md   # préfixe `data-` RÉSERVÉ :
+    - workspace/feats/contracts/tools/{n}-data-*.tool.md   # préfixe `data-` RÉSERVÉ :
                                                      # namespace disjoint de architect-tools,
                                                      # les deux écrivent dans le même
                                                      # répertoire en parallèle (phase 2)
-    - workspace/.sys/.context/adrs/ADR-*.md          # obligatoire si DbAgentRole != readonly
+    - workspace/feats/decisions/ADR-*.md          # obligatoire si DbAgentRole != readonly
 
 architect-memory:
   model_tier: balanced
   budget_bytes: 80000
   reads:
     - .sdda/templates/memory-contract.template.md    # stable
-    - .sdda/stacks/memory/*.md                       # stable
+    - .sdda/stacks/memory/{memory}.md                       # stable
     - workspace/stack/STACK.md                       # semi
-    - workspace/topology/{n}-topology.md             # volatile
+    - workspace/feats/topology/{n}-topology.md             # volatile
   writes:
-    - workspace/contracts/memory/{n}-memory.md
+    - workspace/feats/contracts/memory/{n}-memory.md
 
 # ---------------------------------------------------------------------------
 # Phase 4 — prompts
@@ -293,15 +301,15 @@ dev-prompt:
   reads:
     - .sdda/rules/prompt-authoring.md                # stable — sa règle centrale
     - .sdda/templates/prompt.template.md             # stable
-    - workspace/contracts/agents/{n}-*.agent.md      # volatile — 1 par invocation
-    - workspace/caps/{n}-*-*.md                      # volatile — les CAPs servies
-    - workspace/contracts/tools/{n}-*.tool.md        # volatile — descriptions d'outils
+    - workspace/feats/contracts/agents/{n}-*.agent.md      # volatile — 1 par invocation
+    - workspace/feats/caps/{n}-*-*.md                      # volatile — les CAPs servies
+    - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile — descriptions d'outils
   writes:
-    - workspace/prompts/{agent}.system.md
-    - workspace/contracts/agents/{n}-*.agent.md      # Edit narrow : §Prompt (ref + hash)
+    - workspace/src/prompts/{agent}.system.md
+    - workspace/feats/contracts/agents/{n}-*.agent.md      # Edit narrow : §Prompt (ref + hash)
   forbidden_reads:
     - workspace/src/**          # il écrit la spec, il ne s'aligne pas sur le code
-    - workspace/datasets/**     # un prompt écrit en regardant le jeu de test triche
+    - workspace/proof/datasets/**     # un prompt écrit en regardant le jeu de test triche
 
 # ---------------------------------------------------------------------------
 # Phases 3-5 — implémentation
@@ -313,20 +321,20 @@ dev-tools:
     - workspace/.sys/.context/packs/dev-tools.md      # stable — stack tranchée
     - workspace/stack/STACK.md                       # semi
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
-    - workspace/contracts/tools/{n}-*.tool.md        # volatile
+    - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
   pack_sources:
     - .sdda/stacks/lang/{lang}.md
-    - .sdda/stacks/tools/*.md
+    - .sdda/stacks/tools/{tools}.md
     - .sdda/stacks/observability/otel-genai.md
   writes:
     - workspace/src/**/tools/**
   forbidden_writes:
-    - workspace/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
-    - workspace/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION]
-    - workspace/evals/baselines/**
+    - workspace/proof/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
+    - workspace/src/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION]
+    - workspace/proof/baselines/**
 
 dev-retrieval:
   model_tier: balanced
@@ -335,22 +343,22 @@ dev-retrieval:
     - workspace/.sys/.context/packs/dev-retrieval.md       # stable
     - workspace/stack/STACK.md                       # semi
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
-    - workspace/contracts/retrieval/{n}-*.retrieval.md  # volatile
+    - workspace/feats/contracts/retrieval/{n}-*.retrieval.md  # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
   pack_sources:
     - .sdda/stacks/lang/{lang}.md
-    - .sdda/stacks/rag/*.md
-    - .sdda/stacks/vectorstore/*.md
-    - .sdda/stacks/embedding/*.md
-    - .sdda/stacks/rerank/*.md
+    - .sdda/stacks/rag/{rag}.md
+    - .sdda/stacks/vectorstore/{vectorstore}.md
+    - .sdda/stacks/embedding/{embedding}.md
+    - .sdda/stacks/rerank/{rerank}.md
   writes:
     - workspace/src/**/retrieval/**
   forbidden_writes:
-    - workspace/datasets/**
-    - workspace/prompts/**
-    - workspace/evals/baselines/**
+    - workspace/proof/datasets/**
+    - workspace/src/prompts/**
+    - workspace/proof/baselines/**
 
 dev-data:
   model_tier: balanced
@@ -370,8 +378,8 @@ dev-data:
   writes:
     - workspace/src/**/data/**
   forbidden_writes:
-    - workspace/datasets/**
-    - workspace/prompts/**
+    - workspace/proof/datasets/**
+    - workspace/src/prompts/**
 
 dev-agent:
   model_tier: deep
@@ -380,8 +388,8 @@ dev-agent:
     - workspace/.sys/.context/packs/dev-agent.md     # stable — framework tranché
     - workspace/stack/STACK.md                       # semi
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
-    - workspace/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
-    - workspace/prompts/{agent}.system.md            # volatile — lecture seule
+    - workspace/feats/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
+    - workspace/src/prompts/{agent}.system.md            # volatile — lecture seule
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -389,13 +397,13 @@ dev-agent:
     - .sdda/stacks/lang/{lang}.md
     - .sdda/stacks/framework/{framework}.md
     - .sdda/stacks/framework/{framework}.libs.json
-    - .sdda/stacks/guardrails/*.md
+    - .sdda/stacks/guardrails/{guardrails}.md
   writes:
     - workspace/src/**/agents/{agent}/**                # répertoire DISJOINT par agent
   forbidden_writes:
-    - workspace/datasets/**     # [DATASET_OWNERSHIP_VIOLATION] — sans bypass
-    - workspace/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
-    - workspace/evals/**
+    - workspace/proof/datasets/**     # [DATASET_OWNERSHIP_VIOLATION] — sans bypass
+    - workspace/src/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
+    - workspace/proof/**
     # PAS de `workspace/src/**/agents/{other}/**` ici. Le motif se compilait en
     # `[^/]+`, donc EXACTEMENT comme `{agent}` de `writes:` — et les interdits
     # étant testés en premier, `dev-agent` était refusé dans sa PROPRE zone :
@@ -409,7 +417,7 @@ dev-agent:
     # nommée. Écrire ici un interdit qui n'en est pas un donnait l'illusion
     # d'une barrière tout en supprimant la seule qui fonctionnait.
   forbidden_reads:
-    - workspace/datasets/**     # coder en regardant le jeu de test, c'est tricher
+    - workspace/proof/datasets/**     # coder en regardant le jeu de test, c'est tricher
 
 dev-orchestration:
   model_tier: deep
@@ -418,7 +426,7 @@ dev-orchestration:
     - workspace/.sys/.context/packs/dev-orchestration.md  # stable
     - workspace/stack/STACK.md                       # semi
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — le graphe ET les bornes
-    - workspace/topology/{n}-topology.mmd            # volatile
+    - workspace/feats/topology/{n}-topology.mmd            # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -426,17 +434,25 @@ dev-orchestration:
     - .sdda/stacks/lang/{lang}.md
     - .sdda/stacks/framework/{framework}.md
     - .sdda/stacks/framework/{framework}.libs.json
-    - .sdda/stacks/orchestration/*.md
+    - .sdda/stacks/orchestration/{orchestration}.md
   writes:
     - workspace/src/**/orchestration/**
     - workspace/src/**/shared/**                        # pré-passe : types partagés, puis gelés
   forbidden_writes:
-    - workspace/datasets/**
-    - workspace/prompts/**
+    - workspace/proof/datasets/**
+    - workspace/src/prompts/**
 
 dev-api:
   model_tier: balanced
-  budget_bytes: 120000
+  # 160 Ko, mesuré et non estimé : le contexte STABLE de cet agent pèse déjà
+  # 111 Ko sur un workspace VIDE (pack 60 Ko de la fiche langage + la surface
+  # active + l'observabilité, plus STACK.md à 30 Ko). L'ancien plafond de
+  # 120 Ko ne laissait que 8 Ko pour l'IR, qu'il lit en entier — donc un refus
+  # de spawn dès la première MISSION réelle, sur l'agent qui produit la surface
+  # par laquelle on entre dans le produit.
+  # Le budget doit dire la vérité du coût : le serrer sous le coût réel ne
+  # réduit rien, il déplace l'échec au spawn.
+  budget_bytes: 160000
   reads:
     - workspace/.sys/.context/packs/dev-api.md   # stable
     - workspace/stack/STACK.md                       # semi
@@ -461,17 +477,17 @@ qa-evals:
     - .sdda/rules/eval-protocol.md                   # stable — sa règle centrale
     - .sdda/templates/eval-suite.template.md         # stable
     - .sdda/templates/golden-set.schema.json         # stable
-    - workspace/missions/{n}-*.md                    # semi — la ground truth
-    - workspace/caps/{n}-*-*.md                      # volatile — les AC à mesurer
+    - workspace/feats/missions/{n}-*.md                    # semi — la ground truth
+    - workspace/feats/caps/{n}-*-*.md                      # volatile — les AC à mesurer
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
   writes:
-    - workspace/datasets/**                          # OWNER EXCLUSIF
-    - workspace/evals/suites/**
-    - workspace/evals/calibration/**                 # sauf les labels, qui sont humains
+    - workspace/proof/datasets/**                          # OWNER EXCLUSIF
+    - workspace/proof/suites/**
+    - workspace/proof/calibration/**                 # sauf les labels, qui sont humains
   forbidden_writes:
-    - workspace/evals/baselines/**   # script déterministe uniquement
+    - workspace/proof/baselines/**   # script déterministe uniquement
     - workspace/src/**
-    - workspace/prompts/**
+    - workspace/src/prompts/**
   forbidden_reads:
     - workspace/src/**/agents/**   # construire le jeu en lisant le code produit
                                 # un jeu qui teste ce que le code fait déjà
@@ -481,7 +497,7 @@ qa-tests:
   budget_bytes: 140000
   reads:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
-    - workspace/contracts/tools/{n}-*.tool.md        # volatile
+    - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile
     - workspace/src/**                               # volatile — lecture seule
   writes:
     - workspace/src/tests/**            # tests TRANSVERSES — la zone propre de qa-tests
@@ -494,7 +510,7 @@ qa-tests:
     # n'est pas un mécanisme.
     # `writes:` EST l'allowlist : tout chemin qui n'y figure pas est déjà
     # refusé, donc `src/tools/crm.py` reste interdit sans qu'on ait à le dire.
-    - workspace/datasets/**
+    - workspace/proof/datasets/**
 
 # ---------------------------------------------------------------------------
 # Phase 7 — revue (aucun reviewer n'écrit ailleurs que dans son rapport)
@@ -503,9 +519,9 @@ review-spec:
   model_tier: balanced
   budget_bytes: 160000
   reads:
-    - workspace/caps/{n}-*-*.md
-    - workspace/evals/suites/**
-    - workspace/evals/reports/**
+    - workspace/feats/caps/{n}-*-*.md
+    - workspace/proof/suites/**
+    - workspace/.sys/reports/**
     - workspace/.sys/.ir/{n}-system.ir.json
   writes:
     - workspace/.sys/.validation/reports/spec-compliance-{n}.md
@@ -516,9 +532,9 @@ review-safety:
   reads:
     - .sdda/rules/agent-safety.md                    # stable
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — scopes et postures
-    - workspace/prompts/**                           # volatile
-    - workspace/contracts/tools/{n}-*.tool.md        # volatile
-    - workspace/evals/reports/adversarial-*.json     # volatile
+    - workspace/src/prompts/**                           # volatile
+    - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile
+    - workspace/.sys/reports/adversarial-*.json     # volatile
   writes:
     - workspace/.sys/.validation/reports/agent-safety-{n}.md
 
@@ -526,9 +542,9 @@ review-cost:
   model_tier: fast
   budget_bytes: 60000
   reads:
-    - workspace/missions/{n}-*.md                    # le budget déclaré
+    - workspace/feats/missions/{n}-*.md                    # le budget déclaré
     - workspace/.sys/.ir/{n}-system.ir.json          # le budget estimé
-    - workspace/evals/reports/**                     # le budget mesuré
+    - workspace/.sys/reports/**                     # le budget mesuré
   writes:
     - workspace/.sys/.validation/reports/cost-latency-{n}.md
   why_fast: |
@@ -540,8 +556,8 @@ review-orchestration:
   budget_bytes: 140000
   reads:
     - workspace/.sys/.ir/{n}-system.ir.json
-    - workspace/traces/runs/*.jsonl                  # volatile — les trajectoires réelles
-    - workspace/evals/reports/trajectory-*.json
+    - workspace/.sys/traces/runs/*.jsonl                  # volatile — les trajectoires réelles
+    - workspace/.sys/reports/trajectory-*.json
   writes:
     - workspace/.sys/.validation/reports/orchestration-{n}.md
 
@@ -549,9 +565,9 @@ review-rag:
   model_tier: balanced
   budget_bytes: 140000
   reads:
-    - workspace/contracts/retrieval/{n}-*.retrieval.md
-    - workspace/evals/reports/retrieval-*.json
-    - workspace/evals/reports/groundedness-*.json
+    - workspace/feats/contracts/retrieval/{n}-*.retrieval.md
+    - workspace/.sys/reports/retrieval-*.json
+    - workspace/.sys/reports/groundedness-*.json
   writes:
     - workspace/.sys/.validation/reports/rag-quality-{n}.md
 
@@ -560,18 +576,18 @@ review-adversarial:
   budget_bytes: 160000
   reads:
     - .sdda/rules/agent-safety.md                    # stable
-    - workspace/missions/{n}-*.md                    # le mandat à faire sortir
-    - workspace/datasets/adversarial/**              # volatile
+    - workspace/feats/missions/{n}-*.md                    # le mandat à faire sortir
+    - workspace/proof/datasets/adversarial/**              # volatile
   writes:
     - workspace/.sys/.validation/reports/adversarial-{n}.md
     - workspace/.sys/.validation/adversarial-findings/{n}.jsonl
   forbidden_writes:
-    - workspace/datasets/**     # aucune exception, même pour l'adversarial
+    - workspace/proof/datasets/**     # aucune exception, même pour l'adversarial
   note: |
     Toute attaque réussie doit devenir un item PERMANENT du jeu adversarial —
     c'est le mécanisme qui empêche une faille de revenir après un refactoring.
     Mais il ne l'écrit pas lui-même : il dépose ses trouvailles, et un script
-    déterministe les promeut dans workspace/datasets/adversarial/.
+    déterministe les promeut dans workspace/proof/datasets/adversarial/.
 
     Le détour coûte une étape et préserve un invariant SANS TROU : « seul
     qa-evals écrit dans datasets/ » se vérifie mécaniquement, alors qu'une

@@ -1,7 +1,7 @@
 """Rapports d'évaluation et baselines sur disque — plomberie commune.
 
-    workspace/evals/reports/{n}-{RUN_ID}.json     rapports produits par eval_runner.py
-    workspace/evals/baselines/{n}-system.json     baseline épinglée (P10), déplacée
+    workspace/.sys/reports/{n}-{RUN_ID}.json     rapports produits par eval_runner.py
+    workspace/proof/baselines/{n}-system.json     baseline épinglée (P10), déplacée
                                                   UNIQUEMENT par promote_baseline.py
 
 Partagé par `check_baseline_freshness.py`, `promote_baseline.py` et
@@ -23,7 +23,7 @@ REPORT_SUFFIX = ".json"
 
 
 def reports_dir(root: Path) -> Path:
-    return paths.evals_dir(root) / "reports"
+    return paths.reports_dir(root)
 
 
 def baselines_dir(root: Path) -> Path:

@@ -9,7 +9,7 @@ Ce script **n'appelle aucun LLM**. Il orchestre : il reçoit un `Executor`
 d'un item, fait noter cette sortie par un grader, répète k fois **sans aucun
 cache**, agrège via `eval_stats`, épingle via `eval_pinning`, écrit :
 
-    workspace/evals/reports/{n}-{RUN_ID}.json     le rapport complet
+    workspace/.sys/reports/{n}-{RUN_ID}.json     le rapport complet
     workspace/.sys/.validation/G{x}-{mission}.json  un rapport de gate par gate touchée
 
 Ce qu'il refuse par construction :
@@ -40,6 +40,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -270,6 +271,13 @@ class Filters:
     levels: set[str] = field(default_factory=set)
     caps: set[str] = field(default_factory=set)
     agents: set[str] = field(default_factory=set)
+    #: Fragments de chemin de dataset (`holdout`, `golden`, ou un chemin entier).
+    datasets: set[str] = field(default_factory=set)
+    #: G5 : ne retenir que les suites qui nomment UN agent, et le dire à
+    #: l'exécuteur. Isoler n'est pas un filtre de confort — c'est ce qui
+    #: distingue « cet agent tient ses AC » de « le système y arrive ». Sans
+    #: isolation, un agent faible passe parce qu'un autre rattrape derrière.
+    isolated: bool = False
 
     def accepts(self, suite: dict[str, Any]) -> bool:
         if self.suites and str(suite.get("id")) not in self.suites:
@@ -280,10 +288,17 @@ class Filters:
             return False
         if self.agents and str(suite.get("agentRef")) not in self.agents:
             return False
+        if self.datasets:
+            ds = str(suite.get("dataset") or "")
+            if not any(frag in ds for frag in self.datasets):
+                return False
+        if self.isolated and not str(suite.get("agentRef") or "").strip():
+            return False
         return True
 
-    def to_dict(self) -> dict[str, list[str]]:
-        return {"suites": sorted(self.suites), "levels": sorted(self.levels), "caps": sorted(self.caps), "agents": sorted(self.agents)}
+    def to_dict(self) -> dict[str, Any]:
+        return {"suites": sorted(self.suites), "levels": sorted(self.levels), "caps": sorted(self.caps),
+                "agents": sorted(self.agents), "datasets": sorted(self.datasets), "isolated": self.isolated}
 
 
 def plan_suite(
@@ -399,20 +414,51 @@ def execute_suite(
     detail_rows: list[dict[str, Any]] = []
     exec_errors = 0
 
+    # Parallélisme des items — `EvalMaxParallel`, 4 par défaut.
+    #
+    # Un item était mesuré après l'autre, et c'est le poste qui domine la durée
+    # d'un run complet : k=3 sur 50 items, pour chaque agent en G5, puis en G6,
+    # puis en PHASE 6, puis en G8, fait plus d'un millier d'appels au système
+    # évalué — des heures, quand les agents de construction, eux, se comptent en
+    # dizaines de minutes. Le pipeline passait donc l'essentiel de son temps
+    # mural à attendre en série des appels sans dépendance entre eux.
+    #
+    # Ce qui ne change pas, et qui doit être dit : l'ORDRE des résultats. Les
+    # items sont replacés à leur rang avant agrégation, donc le rapport, les
+    # moyennes par classe et le détail sont identiques à ceux de l'exécution
+    # série. Une mesure dont l'ordre dépend de l'ordonnanceur ne serait pas
+    # comparable d'un run à l'autre, et c'est précisément ce que P10 interdit.
+    #
+    # Contrat imposé à l'exécuteur : `run()` doit supporter des appels
+    # concurrents. Les deux exécuteurs du squelette généré l'honorent (l'un
+    # shelle la surface console, l'autre est sans état partagé). Un exécuteur
+    # qui ne le peut pas se déclare en `EvalMaxParallel: 1`.
+    max_parallel = max(1, config.get_int("EvalMaxParallel", 4) if config else 4)
+
+    def measure(run_index: int, seed: int | None, item: dict[str, Any]) -> ItemResult:
+        item_id = str(item.get("id"))
+        # Pas de mémo : l'exécuteur est rappelé à chaque run, seed distinct.
+        try:
+            produced = executor.run(item, suite=suite, run_index=run_index, seed=seed) or {}
+            measures = {"cost_usd": float(produced.get("cost_usd", 0.0) or 0.0), "latency_ms": float(produced.get("latency_ms", 0.0) or 0.0)}
+            grade = normalize_grade(grader(item, produced.get("output"), produced.get("trace"), measures))
+            passed = grade.passed if grade.passed is not None else plan.threshold.holds(grade.score)
+            return ItemResult(item_id, run_index, grade.score, bool(passed), grade.detail, None, measures["cost_usd"], measures["latency_ms"])
+        except Exception as exc:  # une exception de l'exécuteur ou du grader est une erreur d'item, pas un score
+            return ItemResult(item_id, run_index, 0.0, False, {}, f"{type(exc).__name__}: {exc}")
+
     for run_index, seed in enumerate(plan.seeds):
         run = RunResult(run_index=run_index)
-        for item in items:
+        if max_parallel > 1 and len(items) > 1:
+            with ThreadPoolExecutor(max_workers=min(max_parallel, len(items))) as pool:
+                measured = list(pool.map(lambda it: measure(run_index, seed, it), items))
+        else:
+            measured = [measure(run_index, seed, it) for it in items]
+
+        for item, ir_item in zip(items, measured):
             item_id = str(item.get("id"))
-            # Pas de mémo : l'exécuteur est rappelé à chaque run, seed distinct.
-            try:
-                produced = executor.run(item, suite=suite, run_index=run_index, seed=seed) or {}
-                measures = {"cost_usd": float(produced.get("cost_usd", 0.0) or 0.0), "latency_ms": float(produced.get("latency_ms", 0.0) or 0.0)}
-                grade = normalize_grade(grader(item, produced.get("output"), produced.get("trace"), measures))
-                passed = grade.passed if grade.passed is not None else plan.threshold.holds(grade.score)
-                ir_item = ItemResult(item_id, run_index, grade.score, bool(passed), grade.detail, None, measures["cost_usd"], measures["latency_ms"])
-            except Exception as exc:  # une exception de l'exécuteur ou du grader est une erreur d'item, pas un score
+            if ir_item.error is not None:
                 exec_errors += 1
-                ir_item = ItemResult(item_id, run_index, 0.0, False, {}, f"{type(exc).__name__}: {exc}")
             run.items.append(ir_item)
             cls = item_class(item)
             if cls is not None and ir_item.error is None:
@@ -443,7 +489,7 @@ def _metric_of(suite_id: str) -> str:
 # Orchestration complète
 # ---------------------------------------------------------------------------
 def reports_dir(root: Path) -> Path:
-    return paths.evals_dir(root) / "reports"
+    return paths.reports_dir(root)
 
 
 def unique_report_path(root: Path, number: int, run_id: str) -> Path:
@@ -497,11 +543,18 @@ def run_evals(
     filters = filters or Filters()
     suites = [s for s in ((ir.get("evaluation") or {}).get("suites") or []) if isinstance(s, dict)]
     selected = [s for s in suites if filters.accepts(s)]
+    if filters.isolated:
+        # L'isolement est porté par la suite transmise à l'exécuteur : c'est lui
+        # qui sait câbler des outils mockés et un retrieval figé, le runner
+        # n'appelant jamais rien lui-même. Le dire dans la suite plutôt que dans
+        # une variable d'environnement garde la mesure lisible dans le rapport :
+        # on voit, item par item, si ce score a été obtenu isolé ou en système.
+        selected = [{**s, "isolated": True} for s in selected]
     if not selected:
         report.error("EVAL_SUITE_NOT_FOUND", f"aucune suite de `{mid}` ne correspond aux filtres {filters.to_dict()}",
                      "vérifier --suite / --level / --cap / --agent contre `evaluation.suites` de l'IR", mid)
 
-    bpath = baseline_path or paths.resolve_rel(root, str((ir.get("evaluation") or {}).get("baselineRef") or f"workspace/evals/baselines/{number}-system.json"))
+    bpath = baseline_path or paths.resolve_rel(root, str((ir.get("evaluation") or {}).get("baselineRef") or f"workspace/proof/baselines/{number}-system.json"))
     baselines: dict[str, Baseline] = load_baselines(bpath)
     policy = str(config.get("EvalSeedPolicy", "vary") if config else "vary").strip().lower()
     if policy == "fixed":
@@ -669,6 +722,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--level", "--levels", dest="level", default=None, help="niveaux L0..L9, séparés par des virgules")
     p.add_argument("--cap", action="append", default=None, help="CAP(s) à évaluer")
     p.add_argument("--agent", action="append", default=None, help="agent(s) à évaluer")
+    p.add_argument("--dataset", action="append", default=None,
+                   help="ne retenir que les suites dont le `dataset` contient ce fragment "
+                        "(`holdout`, `golden`, ou un chemin entier). G8 : --level L9 --dataset holdout")
+    p.add_argument("--isolated", action="store_true",
+                   help="G5 : ne retenir que les suites qui nomment UN agent et transmettre `isolated: true` "
+                        "à l'exécuteur (outils mockés, retrieval figé). Un agent mesuré en système "
+                        "n'est pas mesuré : un pair rattrape sa faiblesse")
     p.add_argument("--runs", type=int, default=None, help="forcer k (sinon `runs` de la suite, puis EvalRuns/EvalRunsCritical)")
     p.add_argument("--seed", type=int, default=None, help="seed de base (EvalSeedPolicy: vary le fait varier par run)")
     p.add_argument("--baseline", type=Path, default=None, help="baseline à confronter (défaut : evaluation.baselineRef)")
@@ -686,7 +746,8 @@ def main(argv: list[str] | None = None, *, executor: Any = None, graders: dict[s
     config = load_config(root, report)
 
     try:
-        filters = Filters(suites=_split(args.suite), levels=parse_levels(args.level), caps=_split(args.cap), agents=_split(args.agent))
+        filters = Filters(suites=_split(args.suite), levels=parse_levels(args.level), caps=_split(args.cap),
+                          agents=_split(args.agent), datasets=_split(args.dataset), isolated=args.isolated)
     except ValueError as exc:
         report.error("EVAL_SUITE_NOT_FOUND", str(exc), "--level accepte L0..L9", "--level")
         return finish(report, args)

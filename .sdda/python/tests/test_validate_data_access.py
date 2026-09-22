@@ -283,7 +283,7 @@ def test_file_larger_than_cap(sources_project: Path) -> None:
 # Schéma figé
 # ---------------------------------------------------------------------------
 def test_frozen_schema_missing(sources_project: Path) -> None:
-    (sources_project / "workspace/contracts/dataaccess/schemas/order_tracking.schema.json").unlink()
+    (sources_project / "workspace/feats/contracts/dataaccess/schemas/order_tracking.schema.json").unlink()
     assert "DATA_SOURCE_SCHEMA_MISSING" in errors(sources_project)
 
 
@@ -293,7 +293,7 @@ def test_declared_field_absent_from_frozen_schema(sources_project: Path) -> None
 
 
 def test_frozen_schema_malformed(sources_project: Path) -> None:
-    (sources_project / "workspace/contracts/dataaccess/schemas/crm_customer.schema.json").write_text(
+    (sources_project / "workspace/feats/contracts/dataaccess/schemas/crm_customer.schema.json").write_text(
         "{ pas du json", encoding="utf-8")
     assert "DATA_SOURCE_SCHEMA_MALFORMED" in errors(sources_project)
 

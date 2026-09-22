@@ -11,7 +11,7 @@ via sa stack d'observabilité (`observability/otel-genai.md`, spans OTel-GenAI).
 Il définit **le format d'atterrissage** et ce que le framework est en droit d'en
 exiger :
 
-    workspace/traces/runs/{run_id}.jsonl      une ligne JSON par SPAN
+    workspace/.sys/traces/runs/{run_id}.jsonl      une ligne JSON par SPAN
 
 Un fichier par run, append-only, une ligne par span. Le choix du JSONL n'est pas
 cosmétique : un run interrompu laisse une trace lisible jusqu'à l'interruption,
@@ -214,7 +214,7 @@ def _looks_like_credential(candidate: str) -> bool:
 
 
 def runs_dir(root: Path) -> Path:
-    return root / "workspace" / "traces" / "runs"
+    return root / "workspace" / ".sys" / "traces" / "runs"
 
 
 def trace_path(root: Path, run_id: str) -> Path:

@@ -23,7 +23,7 @@ HOOK = "preflight_cost_cap"
 
 #: Câblage — lu par `harness_build.py`. Tout spawn : le plafond de
 #: construction porte sur le cumul du run, donc sur chaque agent qui le gonfle.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": ()}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": ()}
 
 
 def _spent(root: Path) -> float:

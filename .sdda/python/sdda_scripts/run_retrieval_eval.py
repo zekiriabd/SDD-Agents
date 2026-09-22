@@ -29,7 +29,7 @@ omission. C'est exactement le faux vert que ce framework existe pour empêcher.
 
 Usage :
     python .sdda/sdda.py run-retrieval-eval --mission 1 --executor workspace.src.rag:Retriever
-    python .sdda/sdda.py run-retrieval-eval --mission 1 --replay workspace/evals/runs/retrieval.jsonl --json
+    python .sdda/sdda.py run-retrieval-eval --mission 1 --replay workspace/.sys/reports/runs/retrieval.jsonl --json
     python .sdda/sdda.py run-retrieval-eval --mission 1 --retriever 1-contracts-index --k 10
 
 Bypass : `SDDA_BYPASS_RETRIEVAL_GATE=1` dégrade les erreurs en avertissements,
@@ -451,7 +451,7 @@ def run(
 
     written: dict[str, str] = {}
     if write_report and measures:
-        out = paths.evals_dir(root) / "reports" / f"retrieval-{mid or 'system'}-{rid}.json"
+        out = paths.reports_dir(root) / f"retrieval-{mid or 'system'}-{rid}.json"
         _atomic_write_json(out, payload)
         written["report"] = paths.rel(root, out)
         # UN rapport PAR RETRIEVER : `compute_status` lit `G4-{retriever}`.

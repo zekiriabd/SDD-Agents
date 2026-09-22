@@ -75,21 +75,21 @@ def test_the_prompt_loading_module_may_hold_prompt_text(project: Path) -> None:
 
 
 def test_a_secret_in_a_prompt_is_blocking(project: Path) -> None:
-    path = project / "workspace/prompts/billing-specialist.system.md"
+    path = project / "workspace/src/prompts/billing-specialist.system.md"
     path.write_text(path.read_text(encoding="utf-8") + "\nClé : sk-live4f8a2b91c7de0356aa\n",
                     encoding="utf-8")
     assert "SECRET_LEAK" in errors(lp.run(project, mission=1))
 
 
 def test_a_prompt_naming_an_uncabled_tool_is_blocking(project: Path) -> None:
-    path = project / "workspace/prompts/billing-specialist.system.md"
+    path = project / "workspace/src/prompts/billing-specialist.system.md"
     path.write_text(path.read_text(encoding="utf-8") + "\nUtilise `refund_lookup` si besoin.\n",
                     encoding="utf-8")
     assert "PROMPT_TOOL_UNKNOWN" in errors(lp.run(project, mission=1))
 
 
 def test_contradictory_instructions_are_reported(project: Path) -> None:
-    path = project / "workspace/prompts/billing-specialist.system.md"
+    path = project / "workspace/src/prompts/billing-specialist.system.md"
     path.write_text(path.read_text(encoding="utf-8")
                     + "\nNe jamais rembourser le client.\nToujours rembourser si la demande est fondée.\n",
                     encoding="utf-8")
@@ -97,7 +97,7 @@ def test_contradictory_instructions_are_reported(project: Path) -> None:
 
 
 def test_an_oversized_prompt_is_blocking(project: Path) -> None:
-    write(project, "workspace/prompts/billing-specialist.system.md", "Règle métier. " * 3000)
+    write(project, "workspace/src/prompts/billing-specialist.system.md", "Règle métier. " * 3000)
     assert "PROMPT_TOO_LONG" in errors(lp.run(project, mission=1))
 
 
@@ -123,7 +123,7 @@ def test_the_reference_project_has_symmetric_skills(project: Path) -> None:
 
 
 def test_a_skill_declared_but_absent_from_the_prompt_is_blocking(project: Path) -> None:
-    path = project / "workspace/prompts/billing-specialist.system.md"
+    path = project / "workspace/src/prompts/billing-specialist.system.md"
     path.write_text("Tu expliques une ligne de facture en citant la clause source.\n", encoding="utf-8")
     assert "SKILL_NOT_IMPLEMENTED" in errors(lp.run(_with_ir(project), mission=1))
 
@@ -131,7 +131,7 @@ def test_a_skill_declared_but_absent_from_the_prompt_is_blocking(project: Path) 
 def test_a_skill_in_the_prompt_but_absent_from_the_contract_is_blocking(project: Path) -> None:
     """Le sens inverse compte autant : une compétence qui n'existe que dans le
     prompt échappe à la revue et n'a aucune AC en face."""
-    path = project / "workspace/prompts/billing-specialist.system.md"
+    path = project / "workspace/src/prompts/billing-specialist.system.md"
     path.write_text(path.read_text(encoding="utf-8") + "- `issue-refund` : rembourser.\n", encoding="utf-8")
     assert "SKILL_UNDECLARED" in errors(lp.run(_with_ir(project), mission=1))
 
@@ -139,7 +139,7 @@ def test_a_skill_in_the_prompt_but_absent_from_the_contract_is_blocking(project:
 def test_skills_are_not_checked_before_the_ir_exists(project: Path) -> None:
     """Sans IR, « non déclarée » ne veut rien dire. Un lint qui crie avant la
     compilation est un lint qu'on finit par désactiver."""
-    path = project / "workspace/prompts/billing-specialist.system.md"
+    path = project / "workspace/src/prompts/billing-specialist.system.md"
     path.write_text(path.read_text(encoding="utf-8") + "- `issue-refund` : rembourser.\n", encoding="utf-8")
     assert "SKILL_UNDECLARED" not in errors(lp.run(project, mission=1))
 
@@ -168,8 +168,8 @@ def test_the_reference_project_has_no_secret(project: Path) -> None:
     "postgres://app:s3cr3tp4ssw0rd@db.internal:5432/prod",
 ])
 def test_known_secret_shapes_are_caught(project: Path, secret: str) -> None:
-    write(project, "workspace/datasets/golden/leak.jsonl", '{"input": "x", "note": "%s"}\n' % secret)
-    assert "SECRET_LEAK" in errors(ss.run(project, targets=["workspace/datasets"]))
+    write(project, "workspace/proof/datasets/golden/leak.jsonl", '{"input": "x", "note": "%s"}\n' % secret)
+    assert "SECRET_LEAK" in errors(ss.run(project, targets=["workspace/proof/datasets"]))
 
 
 @pytest.mark.parametrize("benign", [
@@ -180,15 +180,15 @@ def test_known_secret_shapes_are_caught(project: Path, secret: str) -> None:
     "secret: XXXXXXXXXXXXXXXX",
 ])
 def test_declared_references_are_not_secrets(project: Path, benign: str) -> None:
-    write(project, "workspace/prompts/config.system.md", benign + "\n")
-    assert not ss.run(project, targets=["workspace/prompts"]).errors
+    write(project, "workspace/src/prompts/config.system.md", benign + "\n")
+    assert not ss.run(project, targets=["workspace/src/prompts"]).errors
 
 
 def test_the_report_never_echoes_the_secret(project: Path) -> None:
     """Un rapport de gate n'est pas gitignoré partout."""
     secret = "sk-abcdefghijklmnopqrstuvwxyz0123456789"
-    write(project, "workspace/prompts/leak.system.md", f"Clé : {secret}\n")
-    rendered = ss.run(project, targets=["workspace/prompts"]).render_text()
+    write(project, "workspace/src/prompts/leak.system.md", f"Clé : {secret}\n")
+    rendered = ss.run(project, targets=["workspace/src/prompts"]).render_text()
     assert secret not in rendered
     assert "sk-abcdefg" in rendered      # tronqué, pour être reconnaissable
 
@@ -204,7 +204,7 @@ def test_an_absent_directory_downgrades_the_verdict(project: Path) -> None:
 # pii-not-in-vector-store
 # ---------------------------------------------------------------------------
 def test_pii_in_a_dataset_is_reported(project: Path) -> None:
-    write(project, "workspace/datasets/golden/real.jsonl",
+    write(project, "workspace/proof/datasets/golden/real.jsonl",
           '{"input": "contacter marie.dupont@clientreel.fr au 06 12 34 56 78"}\n')
     assert "PII_DETECTED" in errors(scan_pii.run(project, targets=["datasets"]))
 
@@ -216,7 +216,7 @@ def test_pii_in_the_corpus_blocks_before_indexing(project: Path) -> None:
 
 def test_example_values_are_not_pii(project: Path) -> None:
     """Signaler les exemples noierait le vrai signal, donc ferait ignorer le scan."""
-    write(project, "workspace/datasets/golden/doc.jsonl",
+    write(project, "workspace/proof/datasets/golden/doc.jsonl",
           '{"input": "écrire à support@example.com depuis 127.0.0.1"}\n')
     assert not scan_pii.run(project, targets=["datasets"]).errors
 
@@ -227,7 +227,7 @@ def test_a_long_number_is_not_a_card_without_luhn(project: Path) -> None:
     Le rapport cesse alors d'être lu — ce qui revient exactement à ne pas avoir
     de scan, en plus coûteux.
     """
-    write(project, "workspace/datasets/golden/ids.jsonl", '{"order_id": "9999888877776666"}\n')
+    write(project, "workspace/proof/datasets/golden/ids.jsonl", '{"order_id": "9999888877776666"}\n')
     assert "PII_DETECTED" not in errors(scan_pii.run(project, targets=["datasets"]))
 
 
@@ -236,7 +236,7 @@ def test_raw_policy_downgrades_but_never_silences(project: Path) -> None:
     stack.write_text(stack.read_text(encoding="utf-8").replace("TraceLevel: full",
                                                                "TraceLevel: full\nTracePIIPolicy: raw"),
                      encoding="utf-8")
-    write(project, "workspace/datasets/golden/real.jsonl", '{"input": "marie.dupont@clientreel.fr"}\n')
+    write(project, "workspace/proof/datasets/golden/real.jsonl", '{"input": "marie.dupont@clientreel.fr"}\n')
     report = scan_pii.run(project, targets=["datasets"])
     assert report.data["tracePiiPolicy"] == "raw"
     assert "PII_POLICY_PERMISSIVE" in classes(report)
@@ -262,12 +262,12 @@ def test_the_shipped_matrix_is_coherent(project: Path) -> None:
 
 def test_a_dev_agent_writing_a_dataset_is_blocked(project: Path) -> None:
     """Modifier le jeu qui vous juge rend la note invérifiable."""
-    report = ao.run(project, agent="dev-agent", wrote=["workspace/datasets/golden/billing-v1.jsonl"])
+    report = ao.run(project, agent="dev-agent", wrote=["workspace/proof/datasets/golden/billing-v1.jsonl"])
     assert "DATASET_OWNERSHIP_VIOLATION" in errors(report)
 
 
 def test_a_dev_agent_writing_a_prompt_is_blocked(project: Path) -> None:
-    report = ao.run(project, agent="dev-agent", wrote=["workspace/prompts/billing-specialist.system.md"])
+    report = ao.run(project, agent="dev-agent", wrote=["workspace/src/prompts/billing-specialist.system.md"])
     assert "PROMPT_OWNERSHIP_VIOLATION" in errors(report)
 
 

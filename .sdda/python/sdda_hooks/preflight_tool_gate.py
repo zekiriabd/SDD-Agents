@@ -22,7 +22,7 @@ HOOK = "preflight_tool_gate"
 #: Câblage — lu par `harness_build.py`. Le hook garde l'entrée de la phase 4 :
 #: `dev-tools` doit pouvoir travailler pour rendre G3 verte, donc il n'est pas
 #: dans la liste. Se prononcer sur lui interdirait de corriger ce qu'on reproche.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": AGENT_BUILDERS}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": AGENT_BUILDERS}
 
 #: Ce que le bypass ne couvre jamais. Aligné sur `validate_tool_contract.BYPASS_NEVER`.
 NEVER_BYPASSED = ("SIDE_EFFECT_UNDECLARED", "SAFETY_STRATEGY_MISSING", "TOOL_RETRY_UNSAFE")

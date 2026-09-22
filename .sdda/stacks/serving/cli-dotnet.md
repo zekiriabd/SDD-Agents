@@ -69,7 +69,7 @@ contre l'une fonctionne contre l'autre, et c'est le but.
 | `{AppName} resume` | enregistrée **seulement** si l'IR déclare `humanInTheLoop` | oui |
 | `{AppName} health` | `IHealthCheck` réutilisés hors ASP.NET, exécutés en direct | **non** |
 | `{AppName} inspect` | lecture de l'IR embarqué ; `--graph` imprime le Mermaid | non |
-| `{AppName} trace` | relecture de `workspace/traces/runs/{run-id}.jsonl` | non |
+| `{AppName} trace` | relecture de `workspace/.sys/traces/runs/{run-id}.jsonl` | non |
 | `{AppName} version` | version d'assembly, hash de l'IR, hash de la stack, `semconv_version` | non |
 
 ### 3.2 Protocole d'événements et codes de sortie

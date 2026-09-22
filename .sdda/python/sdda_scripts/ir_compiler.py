@@ -16,12 +16,12 @@ Trois règles non négociables (AGENTIC-IR.md §1, §5) :
    - id de suite d'AC : `{n}-{m}-{metric}` ; niveau L4 si la CAP est portée par
      un agent, L3 par un retriever seul, L2 par un outil seul ;
    - `judgeCalibrationRef` d'un `llm-judge` sans `calibration:` :
-     `workspace/evals/calibration/{metric}.json` (annoncé par validate_cap.py) ;
+     `workspace/proof/calibration/{metric}.json` (annoncé par validate_cap.py) ;
    - suite d'injection d'un agent à entrées non maîtrisées :
      `{agentId}-injection`, L8, grader `trajectory`, seuil 1.0 (toute attaque
      réussie est bloquante), `runs` = `EvalRunsCritical` ;
-   - `baselineRef` : `workspace/evals/baselines/{n}-system.json` ;
-   - `holdout` : l'unique fichier `workspace/datasets/holdout/mission-{n}-*.jsonl` ;
+   - `baselineRef` : `workspace/proof/baselines/{n}-system.json` ;
+   - `holdout` : l'unique fichier `workspace/proof/datasets/holdout/mission-{n}-*.jsonl` ;
    - `promptHash` : hash du fichier prompt s'il existe, sinon le hash épinglé
      dans le contrat (`- Hash :`) ; ni l'un ni l'autre => erreur ;
    - `onBoundExceeded` d'un agent : le comportement majoritaire de sa table de
@@ -248,9 +248,9 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
     # §3 Prompt --------------------------------------------------------------
     prompt_kv = markdown_io.parse_kv_list(sec("Prompt") or "")
     prompt_ref = markdown_io.strip_code(prompt_kv.get("Fichier", ""))
-    if markdown_io.is_placeholder(prompt_ref) or not prompt_ref.startswith("workspace/prompts/"):
-        ctx.fail(f"agent `{aid}` : `## 3. Prompt` ne nomme pas de fichier `workspace/prompts/….system.md`",
-                 "écrire `- Fichier : `workspace/prompts/{slug}.system.md``", f"{loc}:3")
+    if markdown_io.is_placeholder(prompt_ref) or not prompt_ref.startswith("workspace/src/prompts/"):
+        ctx.fail(f"agent `{aid}` : `## 3. Prompt` ne nomme pas de fichier `workspace/src/prompts/….system.md`",
+                 "écrire `- Fichier : `workspace/src/prompts/{slug}.system.md``", f"{loc}:3")
     else:
         agent["promptRef"] = prompt_ref
         prompt_path = paths.resolve_rel(ctx.root, prompt_ref)
@@ -356,7 +356,7 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
         posture["injectionSuiteRef"] = suite_ref
     elif untrusted:
         ctx.fail(f"agent `{aid}` : entrées non maîtrisées {untrusted} sans `Suite d'injection`",
-                 "déclarer `- **Suite d'injection** : workspace/datasets/adversarial/{slug}.jsonl` (invariant injection-suite-mandatory)", f"{loc}:8")
+                 "déclarer `- **Suite d'injection** : workspace/proof/datasets/adversarial/{slug}.jsonl` (invariant injection-suite-mandatory)", f"{loc}:8")
     agent["trustPosture"] = posture
 
     # §9 Politique de refus ---------------------------------------------------------
@@ -534,7 +534,7 @@ def compile_tool(ctx: CompileContext, path: Path) -> dict[str, Any]:
     # §8 Tests de contrat ---------------------------------------------------------------------
     m = re.search(r"Fichier\s*:\s*`([^`]+)`", sec("Tests de contrat (L2)") or sec("Tests de contrat") or "")
     if not m or markdown_io.is_placeholder(m.group(1)):
-        ctx.fail(f"outil `{tid}` : `## 8. Tests de contrat (L2)` ne nomme pas de fichier", "écrire `Fichier : `workspace/evals/suites/tool-{id}.yaml``", f"{loc}:8")
+        ctx.fail(f"outil `{tid}` : `## 8. Tests de contrat (L2)` ne nomme pas de fichier", "écrire `Fichier : `workspace/proof/suites/tool-{id}.yaml``", f"{loc}:8")
     else:
         tool["contractTestsRef"] = m.group(1).strip()
     return tool
@@ -732,7 +732,7 @@ def _names(value: str | None) -> list[str]:
 
 
 def compile_orchestration(ctx: CompileContext, topo: TopologySpec, mmd_text: str) -> dict[str, Any]:
-    loc = f"workspace/topology/{ctx.number}-topology.md"
+    loc = f"workspace/feats/topology/{ctx.number}-topology.md"
     orch: dict[str, Any] = {}
     if topo.root_pattern:
         orch["rootPattern"] = topo.root_pattern
@@ -791,7 +791,53 @@ def _suite_id(cap: CapSpec, metric: str) -> str:
     return f"{cap.number}-{cap.index}-{metric}"
 
 
-def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[dict[str, Any]], tools: list[dict[str, Any]], retrievers: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, runs: int) -> dict[str, Any] | None:
+    """La suite L9 : l'objectif chiffré de la MISSION, mesuré sur le holdout.
+
+    C'est la seule suite que G8 sait lire (`LEVEL_GATE["L9"] -> G8.acceptance`),
+    et rien ne la produisait. `eval_runner` connaissait le niveau, la gate
+    l'attendait, et aucun IR n'en contenait jamais une : la part `acceptance`
+    de G8 ne pouvait donc être franchie par aucun chemin. Une gate qu'aucune
+    exécution ne peut rendre verte n'est pas stricte, elle est morte — et c'est
+    la dernière du pipeline, celle qui décide si le produit est livrable.
+
+    Le grader vient de `## Quantified Goal`, jamais d'un défaut : deviner
+    comment on mesure l'objectif d'une mission, c'est choisir son verdict à sa
+    place. Absent, la suite n'est pas émise et `validate_ir` le refuse avec le
+    chemin exact à corriger.
+    """
+    goal = dict(getattr(mission, "goal", {}) or {})
+    grader = str(goal.get("Grader", "")).strip().lower()
+    mloc = f"workspace/feats/missions/{getattr(mission, 'id', ctx.number)}.md"
+    if not grader or markdown_io.is_placeholder(grader):
+        return None
+    if grader not in GRADERS:
+        ctx.fail(f"MISSION : `Quantified Goal: Grader: {grader}` inconnu",
+                 f"graders admis : {', '.join(GRADERS)}", f"{mloc}:Quantified Goal")
+        return None
+
+    threshold = None
+    raw_target = str(goal.get("Target", ""))
+    match = re.search(r"-?\d+(?:[.,]\d+)?", raw_target.replace(",", "."))
+    if match:
+        threshold = float(match.group(0))
+    if threshold is None:
+        ctx.fail(f"MISSION : `Quantified Goal: Target: {raw_target or '<absent>'}` ne porte aucun seuil chiffré",
+                 "écrire une cible mesurable, ex. `>= 0.75 sur le holdout` — G0 le refuse aussi",
+                 f"{mloc}:Quantified Goal")
+        return None
+
+    suite: dict[str, Any] = {
+        "id": f"{ctx.number}-acceptance", "level": "L9", "dataset": holdout,
+        "grader": grader, "threshold": threshold, "runs": runs,
+    }
+    if grader == "llm-judge":
+        cal = str(goal.get("Calibration", "")).strip()
+        suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/proof/calibration/{ctx.number}-acceptance.json"
+    return suite
+
+
+def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[dict[str, Any]], tools: list[dict[str, Any]], retrievers: list[dict[str, Any]], mission: Any = None) -> tuple[dict[str, Any], dict[str, Any]]:
     suites: list[dict[str, Any]] = []
     traceability: dict[str, Any] = {}
     agents_by_cap: dict[str, list[str]] = {}
@@ -801,14 +847,14 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
     critical_runs = ctx.config.get_int("EvalRunsCritical", 5) if ctx.config else 5
 
     for cap in caps:
-        loc = f"workspace/caps/{cap.id}.md"
+        loc = f"workspace/feats/caps/{cap.id}.md"
         alloc_agents = sorted({ctx.qualified(a) for a in cap.allocated.get("agents", [])} | set(agents_by_cap.get(cap.id, [])))
         alloc_tools = sorted({ctx.qualified(t) for t in cap.allocated.get("tools", [])})
         alloc_retr = sorted({ctx.qualified(r) for r in cap.allocated.get("retrievers", [])})
         for kind, ids, known in (("agent", alloc_agents, ctx.agent_ids), ("outil", alloc_tools, ctx.tool_ids), ("retriever", alloc_retr, ctx.retriever_ids)):
             for i in ids:
                 if i not in known:
-                    ctx.fail(f"CAP `{cap.id}` : `## Allocated To` référence le {kind} `{i}` sans contrat", f"écrire le contrat `workspace/contracts/…/{i}.*.md` ou corriger l'allocation", f"{loc}:Allocated To")
+                    ctx.fail(f"CAP `{cap.id}` : `## Allocated To` référence le {kind} `{i}` sans contrat", f"écrire le contrat `workspace/feats/contracts/…/{i}.*.md` ou corriger l'allocation", f"{loc}:Allocated To")
         level = "L4" if alloc_agents else ("L3" if alloc_retr else "L2")
         evaluated_by: list[str] = []
         for ac in cap.acs:
@@ -829,7 +875,7 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
                 suite["agentRef"] = alloc_agents[0]
             if grader == "llm-judge":
                 cal = f.get("calibration", "").strip()
-                suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/evals/calibration/{metric}.json"
+                suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/proof/calibration/{metric}.json"
                 if f.get("advisory", "").strip().lower() in ("true", "oui", "yes"):
                     suite["advisory"] = True
             suites.append(suite)
@@ -855,14 +901,32 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
             suites.append({"id": f"{a['id']}-injection", "level": "L8", "agentRef": a["id"], "dataset": ref,
                            "grader": "trajectory", "threshold": 1.0, "runs": critical_runs})
 
+    # Le holdout et la suite d'acceptation ------------------------------------
+    #
+    # Le holdout est OPTIONNEL à la compilation, et c'est un ordre de pipeline,
+    # pas une tolérance : l'IR se compile en PHASE 2, `qa-evals` ne produit les
+    # jeux qu'en PHASE 6a, et `qa-evals` lit l'IR pour savoir quoi produire.
+    # Exiger le jeu de verdict ici fermait la boucle sur elle-même — aucune
+    # mission neuve ne pouvait franchir G2, donc aucune ne pouvait atteindre la
+    # phase qui aurait produit le fichier réclamé.
+    #
+    # Ce qui remplace l'exigence, et la rend tenable :
+    #   - `source_hashes` suit désormais le holdout, donc l'IR redevient périmé
+    #     dès que le jeu apparaît et la recompilation émet la suite L9 ;
+    #   - `validate_datasets` exige le holdout de la mission (part `datasets`
+    #     de G8), au moment où il doit exister ;
+    #   - `validate_ir` refuse un holdout sans suite d'acceptation.
+    # L'exigence n'est pas levée : elle est déplacée là où elle est actionnable.
     holdouts = sorted(paths.datasets_dir(ctx.root, "holdout").glob(f"mission-{ctx.number}-*.jsonl"))
-    evaluation: dict[str, Any] = {"suites": sorted(suites, key=lambda s: s["id"]), "baselineRef": f"workspace/evals/baselines/{ctx.number}-system.json"}
-    if len(holdouts) == 1:
+    evaluation: dict[str, Any] = {"suites": sorted(suites, key=lambda s: s["id"]), "baselineRef": f"workspace/proof/baselines/{ctx.number}-system.json"}
+    if len(holdouts) > 1:
+        ctx.fail(f"{len(holdouts)} holdouts candidats pour la mission {ctx.number} : {[p.name for p in holdouts]}", "un seul `mission-{n}-v*.jsonl` par mission", "workspace/proof/datasets/holdout/")
+    elif len(holdouts) == 1:
         evaluation["holdout"] = paths.rel(ctx.root, holdouts[0])
-    elif not holdouts:
-        ctx.fail(f"aucun holdout `workspace/datasets/holdout/mission-{ctx.number}-*.jsonl`", "l'qa-evals produit le jeu de verdict avant G2 : sans lui, G8 n'a rien à mesurer", f"workspace/datasets/holdout/")
-    else:
-        ctx.fail(f"{len(holdouts)} holdouts candidats pour la mission {ctx.number} : {[p.name for p in holdouts]}", "un seul `mission-{n}-v*.jsonl` par mission", "workspace/datasets/holdout/")
+        acceptance = compile_acceptance_suite(ctx, mission, evaluation["holdout"], critical_runs)
+        if acceptance is not None:
+            suites.append(acceptance)
+            evaluation["suites"] = sorted(suites, key=lambda s: s["id"])
     adv = sorted({s["dataset"] for s in suites if s["level"] == "L8"})
     if len(adv) == 1:
         evaluation["adversarial"] = adv[0]
@@ -928,12 +992,19 @@ def source_hashes(root: Path, number: int) -> dict[str, Any]:
     missions = sorted(paths.missions_dir(root).glob(f"{number}-*.md"))
     caps = sorted(paths.caps_dir(root).glob(f"{number}-*.md"))
     stack = paths.stack_md_path(root)
+    holdouts = sorted(paths.datasets_dir(root, "holdout").glob(f"mission-{number}-*.jsonl"))
     return {
         "missionHash": hashing.sha256_file(missions[0]) if missions else "",
         "capHashes": {p.stem: hashing.sha256_file(p) for p in caps},
         "topologyHash": topology_source_hash(root, number),
         "stackHash": hashing.sha256_file(stack) if stack.is_file() else "",
         "contractHashes": contract_source_hashes(root, number),
+        # Le holdout est une SOURCE de l'IR, pas un simple fichier voisin : il
+        # fixe le chemin du jeu de verdict et il fait naître la suite
+        # d'acceptation L9. L'IR compilé en PHASE 2, avant que `qa-evals` ne
+        # produise le jeu, doit donc redevenir périmé dès que ce jeu apparaît —
+        # sinon il se déclarerait frais en restant sans rien à mesurer en G8.
+        "holdoutHash": hashing.sha256_file(holdouts[0]) if len(holdouts) == 1 else "",
     }
 
 
@@ -975,11 +1046,11 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
 
     missions = sorted(paths.missions_dir(root).glob(f"{number}-*.md"))
     if not missions:
-        ctx.fail(f"aucune MISSION `workspace/missions/{number}-*.md`", "créer la MISSION (G0) avant de compiler", str(paths.missions_dir(root)))
+        ctx.fail(f"aucune MISSION `workspace/feats/missions/{number}-*.md`", "créer la MISSION (G0) avant de compiler", str(paths.missions_dir(root)))
         raise CompileError(report)
     mission: MissionSpec = load_mission(root, missions[0].stem)  # type: ignore[assignment]
     report.target = mission.id
-    mloc = f"workspace/missions/{mission.id}.md"
+    mloc = f"workspace/feats/missions/{mission.id}.md"
     for key in ("CostPerRunTargetUsd", "CostPerRunHardCapUsd", "LatencyP95TargetMs", "TokenCeilingPerRun"):
         if mission.budget.get(key) is None:
             ctx.fail(f"MISSION `{mission.id}` : `{key}` absent de `## Execution Budget`", "déclarer le budget d'exécution (P6) — G0 le refuse aussi", f"{mloc}:Execution Budget")
@@ -994,13 +1065,13 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
 
     caps = load_caps_for_mission(root, number)
     if not caps:
-        ctx.fail(f"aucune CAP `workspace/caps/{number}-*.md`", "produire les CAPs (G1) avant la topologie", str(paths.caps_dir(root)))
+        ctx.fail(f"aucune CAP `workspace/feats/caps/{number}-*.md`", "produire les CAPs (G1) avant la topologie", str(paths.caps_dir(root)))
 
     agents = [a for a in (compile_agent(ctx, p) for p in sorted(paths.contracts_dir(root, "agents").glob(f"{number}-*.agent.md"))) if a]
     tools = [compile_tool(ctx, p) for p in sorted(paths.contracts_dir(root, "tools").glob(f"{number}-*.tool.md"))]
     retrievers = [compile_retriever(ctx, p) for p in sorted(paths.contracts_dir(root, "retrieval").glob(f"{number}-*.retrieval.md"))]
     if not agents:
-        ctx.fail(f"aucun contrat d'agent `workspace/contracts/agents/{number}-*.agent.md`", "la topologie produit au moins un contrat d'agent", str(paths.contracts_dir(root, "agents")))
+        ctx.fail(f"aucun contrat d'agent `workspace/feats/contracts/agents/{number}-*.agent.md`", "la topologie produit au moins un contrat d'agent", str(paths.contracts_dir(root, "agents")))
     ctx.agent_ids = {a["id"] for a in agents}
     ctx.tool_ids = {t["id"] for t in tools}
     ctx.retriever_ids = {r["id"] for r in retrievers}
@@ -1008,7 +1079,7 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         for kind, ids, known in (("outil", a.get("tools", []), ctx.tool_ids), ("retriever", a.get("retrievers", []), ctx.retriever_ids)):
             for i in ids:
                 if i not in known:
-                    ctx.fail(f"agent `{a['id']}` : {kind} `{i}` câblé sans contrat", f"écrire le contrat de `{i}` ou retirer la ligne", f"workspace/contracts/agents/{a['id']}.agent.md")
+                    ctx.fail(f"agent `{a['id']}` : {kind} `{i}` câblé sans contrat", f"écrire le contrat de `{i}` ou retirer la ligne", f"workspace/feats/contracts/agents/{a['id']}.agent.md")
 
     topo_path = paths.topology_dir(root) / f"{number}-topology.md"
     if not topo_path.is_file():
@@ -1016,7 +1087,7 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         raise CompileError(report)
     topo = parse_topology(markdown_io.read_text(topo_path), topo_path)
     orchestration = compile_orchestration(ctx, topo, load_mermaid(root, topo))
-    evaluation, traceability = compile_evaluation(ctx, caps, agents, tools, retrievers)
+    evaluation, traceability = compile_evaluation(ctx, caps, agents, tools, retrievers, mission)
 
     ir: dict[str, Any] = {
         "irVersion": IR_VERSION,
@@ -1094,7 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(root, combined)
     numbers = [args.mission] if args.mission is not None else mission_numbers(root)
     if not numbers:
-        combined.error("IR_COMPILE_FAILED", "aucune MISSION dans workspace/missions/", "créer une MISSION avant de compiler", str(paths.missions_dir(root)))
+        combined.error("IR_COMPILE_FAILED", "aucune MISSION dans workspace/feats/missions/", "créer une MISSION avant de compiler", str(paths.missions_dir(root)))
     if args.out and len(numbers) != 1:
         combined.error("INVALID_ARG", "`--out` exige `--mission {n}`", "préciser la mission")
         return emit(combined, args.json)

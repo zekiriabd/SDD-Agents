@@ -1,14 +1,14 @@
 <!--
   PROMPT SYSTÈME GÉNÉRÉ — NE PAS ÉDITER À LA MAIN
   ─────────────────────────────────────────────────────────────────────────
-  agent-contract : workspace/contracts/agents/{n}-{agent-slug}.agent.md
+  agent-contract : workspace/feats/contracts/agents/{n}-{agent-slug}.agent.md
   contract-hash  : sha256:{contract-hash}
-  generated-by   : dev-prompt (owner exclusif de workspace/prompts/ — ARCHITECTURE §7)
+  generated-by   : dev-prompt (owner exclusif de workspace/src/prompts/ — ARCHITECTURE §7)
   generated-at   : {YYYY-MM-DDTHH:MM}
   model-tier     : {fast | balanced | deep}     — un TIER, jamais un modèle (P11)
   prompt-hash    : sha256:{prompt-hash}         — calculé sur ce fichier SANS ce bloc de commentaire
 
-  Ce fichier est chargé au runtime depuis workspace/prompts/{agent-slug}.system.md
+  Ce fichier est chargé au runtime depuis workspace/src/prompts/{agent-slug}.system.md
   (P1 : aucun prompt inline dans le code). Son hash est ÉPINGLÉ aux baselines
   d'eval (P10) : toute modification — un mot, une virgule — périme tous les
   résultats d'eval de cet agent et exige leur ré-exécution. Pour changer le

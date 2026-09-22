@@ -13,7 +13,7 @@ Superseded by: <ADR-… | NONE>
 > l'artefact tant que l'ADR référencé n'existe pas ou n'est pas `Accepted`.
 >
 > Identifiant : `ADR-{timestamp}-{slug}` (DOMAIN-MODEL.md §5), stable, jamais
-> renuméroté. Fichier : `workspace/docs/adr/ADR-{timestamp}-{slug}.md`.
+> renuméroté. Fichier : `workspace/feats/decisions/ADR-{timestamp}-{slug}.md`.
 
 ---
 
@@ -82,20 +82,20 @@ Superseded by: <ADR-… | NONE>
 
 | Métrique | Seuil attendu | Dataset | Échéance de revue |
 |---|---|---|---|
-| <ex. coût mesuré par run> | <≤ 0.05 USD> | `workspace/datasets/holdout/…` | <date> |
-| <ex. recall@8> | <≥ 0.80> | `workspace/datasets/golden/retrieval-…` | <date> |
+| <ex. coût mesuré par run> | <≤ 0.05 USD> | `workspace/proof/datasets/holdout/…` | <date> |
+| <ex. recall@8> | <≥ 0.80> | `workspace/proof/datasets/golden/retrieval-…` | <date> |
 
 - **Condition de réversion** : <ce qui, constaté, déclenche l'abandon de la
   décision — ex. coût mesuré > 0.10 USD sur 2 runs d'eval consécutifs>
 
 ## 6. Références
 
-- MISSION / CAPs : `workspace/missions/{n}-…md`, `workspace/caps/{n}-{m}-…md`
-- TOPOLOGY : `workspace/topology/{n}-topology.md` §9
+- MISSION / CAPs : `workspace/feats/missions/{n}-…md`, `workspace/feats/caps/{n}-{m}-…md`
+- TOPOLOGY : `workspace/feats/topology/{n}-topology.md` §9
 - Contrats touchés : <…>
 - Documents du framework : <ex. `ORCHESTRATION-PATTERNS.md#supervisor`,
   `DATA-ACCESS.md §3`, `PHILOSOPHY.md P7`>
-- Rapports d'eval / mesures citées : `workspace/evals/reports/…`
+- Rapports d'eval / mesures citées : `workspace/.sys/reports/…`
 
 ---
 

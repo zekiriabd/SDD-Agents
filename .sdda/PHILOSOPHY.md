@@ -12,7 +12,7 @@ Toute décision — mission, capability, choix d'orchestration, contrat d'outil,
 prompt système, seuil d'eval — est un **fichier versionné** à côté du code.
 
 Corollaire dur, propre à l'agentic : **aucun prompt inline dans le code généré.**
-Les prompts vivent dans `workspace/prompts/*.system.md`, sont chargés au runtime,
+Les prompts vivent dans `workspace/src/prompts/*.system.md`, sont chargés au runtime,
 et sont hashés. Un prompt noyé dans une f-string au milieu d'un service est un
 changement de comportement invisible à la revue et introuvable en production.
 

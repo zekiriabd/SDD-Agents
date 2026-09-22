@@ -6,7 +6,7 @@ Stack ID: observability-otel-genai
 Status: Draft
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: python
-Scope: observabilité de l'application générée via **OpenTelemetry** et les **conventions sémantiques GenAI** — spans à émettre (tour d'agent, appel LLM, appel d'outil, retrieval), attributs, métriques, export OTLP **et** export JSONL par run (`workspace/traces/runs/{run-id}.jsonl`, invariant `trace-emitted-per-run`), redaction PII avant export. Neutre vis-à-vis du backend (Collector, Jaeger, Tempo, Grafana, Datadog, Langfuse en récepteur OTLP…). Suppose `lang/python.md`.
+Scope: observabilité de l'application générée via **OpenTelemetry** et les **conventions sémantiques GenAI** — spans à émettre (tour d'agent, appel LLM, appel d'outil, retrieval), attributs, métriques, export OTLP **et** export JSONL par run (`workspace/.sys/traces/runs/{run-id}.jsonl`, invariant `trace-emitted-per-run`), redaction PII avant export. Neutre vis-à-vis du backend (Collector, Jaeger, Tempo, Grafana, Datadog, Langfuse en récepteur OTLP…). Suppose `lang/python.md`.
 
 ---
 
@@ -21,7 +21,7 @@ classe** sur lequel s'appuient :
 - la **G6** (coût et latence **mesurés** ≤ budget déclaré) — le coût se somme sur
   les spans LLM ;
 - la **console de validation** (coût par CAP, dérive des scores, top des outils
-  en échec) — qui lit `workspace/traces/runs/*.jsonl` ;
+  en échec) — qui lit `workspace/.sys/traces/runs/*.jsonl` ;
 - le **post-mortem** — quel document a été retrouvé, avec quel score, quel outil
   a échoué, quelle borne a coupé.
 
@@ -55,7 +55,7 @@ porte `semconv_version` pour que la console sache lire des traces anciennes.
 - **Stack ID** : `observability-otel-genai`
 - **Langage** : Python 3.12 (`lang/python.md`)
 - **SDK** : `opentelemetry-api` / `opentelemetry-sdk` 1.4x · `opentelemetry-semantic-conventions` 0.6xb0 (incubating, `gen_ai.*`)
-- **Export** : OTLP/HTTP (protobuf) vers `OTEL_EXPORTER_OTLP_ENDPOINT` **+** `JsonlSpanExporter` maison vers `workspace/traces/runs/{run-id}.jsonl` — les deux, toujours
+- **Export** : OTLP/HTTP (protobuf) vers `OTEL_EXPORTER_OTLP_ENDPOINT` **+** `JsonlSpanExporter` maison vers `workspace/.sys/traces/runs/{run-id}.jsonl` — les deux, toujours
 - **Paramètres STACK.md** : `TraceLevel: full`, `TraceSampleRate: 1.0`, `TracePIIPolicy: redact`, `CostTrackingEnabled: true`
 - **Opt-in de stabilité** : `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` posé par `tracing/setup.py`
 - **Capture de contenu** : `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — **`false` par défaut** ; `true` uniquement si `TracePIIPolicy: raw` (exige un ADR)
@@ -206,11 +206,11 @@ workspace/src/{AppName}/src/{AppName}/tracing/
 ├── setup.py              # configure_tracing(settings, run_id) -> TracerProvider : Resource, sampler, BatchSpanProcessor(OTLP) + SimpleSpanProcessor(Jsonl), RedactionProcessor, MeterProvider ; shutdown()
 ├── spans.py              # agent_turn, llm_call, tool_call, retrieval, data_query, guardrail — helpers imposés
 ├── redaction.py          # RedactionSpanProcessor : PII regex (e-mail, téléphone, IBAN, carte), champs @pii, valeurs de secrets connus, politique redact|hash
-├── jsonl_exporter.py     # JsonlSpanExporter : 1 span = 1 ligne, schéma TraceEvent (pydantic), fichier workspace/traces/runs/{run-id}.jsonl, flush à chaque span
+├── jsonl_exporter.py     # JsonlSpanExporter : 1 span = 1 ligne, schéma TraceEvent (pydantic), fichier workspace/.sys/traces/runs/{run-id}.jsonl, flush à chaque span
 ├── pricing.py            # cost_usd(model_id, usage) depuis .sdda/python/sdda_lib/pricing (table versionnée) — sdda.pricing.version
 └── logging.py            # structlog processor : injecte trace_id / span_id dans chaque log
 
-workspace/traces/runs/
+workspace/.sys/traces/runs/
 └── {run-id}.jsonl        # généré à chaque run ; lu par la console et par la L5 ; ownership : script uniquement
 
 workspace/src/{AppName}/tests/tracing/
@@ -306,7 +306,7 @@ uv run python -m {AppName}.tracing.setup --selftest
 #   1. configure_tracing(settings, run_id="smoke-…") sans OTLP endpoint → avertissement, pas d'erreur
 #   2. émet un arbre mocké : sdda.run > invoke_agent > chat + execute_tool(args avec e-mail + secret factice) + sdda.retrieve
 #   3. shutdown() → force_flush
-#   4. relit workspace/traces/runs/smoke-….jsonl : 5 lignes ; toutes valides TraceEvent ; aucun e-mail, aucun secret en clair ([SECRET_LEAK] sinon)
+#   4. relit workspace/.sys/traces/runs/smoke-….jsonl : 5 lignes ; toutes valides TraceEvent ; aucun e-mail, aucun secret en clair ([SECRET_LEAK] sinon)
 #   5. vérifie gen_ai.usage.input_tokens/output_tokens et sdda.cost.usd > 0 sur le span chat
 #   6. supprime le fichier de smoke ; exit 0
 ```

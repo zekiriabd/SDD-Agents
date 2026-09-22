@@ -22,7 +22,7 @@ from sdda_hooks import _hook
 from sdda_hooks import preflight_judge_calibration as hook
 
 ALLOW, DENY = _hook.ALLOW, _hook.DENY
-CAL_DIR = "workspace/evals/calibration"
+CAL_DIR = "workspace/proof/calibration"
 STACK = "workspace/stack/STACK.md"
 
 
@@ -62,7 +62,10 @@ def set_config(project: Path, **values) -> None:
 # ---------------------------------------------------------------------------
 def test_the_hook_is_wired_on_task_for_the_eval_builders() -> None:
     assert hook.HOOK == "preflight_judge_calibration" and callable(hook.main)
-    assert hook.WIRING["event"] == "PreToolUse" and hook.WIRING["matcher"] == "Task"
+    # Les deux noms de l'outil de délégation : `Task` dans Claude Code, `Agent`
+    # dans l'Agent SDK. Un matcher qui n'en nomme qu'un ne se plaint pas, il ne
+    # se déclenche jamais.
+    assert hook.WIRING["event"] == "PreToolUse" and hook.WIRING["matcher"] == "Task|Agent"
     assert hook.WIRING["applies_to"] == _hook.EVAL_BUILDERS
     assert "qa-evals" in hook.WIRING["applies_to"]
 

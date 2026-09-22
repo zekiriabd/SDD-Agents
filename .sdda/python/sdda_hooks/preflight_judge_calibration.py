@@ -24,7 +24,7 @@ HOOK = "preflight_judge_calibration"
 #: Câblage — lu par `harness_build.py`. Devant ceux qui font rendre un verdict
 #: à un juge. Un juge non calibré n'est pas refusé, il est rétrogradé en
 #: `advisory` : le refus ne porte que sur un juge déclaré BLOQUANT sans mesure.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": EVAL_BUILDERS}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": EVAL_BUILDERS}
 
 
 def check(root: Path, data: dict) -> int:
@@ -38,8 +38,15 @@ def check(root: Path, data: dict) -> int:
     except Exception:
         min_kappa, min_items = 0.6, 50
 
-    reports = list((root / "workspace" / "evals" / "calibration").glob("*.json")) \
-        if (root / "workspace" / "evals" / "calibration").is_dir() else []
+    from sdda_lib import paths  # noqa: E402 — import tardif : coût de démarrage du hook
+
+    # Par `paths`, jamais par un chemin assemblé à la main. Assemblé ici, il a
+    # survécu intact à la réorganisation de l'arbre : le hook cherchait dans un
+    # répertoire disparu, n'y trouvait rien, concluait « aucun rapport de
+    # calibration » et AUTORISAIT. Un juge bloquant non calibré serait passé,
+    # et le message de sortie aurait dit que tout allait bien.
+    cal_dir = paths.proof_dir(root) / "calibration"
+    reports = list(cal_dir.glob("*.json")) if cal_dir.is_dir() else []
     if not reports:
         return allow("aucun rapport de calibration — les juges restent en `advisory` jusqu'à mesure")
 

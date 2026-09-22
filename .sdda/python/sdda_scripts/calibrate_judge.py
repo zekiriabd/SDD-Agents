@@ -39,7 +39,7 @@ def judge_suites(ir: dict) -> list[dict]:
     return [s for s in (ir.get("evaluation") or {}).get("suites") or [] if s.get("grader") == "llm-judge"]
 
 
-def run(root: Path, *, only: str | None = None, write: bool = True) -> tuple[Report, list[dict]]:
+def run(root: Path, *, only: str | None = None, write: bool = True, mission: int | None = None) -> tuple[Report, list[dict]]:
     config = read_layered_config(root)
     report = Report(name="G5.calibration", target=str(root))
     outcomes: list[dict] = []
@@ -48,11 +48,17 @@ def run(root: Path, *, only: str | None = None, write: bool = True) -> tuple[Rep
     min_kappa = float(config.get("JudgeCalibrationMinKappa", 0.6))
     advisory_fallback = bool(config.get("JudgeAdvisoryFallback", True))
 
-    ir_files = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
+    # `--mission` restreint aux suites de CETTE mission. Les commandes ne
+    # connaissent qu'un numéro et le passaient déjà ; le script ne le lisait
+    # pas, donc l'appel sortait en `usage:` argparse au lieu de calibrer — et
+    # un juge non calibré bascule en `advisory`, c'est-à-dire cesse de bloquer
+    # sans que personne ne l'ait décidé.
+    pattern = f"{mission}-system.ir.json" if mission is not None else "*-system.ir.json"
+    ir_files = sorted(paths.ir_dir(root).glob(pattern))
     if not ir_files:
         report.error(
             "IR_NOT_FOUND",
-            "aucun IR compilé sous workspace/.sys/.ir/",
+            f"aucun IR compilé sous workspace/.sys/.ir/{'' if mission is None else f' pour la mission {mission}'}",
             "lancer /sdda-topology {n} pour compiler l'IR",
             "workspace/.sys/.ir/",
         )
@@ -180,6 +186,7 @@ def _write_report(root: Path, report: Report, outcomes: list[dict]) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Calibre les graders LLM contre des labels humains.")
     parser.add_argument("--root", default=".", help="racine du projet")
+    parser.add_argument("--mission", type=int, default=None, help="numéro de mission ; défaut : tous les IR compilés")
     parser.add_argument("--grader", help="ne traiter que les suites dont l'id contient cette chaîne")
     parser.add_argument("--json", action="store_true", help="sortie machine")
     parser.add_argument("--no-report", action="store_true", help="ne pas écrire le rapport de gate")
@@ -190,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.root).resolve()
 
-    report, outcomes = run(root, only=args.grader, write=not args.no_report)
+    report, outcomes = run(root, only=args.grader, write=not args.no_report, mission=args.mission)
 
     if args.json:
         print(json.dumps(report.to_dict() | {"judges": outcomes}, ensure_ascii=False, indent=2))

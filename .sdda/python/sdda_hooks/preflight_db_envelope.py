@@ -23,7 +23,7 @@ HOOK = "preflight_db_envelope"
 #: Câblage — lu par `harness_build.py`. Se prononce devant ceux dont le code
 #: touchera des données. `architect-data` en est exclu : c'est lui qui
 #: écrit l'enveloppe qu'on exige.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": DATA_BUILDERS}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": DATA_BUILDERS}
 
 
 def check(root: Path, data: dict) -> int:

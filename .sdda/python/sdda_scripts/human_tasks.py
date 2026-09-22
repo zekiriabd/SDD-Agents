@@ -50,7 +50,7 @@ YELLOW_GATES: tuple[str, ...] = ("G5", "G6", "G8")
 #: loader.yml, smoke_check) ; `docs/adr/` est celle que citent le gabarit d'ADR
 #: et `validate_architecture`. Les deux sont lues : un ADR écrit au mauvais
 #: endroit reste un ADR écrit.
-ADR_DIRS: tuple[str, ...] = ("workspace/.sys/.context/adrs", "workspace/docs/adr")
+ADR_DIRS: tuple[str, ...] = ("workspace/feats/decisions", "workspace/feats/decisions")
 
 
 def task(kind: str, mission: int | None, title: str, why: str, how: str, *, blocking: bool, ref: str) -> dict[str, Any]:
@@ -133,7 +133,7 @@ def labels_tasks(root: Path, number: int, config: LayeredConfig) -> list[dict[st
         report_path = paths.resolve_rel(root, ref) if ref else None
         dataset = calibration.load_calibration_set(report_path) if report_path else None
 
-        labels_ref = f"workspace/datasets/calibration/{grader}-v1.jsonl"
+        labels_ref = f"workspace/proof/datasets/calibration/{grader}-v1.jsonl"
         if report_path and report_path.is_file():
             try:
                 declared_ref = json.loads(report_path.read_text(encoding="utf-8-sig")).get("labelsRef")

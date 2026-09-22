@@ -12,7 +12,7 @@ n'a rien à dire, et le dire explicitement vaut mieux qu'un score par défaut.
 
 **P9 — un juge non calibré est une décoration.** Il ne rend pas de verdict
 bloquant. Le statut de calibration vient de la config
-(`calibration: {kappa, n}` — le contenu de `workspace/evals/calibration/
+(`calibration: {kappa, n}` — le contenu de `workspace/proof/calibration/
 {grader}.json`, lu par le runner, pas par ce module) et se compare à
 `min_kappa` (défaut 0.6, `JudgeCalibrationMinKappa`) et `min_items` (défaut
 50, `JudgeCalibrationMinItems`). Sous le seuil, ou sans calibration, ou si

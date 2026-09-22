@@ -18,14 +18,14 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 
 | CAP | AC couverts | Évaluée par |
 |---|---|---|
-| {n}-{m}-… | AC-1, AC-2 | `workspace/evals/suites/…` |
+| {n}-{m}-… | AC-1, AC-2 | `workspace/proof/suites/…` |
 
 > Un agent qui ne sert aucune CAP est `[AGENT_SERVES_NO_CAP]` — il a été ajouté
 > « pour la structure ».
 
 ## 3. Prompt
 
-- Fichier : `workspace/prompts/{agent-slug}.system.md`
+- Fichier : `workspace/src/prompts/{agent-slug}.system.md`
 - Hash : `sha256:…`  *(calculé, épinglé aux baselines d'eval — P10)*
 - Rédigé par : `dev-prompt` depuis ce contrat
 
@@ -56,7 +56,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 | `{n}-…` | <une phrase, observable> | {n}-{m}-… AC-{i} |
 
 > Chaque skill déclarée ici **doit** être listée dans la section `## Compétences`
-> de `workspace/prompts/{slug}.system.md` — sinon `[SKILL_NOT_IMPLEMENTED]`,
+> de `workspace/src/prompts/{slug}.system.md` — sinon `[SKILL_NOT_IMPLEMENTED]`,
 > bloquant. L'inverse aussi : une compétence listée dans le prompt et absente
 > d'ici est `[SKILL_UNDECLARED]`. Les deux sont vérifiés par `lint_prompts.py`.
 >
@@ -86,7 +86,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 | `{n}-…` | <une phrase, observable dans une trajectoire> | <refus \| dégradation \| escalade> |
 
 > Chaque règle déclarée ici **doit** être listée dans la section `## Règles` de
-> `workspace/prompts/{slug}.system.md` — sinon `[RULE_NOT_IMPLEMENTED]`,
+> `workspace/src/prompts/{slug}.system.md` — sinon `[RULE_NOT_IMPLEMENTED]`,
 > bloquant. L'inverse aussi : une règle listée dans le prompt et absente d'ici
 > est `[RULE_UNDECLARED]`. Les deux sont vérifiés par `lint_prompts.py`.
 >
@@ -131,7 +131,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 - **Entrées non maîtrisées** : <ex. `user_message`, `retrieved_documents`,
   sortie du serveur MCP `web-fetch`>
 - **Traitement** : contenu, jamais instruction (P8)
-- **Suite d'injection** : `workspace/datasets/adversarial/{agent-slug}.jsonl`
+- **Suite d'injection** : `workspace/proof/datasets/adversarial/{agent-slug}.jsonl`
   *(obligatoire dès qu'une entrée est non maîtrisée — invariant
   `injection-suite-mandatory`)*
 

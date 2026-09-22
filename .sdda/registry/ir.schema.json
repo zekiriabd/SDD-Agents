@@ -32,7 +32,8 @@
         "topologyHash",
         "stackHash",
         "contractHashes",
-        "compiledAt"
+        "compiledAt",
+        "holdoutHash"
       ],
       "additionalProperties": false,
       "properties": {
@@ -59,7 +60,7 @@
           "description": "Empreinte de CHAQUE contrat compile (agents, outils, retrieval, memoire), par chemin relatif. Sans elle, editer un contrat laisse l'IR se declarer frais alors qu'il ne reflete plus sa source - et c'est precisement le cas que `/sdda-topology --recompile-only` existe pour traiter.",
           "propertyNames": {
             "type": "string",
-            "pattern": "^workspace/contracts/.+\\.md$"
+            "pattern": "^workspace/feats/contracts/.+\\.md$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/sha256"
@@ -68,6 +69,10 @@
         "compiledAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "holdoutHash": {
+          "type": "string",
+          "description": "Empreinte du holdout de la mission, ou chaine vide tant qu'il n'existe pas. Suivre cette source fait redevenir l'IR perime des que le jeu de verdict apparait, donc declenche la recompilation qui emet la suite d'acceptation L9."
         }
       }
     },
@@ -465,7 +470,7 @@
         },
         "promptRef": {
           "type": "string",
-          "pattern": "^workspace/prompts/.+\\.system\\.md$"
+          "pattern": "^workspace/src/prompts/.+\\.system\\.md$"
         },
         "promptHash": {
           "$ref": "#/$defs/sha256"
@@ -1114,7 +1119,6 @@
       "type": "object",
       "required": [
         "suites",
-        "holdout",
         "baselineRef"
       ],
       "additionalProperties": false,
@@ -1216,7 +1220,7 @@
         },
         "holdout": {
           "type": "string",
-          "description": "Disjoint du golden, vérifié par hash."
+          "description": "Le jeu de verdict. ABSENT tant que qa-evals ne l'a pas produit (PHASE 6a) : l'IR se compile en PHASE 2, et l'exiger ici rendait toute mission neuve incompilable. Sa presence est exigee par validate_datasets (G8.datasets) et, des qu'il existe, validate_ir exige la suite L9 qui le mesure."
         },
         "adversarial": {
           "type": "string"
