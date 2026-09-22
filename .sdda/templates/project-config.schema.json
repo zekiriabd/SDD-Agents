@@ -205,6 +205,13 @@
       "default": 3,
       "description": "Baisse tolérée (en %) vs la baseline épinglée avant [REGRESSION] (L9)."
     },
+    "RegressionNoiseSigma": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 2.0,
+      "description": "Bande de bruit (L9) : une baisse au-delà de la tolérance mais sous N écarts-types de la baseline est signalée [REGRESSION_WITHIN_NOISE] (WARN) au lieu de [REGRESSION]. 0 = ne pas lire l'écart-type."
+    },
     "BaselinePromotionPolicy": {
       "enum": [
         "explicit",

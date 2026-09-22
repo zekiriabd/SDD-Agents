@@ -10,7 +10,15 @@ Pour chaque suite du rapport qui a une baseline :
   2. `regression_delta` (eval_pinning) donne la variation en % **dans le sens de
      la métrique** : une latence qui baisse est une amélioration, un
      groundedness qui baisse ne l'est pas. Au-delà de `RegressionTolerancePct`
-     (3 %) : [REGRESSION], bloquant.
+     (3 %) : [REGRESSION], bloquant…
+  3. …sauf si la baisse tient dans la **bande de bruit de la baseline**. Une
+     baseline est une moyenne sur k runs et porte son écart-type ; une baisse
+     de 4 % sur une métrique dont l'écart-type est 3 % n'est pas une régression,
+     c'est un tirage. Sous `RegressionNoiseSigma` (2.0) écarts-types :
+     WARN [REGRESSION_WITHIN_NOISE], et le verdict reste vert. Déclarer une
+     régression sans lire l'écart-type, c'est bloquer un run sur du bruit — et
+     un run bloqué sur du bruit, c'est une tolérance qu'on finit par relever
+     jusqu'à ce qu'elle ne mesure plus rien.
 
 Une suite sans baseline est signalée WARN [EVAL_BASELINE_MISSING] — rien n'est
 comparable, et le dire vaut mieux que rendre un vert vide. Une suite
@@ -19,7 +27,7 @@ comparable, et le dire vaut mieux que rendre un vert vide. Une suite
 Usage :
     python check_regression.py --mission 1                       # dernier rapport vs baseline
     python check_regression.py --mission 1 --report workspace/evals/reports/1-x.json --json
-    python check_regression.py --mission 1 --tolerance 5
+    python check_regression.py --mission 1 --tolerance 5 --noise-sigma 0   # strict : l'écart-type est ignoré
 """
 from __future__ import annotations
 
@@ -45,6 +53,7 @@ def compare(
     report_path: Path,
     *,
     tolerance_pct: float,
+    noise_sigma: float = 2.0,
     baseline_file: Path | None = None,
     require_baseline: bool = False,
 ) -> Report:
@@ -70,13 +79,14 @@ def compare(
     for sid, entry in sorted(entries.items()):
         base = baselines.get(sid)
         advisory = bool(entry.get("advisory"))
-        row: dict[str, Any] = {"suiteId": sid, "metric": entry.get("metric"), "advisory": advisory, "mean": entry.get("mean"), "baselineMean": None, "deltaPct": None, "status": "no-baseline", "moved": []}
+        row: dict[str, Any] = {"suiteId": sid, "metric": entry.get("metric"), "advisory": advisory, "mean": entry.get("mean"), "baselineMean": None, "baselineStddev": None, "noiseBand": None, "deltaPct": None, "status": "no-baseline", "moved": []}
         if base is None:
             if baselines:
                 report.warn("EVAL_BASELINE_MISSING", f"suite `{sid}` : pas de baseline dans `{bloc}`", "promote_baseline.py --suite {sid}", sid)
             rows.append(row)
             continue
         row["baselineMean"] = base.mean
+        row["baselineStddev"] = base.stddev
         moved = base.pins.diff(suite_pins(entry))
         if moved:
             row.update({"status": "stale", "moved": sorted(moved)})
@@ -87,9 +97,27 @@ def compare(
         threshold = parse_threshold(entry.get("threshold", 0.0))
         delta = regression_delta(base, float(entry.get("mean", 0.0)), threshold.lower_is_better)
         row["deltaPct"] = round(delta, 3)
+        # La bande de bruit se lit sur l'écart-type de la BASELINE — celui du
+        # rapport courant dirait « ce run est instable », ce qui est une autre
+        # information (le verdict jaune de eval_runner la porte déjà).
+        band = float(noise_sigma) * float(base.stddev or 0.0)
+        row["noiseBand"] = round(band, 6) if band else 0.0
+        drop_abs = abs(float(entry.get("mean", 0.0)) - base.mean)
         if delta < -tolerance_pct:
-            row["status"] = "regression"
             msg = f"suite `{sid}` : {entry.get('metric')} {base.mean:.4f} -> {float(entry.get('mean', 0.0)):.4f} ({delta:+.2f} %) au-delà de RegressionTolerancePct {tolerance_pct:g} %"
+            if band > 0 and drop_abs <= band:
+                row["status"] = "within-noise"
+                report.warn(
+                    "REGRESSION_WITHIN_NOISE",
+                    msg + f" — mais sous {noise_sigma:g} σ de la baseline (σ = {base.stddev:.4f}, bande ±{band:.4f}) : bruit d'échantillonnage, pas une régression",
+                    "relancer avec k plus grand si la variance de la baseline paraît trop large pour juger ; RegressionNoiseSigma: 0 rend le contrôle strict",
+                    sid,
+                )
+                rows.append(row)
+                continue
+            row["status"] = "regression"
+            if band > 0:
+                msg += f" et hors de la bande de bruit ({noise_sigma:g} σ = ±{band:.4f})"
             if advisory:
                 report.warn("REGRESSION", msg + " (advisory : informe, ne bloque pas)", "", sid)
             else:
@@ -100,8 +128,9 @@ def compare(
             row["status"] = "stable"
         rows.append(row)
 
-    report.data.update({"report": rloc, "baseline": bloc, "tolerancePct": tolerance_pct, "runId": data.get("runId"), "suites": rows,
+    report.data.update({"report": rloc, "baseline": bloc, "tolerancePct": tolerance_pct, "noiseSigma": noise_sigma, "runId": data.get("runId"), "suites": rows,
                         "regressions": sorted(r["suiteId"] for r in rows if r["status"] == "regression"),
+                        "withinNoise": sorted(r["suiteId"] for r in rows if r["status"] == "within-noise"),
                         "stale": sorted(r["suiteId"] for r in rows if r["status"] == "stale")})
     return report
 
@@ -111,7 +140,8 @@ def render_rows(report: Report) -> str:
     for r in report.data.get("suites") or []:
         delta = f"{r['deltaPct']:+.2f} %" if r["deltaPct"] is not None else "—"
         base = f"{r['baselineMean']:.4f}" if r["baselineMean"] is not None else "—"
-        lines.append(f"  {r['status']:<11} {r['suiteId']:<40} {r['metric'] or '':<24} {base} -> {float(r['mean'] or 0):.4f}  {delta}" + ("  [advisory]" if r["advisory"] else ""))
+        sigma = f"  σ={r['baselineStddev']:.4f}" if r.get("baselineStddev") else ""
+        lines.append(f"  {r['status']:<12} {r['suiteId']:<40} {r['metric'] or '':<24} {base} -> {float(r['mean'] or 0):.4f}  {delta}{sigma}" + ("  [advisory]" if r["advisory"] else ""))
     return "\n".join(lines)
 
 
@@ -122,6 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run", default=None, help="RUN_ID du rapport")
     p.add_argument("--baseline", type=Path, default=None, help="fichier de baselines (défaut : evaluation.baselineRef)")
     p.add_argument("--tolerance", type=float, default=None, help="tolérance en %% (défaut : RegressionTolerancePct)")
+    p.add_argument("--noise-sigma", type=float, default=None, help="bande de bruit en écarts-types de la baseline (défaut : RegressionNoiseSigma ; 0 = strict)")
     p.add_argument("--require-baseline", action="store_true", help="l'absence de baseline devient bloquante")
     add_common_args(p)
     return p
@@ -146,8 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         rpath = latest_report(root, number) or (paths.evals_dir(root) / "reports" / f"{number}-<aucun>.json")
     tolerance = args.tolerance if args.tolerance is not None else config.get_float("RegressionTolerancePct", 3.0)
+    noise_sigma = args.noise_sigma if args.noise_sigma is not None else config.get_float("RegressionNoiseSigma", 2.0)
     bfile = args.baseline if args.baseline is None or args.baseline.is_absolute() else root / args.baseline
-    sub = compare(root, ir, rpath, tolerance_pct=tolerance, baseline_file=bfile, require_baseline=args.require_baseline)
+    sub = compare(root, ir, rpath, tolerance_pct=tolerance, noise_sigma=noise_sigma, baseline_file=bfile, require_baseline=args.require_baseline)
     report.extend(sub)
     report.data.update(sub.data)
     report.target = sub.target

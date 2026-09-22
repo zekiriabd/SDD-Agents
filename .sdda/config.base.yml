@@ -71,6 +71,11 @@ HoldoutDisjointCheck: strict          # strict | warn
 
 # Régression (L9)
 RegressionTolerancePct: 3
+RegressionNoiseSigma: 2.0             # une baisse au-delà de la tolérance mais
+                                      # sous N écarts-types de la BASELINE est du
+                                      # bruit d'échantillonnage, pas une régression :
+                                      # WARN [REGRESSION_WITHIN_NOISE], jamais rouge.
+                                      # 0 = ignorer l'écart-type (comportement strict)
 BaselinePromotionPolicy: explicit     # explicit | auto
                                       # `auto` rend la dérive lente invisible
 
