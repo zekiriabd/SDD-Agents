@@ -110,6 +110,16 @@ def rewrite_refs(text: str, harness: Harness) -> str:
     return AT_REF_RE.sub(lambda m: f"`{m.group(1)}` (Read ce fichier avant de poursuivre)", text)
 
 
+#: Marqueurs de `sync_counters.py` : la SOURCE porte `<!--sdda:count agents-->22<!--/sdda:count-->`
+#: pour que le chiffre soit régénéré ; la FAÇADE ne porte que `22`. Un agent ne
+#: paie aucun token pour un mécanisme d'entretien de la doc.
+SYNC_MARKER_RE = re.compile(r"<!--sdda:(count|config|graders)(?: [^>]*)?-->(.*?)<!--/sdda:\1-->", re.S)
+
+
+def strip_sync_markers(text: str) -> str:
+    return SYNC_MARKER_RE.sub(lambda m: m.group(2), text)
+
+
 def frontmatter_and_body(text: str) -> tuple[dict[str, Any], str]:
     if not text.startswith("---"):
         return {}, text
@@ -157,7 +167,7 @@ class Adapter:
         count = 0
         for src in sorted((SDDA / "agents").glob("*.md")):
             meta, body = frontmatter_and_body(src.read_text(encoding="utf-8"))
-            plan.add(out / "agents" / src.name, self.render_agent(src, meta, body))
+            plan.add(out / "agents" / src.name, self.render_agent(src, meta, strip_sync_markers(body)))
             count += 1
         return count
 
@@ -169,7 +179,7 @@ class Adapter:
         count = 0
         for src in sorted((SDDA / "commands").glob("*.md")):
             meta, body = frontmatter_and_body(src.read_text(encoding="utf-8"))
-            self.render_command(plan, out, src, meta, body)
+            self.render_command(plan, out, src, meta, strip_sync_markers(body))
             count += 1
         return count
 
@@ -180,7 +190,7 @@ class Adapter:
     def emit_memory_file(self, plan: BuildPlan, out: Path) -> None:
         body = (SDDA / "entrypoint-body.md")
         source = body if body.is_file() else (SDDA / "ARCHITECTURE.md")
-        text = rewrite_refs(source.read_text(encoding="utf-8"), self.harness)
+        text = rewrite_refs(strip_sync_markers(source.read_text(encoding="utf-8")), self.harness)
         plan.add(
             out / self.harness.memory_file,
             GENERATED_BANNER.format(source=f".sdda/{source.name}") + "\n" + text,

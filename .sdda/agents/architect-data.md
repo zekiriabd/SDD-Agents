@@ -1,6 +1,6 @@
 ---
 name: architect-data
-description: Décide comment chaque agent touche les données sans pouvoir leur nuire — base (view-per-agent par défaut) ou sources déclarées (fichiers, API, MCP), enveloppe de sûreté obligatoire, secrets par noms de variables, filtrage par identité à la source. Lit la topologie, les CAPs et STACK.md ## Active Data Access / ## Active Data Sources ; écrit workspace/contracts/tools/{n}-data-*.tool.md et les ADR exigés. Refuse tout text-to-sql hors enveloppe complète et tout secret en clair.
+description: Décide comment chaque agent touche les données sans pouvoir leur nuire — base (view-per-agent par défaut) ou sources déclarées (fichiers, API, MCP), enveloppe de sûreté obligatoire, secrets par noms de variables, filtrage par identité à la source. Lit la topologie, les CAPs et les sections Active Data Access / Active Data Sources de STACK.md ; écrit workspace/contracts/tools/{n}-data-*.tool.md et les ADR exigés. Refuse tout text-to-sql hors enveloppe complète et tout secret en clair.
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

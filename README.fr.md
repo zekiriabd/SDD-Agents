@@ -158,14 +158,14 @@ Spécification complète : [.sdda/templates/STACK.md.template](.sdda/templates/S
 | [DOMAIN-MODEL.md](.sdda/docs/DOMAIN-MODEL.md) | Le vocabulaire clos : MISSION, CAP, AGENT, TOOL, RETRIEVER… |
 | [AGENTIC-IR.md](.sdda/docs/AGENTIC-IR.md) | La représentation intermédiaire qui rend le multi-framework déterministe |
 | [LIFECYCLE.md](.sdda/docs/LIFECYCLE.md) | Machine à états Draft → Approved, dérivée des gates |
-| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | Les 22 Developer Agents et leur orchestration interne |
+| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | Les <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents et leur orchestration interne |
 | [ORCHESTRATION-PATTERNS.md](.sdda/docs/ORCHESTRATION-PATTERNS.md) | Catalogue + matrice de sélection |
 | [RAG-PATTERNS.md](.sdda/docs/RAG-PATTERNS.md) | Catalogue + métriques de gate |
 | [MEMORY-PATTERNS.md](.sdda/docs/MEMORY-PATTERNS.md) | Portées, coûts, et la mémoire comme surface d'attaque persistante |
 | [DATA-ACCESS.md](.sdda/docs/DATA-ACCESS.md) | Stratégies d'accès base pour agents |
 | [MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md) | Compilation vers Claude Code / Codex / Gemini CLI |
 | [TESTING-AND-EVAL.md](.sdda/docs/TESTING-AND-EVAL.md) | La pyramide L0→L9 |
-| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les 20 contrats porteurs + leur enforcer |
+| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les <!--sdda:count invariants-->21<!--/sdda:count--> contrats porteurs + leur enforcer |
 | [ROADMAP.md](.sdda/docs/ROADMAP.md) | Ordre de construction + le MVP |
 | [PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md) | Le backlog déterministe, généré — qui réclame quoi |
 
@@ -203,7 +203,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (787 tests) :
+existent et sont testés (<!--sdda:count tests-->857<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification

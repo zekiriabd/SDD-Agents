@@ -2,7 +2,7 @@
 
 > **Spec Driven Development for agentic applications, multi-harness** (Claude
 > Code, Codex, Gemini CLI) — a framework that turns a MISSION into a tested
-> system of LLM agents through **22 Developer Agents**, deterministic Python
+> system of LLM agents through **<!--sdda:count agents-->22<!--/sdda:count--> Developer Agents**, deterministic Python
 > orchestration (**0 token**) and **9 gates**.
 
 This is the documentation hub. Each document has one purpose and one audience.
@@ -66,10 +66,10 @@ and [../registry/compatibility.matrix.json](../registry/compatibility.matrix.jso
 | Topic | Document | Languages |
 |---|---|---|
 | The Agentic IR — the intermediate representation that makes multi-framework deterministic | [AGENTIC-IR.md](AGENTIC-IR.md) | 🇫🇷 French only |
-| The 22 Developer Agents and their internal orchestration | [AGENT-ROSTER.md](AGENT-ROSTER.md) | 🇫🇷 French only |
+| The <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents and their internal orchestration | [AGENT-ROSTER.md](AGENT-ROSTER.md) | 🇫🇷 French only |
 | Compilation to Claude Code / Codex / Gemini CLI | [MULTI-HARNESS.md](MULTI-HARNESS.md) | 🇫🇷 French only |
 | Testing and evaluation — the L0→L9 pyramid, *a test asserts, an eval scores* | [TESTING-AND-EVAL.md](TESTING-AND-EVAL.md) | 🇫🇷 French only |
-| The 20 load-bearing invariants and their enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | machine file |
+| The <!--sdda:count invariants-->21<!--/sdda:count--> load-bearing invariants and their enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | machine file |
 | The deterministic Python layer | [../python/README.md](../python/README.md) | 🇫🇷 French only |
 | Test fixtures | [../python/tests/fixtures/README.md](../python/tests/fixtures/README.md) | 🇫🇷 French only |
 

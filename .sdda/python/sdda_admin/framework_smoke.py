@@ -273,6 +273,16 @@ def check_digests() -> None:
     )
 
 
+def check_counters() -> None:
+    """Les chiffres de la prose (agents, fiches, classes, défauts de config…)
+    sont ceux du disque — même mécanisme que les digests."""
+    _delegate(
+        "counters.sync",
+        "sync_counters.py",
+        "sync_counters.py absent — compteurs de la prose non vérifiables",
+    )
+
+
 # ---------------------------------------------------------------------------
 # 4. Références de fichiers : ce que les docs promettent existe-t-il ?
 # ---------------------------------------------------------------------------
@@ -316,7 +326,24 @@ def check_references() -> None:
             (planned if is_planned else broken).add(entry)
 
     if planned:
-        warn("refs.planned", f"{len(planned)} script(s) référencé(s) mais pas encore écrit(s) — dette du Lot 1-2")
+        warn("refs.planned", f"{len(planned)} script(s) référencé(s) mais pas encore écrit(s) — dette des lots à venir")
+        # Une dette annoncée est une dette ; une dette MUETTE est un prompt qui
+        # ment : l'agent croit disposer d'un outil et invente sa sortie. Chaque
+        # appel à un script absent doit être suivi d'un « Planifié » qui dit
+        # quoi faire tant qu'il manque.
+        try:
+            sys.path.insert(0, str(SDDA / "python"))
+            from sdda_admin import planned_scripts
+
+            pathed, _bare, declared = planned_scripts.collect()
+            silent = planned_scripts.undeclared_missing(pathed, declared)
+        except Exception as exc:
+            warn("refs.planned.undeclared", f"planned_scripts non chargeable ({exc!r})")
+            silent = {}
+        for ref, callers in sorted(silent.items()):
+            fail("refs.planned.undeclared",
+                 f"`{ref}` absent et cité sans « Planifié » par {', '.join(sorted(callers)[:3])} — "
+                 "le lecteur croit à un outil disponible")
     if broken:
         warn("refs.broken", f"{len(broken)} document(s) référencé(s) mais absent(s) (sur {checked} refs)")
         for item in sorted(broken)[:12]:
@@ -437,6 +464,65 @@ def check_section_refs() -> None:
             fail("refs.sections", item)
     else:
         ok("refs.sections", f"{checked} références §n qualifiées, toutes résolues")
+
+
+# ---------------------------------------------------------------------------
+# 1.bis Frontmatter : ce que la façade recevra est-il ce que la fiche dit ?
+# ---------------------------------------------------------------------------
+def check_frontmatter_intact() -> None:
+    """Aucune valeur de frontmatter tronquée par un commentaire YAML.
+
+    En YAML, ` #` en plein scalaire ouvre un commentaire. La description
+    d'`architect-data` citait `STACK.md ## Active Data Access` : tout ce qui
+    suivait disparaissait à la compilation, et la façade Claude annonçait un
+    agent qui « lit la topologie, les CAPs et STACK.md » — sans ce qu'il ÉCRIT
+    ni ce qu'il REFUSE. La source était juste, la façade mentait, et rien ne
+    comparait les deux.
+
+    Le contrôle relit chaque scalaire brut et le confronte à ce que le parseur
+    en garde : un écart est une troncature, donc un échec.
+    """
+    try:
+        sys.path.insert(0, str(SDDA / "python"))
+        from sdda_lib import yaml_mini
+    except Exception as exc:
+        warn("agents.frontmatter", f"yaml_mini non chargeable ({exc!r})")
+        return
+
+    truncated: list[str] = []
+    checked = 0
+    for path in sorted(list((SDDA / "agents").glob("*.md")) + list((SDDA / "commands").glob("*.md"))):
+        text = read(path)
+        if not text.startswith("---"):
+            continue
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            continue
+        raw_block = parts[1]
+        try:
+            meta = yaml_mini.parse_mapping(raw_block)
+        except Exception as exc:
+            truncated.append(f"{path.relative_to(SDDA)} : frontmatter illisible ({exc})")
+            continue
+        for line in raw_block.splitlines():
+            m = re.match(r"^([A-Za-z_][\w-]*):\s+(.+?)\s*$", line)
+            if not m or m.group(2).startswith(("[", "{", '"', "'")):
+                continue
+            key, raw_value = m.group(1), m.group(2)
+            parsed = meta.get(key)
+            if not isinstance(parsed, str):
+                continue
+            checked += 1
+            if parsed.strip() != raw_value.strip():
+                truncated.append(
+                    f"{path.relative_to(SDDA)} : `{key}` perd « {raw_value[len(parsed):].strip()[:60]} » "
+                    f"(` #` ouvre un commentaire YAML — reformuler sans dièse)"
+                )
+    if truncated:
+        for item in truncated[:8]:
+            fail("agents.frontmatter", item)
+    else:
+        ok("agents.frontmatter", f"{checked} scalaires de frontmatter intacts après parsing")
 
 
 # ---------------------------------------------------------------------------
@@ -860,10 +946,12 @@ def main() -> int:
 
     for check in (
         check_agents,
+        check_frontmatter_intact,
         check_invariants,
         check_hooks_reachable,
         check_error_classes,
         check_digests,
+        check_counters,
         check_references,
         check_template_numbering,
         check_section_refs,

@@ -110,10 +110,11 @@ agents:
     # faux verts, parce qu'il rassure.
 
 # ── Bilan ──────────────────────────────────────────────────────────────────
-# 26 agents : 10 tier_default=deep, 12 balanced, 4 fast.
-#             19 floor=balanced, 7 floor=fast, 0 floor=deep.
-#             2 plafonnés balanced (po-elicitor, architect-memory,
-#             plus les 4 dont le ceiling est balanced par nature de tâche).
+# sdda:bilan-begin — régénéré par sdda_admin/sync_counters.py depuis les entrées ci-dessus, ne pas éditer
+# 22 agents : 8 tier_default=deep, 13 balanced, 1 fast.
+#             17 floor=balanced, 5 floor=fast, 0 floor=deep.
+#             6 plafonnés balanced (architect-memory, dev-api, dev-data, po-elicitor, qa-tests, review-cost).
+# sdda:bilan-end
 #
 # Aucun agent n'a tier_floor=deep : un plancher `deep` interdirait toute
 # optimisation de coût et ferait du mode dynamic une décoration.
