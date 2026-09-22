@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdd-agents.dev/schemas/libs-catalog.schema.json",
+  "title": "Catalogue de dépendances d'une stack",
+  "description": "Versions épinglées d'une fiche de stack. Le `.md` porte les idiomes et les pièges ; ce fichier porte les versions, et lui seul fait foi. Un agent qui invente une version ou une librairie absente de ce catalogue émet [STACK_LIBRARY_MISSING].",
+  "type": "object",
+  "required": ["stackId", "category", "schemaVersion", "versions", "core"],
+  "additionalProperties": false,
+
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "stackId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*-[a-z0-9-]+$",
+      "description": "Préfixé par la catégorie : `framework-langgraph`, `eval-pytest-eval`. Le préfixe vaut le nom du dossier, ce qui évite les collisions entre catégories — `langsmith` existe en framework, en eval et en observability."
+    },
+
+    "category": {
+      "enum": [
+        "lang", "framework", "orchestration", "rag", "vectorstore", "embedding", "rerank",
+        "dataaccess", "memory", "tools", "eval", "observability", "guardrails",
+        "serving"
+      ],
+      "description": "Doit être identique au nom du dossier parent."
+    },
+
+    "schemaVersion": { "const": 1 },
+
+    "buildSystem": {
+      "type": "string",
+      "description": "uv | pip | poetry | npm | pnpm | dotnet | gradle | maven"
+    },
+
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fichiers de manifeste générés, avec placeholders ({BackendName}, …)."
+        }
+      }
+    },
+
+    "versions": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "La table des versions épinglées. TOUTE `ref` d'une entrée `core`, `dev` ou `onDemand` doit exister ici, sinon la référence est morte.",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._@/-]*$" },
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+
+    "core": {
+      "type": "array",
+      "description": "Dépendances installées systématiquement par cette stack.",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "dev": {
+      "type": "array",
+      "description": "Dépendances d'outillage (tests, lint, typage).",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "onDemand": {
+      "type": "array",
+      "description": "Installées seulement si une autre stack active ou un contrat les exige. `requiredBy` dit laquelle.",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+
+    "absentByDesign": {
+      "type": "array",
+      "description": "Librairies volontairement ABSENTES, avec la raison. Sans ce bloc, un agent qui ne trouve pas une dépendance attendue suppose un oubli et l'ajoute — c'est ainsi qu'un `AgentExecutor` interdit réapparaît.",
+      "items": {
+        "type": "object",
+        "required": ["module", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "module": { "type": "string" },
+          "reason": { "type": "string", "minLength": 10 }
+        }
+      }
+    },
+
+    "dbDrivers": {
+      "type": "object",
+      "description": "Pilote par moteur de base, sélectionné depuis STACK.md `DatabaseType`.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["module", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "module": { "type": "string" },
+          "ref": { "type": "string" },
+          "scope": {
+            "type": "string",
+            "description": "`runtime` | `dev` | `test` — où le pilote est installé. Un pilote de base installé en `dev` seulement produit une application qui démarre en CI et pas en production."
+          }
+        }
+      }
+    },
+
+    "plugins": {
+      "type": "array",
+      "description": "Extensions du moteur lui-même, pas du gestionnaire de paquets : une extension PostgreSQL, un plugin de runner. Elles s'installent côté serveur et n'apparaissent dans aucun lockfile — c'est pour cela qu'elles se déclarent ici.",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+
+    "runtimeRequirements": {
+      "type": "object",
+      "description": "Ce qui doit exister HORS du gestionnaire de paquets : version de serveur, extension, binaire, GPU. C'est ce qui casse un bootstrap sans que le lockfile n'en dise rien.",
+      "additionalProperties": { "type": "string" }
+    },
+
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lastRebased": { "type": "string", "description": "Date ISO du dernier alignement des versions." },
+        "lastUpdated": { "type": "string", "description": "Date ISO de la dernière modification du catalogue, alignement de versions ou non." },
+        "status": { "type": "string", "description": "`design-phase` | `untested` | `bench-validated` | `validated` — même échelle que le `Validation:` de la fiche." },
+        "format": { "type": "string" },
+        "versionsVerified": {
+          "type": "boolean",
+          "description": "false = versions plausibles mais NON vérifiées contre le registre de paquets. Doit rester false tant que les pins n'ont pas été résolus contre le registre réel — annoncer l'inverse est un faux vert, et c'est exactement ce que `framework_smoke.libs.unverified` surveille."
+        },
+        "verifiedAt": {
+          "type": "string",
+          "description": "Date ISO de la résolution qui a mis `versionsVerified` à true. Exigée avec lui : une vérification sans date ne peut pas se périmer, donc ne peut pas être contredite. C'est ce qui distingue un fait mesuré d'une déclaration."
+        },
+        "verifiedAgainst": {
+          "type": "string",
+          "description": "Registre et méthode de la résolution (ex. « pypi.org via `uv pip compile` », « nuget.org »). Une résolution CONJOINTE des catalogues d'un même langage ne dit pas la même chose qu'un `pip index versions` paquet par paquet : la première garantit la compatibilité mutuelle, la seconde non."
+        },
+        "notes": {
+          "anyOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "changeLog": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+
+  "$defs": {
+    "dependency": {
+      "type": "object",
+      "required": ["module", "ref"],
+      "additionalProperties": false,
+      "properties": {
+        "module": {
+          "type": "string",
+          "description": "Nom d'installation, extras compris : `uvicorn[standard]`."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Clé dans `versions`. Une `ref` absente de `versions` est une référence morte."
+        },
+        "requiredBy": {
+          "type": "string",
+          "description": "Pour `onDemand` : la stack, le provider ou le contrat qui la déclenche."
+        },
+        "capability": {
+          "type": "string",
+          "description": "Pour `onDemand` : le nom de la capability qui déclenche l'installation (`provider-anthropic`, `mcp-tools`, `format-xlsx`…). C'est le point de jonction entre une fiche transverse et le catalogue du framework actif : `tools/mcp.md` n'a pas de `.libs.json`, il RÉCLAME `mcp-tools`. Sans cette clé, chaque fiche transverse devrait posséder ses propres dépendances, et la même librairie serait épinglée à deux versions différentes selon qui l'a déclarée."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Pourquoi cette dépendance, et ce qu'elle sert précisément. Une dépendance sans raison écrite est une dépendance que personne n'osera retirer."
+        },
+        "triggers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Pour `onDemand` : motifs (regex) cherchés dans STACK.md et les contrats pour décider si la capability est réclamée. Déclaratif à dessein — un déclenchement décidé par du code serait invisible en revue."
+        },
+        "installCommand": {
+          "type": "string",
+          "description": "Commande exacte d'installation, placeholders compris. Elle porte le pin : une commande sans version figée réinstalle autre chose la semaine suivante, et le comportement observable change sans qu'aucun fichier n'ait bougé."
+        },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

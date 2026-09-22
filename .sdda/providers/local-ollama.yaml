@@ -1,0 +1,83 @@
+# .sdda/providers/local-ollama.yaml — Ollama, inférence locale (ou auto-hébergée)
+#
+# ============================================================================
+# CE FICHIER RÉSOUT DES TIERS, PAS DES MODÈLES
+# ============================================================================
+# Les agents déclarent un TIER (`fast` | `balanced` | `deep`), jamais un nom de
+# modèle (P11, ARCHITECTURE §6). La résolution tier -> modèle appartient au
+# provider actif, c'est-à-dire à ce fichier (`tier_map`). Ajouter ou modifier
+# un provider ne touche aucun agent. Seul `model_id` bouge dans le tuple
+# d'épinglage des baselines (P10).
+#
+# Cas d'usage : POC hors ligne, corpus qui ne doit JAMAIS quitter le réseau,
+# tier `fast` économique en mixage cross-provider (STACK.md ## Runtime Models
+# autorise deep=anthropic / fast=local). Les modèles locaux sont nettement
+# moins capables en tool calling et en sortie structurée : la fidélité doit
+# être MESURÉE par conformance run avant tout usage en production.
+#
+# Aucun secret ici : uniquement des NOMS de variables d'environnement.
+# ============================================================================
+
+schema: sdda.provider/v1
+name: local-ollama
+endpoint_kind: openai-compat          # Ollama expose /v1 compatible OpenAI (+ API native /api)
+base_url_env: OLLAMA_HOST             # défaut : http://localhost:11434
+auth_env: OLLAMA_API_KEY              # OPTIONNEL — inutile en local ; requis derrière un proxy ou Ollama cloud
+
+tier_map:
+  # Tags Ollama (nom:taille). Choix 2026-09-20 parmi les modèles populaires de
+  # la bibliothèque officielle supportant le tool calling. Les tailles sont des
+  # points de départ pour une machine 24-32 Go de VRAM ; à ajuster au matériel.
+  deep: qwen3:32b                     # dense 32B, tool calling, mode thinking
+  balanced: gpt-oss:20b               # MoE 20B (OpenAI open-weights), tool calling, ~16 Go
+  fast: llama3.2:3b                   # 3B, tool calling basique
+
+context_window:                       # tokens — fenêtre EFFECTIVE fixée par num_ctx (défaut Ollama souvent 4096 !)
+  # Un num_ctx laissé au défaut tronque silencieusement le prompt : le
+  # générateur DOIT le fixer explicitement à la valeur ci-dessous.
+  deep: 32768                         # natif 32k (128k avec YaRN, à activer explicitement) — à confirmer
+  balanced: 131072                    # à confirmer
+  fast: 131072                        # à confirmer
+
+capabilities:
+  structured_output_fidelity: unknown # dépend du modèle ; mesurer par modèle au conformance run
+  tool_calling: openai-compat         # dépend du modèle — les trois tags ci-dessus le déclarent ; à mesurer
+  prompt_caching: none                # cache KV de session côté serveur, non facturé, non contrôlable par bloc
+  streaming: true
+  notes:
+    - "Pas de tier `deep` réellement comparable aux modèles frontière : ne pas l'utiliser pour JudgeModel sans calibration mesurée (P9)."
+    - "Le modèle exact chargé dépend du tag ET du digest local : épingler le digest (ollama show) dans model_id pour l'épinglage P10."
+
+embedding_models:
+  - id: nomic-embed-text
+    dimensions: 768
+    price_per_million_input_usd: 0.0
+  - id: bge-m3
+    dimensions: 1024
+    price_per_million_input_usd: 0.0
+  - id: mxbai-embed-large
+    dimensions: 1024
+    price_per_million_input_usd: 0.0
+
+telemetry:
+  # Aucune télémétrie sortante : les prompts ne quittent pas l'hôte. C'est
+  # la raison d'être de ce provider pour les corpus sensibles.
+  # La garantie ne tient que si OLLAMA_HOST pointe sur une machine maîtrisée :
+  # un OLLAMA_HOST vers un service cloud tiers rend ce bloc faux — bootstrap.py
+  # doit avertir si l'hôte n'est pas local / privé.
+  default_retention_days: 0
+  optout_available: true
+  optout_mechanism: "Non applicable : exécution locale, aucune donnée transmise à un tiers tant que OLLAMA_HOST est maîtrisé"
+  training_on_api_data: false
+  reference_url: "https://github.com/ollama/ollama/blob/main/docs/faq.md"
+  last_reviewed: 2026-09-20
+
+pricing:                              # USD par million de tokens — 0 : le coût est celui de l'infrastructure
+  # estimate_budget.py et le grader `cost` verront un coût nul. Pour un budget
+  # honnête, déclarer un coût d'infrastructure amorti dans STACK.md
+  # (clé à définir — cf. rapport de conception : `LocalComputeCostPerHourUsd`
+  # n'existe pas encore dans config.base.yml).
+  qwen3:32b:   {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
+  gpt-oss:20b: {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
+  llama3.2:3b: {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
+pricing_last_reviewed: 2026-09-20

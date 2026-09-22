@@ -1,0 +1,6 @@
+flowchart TD
+  classify{intent-classifier} -.->|intent == 'billing'| billing[billing-specialist]
+  classify -->|aucune classe| clarify[clarify_request]
+  billing -->|resolved| finalize[compose_answer]
+  billing -.->|needs_reclassification| classify
+  clarify --> finalize

@@ -1,0 +1,3 @@
+{"id": "holdout-billing-001", "input": {"question": "Ma facture d'avril inclut une ligne inconnue", "customer_id": "c9"}, "expected": {"resolved": true}, "metadata": {"source": "real-anonymized", "difficulty": "medium", "class": "line-explanation"}}
+{"id": "holdout-dispute-002", "input": {"question": "Je conteste 700 EUR de pénalités", "customer_id": "c9"}, "expected": {"resolved": false}, "expected_abstention": true, "metadata": {"source": "real-anonymized", "difficulty": "hard", "class": "dispute"}}
+{"id": "holdout-billing-003", "input": {"question": "Que signifie 'abonnement fixe' sur ma facture ?", "customer_id": "c9"}, "expected": {"resolved": true}, "metadata": {"source": "real-anonymized", "difficulty": "easy", "class": "line-explanation"}}

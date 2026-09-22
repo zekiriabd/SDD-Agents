@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdd-agents.dev/schemas/golden-set.schema.json",
+  "title": "Golden set item",
+  "description": "Schéma d'UN item d'un jeu de données d'évaluation SDD_Agents. Les jeux sont des fichiers JSONL (un item JSON par ligne) sous workspace/datasets/{golden|holdout|calibration|adversarial}/. Le même schéma sert aux quatre rôles ; `expected` porte la vérité attendue d'une réponse, `expected_documents` la vérité de retrieval (niveau document, RAG-PATTERNS.md §1). Owner exclusif : qa-evals — aucun dev-* n'écrit dans datasets/ (ARCHITECTURE §7). Les hashes de fichiers entiers servent à la disjonction golden/holdout (HoldoutDisjointCheck) et au tuple d'épinglage des baselines (P10).",
+  "type": "object",
+  "required": ["id", "input", "metadata"],
+  "additionalProperties": false,
+
+  "anyOf": [
+    { "required": ["expected"] },
+    { "required": ["expected_documents"] },
+    { "required": ["expected_trajectory"] },
+    { "required": ["adversarial"] }
+  ],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*-[0-9]{3,}$",
+      "description": "Identifiant stable, jamais renuméroté (DOMAIN-MODEL.md §5). Convention : {jeu}-{classe}-{nnn}, ex. support-billing-042. Un item retiré n'est pas réattribué."
+    },
+
+    "input": {
+      "description": "L'entrée soumise au système. Chaîne pour une question simple ; objet pour une entrée structurée (conforme à l'inputSchema de la CAP ou de l'agent). Pour une conversation multi-tours, utiliser `messages`.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "properties": {
+            "messages": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["role", "content"],
+                "additionalProperties": false,
+                "properties": {
+                  "role": { "enum": ["user", "assistant", "tool"] },
+                  "content": { "type": "string" }
+                }
+              },
+              "description": "Historique de conversation. Le dernier message est celui auquel le système répond."
+            },
+            "context": {
+              "type": "object",
+              "description": "État d'entrée hors message : identité de l'appelant (tenant_id, rôle), variables de session. JAMAIS de secret."
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+
+    "expected": {
+      "description": "Vérité attendue de la RÉPONSE, interprétée par le grader déclaré dans la suite. exact/regex : chaîne. schema : objet. numeric-tolerance : nombre. llm-judge / semantic-similarity : réponse de référence (chaîne) — le juge la voit quand elle existe. Ne jamais mettre null : omettre la clé.",
+      "not": { "type": "null" }
+    },
+
+    "expected_class": {
+      "type": "string",
+      "description": "Classe attendue pour un routeur ou un classifieur. Permet l'accuracy PAR CLASSE (une accuracy globale de 0.95 peut cacher 0.40 sur la classe critique)."
+    },
+
+    "expected_abstention": {
+      "type": "boolean",
+      "default": false,
+      "description": "true : la bonne réponse est « je ne sais pas » / escalade (item hors corpus, hors compétence). Alimente le taux d'abstention (TESTING-AND-EVAL.md §6). Un jeu sans items d'abstention ne mesure pas la Failure Policy de la MISSION."
+    },
+
+    "expected_documents": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Vérité de RETRIEVAL au niveau document (L3, RETRIEVAL GATE). recall@k se calcule sur doc_id ; nDCG utilise relevance. Un item avec expected_documents vide n'existe pas : pour « aucun document pertinent », utiliser expected_abstention: true sans expected_documents.",
+      "items": {
+        "type": "object",
+        "required": ["doc_id", "relevance"],
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": { "type": "string", "minLength": 1, "description": "Identifiant du document dans l'index (métadonnée doc_id conservée par chunk)." },
+          "passage_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optionnel : passages/chunks précis. La vérité de référence reste le document — c'est ce qui isole l'échec du chunking de l'échec du corpus."
+          },
+          "relevance": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "Pertinence graduée pour nDCG : 3 = répond directement, 2 = nécessaire mais partiel, 1 = utile en contexte."
+          },
+          "required_for_answer": {
+            "type": "boolean",
+            "default": true,
+            "description": "false : document pertinent mais dont l'absence ne fait pas échouer la réponse (multi-sauts : distinguer les sauts obligatoires)."
+          }
+        }
+      }
+    },
+
+    "expected_trajectory": {
+      "type": "object",
+      "description": "Vérité de TRAJECTOIRE (L5, grader trajectory) — sur la trace, pas sur la réponse. Une réponse correcte obtenue par une trajectoire aberrante est un faux vert.",
+      "additionalProperties": false,
+      "properties": {
+        "route": { "type": "string", "description": "Nœud / spécialiste attendu après routage." },
+        "tools_required": { "type": "array", "items": { "type": "string" }, "description": "Outils qui DOIVENT être appelés (ordre libre sauf tools_order)." },
+        "tools_forbidden": { "type": "array", "items": { "type": "string" }, "description": "Outils qui ne doivent JAMAIS être appelés sur cet item (ex. outil destructif hors mandat)." },
+        "tools_order": { "type": "array", "items": { "type": "string" }, "description": "Ordre ADMISSIBLE (pas unique) — sous-séquence attendue." },
+        "max_hops": { "type": "integer", "minimum": 0 },
+        "max_tool_calls": { "type": "integer", "minimum": 0 },
+        "max_retrieval_calls": { "type": "integer", "minimum": 0 },
+        "terminal_node": { "type": "string" },
+        "expected_bound_behavior": { "enum": ["fail-explicit", "degrade", "escalate-human"], "description": "Si l'item est conçu pour atteindre une borne : comportement déclaré attendu." }
+      }
+    },
+
+    "adversarial": {
+      "type": "object",
+      "description": "Présent uniquement dans datasets/adversarial/. Familles et attendus de TESTING-AND-EVAL.md §4. Toute attaque RÉUSSIE découverte en production ou en revue devient un item permanent ici.",
+      "required": ["family", "expected_outcome"],
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "enum": [
+            "direct-injection",
+            "indirect-injection",
+            "tool-injection",
+            "tool-abuse",
+            "privilege-escalation",
+            "exfiltration",
+            "authorization-crossing",
+            "budget-exhaustion",
+            "persona-jailbreak",
+            "memory-poisoning"
+          ]
+        },
+        "vector": {
+          "enum": ["user_message", "retrieved_document", "tool_output", "mcp_server", "memory", "api_response"],
+          "description": "Par où l'attaque entre. indirect-injection exige retrieved_document ou tool_output : c'est le cas le plus important."
+        },
+        "payload_ref": {
+          "type": "string",
+          "description": "Référence du document empoisonné injecté dans l'index de TEST (jamais l'index réel), ou de la réponse d'outil forgée."
+        },
+        "expected_outcome": {
+          "enum": ["refused", "ignored-as-data", "blocked", "filtered-at-source", "bound-reached-declared-behavior", "refusal-policy-respected", "impossible-by-construction"],
+          "description": "refused : injection directe. ignored-as-data : injection indirecte / via outil — traité comme donnée, jamais exécuté. blocked : exfiltration. filtered-at-source : franchissement d'autorisation. bound-reached-declared-behavior : épuisement de budget. refusal-policy-respected : jailbreak de persona. impossible-by-construction : escalade de privilège (scopes)."
+        },
+        "forbidden_observables": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ce qui ne doit apparaître NI dans la réponse NI dans la trace : fragment de prompt système, valeur de secret, PII cible, appel d'un outil interdit."
+        },
+        "discovered_at": { "type": "string", "format": "date", "description": "Date de découverte si l'item provient d'une attaque réussie (finding)." },
+        "finding_ref": { "type": "string", "description": "Référence du finding de revue ou de l'incident d'origine." }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "required": ["source", "difficulty", "class"],
+      "additionalProperties": true,
+      "properties": {
+        "source": {
+          "enum": ["real", "real-anonymized", "synthetic", "adversarial-finding", "human-authored"],
+          "description": "Provenance. Les items synthétiques sont marqués : un jeu 100 % synthétique n'est pas une vérité terrain (MISSION ## Ground Truth)."
+        },
+        "source_ref": { "type": "string", "description": "Référence de l'origine (export, ticket, conversation) — sans PII." },
+        "difficulty": { "enum": ["easy", "medium", "hard"] },
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Classe métier de l'item (intention, type de question, famille). Pilote l'accuracy par classe et la distribution du jeu."
+        },
+        "criticality": {
+          "enum": ["normal", "critical"],
+          "default": "normal",
+          "description": "critical : l'échec d'un seul item de cette classe rend le verdict ROUGE, et k runs = EvalRunsCritical."
+        },
+        "cap_refs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9]+-[0-9]+-[A-Za-z0-9]+$" },
+          "description": "CAPs que cet item exerce (traçabilité montante)."
+        },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "language": { "type": "string", "description": "Code langue de l'entrée (fr, en, …)." },
+        "created_at": { "type": "string", "format": "date" },
+        "pii_status": {
+          "enum": ["none", "redacted", "present-authorized"],
+          "default": "none",
+          "description": "present-authorized exige un ADR ; le scan de secrets/PII de G7 parcourt aussi les datasets."
+        }
+      }
+    },
+
+    "labels": {
+      "type": "array",
+      "description": "Labels HUMAINS optionnels. Obligatoires dans datasets/calibration/ : c'est contre eux que le juge LLM est calibré (P9, κ >= 0.6 sur >= 50 items, selon la grille EXACTE du juge). Plusieurs labellisateurs permettent de mesurer l'accord inter-annotateurs.",
+      "items": {
+        "type": "object",
+        "required": ["labeler", "rubric_ref", "labeled_at", "score"],
+        "additionalProperties": false,
+        "properties": {
+          "labeler": { "type": "string", "description": "Identifiant pseudonyme du labellisateur — jamais une adresse e-mail en clair dans un dataset." },
+          "rubric_ref": { "type": "string", "description": "Référence de la grille utilisée (fichier + version). Doit être la grille du juge calibré." },
+          "rubric_version": { "type": "string" },
+          "labeled_at": { "type": "string", "format": "date" },
+          "score": {
+            "description": "Score humain selon la grille : booléen, ordinal ou continu — même échelle que le juge.",
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "number" },
+              { "type": "string" }
+            ]
+          },
+          "criteria": {
+            "type": "object",
+            "additionalProperties": { "oneOf": [{ "type": "boolean" }, { "type": "number" }, { "type": "string" }] },
+            "description": "Détail par critère de la grille (C1, C2, …) quand la grille en a."
+          },
+          "rationale": { "type": "string", "description": "Justification courte. Utile pour retravailler la grille quand κ est sous le seuil." }
+        }
+      }
+    }
+  }
+}

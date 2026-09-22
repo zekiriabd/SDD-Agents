@@ -1,0 +1,82 @@
+# .sdda/providers/azure-openai.yaml — Azure OpenAI (Microsoft Foundry, « Models sold by Azure »)
+#
+# ============================================================================
+# CE FICHIER RÉSOUT DES TIERS, PAS DES MODÈLES
+# ============================================================================
+# Les agents déclarent un TIER (`fast` | `balanced` | `deep`), jamais un nom de
+# modèle (P11, ARCHITECTURE §6). La résolution tier -> modèle appartient au
+# provider actif, c'est-à-dire à ce fichier (`tier_map`). Ajouter ou modifier
+# un provider ne touche aucun agent. Seul `model_id` bouge dans le tuple
+# d'épinglage des baselines (P10).
+#
+# Particularité Azure : on n'appelle pas un modèle mais un DÉPLOIEMENT nommé
+# par le client. `tier_map` porte le modèle sous-jacent (pour le pricing et
+# l'épinglage) ; `deployment_env` porte la variable qui contient le nom du
+# déploiement de chaque tier. Aucun secret ici : uniquement des NOMS de
+# variables d'environnement.
+# ============================================================================
+
+schema: sdda.provider/v1
+name: azure-openai
+endpoint_kind: azure-openai           # API OpenAI via ressource Azure ; version d'API explicite
+base_url_env: AZURE_OPENAI_ENDPOINT   # https://{resource}.openai.azure.com — pas de défaut SDK
+auth_env: AZURE_OPENAI_API_KEY        # ou Entra ID : AZURE_OPENAI_USE_ENTRA_ID=1 (DefaultAzureCredential), recommandé en production
+api_version_env: AZURE_OPENAI_API_VERSION
+
+deployment_env:                       # nom du déploiement Azure par tier — valeurs dans STACK.md, jamais ici
+  deep: AZURE_OPENAI_DEPLOYMENT_DEEP
+  balanced: AZURE_OPENAI_DEPLOYMENT_BALANCED
+  fast: AZURE_OPENAI_DEPLOYMENT_FAST
+
+tier_map:
+  # Modèle SOUS-JACENT attendu derrière chaque déploiement. Miroir de
+  # openai.yaml : la disponibilité par région et par type de déploiement
+  # (Standard / Global / DataZone) est à confirmer au bootstrap ; un
+  # déploiement pointant un autre modèle que celui déclaré ici invalide le
+  # pricing et l'épinglage -> bootstrap.py doit vérifier la correspondance.
+  deep: gpt-5.6-sol                   # disponibilité Azure à confirmer ; repli documenté : gpt-5.5
+  balanced: gpt-5.4
+  fast: gpt-5.4-nano
+
+context_window:                       # tokens d'entrée — à confirmer (identique à openai.yaml)
+  deep: 272000                        # à confirmer
+  balanced: 272000                    # à confirmer
+  fast: 272000                        # à confirmer
+
+capabilities:
+  structured_output_fidelity: unknown # verdict au 1er conformance run
+  tool_calling: openai-native
+  prompt_caching: implicit            # même mécanisme qu'OpenAI, disponibilité par type de déploiement à confirmer
+  streaming: true
+
+embedding_models:                     # via déploiements dédiés ; nom du déploiement dans AZURE_OPENAI_DEPLOYMENT_EMBEDDING
+  - id: text-embedding-3-large
+    dimensions: 3072
+    price_per_million_input_usd: 0.13 # tarif liste ; varie par région — à valider
+  - id: text-embedding-3-small
+    dimensions: 1536
+    price_per_million_input_usd: 0.02 # tarif liste ; varie par région — à valider
+
+telemetry:
+  # Les prompts peuvent contenir des données sensibles. Consommé par la
+  # SAFETY GATE et le architect-rag.
+  # Différence structurante vs openai.yaml : les données ne transitent PAS
+  # par OpenAI ; hébergement dans le tenant Azure du client, géographie choisie
+  # (sauf déploiements Global / DataZone : traitement possible hors géographie,
+  # stockage au repos dans la géographie désignée).
+  default_retention_days: 30          # magasin d'abuse monitoring (prompts/complétions SIGNALÉS uniquement) — durée à reconfirmer sur la page abuse-monitoring
+  optout_available: true              # « modified abuse monitoring » sur demande (clients managés)
+  optout_mechanism: "Demande d'exemption d'abuse monitoring (formulaire Microsoft, clients managés). Vérifiable : capability ContentLogging=false dans le JSON de la ressource (portail ou `az cognitiveservices account show`). La revue automatisée en temps réel subsiste."
+  training_on_api_data: false
+  reference_url: "https://learn.microsoft.com/azure/ai-foundry/responsible-ai/openai/data-privacy"
+  last_reviewed: 2026-09-20
+
+pricing:                              # USD par million de tokens — tarif LISTE OpenAI repris comme placeholder (revu 2026-09-20)
+  # Azure facture par région et par type de déploiement (Standard / Global /
+  # DataZone / Provisioned) : ces valeurs DOIVENT être validées contre la
+  # grille Azure du client au bootstrap, sinon estimate_budget.py ment.
+  gpt-5.6-sol:  {input: 4.00, output: 20.00, cache_read: 0.40, cache_creation: 4.00}
+  gpt-5.4:      {input: 2.50, output: 15.00, cache_read: 0.25, cache_creation: 2.50}
+  gpt-5.4-nano: {input: 0.20, output:  1.25, cache_read: 0.02, cache_creation: 0.20}
+pricing_last_reviewed: 2026-09-20
+pricing_confidence: placeholder       # placeholder | validated — passe à validated après relevé de la grille Azure du client

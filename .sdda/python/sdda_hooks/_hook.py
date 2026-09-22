@@ -1,0 +1,295 @@
+"""Plomberie des hooks — protocole d'exécution, lecture de gate, sortie.
+
+Un **hook** n'est pas un validateur. Le validateur répond « est-ce correct ? » et
+écrit un rapport ; le hook répond « ai-je le droit de faire CETTE action, MAINTENANT ? »
+et il répond assez vite pour s'intercaler entre deux frappes du harnais.
+
+Trois différences qui gouvernent tout ce module :
+
+1. **Le code de sortie est un verdict d'autorisation.** `0` autorise, `2` refuse.
+   Claude Code interprète `2` sur un `PreToolUse` comme un refus de l'action, et
+   rend `stderr` au modèle. C'est le seul canal par lequel un invariant peut
+   arrêter un agent **avant** qu'il écrive, et non après.
+
+2. **Un hook qui plante doit AUTORISER.** Un bug de hook qui bloque chaque
+   `Write` paralyse le pipeline entier, et la réaction humaine sera de désactiver
+   les hooks — donc de perdre tous les invariants, pas seulement le fautif. Un
+   hook qui plante émet un avertissement sur `stderr` et laisse passer. Le
+   contrôle correspondant reste joué en CI par son validateur, plus tard mais
+   sûrement.
+
+3. **Un hook lit, il n'écrit pas.** Aucun rapport de gate, aucun état. Il
+   consulte ce que les validateurs ont déjà écrit. Deux écrivains sur
+   `.sys/.validation/` produiraient exactement la course que la matrice
+   d'ownership existe pour empêcher.
+
+Le payload du harnais arrive sur `stdin` en JSON (`tool_name`, `tool_input`,
+`subagent_type`…). Il peut être absent : un hook doit rester exécutable à la main.
+
+**Chaque hook déclare son câblage** dans un `WIRING` de module — l'événement, le
+matcher, et les agents sur lesquels il se prononce. `harness_build.py` génère
+`settings.json` depuis ces déclarations : un hook présent sur le disque mais sans
+`WIRING` n'est câblé nulle part, et `framework_smoke` le signale. C'est ce qui
+empêche qu'un enforcer déclaré dans `INVARIANTS.yml` existe sans jamais
+s'exécuter — la forme la plus coûteuse de doc-theater, parce qu'elle est
+indiscernable d'une protection active.
+
+`applies_to` n'est pas une commodité : un hook de gate câblé sur **tout** `Task`
+refuse le premier agent du pipeline, quand aucune gate ne peut encore être verte.
+Un hook qui paralyse se fait désactiver, et on perd alors tous les invariants —
+pas seulement le fautif.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from sdda_lib import paths  # noqa: E402
+from sdda_lib.gate_reports import load_gate_reports  # noqa: E402
+
+# `stderr` est le canal par lequel un refus atteint le modèle. Sous Windows il
+# est en `cp1252` par défaut : « borne dépassée » y devient « borne d�pass�e »,
+# et le `FIX:` que le modèle doit lire arrive abîmé — au moment précis où il
+# doit comprendre quoi corriger. Même piège que `serving/cli.md §7.5`.
+for _stream in (sys.stderr, sys.stdout):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except Exception:
+        pass
+
+#: Codes de sortie. `2` est la valeur que Claude Code interprète comme un refus.
+ALLOW = 0
+DENY = 2
+
+# ---------------------------------------------------------------------------
+# Groupes d'agents — nommés ici, une seule fois
+# ---------------------------------------------------------------------------
+# Les `applies_to` des hooks s'y réfèrent plutôt que de recopier des listes :
+# une renommée d'agent se répercute alors en un point, et un `applies_to` se lit
+# comme une phrase au lieu d'un tuple de chaînes.
+
+#: Phase 2 — ceux qui architecturent sur les CAPs. Rien ne doit partir chez eux
+#: si G1 n'est pas verte : ils bâtiraient sur des critères non mesurables.
+PHASE2_ARCHITECTS = (
+    "architect-topology", "architect-rag", "architect-data",
+    "architect-memory", "architect-tools",
+)
+
+#: Phases 4-5 — ceux qui câblent les agents et l'orchestration. Ils s'appuient
+#: sur les couches basses (outils, retrieval) : elles doivent être prouvées avant.
+AGENT_BUILDERS = ("dev-agent", "dev-orchestration")
+
+#: Ceux dont le code touche des données — base, sources déclarées ou corpus.
+DATA_BUILDERS = ("dev-data", "dev-retrieval", "dev-agent")
+
+#: Ceux qui produisent ou consomment des mesures d'évaluation.
+EVAL_BUILDERS = ("qa-evals", "qa-tests", "dev-orchestration")
+
+
+#: Options acceptées en ligne de commande, et la clé de payload qu'elles posent.
+#: Les commandes invoquent les hooks à la main (`--mission {n}`) ; sans cette
+#: table, l'option était lue par personne et le hook se prononçait sur TOUTES les
+#: missions au lieu de celle qu'on lui nommait — un faux vert silencieux.
+ARGV_KEYS = {
+    "--mission": "mission",
+    "--agent": "subagent_type",
+    "--run-id": "runId",
+    "--root": "cwd",
+}
+
+
+def argv_data(argv: list[str] | None = None) -> dict[str, Any]:
+    """Les options de la ligne de commande, en clés de payload.
+
+    Tolérant à dessein : une option inconnue est ignorée plutôt que fatale. Un
+    hook reste exécutable à la main même si l'appelant se trompe de drapeau.
+    """
+    args = list(argv if argv is not None else sys.argv[1:])
+    out: dict[str, Any] = {}
+    i = 0
+    while i < len(args):
+        token = args[i]
+        key, _, inline = token.partition("=")
+        target = ARGV_KEYS.get(key)
+        if target is None:
+            i += 1
+            continue
+        if inline:
+            out[target] = inline
+            i += 1
+        elif i + 1 < len(args) and not args[i + 1].startswith("--"):
+            out[target] = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    return out
+
+
+def payload() -> dict[str, Any]:
+    """Le JSON du harnais sur stdin, enrichi des options de la ligne de commande.
+
+    Jamais bloquant : un hook doit rester lançable à la main pour être debogable,
+    et un payload illisible n'est pas une raison de refuser une action. La ligne
+    de commande l'emporte sur stdin — c'est l'opérateur qui restreint le scope,
+    et restreindre ne peut pas être moins sûr qu'élargir.
+    """
+    data: dict[str, Any] = {}
+    if sys.stdin is not None and not sys.stdin.isatty():
+        try:
+            raw = sys.stdin.read()
+        except (OSError, ValueError):
+            raw = ""
+        if raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                data = parsed
+    data.update(argv_data())
+    return data
+
+
+def root_of(data: dict[str, Any]) -> Path:
+    """La racine du projet : `cwd` du harnais, variable d'env, ou détection."""
+    for candidate in (data.get("cwd"), os.environ.get("SDDA_ROOT")):
+        if candidate and Path(str(candidate)).is_dir():
+            return Path(str(candidate)).resolve()
+    try:
+        return paths.find_root().resolve()
+    except Exception:
+        return Path.cwd().resolve()
+
+
+def deny(hook: str, cls: str, detail: str, fix: str) -> int:
+    """Refuse l'action, en disant au modèle ce qui la débloque.
+
+    Le bloc 3 lignes n'est pas décoratif : c'est ce que le modèle reçoit, et
+    « refusé » sans `FIX:` produit un agent qui réessaie la même action.
+    """
+    sys.stderr.write(f"ERROR: hook {hook} — action refusée\nCAUSE: [{cls}] {detail}\nFIX: {fix}\n")
+    return DENY
+
+
+def allow(note: str = "") -> int:
+    if note:
+        sys.stderr.write(f"[hook] {note}\n")
+    return ALLOW
+
+
+def degrade(hook: str, exc: BaseException) -> int:
+    """Un hook cassé autorise — et le dit. Cf. §2 du module."""
+    sys.stderr.write(
+        f"[hook] {hook} n'a pas pu s'exécuter ({exc.__class__.__name__}: {exc}) — action AUTORISÉE.\n"
+        f"[hook] le contrôle reste joué en CI par son validateur. Corriger le hook.\n")
+    return ALLOW
+
+
+def agent_of(data: dict[str, Any]) -> str:
+    """L'agent que l'action concerne, `""` si le payload n'en nomme aucun.
+
+    **Le harnais place `subagent_type` sous `tool_input`, pas à la racine.**
+    Lire uniquement la racine renvoyait toujours `""`, avec deux conséquences
+    opposées et toutes deux fausses :
+
+    - un hook de gate (`applies_to` non vide) se croyait « dans le périmètre »
+      faute d'étiquette et refusait le PREMIER spawn du pipeline, quand aucune
+      gate ne peut encore être verte ;
+    - un hook d'ownership (`applies_to` vide) laissait tout passer, puisqu'il
+      autorise explicitement les écritures du fil principal.
+
+    On regarde donc les deux emplacements, plus les clés que pose la ligne de
+    commande (`--agent`). Une seule source aurait suffi si le format était
+    stable ; il ne l'est pas entre harnais, et se tromper ici désarme ou
+    paralyse toute la couche de protection.
+    """
+    tool_input = data.get("tool_input")
+    candidates = [
+        (tool_input or {}).get("subagent_type") if isinstance(tool_input, dict) else None,
+        (tool_input or {}).get("agent") if isinstance(tool_input, dict) else None,
+        data.get("subagent_type"),
+        data.get("agent"),
+    ]
+    for value in candidates:
+        if value and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def out_of_scope(data: dict[str, Any], applies_to: tuple[str, ...]) -> bool:
+    """L'action en cours sort-elle du périmètre de ce hook ?
+
+    Trois cas, et leur raison :
+
+    - `applies_to` vide → le hook se prononce sur tout (l'ownership vaut pour
+      chaque écriture, quel qu'en soit l'auteur) ;
+    - le payload ne nomme aucun agent → **on se prononce**. C'est l'invocation
+      manuelle ou le CI : refuser de juger faute d'étiquette rendrait le hook
+      inutilisable précisément là où il sert de filet ;
+    - le payload nomme un agent hors liste → on laisse passer. Une gate de
+      phase 3 n'a rien à dire sur le lancement d'un `po-elicitor`, et prétendre
+      le contraire est ce qui transforme un invariant en obstacle qu'on
+      désactive.
+    """
+    if not applies_to:
+        return False
+    agent = agent_of(data)
+    if not agent:
+        return False
+    return agent not in applies_to
+
+
+def run(hook: str, fn, applies_to: tuple[str, ...] = ()) -> int:
+    """Enveloppe standard : payload, périmètre, racine, verdict, dégradation sûre."""
+    try:
+        data = payload()
+        if out_of_scope(data, applies_to):
+            return ALLOW
+        return fn(root_of(data), data)
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 — tout échec doit dégrader, pas bloquer
+        return degrade(hook, exc)
+
+
+# ---------------------------------------------------------------------------
+# Lecture des gates déjà franchies
+# ---------------------------------------------------------------------------
+def gate_status(root: Path, gate: str, artifact: str | None = None) -> tuple[str, list[str]]:
+    """`(verdict, raisons)` pour une gate : `green` | `red` | `absent`.
+
+    Une gate composite (G2, G3, G7, G8) n'est verte que si **toutes** ses parts
+    le sont. Une part manquante rend `absent`, jamais `green` : l'absence de
+    preuve n'est pas une preuve, et c'est précisément par là qu'un pipeline se
+    déclare vert tout seul.
+    """
+    reports = [r for r in load_gate_reports(root)
+               if r.get("gate") == gate and (artifact is None or str(r.get("artifact")) == str(artifact))]
+    if not reports:
+        return "absent", [f"aucun rapport {gate} dans {paths.rel(root, paths.validation_dir(root))}"]
+
+    red = [r for r in reports if not r.get("ok")]
+    if red:
+        reasons = []
+        for r in red:
+            classes = [e.get("class", "?") for e in (r.get("errors") or [])][:3]
+            reasons.append(f"{r.get('gate')}{'.' + r['part'] if r.get('part') else ''} : {classes}")
+        return "red", reasons
+    return "green", [f"{len(reports)} part(s) verte(s)"]
+
+
+def require_gate(hook: str, root: Path, gate: str, artifact: str | None, cls: str, fix: str) -> int:
+    verdict, reasons = gate_status(root, gate, artifact)
+    if verdict == "green":
+        return allow()
+    return deny(hook, cls, f"{gate} non franchie — {'; '.join(reasons)}", fix)
+
+
+def bypassed(name: str) -> bool:
+    """Un bypass nominatif est actif ? (LIFECYCLE R5 — audité par la commande.)"""
+    return os.environ.get(name, "0").strip().lower() in ("1", "true", "yes", "on")

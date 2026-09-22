@@ -1,0 +1,68 @@
+# .sdda/providers/google.yaml — Google Gemini API (Developer API)
+#
+# ============================================================================
+# CE FICHIER RÉSOUT DES TIERS, PAS DES MODÈLES
+# ============================================================================
+# Les agents déclarent un TIER (`fast` | `balanced` | `deep`), jamais un nom de
+# modèle (P11, ARCHITECTURE §6). La résolution tier -> modèle appartient au
+# provider actif, c'est-à-dire à ce fichier (`tier_map`). Ajouter ou modifier
+# un provider ne touche aucun agent. Seul `model_id` bouge dans le tuple
+# d'épinglage des baselines (P10).
+#
+# Aucun secret ici : uniquement des NOMS de variables d'environnement.
+# ============================================================================
+
+schema: sdda.provider/v1
+name: google
+endpoint_kind: native                 # API Gemini native (generativelanguage)
+base_url_env: GOOGLE_GEMINI_BASE_URL  # défaut SDK : https://generativelanguage.googleapis.com
+auth_env: GEMINI_API_KEY
+
+tier_map:
+  # Résolution 2026-09-20 depuis ai.google.dev/gemini-api/docs/models et /pricing.
+  # ATTENTION : au 2026-09-20 le seul modèle Pro listé au tarif est un PREVIEW.
+  # Un modèle preview dans le tier `deep` doit être assumé par écrit dans
+  # STACK.md (dérive de comportement sans changement d'identifiant possible).
+  deep: gemini-3.1-pro-preview        # preview — à remplacer par la version GA dès publication
+  balanced: gemini-3.8-flash
+  fast: gemini-3.5-flash-lite
+
+context_window:                       # tokens d'entrée — à confirmer via l'API models (non précisé sur la page de tarifs)
+  deep: 1000000                       # à confirmer
+  balanced: 1000000                   # à confirmer
+  fast: 1000000                       # à confirmer
+
+capabilities:
+  structured_output_fidelity: unknown # verdict au 1er conformance run (SDD-Pro le déclare `high` — non transféré sans mesure ici)
+  tool_calling: google-native
+  prompt_caching: context-caching     # API distincte (cache explicite, facturé au stockage/heure)
+  streaming: true
+
+embedding_models:
+  - id: gemini-embedding-001
+    dimensions: 3072                  # réductible (MRL) — à confirmer
+    price_per_million_input_usd: null # non relevé sur la page de tarifs au 2026-09-20 — à compléter
+  - id: gemini-embedding-2-preview
+    dimensions: null                  # à confirmer
+    price_per_million_input_usd: 0.20 # texte ; image 0.45
+
+telemetry:
+  # Les prompts peuvent contenir des données sensibles. Consommé par la
+  # SAFETY GATE et le architect-rag.
+  default_retention_days: 55          # valeur héritée de SDD-Pro (audit 2026-07) — à reconfirmer sur les conditions Gemini API
+  optout_available: true              # Vertex AI (Google Cloud) : résidence + no-logging au niveau projet
+  optout_mechanism: "Passer par Vertex AI avec configuration projet sans journalisation, ou contrôles de données du compte Developer API (ai.google.dev/data-controls). Le palier gratuit de la Developer API PEUT utiliser les données pour l'amélioration des produits : REFUSÉ pour tout corpus non public."
+  training_on_api_data: "paid-tier: false ; free-tier: true"
+  reference_url: "https://ai.google.dev/gemini-api/terms"
+  last_reviewed: 2026-09-20
+
+pricing:                              # USD par million de tokens — tarif public Gemini API (revu 2026-09-20), prompts <= 200k tokens
+  # cache_read = « context caching » publié (hors coût de stockage/heure).
+  # Google ne publie pas d'écriture de cache par token : cache_creation = input
+  # pour compatibilité de schéma.
+  # gemini-3.1-pro-preview : au-delà de 200k tokens de prompt -> input 4.00 / output 18.00 / cache 0.40.
+  # gemini-3.8-flash : tarif PROMOTIONNEL jusqu'au 2026-12-31 ; à partir du 2027-01-01 -> input 1.50 / output 7.50 / cache 0.15.
+  gemini-3.1-pro-preview: {input: 2.00, output: 12.00, cache_read: 0.200, cache_creation: 2.00}
+  gemini-3.8-flash:       {input: 0.75, output:  3.75, cache_read: 0.075, cache_creation: 0.75}
+  gemini-3.5-flash-lite:  {input: 0.30, output:  2.50, cache_read: 0.030, cache_creation: 0.30}
+pricing_last_reviewed: 2026-09-20

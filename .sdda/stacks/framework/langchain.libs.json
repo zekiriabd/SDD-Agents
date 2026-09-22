@@ -1,0 +1,123 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "framework-langchain",
+  "category": "framework",
+  "schemaVersion": 1,
+  "buildSystem": "uv",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/pyproject.toml",
+      "workspace/src/{AppName}/uv.lock"
+    ]
+  },
+  "versions": {
+    "python": "3.12",
+    "langchain-core": "1.6.4",
+    "langchain": "1.4.2",
+    "langchain-text-splitters": "1.1.2",
+    "langchain-anthropic": "1.7.2",
+    "langchain-openai": "1.6.3",
+    "langchain-google-genai": "4.4.0",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "structlog": "26.1.0",
+    "httpx": "0.28.1",
+    "tenacity": "9.1.4",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  },
+  "core": [
+    {
+      "module": "langchain-core",
+      "ref": "langchain-core",
+      "rationale": "Runnable/LCEL, messages, @tool/StructuredTool, BaseChatModel.bind_tools, with_structured_output, fake chat models pour L1/L2."
+    },
+    {
+      "module": "langchain",
+      "ref": "langchain",
+      "rationale": "init_chat_model (résolution provider par chaîne) et utilitaires. langchain.agents.create_agent est INTERDIT dans cette stack (graphe LangGraph implicite)."
+    },
+    {
+      "module": "langchain-text-splitters",
+      "ref": "langchain-text-splitters",
+      "rationale": "Splitters d'ingestion (recursive-structural, markdown, html) utilisés par rag/*.md."
+    },
+    {
+      "module": "pydantic",
+      "ref": "pydantic"
+    },
+    {
+      "module": "pydantic-settings",
+      "ref": "pydantic-settings"
+    },
+    {
+      "module": "structlog",
+      "ref": "structlog"
+    },
+    {
+      "module": "httpx",
+      "ref": "httpx"
+    },
+    {
+      "module": "tenacity",
+      "ref": "tenacity",
+      "rationale": "Retry — uniquement sur outils dont retry_policy != none."
+    },
+    {
+      "module": "ruff",
+      "ref": "ruff"
+    },
+    {
+      "module": "mypy",
+      "ref": "mypy"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "langchain-anthropic",
+      "ref": "langchain-anthropic",
+      "capability": "provider-anthropic",
+      "triggers": [
+        "RuntimeProvider:\\s*anthropic",
+        "claude-"
+      ]
+    },
+    {
+      "module": "langchain-openai",
+      "ref": "langchain-openai",
+      "capability": "provider-openai",
+      "triggers": [
+        "RuntimeProvider:\\s*(openai|azure)",
+        "gpt-",
+        "o[0-9]-mini"
+      ]
+    },
+    {
+      "module": "langchain-google-genai",
+      "ref": "langchain-google-genai",
+      "capability": "provider-google",
+      "triggers": [
+        "RuntimeProvider:\\s*google",
+        "gemini-"
+      ]
+    }
+  ],
+  "plugins": [],
+  "metadata": {
+    "lastUpdated": "2026-09-22",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Stack 'LangChain seul' : aucun langgraph* en core. Si la TOPOLOGY exige un cycle, une reprise ou escalate-human, STACK.md doit activer framework/langgraph.md en plus — le preflight le vérifie.",
+      "langchain 1.x dépend transitivement de langgraph pour create_agent ; la présence du paquet dans uv.lock n'autorise pas son usage : c'est l'import qui est audité (grep 'langchain.agents' → [STACK_COMBO_UNDECLARED]).",
+      "Pins résolus conjointement le 2026-09-22 : l'union des catalogues Python est passée à `uv pip compile --python-version 3.12`, donc les versions sont mutuellement compatibles et non « la dernière de chaque paquet ». `pgvector` reste en 0.3.6 parce que `langchain-postgres` le contraint — 0.5.0 est publié mais incompatible avec le reste du catalogue."
+    ],
+    "changeLog": [
+      "2026-09-20 — Création (design-phase).",
+      "2026-09-22 — Résolution PyPI (7) : langchain-core 1.1.6→1.6.4 · langchain 1.1.6→1.4.2 · langchain-text-splitters 1.0.2→1.1.2 · langchain-anthropic 1.2.3→1.7.2 · langchain-openai 1.2.1→1.6.3 · langchain-google-genai 3.2.0→4.4.0 · ruff 0.16.5→0.16.8"
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "pypi.org via `uv pip compile` (résolution conjointe des catalogues Python, Python 3.12)"
+  }
+}

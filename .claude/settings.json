@@ -1,0 +1,71 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_agent_bounds.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_agent_budget.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_cap_gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_cost_cap.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_db_envelope.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_judge_calibration.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_retrieval_gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_stack_combo.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_tool_gate.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_ownership.py"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/postflight_no_inline_prompt.py"
+          },
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/postflight_trace_present.py"
+          }
+        ]
+      }
+    ]
+  }
+}

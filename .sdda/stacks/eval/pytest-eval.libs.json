@@ -1,0 +1,145 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "eval-pytest-eval",
+  "category": "eval",
+  "schemaVersion": 1,
+  "buildSystem": "uv",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/pyproject.toml",
+      "workspace/src/{AppName}/uv.lock",
+      "workspace/evals/pytest.ini"
+    ]
+  },
+  "versions": {
+    "python": "3.12",
+    "pytest": "9.1.1",
+    "pytest-asyncio": "1.4.0",
+    "pytest-xdist": "3.8.0",
+    "pytest-timeout": "2.4.0",
+    "jsonschema": "4.26.0",
+    "pyyaml": "6.0.3",
+    "hypothesis": "6.168.0",
+    "respx": "0.23.1",
+    "numpy": "2.5.3",
+    "pydantic": "2.13.5",
+    "structlog": "26.1.0",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  },
+  "core": [
+    {
+      "module": "pytest",
+      "ref": "pytest",
+      "rationale": "Runner unique L0–L9 ; hooks addoption / collection_modifyitems / sessionfinish pour le plugin local d'eval.",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} pytest==9.0.2"
+    },
+    {
+      "module": "pytest-asyncio",
+      "ref": "pytest-asyncio",
+      "rationale": "asyncio_mode=auto ; loop_scope=session pour les fixtures de session (pool, checkpointer).",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} pytest-asyncio==1.3.0"
+    },
+    {
+      "module": "pytest-xdist",
+      "ref": "pytest-xdist",
+      "rationale": "Parallélisme PAR ITEM ; les k runs d'un item restent séquentiels dans un worker.",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} pytest-xdist==3.8.0"
+    },
+    {
+      "module": "pytest-timeout",
+      "ref": "pytest-timeout",
+      "rationale": "Timeout par item = suite.timeout_s × runs + marge ; timeout_method=thread (Windows).",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} pytest-timeout==2.4.0"
+    },
+    {
+      "module": "jsonschema",
+      "ref": "jsonschema",
+      "rationale": "Grader `schema` ; validation des suites YAML (suite.schema.json) et des lignes de dataset (golden-set.schema.json).",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} jsonschema==4.25.1"
+    },
+    {
+      "module": "pyyaml",
+      "ref": "pyyaml",
+      "rationale": "Suites d'eval déclaratives.",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} pyyaml==6.0.3"
+    },
+    {
+      "module": "pydantic",
+      "ref": "pydantic",
+      "rationale": "EvalReport, EvalItemResult, PinTuple (frozen).",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} pydantic==2.13.5"
+    },
+    {
+      "module": "structlog",
+      "ref": "structlog",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} structlog==26.1.0"
+    },
+    {
+      "module": "ruff",
+      "ref": "ruff",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} ruff==0.16.5"
+    },
+    {
+      "module": "mypy",
+      "ref": "mypy",
+      "installCommand": "uv add --dev --project workspace/src/{AppName} mypy==2.3.1"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "hypothesis",
+      "ref": "hypothesis",
+      "capability": "property-tests",
+      "rationale": "Tests L1 property-based sur graders déterministes (recall@k, nDCG, RRF, kappa) et réducteurs d'état.",
+      "triggers": [
+        "property.?based",
+        "hypothesis",
+        "invariant.*grader"
+      ],
+      "installCommand": "uv add --dev --project workspace/src/{AppName} hypothesis==6.140.3"
+    },
+    {
+      "module": "respx",
+      "ref": "respx",
+      "capability": "http-mocks",
+      "rationale": "Mocks httpx pour les L2 d'outils REST/OpenAPI (happy, chaque erreur déclarée, timeout, 401).",
+      "triggers": [
+        "stacks/tools/(rest|openapi)\\.md",
+        "httpx\\.AsyncClient",
+        "mock.*http"
+      ],
+      "installCommand": "uv add --dev --project workspace/src/{AppName} respx==0.22.0"
+    },
+    {
+      "module": "numpy",
+      "ref": "numpy",
+      "capability": "semantic-similarity",
+      "rationale": "Grader semantic-similarity (cosinus sur embeddings). Inutile pour recall@k / nDCG / kappa qui sont en Python pur.",
+      "triggers": [
+        "semantic.?similarity",
+        "grader:\\s*semantic"
+      ],
+      "installCommand": "uv add --dev --project workspace/src/{AppName} numpy==2.3.4"
+    }
+  ],
+  "plugins": [],
+  "metadata": {
+    "lastUpdated": "2026-09-22",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Toutes les libs sont installées en groupe dev (installCommand explicite avec --dev) : l'application livrée n'embarque pas son runner d'eval.",
+      "Volontairement absents : pytest-rerunfailures / flaky (relancer un eval masque la variance — interdit sur le marqueur eval, hook de collection [EVAL_RERUN_FORBIDDEN]) ; scikit-learn (kappa de Cohen en Python pur dans sdda_eval.stats) ; ragas / deepeval / promptfoo (stacks eval distinctes, utilisables comme GRADERS branchés dans ce runner, pas comme runners).",
+      "Les graders déterministes et le protocole (k runs, verdict, PinTuple, rapport) vivent dans .sdda/python/sdda_lib/sdda_eval/ — partagés entre missions, testés dans .sdda/python/tests/.",
+      "Pins résolus conjointement le 2026-09-22 : l'union des catalogues Python est passée à `uv pip compile --python-version 3.12`, donc les versions sont mutuellement compatibles et non « la dernière de chaque paquet ». `pgvector` reste en 0.3.6 parce que `langchain-postgres` le contraint — 0.5.0 est publié mais incompatible avec le reste du catalogue."
+    ],
+    "changeLog": [
+      "2026-09-20 — Création (design-phase).",
+      "2026-09-22 — Résolution PyPI (7) : pytest 9.0.2→9.1.1 · pytest-asyncio 1.3.0→1.4.0 · jsonschema 4.25.1→4.26.0 · hypothesis 6.140.3→6.168.0 · respx 0.22.0→0.23.1 · numpy 2.3.4→2.5.3 · ruff 0.16.5→0.16.8"
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "pypi.org via `uv pip compile` (résolution conjointe des catalogues Python, Python 3.12)"
+  }
+}

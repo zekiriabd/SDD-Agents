@@ -1,0 +1,182 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "framework-ms-agent-framework",
+  "category": "framework",
+  "schemaVersion": 1,
+  "buildSystem": "dotnet",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/Directory.Packages.props",
+      "workspace/src/{AppName}/src/{AppName}/{AppName}.csproj",
+      "workspace/src/{AppName}/{AppName}.slnx"
+    ]
+  },
+  "versions": {
+    "dotnet": "10.0",
+    "Microsoft.Agents.AI": "1.22.0",
+    "Microsoft.Agents.AI.Abstractions": "1.22.0",
+    "Microsoft.Agents.AI.OpenAI": "1.22.0",
+    "Microsoft.Agents.AI.Workflows": "1.22.0",
+    "Microsoft.Extensions.AI": "10.10.0",
+    "Microsoft.Extensions.Hosting": "10.0.12",
+    "Microsoft.Extensions.Http.Resilience": "10.10.0",
+    "OpenTelemetry.Extensions.Hosting": "1.19.1",
+    "OpenTelemetry.Exporter.OpenTelemetryProtocol": "1.19.1",
+    "ModelContextProtocol": "2.2.0",
+    "Anthropic.SDK": "5.10.0",
+    "xunit.v3": "4.0.1",
+    "NSubstitute": "6.2.0"
+  },
+  "core": [
+    {
+      "module": "Microsoft.Agents.AI",
+      "ref": "Microsoft.Agents.AI",
+      "rationale": "AIAgent, AgentThread, exécution d'un tour. C'est le seul endroit du code généré où le framework apparaît nommément (orchestration/) — partout ailleurs il est interdit, et validate_ir le vérifie.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI --version 1.22.0"
+    },
+    {
+      "module": "Microsoft.Agents.AI.Abstractions",
+      "ref": "Microsoft.Agents.AI.Abstractions",
+      "rationale": "Contrats sans implémentation. Les projets qui définissent des types partagés y référencent ceci, pas le paquet complet : une couche métier qui référence l'implémentation ne peut plus être testée sans elle.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI.Abstractions --version 1.22.0"
+    },
+    {
+      "module": "Microsoft.Extensions.AI",
+      "ref": "Microsoft.Extensions.AI",
+      "rationale": "IChatClient, AIFunction, sorties structurées. C'est l'abstraction provider-agnostique : le code manipule un IChatClient résolu par tier, jamais un client OpenAI ou Anthropic nommé (équivalent de models.resolve(tier) côté Python).",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Extensions.AI --version 10.10.0"
+    },
+    {
+      "module": "Microsoft.Extensions.Hosting",
+      "ref": "Microsoft.Extensions.Hosting",
+      "rationale": "IHostBuilder, IOptions, IConfiguration : l'équivalent de Settings/pydantic-settings. Les secrets passent par IConfiguration, jamais par Environment.GetEnvironmentVariable — cf. [SEC_ENV_VAR_FORBIDDEN].",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Extensions.Hosting --version 10.0.12"
+    },
+    {
+      "module": "Microsoft.Extensions.Http.Resilience",
+      "ref": "Microsoft.Extensions.Http.Resilience",
+      "rationale": "Timeout, retry et circuit breaker déclarés sur le HttpClient (équivalent de tenacity). À n'activer QUE sur les outils dont retry_policy != none : un retry sur un outil non idempotent crée trois tickets.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Extensions.Http.Resilience --version 10.10.0"
+    },
+    {
+      "module": "OpenTelemetry.Extensions.Hosting",
+      "ref": "OpenTelemetry.Extensions.Hosting",
+      "rationale": "Câblage OTel dans l'hôte. Sans trace, un système non déterministe n'est pas débogable — invariant trace-emitted-per-run.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package OpenTelemetry.Extensions.Hosting --version 1.19.1"
+    },
+    {
+      "module": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
+      "ref": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
+      "rationale": "Export OTLP des spans GenAI (cf. observability/otel-genai.md). Le collecteur est une exigence runtime, pas une dépendance : voir runtimeRequirements.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package OpenTelemetry.Exporter.OpenTelemetryProtocol --version 1.19.1"
+    }
+  ],
+  "dev": [
+    {
+      "module": "xunit.v3",
+      "ref": "xunit.v3",
+      "rationale": "Runner L0→L2. Les evals L3+ vivent dans workspace/evals/, hors du projet de test — ownership qa-evals, jamais dev-*.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests package xunit.v3 --version 4.0.1"
+    },
+    {
+      "module": "NSubstitute",
+      "ref": "NSubstitute",
+      "rationale": "Doubles de IChatClient et des outils en L1/L2. Un test d'agent qui appelle un vrai modèle n'est pas un test unitaire : c'est une eval, et elle se mesure ailleurs.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests package NSubstitute --version 6.2.0"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "Microsoft.Agents.AI.OpenAI",
+      "ref": "Microsoft.Agents.AI.OpenAI",
+      "capability": "provider-openai",
+      "requiredBy": "STACK.md ## Runtime Models — RuntimeProvider: openai | azure-openai",
+      "triggers": [
+        "RuntimeProvider:\\s*(openai|azure-openai)",
+        "gpt-"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI.OpenAI --version 1.22.0"
+    },
+    {
+      "module": "Anthropic.SDK",
+      "ref": "Anthropic.SDK",
+      "capability": "provider-anthropic",
+      "requiredBy": "STACK.md ## Runtime Models — RuntimeProvider: anthropic",
+      "triggers": [
+        "RuntimeProvider:\\s*anthropic",
+        "claude-"
+      ],
+      "note": "Il n'existe PAS de Microsoft.Agents.AI.Anthropic : le provider passe par l'implémentation IChatClient de ce paquet communautaire. C'est le point de couplage le plus fragile de cette stack — à réévaluer dès qu'un paquet officiel existe.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Anthropic.SDK --version 5.10.0"
+    },
+    {
+      "module": "ModelContextProtocol",
+      "ref": "ModelContextProtocol",
+      "capability": "mcp-tools",
+      "requiredBy": "tools/mcp.md — un serveur MCP déclaré dans ## Active Tools & Integrations",
+      "triggers": [
+        "MCPServers:\\s*\\n\\s*-",
+        "stacks/tools/mcp\\.md"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package ModelContextProtocol --version 2.2.0"
+    },
+    {
+      "module": "Microsoft.Agents.AI.Workflows",
+      "ref": "Microsoft.Agents.AI.Workflows",
+      "capability": "orchestration-graph",
+      "requiredBy": "orchestration/*.md — un pattern à graphe, cycles ou checkpointing",
+      "triggers": [
+        "HumanInTheLoopEnabled:\\s*true",
+        "stacks/orchestration/(router|sequential)\\.md"
+      ],
+      "note": "Équivalent .NET du rôle de LangGraph : à n'activer que si la TOPOLOGY exige un cycle, une reprise ou un escalate-human. Un agent unique n'en a pas besoin, et l'ajouter par défaut introduit un graphe que personne n'a décidé.",
+      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI.Workflows --version 1.22.0"
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "Microsoft.SemanticKernel",
+      "reason": "Microsoft Agent Framework EST la convergence de Semantic Kernel et d'AutoGen. Référencer les deux fait cohabiter deux modèles d'agent dans un même processus, et un agent qui ne trouve pas AIAgent ajoutera Kernel en croyant compléter un oubli. Une migration depuis SK existant relève d'un ADR, pas d'une dépendance ajoutée en silence."
+    },
+    {
+      "module": "Microsoft.Agents.AI.Foundry",
+      "reason": "Hébergement Azure AI Foundry. Hors périmètre du MVP : l'application généré est hébergée par la stack serving/*, et ce paquet y substituerait un runtime managé sans que STACK.md l'ait déclaré. Sa version (1.5.0) diverge par ailleurs du reste de la famille (1.22.0) — un catalogue qui l'inclurait épinglerait deux lignes de version incohérentes."
+    },
+    {
+      "module": "Microsoft.Agents.AI.Workflows.Declarative",
+      "reason": "Workflows décrits en YAML. Le graphe de SDD_Agents est décidé par la TOPOLOGY et compilé dans l'IR : un second format déclaratif créerait deux sources de vérité pour la même chose, et c'est celle que personne ne relit qui gagnerait."
+    },
+    {
+      "module": "Newtonsoft.Json",
+      "reason": "System.Text.Json est dans le BCL et c'est ce que Microsoft.Extensions.AI utilise pour les sorties structurées. Deux sérialiseurs dans un même processus produisent deux interprétations du même schéma — exactement le drift que le schéma figé existe pour empêcher."
+    },
+    {
+      "module": "AutoMapper",
+      "reason": "Le mapping entre le schéma d'outil et le modèle métier est explicite par construction : un mapping par convention rend invisible le champ qu'on n'a pas voulu exposer, et une allowlist de champs invisible n'est plus une allowlist."
+    }
+  ],
+  "runtimeRequirements": {
+    "dotnet-sdk": ">= 10.0.100 — TargetFramework net10.0",
+    "otel-collector": "un endpoint OTLP joignable (OTEL_EXPORTER_OTLP_ENDPOINT) ; sans lui les spans sont produits et jetés",
+    "nuget-feed": "nuget.org, ou un miroir interne portant les mêmes versions — un miroir en retard installe silencieusement un autre comportement"
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-21",
+    "lastRebased": "2026-09-21",
+    "status": "design-phase",
+    "versionsVerified": true,
+    "format": "compact (v2) — aligné sur libs-catalog.schema.json",
+    "notes": [
+      "Versions relevées contre l'API de nuget.org le 2026-09-21 : dernière stable publiée de chaque paquet, previews et rc exclus. `versionsVerified: true` porte sur CE relevé, pas sur un bootstrap réel — aucun projet .NET n'a encore été généré avec cette stack.",
+      "La famille Microsoft.Agents.AI.* est versionnée solidairement (1.22.0) sauf Foundry (1.5.0), écarté. Monter un seul paquet de la famille sans les autres est un mélange de versions non testé.",
+      "Aucun paquet Anthropic officiel dans la famille Microsoft.Agents.AI : provider-anthropic passe par Anthropic.SDK (communautaire) via IChatClient. C'est le point de couplage à réévaluer en premier.",
+      "Pas d'équivalent pydantic : la validation des entrées d'outil passe par System.Text.Json + des records avec required members, et les bornes de schéma sont portées par le tool-contract, pas par des attributs de validation."
+    ],
+    "changeLog": [
+      "2026-09-21 — Création (design-phase). Versions vérifiées contre nuget.org.",
+      "2026-09-22 — Re-contrôle nuget.org : 13/13 pins confirmés exacts, aucun changement."
+    ],
+    "verifiedAt": "2026-09-21",
+    "verifiedAgainst": "nuget.org (API), dernières stables publiées, previews et rc exclus"
+  }
+}

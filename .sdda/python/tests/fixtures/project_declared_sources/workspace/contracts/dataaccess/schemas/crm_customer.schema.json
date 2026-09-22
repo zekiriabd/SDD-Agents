@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "crm_customer",
+  "type": "object",
+  "required": ["customer_id", "updated_at"],
+  "properties": {
+    "customer_id": { "type": "string" },
+    "email": { "type": "string" },
+    "segment": { "type": "string" },
+    "notes": { "type": "string" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

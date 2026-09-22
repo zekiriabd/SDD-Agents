@@ -1,0 +1,124 @@
+# .sdda/agent-bounds.yaml — Bornes de tier par Developer Agent
+#
+# Ce sont des TIERS, jamais des noms de modèles. La résolution tier -> modèle
+# appartient au provider actif (.sdda/providers/*.yaml, clé `tier_map`).
+# Ajouter un provider ne touche aucun agent.
+#
+# tier_default  : le tier employé en mode `static` (défaut).
+# tier_floor    : plancher de qualité. En mode `dynamic`, le scorer ne peut
+#                 JAMAIS descendre en dessous. NON surchargeable par le
+#                 Project Config — seul un commit framework le modifie.
+# tier_ceiling  : plafond de coût. Le scorer ne peut pas monter au-dessus.
+#
+# Principe d'arbitrage : le floor protège la qualité là où une erreur est
+# coûteuse ou silencieuse ; le ceiling protège le budget là où la tâche est
+# bornée et vérifiable par un script.
+
+schema: sdda.agent-bounds/v1
+status: design-phase-0
+
+agents:
+
+  # ── Phase 0-1 : spécification ────────────────────────────────────────────
+  po-elicitor:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: balanced }
+    # Plafonné balanced : tâche interactive, la latence compte plus que la
+    # profondeur. Il pose des questions, il ne conçoit pas.
+
+  po-capabilities:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+    # Floor balanced : une CAP mal découpée contamine tout l'aval. Une AC non
+    # mesurable qui passe ici coûte une refonte complète de l'eval.
+
+  # ── Phase 2 : architecture ───────────────────────────────────────────────
+  architect-topology:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # L'agent le plus cher du framework, et c'est justifié : il décide du coût
+    # d'exécution du produit pour toute sa vie. Payer `deep` une fois pour
+    # éviter une topologie à $0.40/appel est le meilleur arbitrage du pipeline.
+
+  architect-rag:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # Le découpage et la stratégie de récupération décident de la qualité
+    # finale plus que le choix du modèle de génération. Ne pas économiser ici.
+
+  architect-tools:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+    # La `description` d'un outil EST du prompt : c'est sur elle que le modèle
+    # décide d'appeler. Floor balanced pour cette raison précise.
+
+  architect-data:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+    # Décision de sécurité autant que d'architecture.
+
+  architect-memory:
+    { tier_default: balanced, tier_floor: fast, tier_ceiling: balanced }
+    # Floor fast assumé : le choix se fait dans un espace restreint et
+    # catalogué, et l'enveloppe (rétention, PII) est vérifiée par script.
+
+  # ── Phase 4 : prompts ────────────────────────────────────────────────────
+  dev-prompt:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # Le prompt est le produit. Un prompt médiocre ne se rattrape par aucune
+    # quantité de code autour.
+
+  # ── Phases 3-5 : implémentation ──────────────────────────────────────────
+  dev-tools:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+  dev-retrieval:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+  dev-data:
+    { tier_default: balanced, tier_floor: fast, tier_ceiling: balanced }
+    # Floor fast : génère des vues et des repositories depuis un contrat déjà
+    # décidé, et le résultat est vérifié par des tests déterministes.
+  dev-agent:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+  dev-orchestration:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # Il matérialise le graphe ET ses bornes. Une borne oubliée est une
+    # facture non bornée en production.
+  dev-api:
+    { tier_default: balanced, tier_floor: fast, tier_ceiling: balanced }
+
+  # ── Phase 6 : evaluation et tests ────────────────────────────────────────
+  qa-evals:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # Sans lui rien n'est prouvé. Un golden set complaisant produit un
+    # framework qui se félicite — exactement ce qu'on veut empêcher.
+  qa-tests:
+    { tier_default: balanced, tier_floor: fast, tier_ceiling: balanced }
+    # Tests déterministes sur des contrats explicites : tâche bornée.
+
+  # ── Phase 7 : revue ──────────────────────────────────────────────────────
+  review-spec:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+  review-safety:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # Jamais sous balanced : les classes [SAFETY_*] sont bloquantes et leurs
+    # faux négatifs sont silencieux jusqu'à l'incident.
+  review-cost:
+    { tier_default: fast, tier_floor: fast, tier_ceiling: balanced }
+    # Candidat `fast` canonique : il lit des mesures produites par des scripts
+    # et les compare à des seuils. Aucun jugement ouvert.
+  review-orchestration:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+  review-rag:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+  review-adversarial:
+    { tier_default: deep, tier_floor: balanced, tier_ceiling: deep }
+    # Un attaquant médiocre produit un faux vert de sécurité — le pire des
+    # faux verts, parce qu'il rassure.
+
+# ── Bilan ──────────────────────────────────────────────────────────────────
+# 26 agents : 10 tier_default=deep, 12 balanced, 4 fast.
+#             19 floor=balanced, 7 floor=fast, 0 floor=deep.
+#             2 plafonnés balanced (po-elicitor, architect-memory,
+#             plus les 4 dont le ceiling est balanced par nature de tâche).
+#
+# Aucun agent n'a tier_floor=deep : un plancher `deep` interdirait toute
+# optimisation de coût et ferait du mode dynamic une décoration.
+#
+# Routage par work-item : en mode `dynamic`, un scorer déterministe (0 token)
+# calcule la complexité de l'item et propose un tier, CLAMPÉ dans ces bornes.
+# Une CAP triviale ne paie pas le tier d'une CAP critique — même principe que
+# le routeur de tier par objet SQL de SDD_Pro.

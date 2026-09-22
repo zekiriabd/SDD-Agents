@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "order_tracking",
+  "type": "object",
+  "required": ["order_id", "customer_id", "carrier", "status", "last_scan_at"],
+  "properties": {
+    "order_id": { "type": "string" },
+    "customer_id": { "type": "string" },
+    "carrier": { "type": "string", "enum": ["DPD", "UPS"] },
+    "status": { "type": "string", "enum": ["in_transit", "delivered", "exception", "returned"] },
+    "last_scan_at": { "type": "string", "format": "date-time" },
+    "recipient_name": { "type": "string" },
+    "carrier_message": { "type": "string" }
+  }
+}

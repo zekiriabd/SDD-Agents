@@ -1,0 +1,96 @@
+# Roster d'agents — déclaré par l'ARCHITECTE (PHILOSOPHY P7).
+#
+# C'est CE fichier qui fixe l'architecture agentic : combien d'agents, lesquels,
+# qui fait quoi, avec quels outils et quel modèle. Le framework le vérifie et
+# l'implémente ; il n'en décide aucune ligne.
+#
+# Référencé depuis `STACK.md ## Active Agent Topology` :
+#     RosterManifestRoot: workspace/stack/topology
+#     RosterManifests:
+#       - path: 1-roster.yml
+#
+# Convention de nommage : `{n}-roster.yml`, où {n} est le numéro de MISSION.
+# Un fichier trouvé par cette convention est chargé même sans être listé.
+#
+# VERSIONNÉ, contrairement à STACK.md (gitignoré, il porte les secrets) : la
+# décision d'architecture doit être relue en revue, et retrouvable dans six mois.
+#
+# Ce qui est OBLIGATOIRE dépend du pattern actif de `## Active Orchestration
+# Pattern`. La liste exacte :
+#     python .sdda/python/sdda_scripts/validate_architecture.py --explain
+#
+# Spécification complète : .sdda/registry/architecture-requirements.yml
+
+mission: 1
+
+# ---------------------------------------------------------------------------
+# L'orchestrateur — celui qui reçoit l'entrée et décide de la suite.
+# Même en `single-agent`, il se déclare : « un agent » n'est pas « pas
+# d'architecture », c'est l'architecture la plus simple.
+# ---------------------------------------------------------------------------
+orchestrator:
+  id: support-orchestrator
+  role: >
+    Classe l'intention entrante et route vers le spécialiste adéquat.
+  responsibilities: >
+    Router ou demander une clarification. Ne répond jamais au fond,
+    ne formule jamais d'engagement commercial.
+  tier: fast                      # fast | balanced | deep
+  model:                          # optionnel — prime sur le tier s'il est renseigné
+  tools: []                       # liste explicite ; [] signifie « aucun », et c'est une décision
+  rules: >
+    Route si confidence >= 0.7, sinon clarification. maxHops = 6.
+
+# ---------------------------------------------------------------------------
+# Les subagents — un bloc par agent. Vide pour `single-agent`.
+# ---------------------------------------------------------------------------
+subagents:
+  - id: billing-specialist
+    role: >
+      Répond aux questions de facturation.
+    responsibilities: >
+      Explique une ligne de facture à partir des documents récupérés.
+      N'émet jamais de remboursement ni d'avoir.
+    tools: [invoice_lookup, zendesk_create_ticket]
+    skills: [explain_invoice_line, cite_source]
+    # Ce que l'agent NE PEUT PAS enfreindre. Jumelles des skills : nommées ici
+    # par l'architecte, implémentées par `dev-prompt` dans `## Règles` du
+    # prompt, vérifiées par symétrie ([RULE_NOT_IMPLEMENTED] / [RULE_UNDECLARED]).
+    # Une règle n'ayant ni schéma ni effet de bord, aucune gate ne peut
+    # l'exécuter pour la juger — c'est la seule vérification possible.
+    rules: [never_issue_refund, always_cite_invoice_id]
+    tier: balanced
+    model:
+
+# ---------------------------------------------------------------------------
+# Les relations — qui appelle qui, à quelle condition.
+# Une condition vide est refusée : « le contexte suit » n'est pas une condition.
+# ---------------------------------------------------------------------------
+relations:
+  - from: support-orchestrator
+    to: billing-specialist
+    condition: "intent == 'billing' && confidence >= 0.7"
+    counts_as_hop: true
+  - from: support-orchestrator
+    to: clarify_request
+    condition: "aucune classe au-dessus du seuil — chemin de repli"
+    counts_as_hop: true
+  - from: billing-specialist
+    to: support-orchestrator
+    condition: "needs_reclassification"
+    counts_as_hop: true
+
+# ---------------------------------------------------------------------------
+# Les bornes — obligatoires dès que le pattern autorise un cycle.
+# Une boucle non bornée est un bug, pas une propriété émergente (P12).
+# ---------------------------------------------------------------------------
+loop_bounds:
+  - loop: "support-orchestrator <-> billing-specialist"
+    bound: "maxHops = 6"
+    on_exceeded: fail-explicit    # fail-explicit | degrade | escalate-human
+
+# ---------------------------------------------------------------------------
+# La fusion — obligatoire pour `parallel` uniquement.
+# Réconcilier des sorties contradictoires est le vrai travail.
+# ---------------------------------------------------------------------------
+merge_strategy:                   # vote | priorité déclarée | synthèse par un agent dédié | échec si divergence

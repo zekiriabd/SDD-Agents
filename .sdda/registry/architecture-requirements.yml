@@ -1,0 +1,286 @@
+# Exigences de spécification par choix d'architecture
+#
+# ============================================================================
+# Ce que ce fichier est
+# ============================================================================
+# La SSoT machine de P7 : « le LLM ne choisit pas l'architecture, l'architecte
+# choisit l'architecture ».
+#
+# Chaque ligne active de STACK.md IMPOSE des champs de spécification. Ce fichier
+# dit lesquels ; `validate_architecture.py` vérifie qu'ils sont là, remplis, et
+# cohérents. Un champ manquant est [ARCH_SPEC_INCOMPLETE], bloquant en G2.
+#
+# Le point n'est pas de rendre la déclaration pénible : c'est qu'une
+# architecture partiellement spécifiée produit une architecture partiellement
+# ÉMERGENTE. Le trou est comblé par un LLM au moment de la génération, sans que
+# personne l'ait décidé ni relu — et c'est exactement ce que ce framework
+# existe pour empêcher.
+#
+# DÉCLARATIF À DESSEIN : ajouter un pattern d'orchestration, c'est ajouter un
+# bloc ici, pas modifier du code. Une exigence décidée dans un script serait
+# invisible en revue d'architecture.
+# ============================================================================
+
+version: 1
+updated: "2026-09-21"
+
+# ----------------------------------------------------------------------------
+# Grammaire close des clés d'exigence.
+# Une clé inconnue est [ARCH_REQUIREMENT_UNKNOWN] : une faute de frappe qui
+# désactiverait une exigence en silence est pire que pas d'exigence du tout.
+# ----------------------------------------------------------------------------
+requirementKeys:
+  orchestrator: "un agent orchestrateur nommé, avec rôle et responsabilités, dans `## Roster déclaré`"
+  subagents_min: "nombre minimal de subagents nominatifs déclarés"
+  subagents_max: "nombre maximal ; au-delà, l'architecte doit scinder ou assumer par ADR"
+  relations: "la table des relations entre agents est non vide"
+  conditions: "chaque relation porte une condition explicite (pas « le contexte suit »)"
+  fallback: "un chemin de repli déclaré pour le cas « aucune branche ne correspond »"
+  tools_per_agent: "chaque agent du roster déclare ses outils/skills (ou `aucun`, explicitement)"
+  model_per_agent: "chaque agent déclare son tier, ou son modèle nominatif"
+  merge_strategy: "la stratégie de fusion des sorties parallèles est déclarée et évaluable"
+  loop_bound: "toute boucle déclarée porte sa borne et le comportement à l'atteinte"
+  stack_keys: "clés de STACK.md qui doivent être présentes et non-placeholder"
+  stack_section: "section de STACK.md où chercher les `stack_keys`"
+
+# ============================================================================
+# AXE 1 — Orchestration : `## Active Orchestration Pattern`
+# ============================================================================
+orchestration:
+  section: "Active Orchestration Pattern"
+  choices:
+
+    single-agent:
+      label: "un agent, des outils"
+      requires:
+        orchestrator: true
+        subagents_max: 0
+        tools_per_agent: true
+        model_per_agent: true
+      why: >
+        Même à un seul agent, son rôle, ses responsabilités, ses outils et son
+        modèle sont déclarés. « Un agent » n'est pas « pas d'architecture » :
+        c'est l'architecture la plus simple, et elle se décrit comme les autres.
+
+    router:
+      label: "classifier puis déléguer"
+      requires:
+        orchestrator: true
+        # 1 et non 2 : un routeur vers UN spécialiste plus un chemin de repli
+        # (clarification) est un routeur légitime. Ce qui garantit la branche
+        # « aucune classe ne correspond » est `fallback`, pas le compte d'agents.
+        subagents_min: 1
+        relations: true
+        conditions: true
+        fallback: true
+        tools_per_agent: true
+        model_per_agent: true
+      why: >
+        Le mode d'échec dominant du routeur est le misroute silencieux et
+        irrécupérable. Sans table de conditions ni chemin de repli déclarés,
+        la branche « aucune classe ne correspond » est celle que personne
+        n'a écrite — et c'est celle qui arrive en production.
+
+    sequential:
+      label: "pipeline d'étapes ordonnées"
+      requires:
+        orchestrator: true
+        subagents_min: 2
+        relations: true
+        tools_per_agent: true
+        model_per_agent: true
+      why: >
+        L'ordre EST la spécification. Une étape non déclarée, et l'erreur
+        compose sans que personne ne sache quelle étape a abîmé le résultat.
+
+    parallel:
+      label: "fan-out / gather"
+      requires:
+        orchestrator: true
+        subagents_min: 2
+        relations: true
+        merge_strategy: true
+        tools_per_agent: true
+        model_per_agent: true
+      why: >
+        L'étape de fusion est systématiquement sous-estimée : réconcilier des
+        sorties contradictoires est le vrai travail. Elle se déclare, et elle
+        s'évalue séparément.
+
+    supervisor:
+      label: "superviseur + subagents, délégation dynamique"
+      requires:
+        orchestrator: true
+        subagents_min: 2
+        relations: true
+        conditions: true
+        loop_bound: true
+        tools_per_agent: true
+        model_per_agent: true
+      why: >
+        C'est le pattern où « le LLM décide » est le plus tentant — et le plus
+        coûteux. Le superviseur délègue dynamiquement, mais QUI il peut
+        déléguer, à quelles conditions et avec quelle borne de hops sont des
+        décisions d'architecte, pas des propriétés émergentes.
+
+    graph:
+      label: "graphe d'états explicite"
+      requires:
+        orchestrator: true
+        subagents_min: 1
+        relations: true
+        conditions: true
+        loop_bound: true
+        tools_per_agent: true
+        model_per_agent: true
+
+    plan-execute:
+      label: "planifier puis exécuter"
+      requires:
+        orchestrator: true
+        subagents_min: 1
+        relations: true
+        loop_bound: true
+        tools_per_agent: true
+        model_per_agent: true
+
+    reflection:
+      label: "rédacteur + critique"
+      requires:
+        orchestrator: true
+        subagents_min: 2
+        relations: true
+        loop_bound: true
+        tools_per_agent: true
+        model_per_agent: true
+      why: >
+        Le critique est un agent DISTINCT du rédacteur qu'il note (P7 raison 4),
+        et le nombre de révisions est borné. Les deux se déclarent.
+
+    blackboard:
+      label: "tableau noir partagé"
+      requires:
+        orchestrator: true
+        subagents_min: 2
+        relations: true
+        loop_bound: true
+        tools_per_agent: true
+        model_per_agent: true
+
+    network:
+      label: "réseau libre agent-à-agent"
+      requires:
+        orchestrator: true
+        subagents_min: 2
+        relations: true
+        conditions: true
+        loop_bound: true
+        tools_per_agent: true
+        model_per_agent: true
+      adr_required: true
+      why: >
+        `refused-by-default` dans le registre de patterns. Un réseau libre rend
+        les trajectoires et le coût non bornables par construction. Il exige un
+        ADR nominatif en plus de la déclaration complète.
+
+# ============================================================================
+# AXE 2 — RAG : `## Active RAG Pattern` + `## Active Retrieval Stack`
+# ============================================================================
+rag:
+  section: "Active RAG Pattern"
+  choices:
+    none:
+      label: "aucune récupération"
+      requires: {}
+
+    _default:
+      label: "toute stratégie RAG active"
+      requires:
+        stack_section: "Active Retrieval Stack"
+        stack_keys:
+          - ChunkStrategy
+          - ChunkSize
+          - ChunkOverlap
+          - RetrievalTopK
+          - CitationMode
+          - IngestionMode
+          - IndexRefreshPolicy
+      why: >
+        Choisir « RAG » sans déclarer le corpus, le découpage, les embeddings,
+        le store et les paramètres de recherche, c'est déléguer au LLM la moitié
+        des décisions qui font la qualité de récupération — celles, précisément,
+        que la RETRIEVAL GATE mesure. Le contrat de retrieval complète cette
+        déclaration par source de corpus.
+
+# ============================================================================
+# AXE 3 — Accès aux données : `## Active Data Access`
+# ============================================================================
+dataaccess:
+  section: "Active Data Access"
+  choices:
+    none:
+      requires: {}
+
+    declared-sources:
+      label: "fichiers / API / MCP déclarés"
+      requires:
+        stack_section: "Active Data Sources"
+        stack_keys:
+          - SourceAgentRole
+          - SourceReadTimeoutMs
+          - SourceMaxRecordsReturned
+          - SourceForbiddenOps
+          - SourceQueryLogging
+
+    _default:
+      label: "toute stratégie sur base"
+      requires:
+        stack_section: "Active Data Access"
+        stack_keys:
+          - DatabaseType
+          - DbAgentRole
+          - DbStatementTimeoutMs
+          - DbMaxRowsReturned
+          - DbAllowedSchemas
+          - DbQueryLogging
+
+# ============================================================================
+# AXE 4 — Outils MCP : `## Active Tools & Integrations`
+# ============================================================================
+tools:
+  section: "Active Tools & Integrations"
+  choices:
+    mcp:
+      label: "serveurs Model Context Protocol"
+      requires:
+        stack_section: "Active Tools & Integrations"
+        stack_keys:
+          - MCPServers
+      mcp_servers_complete: true
+      why: >
+        Un serveur MCP propose N outils ; l'application n'en câble que ceux
+        qu'elle a nommés. Sans `tools_allowlist` ni posture de confiance
+        déclarées par serveur, c'est le serveur qui décide de la surface
+        d'attaque — et un serveur `untrusted` non déclaré fait entrer du texte
+        hostile dans le contexte sans suite d'injection (P8).
+
+# ============================================================================
+# AXE 5 — Modèles : `## Runtime Models`
+# ============================================================================
+runtime_models:
+  section: "Runtime Models"
+  always:
+    requires:
+      stack_section: "Runtime Models"
+      stack_keys:
+        - RuntimeProvider
+        - RuntimeTierMap
+  multi_model:
+    label: "plusieurs modèles distincts dans RuntimeTierMap"
+    requires:
+      model_per_agent: true
+    why: >
+      Dès que deux tiers résolvent vers deux modèles différents, « quel modèle
+      pour quel agent » devient une décision de coût et de qualité. La laisser
+      implicite revient à laisser le générateur choisir — et un tier par défaut
+      appliqué partout annule l'économie que le multi-modèle devait produire.

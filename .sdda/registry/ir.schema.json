@@ -1,0 +1,1230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdd-agents.dev/schemas/ir.schema.json",
+  "title": "Agentic IR",
+  "description": "Représentation intermédiaire machine d'un système agentic. Compilée depuis les contrats Markdown par ir_compiler.py, consommée par les générateurs de code. JAMAIS éditée à la main. Voir .sdda/docs/AGENTIC-IR.md.",
+  "type": "object",
+  "required": [
+    "irVersion",
+    "missionId",
+    "compiledFrom",
+    "budget",
+    "orchestration",
+    "agents",
+    "tools",
+    "evaluation",
+    "traceability"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "irVersion": {
+      "const": "1"
+    },
+    "missionId": {
+      "$ref": "#/$defs/missionId"
+    },
+    "compiledFrom": {
+      "description": "Empreintes des sources Markdown. Toute divergence se résout en faveur du Markdown, puis par recompilation.",
+      "type": "object",
+      "required": [
+        "missionHash",
+        "capHashes",
+        "topologyHash",
+        "stackHash",
+        "contractHashes",
+        "compiledAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "missionHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "capHashes": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/capId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "topologyHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "stackHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "contractHashes": {
+          "type": "object",
+          "description": "Empreinte de CHAQUE contrat compile (agents, outils, retrieval, memoire), par chemin relatif. Sans elle, editer un contrat laisse l'IR se declarer frais alors qu'il ne reflete plus sa source - et c'est precisement le cas que `/sdda-topology --recompile-only` existe pour traiter.",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^workspace/contracts/.+\\.md$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "compiledAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "budget": {
+      "description": "Budget d'EXECUTION du produit généré. Exigence fonctionnelle (P6), pas un sujet d'exploitation.",
+      "type": "object",
+      "required": [
+        "costPerRunTargetUsd",
+        "costPerRunHardCapUsd",
+        "latencyP95TargetMs",
+        "tokenCeilingPerRun"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "costPerRunTargetUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "costPerRunHardCapUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "latencyP95TargetMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "tokenCeilingPerRun": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "estimated": {
+          "description": "Rempli par estimate_budget.py. Comparé aux cibles par la TOPOLOGY GATE.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nominalCostUsd": {
+              "type": "number"
+            },
+            "worstCaseCostUsd": {
+              "type": "number"
+            },
+            "nominalLatencyMs": {
+              "type": "integer"
+            },
+            "worstCaseLatencyMs": {
+              "type": "integer"
+            },
+            "worstCasePath": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "orchestration": {
+      "type": "object",
+      "required": [
+        "rootPattern",
+        "entryNode",
+        "terminalNodes",
+        "maxHops",
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rootPattern": {
+          "$ref": "#/$defs/orchestrationPattern"
+        },
+        "entryNode": {
+          "type": "string"
+        },
+        "terminalNodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxHops": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Borne dure. Tout cycle du graphe doit être coupé par elle ou par une borne d'agent (P12)."
+        },
+        "checkpointing": {
+          "type": "boolean",
+          "default": false
+        },
+        "humanInTheLoop": {
+          "type": "boolean",
+          "default": false
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "agent",
+                  "tool",
+                  "retriever",
+                  "function",
+                  "router",
+                  "gather",
+                  "human"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "nestedPattern": {
+                "$ref": "#/$defs/orchestrationPattern",
+                "description": "Imbrication. Profondeur max 2 — au-delà, on ne peut plus raisonner sur le coût."
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "condition"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "condition": {
+                "type": "string",
+                "description": "Expression, ou 'always'."
+              },
+              "countsAsHop": {
+                "type": "boolean",
+                "default": true
+              },
+              "isFallback": {
+                "type": "boolean",
+                "default": false,
+                "description": "Tout nœud router DOIT avoir au moins une arête isFallback, sinon [ROUTER_NO_FALLBACK]."
+              }
+            }
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/agent"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "retrievers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/retriever"
+      }
+    },
+    "dataAccess": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dataAccess"
+      }
+    },
+    "memory": {
+      "$ref": "#/$defs/memory"
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guardrail"
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guardrail"
+          }
+        }
+      }
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
+    },
+    "traceability": {
+      "description": "CAP -> ce qui la couvre et ce qui la mesure. Toute CAP doit y figurer (G1/G2).",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/capId"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "coversMissionItems",
+          "implementedBy",
+          "evaluatedBy"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "coversMissionItems": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "implementedBy": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "agents": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "retrievers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "evaluatedBy": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "description": "Schémas JSON réutilisables, référencés par $ref depuis les agents et les outils.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{8,64}$"
+    },
+    "missionId": {
+      "type": "string",
+      "pattern": "^[0-9]+-[A-Za-z0-9]+$"
+    },
+    "capId": {
+      "type": "string",
+      "pattern": "^[0-9]+-[0-9]+-[A-Za-z0-9]+$"
+    },
+    "slugId": {
+      "type": "string",
+      "pattern": "^[0-9]+-[a-z0-9-]+$"
+    },
+    "modelTier": {
+      "enum": [
+        "fast",
+        "balanced",
+        "deep"
+      ],
+      "description": "Un TIER, jamais un nom de modèle (P11). La résolution appartient au provider."
+    },
+    "orchestrationPattern": {
+      "enum": [
+        "single-agent",
+        "router",
+        "sequential",
+        "parallel",
+        "supervisor",
+        "graph",
+        "plan-execute",
+        "reflection",
+        "blackboard"
+      ],
+      "description": "`network` est délibérément absent : coût non borné, refusé par défaut."
+    },
+    "sideEffectClass": {
+      "enum": [
+        "read-only",
+        "write-scoped",
+        "write-destructive",
+        "external-side-effect"
+      ]
+    },
+    "onBoundExceeded": {
+      "enum": [
+        "fail-explicit",
+        "degrade",
+        "escalate-human"
+      ]
+    },
+    "bounds": {
+      "description": "Obligatoires, toutes. Invariant no-unbounded-loop (P12).",
+      "type": "object",
+      "required": [
+        "maxIterations",
+        "maxToolCalls",
+        "maxDelegationDepth",
+        "timeoutSec",
+        "budgetUsd"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "maxIterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxToolCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxDelegationDepth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeoutSec": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "budgetUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": [
+        "id",
+        "servesCaps",
+        "promptRef",
+        "promptHash",
+        "modelTier",
+        "bounds",
+        "onBoundExceeded",
+        "trustPosture"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slugId"
+        },
+        "role": {
+          "type": "string"
+        },
+        "servesCaps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/capId"
+          },
+          "description": "minItems 1 : un agent qui ne sert aucune CAP est [AGENT_SERVES_NO_CAP]."
+        },
+        "promptRef": {
+          "type": "string",
+          "pattern": "^workspace/prompts/.+\\.system\\.md$"
+        },
+        "promptHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "modelTier": {
+          "$ref": "#/$defs/modelTier"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slugId"
+          },
+          "description": "Ce que l'agent a le DROIT D'APPELER. Chaque entrée référence un tools[].id et porte un schéma, une classe d'effet de bord et une gate (G3)."
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slugId"
+          },
+          "description": "Ce que l'agent SAIT FAIRE — une compétence nommée, sans schéma ni effet de bord, portée par le prompt système. Distincte de tools[] : le moindre privilège ne se déduit jamais d'une skill (validate_architecture.py). Owner de l'implémentation : dev-prompt ; symétrie prompt <-> IR vérifiée par lint_prompts.py ; mesurée en G5 par les AC des servesCaps, jamais par une gate propre."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slugId"
+          },
+          "description": "Ce que l'agent DOIT RESPECTER — une contrainte de comportement nommée, sans schéma ni effet de bord, portée par le prompt système. Jumelle de skills[] : une skill est ce qu'il sait faire, une rule ce qu'il n'a pas le droit d'enfreindre. Ni l'une ni l'autre n'est exécutable par une gate, donc aucune ne se vérifie autrement que par symétrie contrat <-> prompt (lint_prompts.py : [RULE_NOT_IMPLEMENTED] / [RULE_UNDECLARED]). Déclarée par architect-topology au roster, implémentée par dev-prompt dans `## Règles` du prompt. À ne pas confondre avec .sdda/rules/, qui sont les règles du FRAMEWORK, pas celles d'un agent du produit."
+        },
+        "retrievers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slugId"
+          }
+        },
+        "memoryScopes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "write": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "bounds": {
+          "$ref": "#/$defs/bounds"
+        },
+        "onBoundExceeded": {
+          "$ref": "#/$defs/onBoundExceeded"
+        },
+        "trustPosture": {
+          "type": "object",
+          "required": [
+            "untrustedInputs"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "untrustedInputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Non vide => une suite d'injection est obligatoire (invariant injection-suite-mandatory)."
+            },
+            "injectionSuiteRef": {
+              "type": "string"
+            }
+          }
+        },
+        "refusalPolicy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "degradation": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Situation -> comportement. Ex. retrievalEmpty, toolUnavailable, lowConfidence."
+        },
+        "handoffs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "to",
+              "condition",
+              "stateContract"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "type": "string"
+              },
+              "condition": {
+                "type": "string"
+              },
+              "stateContract": {
+                "type": "object"
+              },
+              "expectedReturn": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "description",
+        "sideEffectClass",
+        "inputSchema",
+        "outputSchema",
+        "trust",
+        "timeoutSec",
+        "retryPolicy",
+        "contractTestsRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slugId"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 20,
+          "description": "C'est du prompt engineering, pas de la documentation : c'est sur elle que le modèle décide d'appeler l'outil."
+        },
+        "sideEffectClass": {
+          "$ref": "#/$defs/sideEffectClass"
+        },
+        "safetyStrategy": {
+          "description": "Obligatoire si sideEffectClass != read-only (invariant tool-side-effect-declared).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "idempotency": {
+              "type": "string",
+              "description": "'header', 'natural-key:{champ}' ou 'none'."
+            },
+            "dryRunSupported": {
+              "type": "boolean"
+            },
+            "confirmation": {
+              "type": "string",
+              "description": "'never', 'always' ou 'required-above:{seuil}'."
+            },
+            "cap": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "allowlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "agentBehavior"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "meaning": {
+                "type": "string"
+              },
+              "agentBehavior": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "authEnv": {
+          "type": "string",
+          "description": "Nom de variable d'environnement. JAMAIS la valeur."
+        },
+        "timeoutSec": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rateLimitRpm": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retryPolicy": {
+          "type": "string",
+          "description": "'none' obligatoire si l'outil n'est pas idempotent : un retry crée trois tickets."
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "trust": {
+          "enum": [
+            "trusted",
+            "untrusted"
+          ]
+        },
+        "contractTestsRef": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "sideEffectClass": {
+                "not": {
+                  "const": "read-only"
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "safetyStrategy"
+            ]
+          }
+        }
+      ]
+    },
+    "retriever": {
+      "description": "Deux branches, et la frontière est porteuse. HORS `binding` vit l'INTENTION : ce que l'architecte EXIGE et ce que la RETRIEVAL GATE mesure — pattern, topK, mode de citation, filtrage par identité, plafond d'appels, seuils. Dans `binding` vit la RÉALISATION : les composants qui l'atteignent et leurs réglages. Un générateur écrit son plan d'appel contre l'intention et ne résout `binding` qu'au moment d'émettre du code : c'est ce qui rend l'IR réellement multi-langage (P11). Sans cette frontière, `store: pgvector` obligeait un générateur C# à traduire une référence Python — et la même décision vivait deux fois, ici et dans `STACK.md ## Active Retrieval Stack`.",
+      "type": "object",
+      "required": [
+        "id",
+        "pattern",
+        "binding",
+        "topK",
+        "citationMode",
+        "gateThresholds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slugId"
+        },
+        "pattern": {
+          "enum": [
+            "classic",
+            "hybrid",
+            "contextual",
+            "hyde",
+            "sequential-multihop",
+            "agentic",
+            "self-rag",
+            "corrective-rag",
+            "graph-rag",
+            "raptor"
+          ]
+        },
+        "binding": {
+          "description": "COMMENT l'intention est atteinte. Réconcilié avec `STACK.md ## Active Retrieval Stack` et `## Active Reranker` à la compilation : un désaccord est [RETRIEVAL_BINDING_MISMATCH], jamais un arbitrage silencieux. Aucun contrôle de gate ne lit cette branche — elle n'est consommée que par les générateurs, au moment d'émettre du code.",
+          "type": "object",
+          "required": [
+            "store",
+            "embeddingModel",
+            "chunk"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "store": {
+              "type": "string",
+              "description": "Identifiant de la fiche `stacks/vectorstore/`. Le SEUL endroit de l'IR où un composant d'infrastructure peut être nommé."
+            },
+            "embeddingModel": {
+              "type": "string"
+            },
+            "chunk": {
+              "type": "object",
+              "required": [
+                "strategy",
+                "size",
+                "overlap"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "fixed",
+                    "recursive-structural",
+                    "semantic",
+                    "document-aware",
+                    "parent-child"
+                  ]
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "overlap": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "comparativeMeasureRef": {
+                  "type": "string",
+                  "description": "Mesure d'au moins 2 configurations sur le golden set. Choisir 512/50 par défaut de tutoriel n'est pas une décision d'architecture."
+                }
+              }
+            },
+            "hybridWeights": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "vector": {
+                  "type": "number"
+                },
+                "lexical": {
+                  "type": "number"
+                }
+              }
+            },
+            "rerank": {
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          }
+        },
+        "topK": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxRetrievalCalls": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Obligatoire pour pattern 'agentic' : son coût est variable par nature."
+        },
+        "citationMode": {
+          "enum": [
+            "required",
+            "optional",
+            "none"
+          ]
+        },
+        "identityFilter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Filtrage par identité APPLIQUÉ À LA SOURCE. Un filtre post-génération est une fuite avec une étape de plus."
+        },
+        "indexHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "gateThresholds": {
+          "type": "object",
+          "required": [
+            "recallAtK",
+            "groundedness",
+            "citationResolveRate"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "recallAtK": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "ndcg": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "contextPrecision": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "groundedness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "answerRelevance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "citationResolveRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "pattern": {
+                "const": "agentic"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "maxRetrievalCalls"
+            ]
+          }
+        }
+      ]
+    },
+    "dataAccess": {
+      "description": "Une entrée par stratégie d'accès. `dataaccess/none` de STACK.md ne produit AUCUNE entrée ici : l'absence est la représentation de `none`, et un tableau vide est valide. Il n'existe donc pas de valeur `none` dans l'enum `binding.strategy`. Même frontière que pour `retriever` : hors `binding` vit ce qui EXIGE et se mesure — qui est exposé, et sous quelle enveloppe de sûreté ; dans `binding` vit la stratégie qui le réalise, réconciliée avec `STACK.md ## Active Data Access`.",
+      "type": "object",
+      "required": [
+        "id",
+        "binding",
+        "exposedTo",
+        "envelope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slugId"
+        },
+        "binding": {
+          "type": "object",
+          "required": [
+            "strategy"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {
+              "enum": [
+                "view-per-agent",
+                "repository-tools",
+                "semantic-layer",
+                "text-to-sql",
+                "graphql",
+                "declared-sources"
+              ]
+            }
+          }
+        },
+        "connectors": {
+          "description": "Pour `declared-sources` : les connecteurs réellement utilisés par cet accès. Sert à la SAFETY GATE — la présence de `http-api` ou `mcp` exige une `egressAllowlist` non vide et une suite d'injection, parce que la sortie est écrite par un tiers.",
+          "type": "array",
+          "items": {
+            "enum": [
+              "file",
+              "http-api",
+              "mcp"
+            ]
+          }
+        },
+        "exposedTo": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/slugId"
+          }
+        },
+        "envelope": {
+          "description": "Obligatoire. Invariant db-safety-envelope-present. Pour `declared-sources`, les mêmes bornes portent sur des fichiers, des réponses d'API et des outils MCP : `statementTimeoutMs` borne la lecture d'un appel, `maxRows` le nombre d'enregistrements retournés, `schemas` est l'allowlist des `id` de sources (jamais des chemins ni des URL), `stores` l'allowlist des `id` de stores, `egressAllowlist` les hôtes joignables (vide = aucune sortie réseau, jamais « tout permis »), `forbidden` les opérations interdites (WRITE, DELETE, EXEC, SYMLINK_FOLLOW, UNDECLARED_EGRESS).",
+          "type": "object",
+          "required": [
+            "role",
+            "statementTimeoutMs",
+            "maxRows",
+            "schemas",
+            "forbidden"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "role": {
+              "enum": [
+                "readonly",
+                "scoped-write",
+                "full"
+              ]
+            },
+            "statementTimeoutMs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxRows": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "schemas": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "forbidden": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "stores": {
+              "description": "Pour `declared-sources` : allowlist des `id` de stores. Un store non listé n'existe pas pour l'application — importer une configuration MCP ou déclarer un bucket ne câble rien à soi seul.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "egressAllowlist": {
+              "description": "Hôtes que l'application peut joindre pour cet accès. Une liste vide vaut « aucune sortie réseau » — jamais « tout permis » : une denylist d'hôtes n'a jamais protégé personne.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "secretsByName": {
+              "type": "boolean",
+              "description": "Vrai quand aucune valeur de secret n'apparaît dans la déclaration : les stores ne portent que des NOMS de variables, résolus depuis le fichier `.env` gitignoré."
+            },
+            "astValidated": {
+              "type": "boolean",
+              "description": "Vérification sur l'AST, jamais par regex : une regex se contourne."
+            },
+            "identityFilter": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shortTermPolicy": {
+          "enum": [
+            "none",
+            "sliding-window",
+            "summarize-over",
+            "hybrid"
+          ]
+        },
+        "shortTermMaxTurns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "summarizeTriggerTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "longTermEnabled": {
+          "type": "boolean"
+        },
+        "longTermStore": {
+          "type": "string"
+        },
+        "longTermWritePolicy": {
+          "enum": [
+            "explicit",
+            "automatic"
+          ]
+        },
+        "longTermRetentionDays": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "piiPolicy": {
+          "enum": [
+            "forbid",
+            "redact-before-write",
+            "allow"
+          ]
+        },
+        "crossAgentSharedState": {
+          "enum": [
+            "none",
+            "scoped",
+            "full"
+          ]
+        }
+      }
+    },
+    "guardrail": {
+      "type": "object",
+      "required": [
+        "id",
+        "onTrip"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "onTrip": {
+          "enum": [
+            "block-and-log",
+            "sanitize-and-continue",
+            "escalate-human"
+          ]
+        },
+        "config": {
+          "type": "object"
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "required": [
+        "suites",
+        "holdout",
+        "baselineRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "suites": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "level",
+              "dataset",
+              "grader",
+              "threshold",
+              "runs"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "level": {
+                "enum": [
+                  "L0",
+                  "L1",
+                  "L2",
+                  "L3",
+                  "L4",
+                  "L5",
+                  "L6",
+                  "L7",
+                  "L8",
+                  "L9"
+                ]
+              },
+              "capRef": {
+                "$ref": "#/$defs/capId"
+              },
+              "agentRef": {
+                "$ref": "#/$defs/slugId"
+              },
+              "dataset": {
+                "type": "string"
+              },
+              "grader": {
+                "enum": [
+                  "exact",
+                  "regex",
+                  "schema",
+                  "numeric-tolerance",
+                  "semantic-similarity",
+                  "llm-judge",
+                  "trajectory",
+                  "cost",
+                  "latency"
+                ]
+              },
+              "judgeCalibrationRef": {
+                "type": "string",
+                "description": "Obligatoire pour llm-judge : un juge non calibré ne rend pas de verdict bloquant (P9)."
+              },
+              "advisory": {
+                "type": "boolean",
+                "default": false
+              },
+              "threshold": {
+                "type": "number"
+              },
+              "runs": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "k runs. Un run vert n'est pas une preuve (P3)."
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "grader": {
+                      "const": "llm-judge"
+                    },
+                    "advisory": {
+                      "const": false
+                    }
+                  },
+                  "required": [
+                    "grader"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "judgeCalibrationRef"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "holdout": {
+          "type": "string",
+          "description": "Disjoint du golden, vérifié par hash."
+        },
+        "adversarial": {
+          "type": "string"
+        },
+        "baselineRef": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

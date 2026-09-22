@@ -1,0 +1,290 @@
+# SDD_Agents — Project Config, couche de base
+#
+# Hiérarchie à 3 couches (le projet gagne, sauf security-down) :
+#   1. .sdda/config.base.yml          <- CE FICHIER, défauts du framework
+#   2. ~/.sdda/config.team.yml        politique d'équipe / d'organisation
+#   3. workspace/stack/STACK.md       ## Project Config, override final
+#
+# Deep-merge : scalaires remplacés, listes remplacées (pas de concaténation).
+#
+# PROTECTION SECURITY-DOWN : le projet NE PEUT PAS relâcher ce que la couche
+# team a durci sur les clés listées dans `security_down_protected` en fin de
+# fichier. Violation -> [CONFIG_SECURITY_DOWNGRADE], bloquant.
+#
+# Toute clé doit exister dans templates/project-config.schema.json, sinon
+# WARN [CONFIG_UNKNOWN_KEY] à la lecture (SDDA_CONFIG_STRICT=1 la rend fatale).
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Budget d'EXECUTION du produit généré  (P6 — exigence fonctionnelle)
+# ═══════════════════════════════════════════════════════════════════════════
+# Ces valeurs n'ont pas de défaut universel sensé : elles dépendent du modèle
+# économique du produit. `null` force la MISSION à les déclarer (G0 refuse un
+# budget absent). C'est délibéré : un défaut silencieux ici ferait passer des
+# architectures économiquement impossibles.
+CostPerRunTargetUsd: null
+CostPerRunHardCapUsd: null
+LatencyP95TargetMs: null
+TokenCeilingPerRun: null
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Bornes imposées à TOUT agent généré  (P12 — invariant no-unbounded-loop)
+# ═══════════════════════════════════════════════════════════════════════════
+# Défauts volontairement serrés. Les desserrer est une décision explicite,
+# visible dans le diff de STACK.md.
+MaxIterations: 12
+MaxToolCalls: 25
+MaxDelegationDepth: 3
+AgentTimeoutSec: 120
+OnBoundExceeded: fail-explicit        # fail-explicit | degrade | escalate-human
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Budget de CONSTRUCTION (le pipeline SDD_Agents lui-même)
+# ═══════════════════════════════════════════════════════════════════════════
+MaxCostPerRun: 50.00                  # USD ; 0 = désactivé
+BuildLoopMaxCostUsd: 15.00
+BuildLoopMaxIter: 3
+MaxParallel: 3
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Evaluation  (P3 — le non-déterminisme se comptabilise)
+# ═══════════════════════════════════════════════════════════════════════════
+EvalRuns: 3                           # k runs par item. 1 = dev local, REFUSÉ en CI
+EvalRunsCritical: 5                   # pour Criticality: critical
+EvalVarianceWarnPct: 15               # écart-type au-delà -> verdict JAUNE
+EvalSeedPolicy: vary                  # vary | fixed — `fixed` masque la variance,
+                                      # réservé au débogage d'un cas précis
+
+# Calibration des juges LLM (P9 — invariant llm-judge-calibrated)
+JudgeCalibrationMinKappa: 0.6
+JudgeCalibrationMinItems: 50
+JudgeAdvisoryFallback: true           # sous le seuil, le juge informe mais ne bloque plus
+JudgeMustDifferFromEvaluated: true    # un modèle qui se note mesure sa complaisance
+
+# Datasets
+GoldenSetMinItems: 50
+HoldoutSetMinItems: 30
+CalibrationSetMinItems: 50
+AdversarialSetMinItems: 25
+HoldoutDisjointCheck: strict          # strict | warn
+                                      # `warn` autorise l'optimisation contre le jeu
+                                      # qui rend le verdict. À n'utiliser qu'en POC.
+
+# Régression (L9)
+RegressionTolerancePct: 3
+BaselinePromotionPolicy: explicit     # explicit | auto
+                                      # `auto` rend la dérive lente invisible
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Seuils de la RETRIEVAL GATE (G4)
+# ═══════════════════════════════════════════════════════════════════════════
+# Auto-skip si `## Active RAG Pattern` = none.
+RetrievalRecallAtK: 0.80
+RetrievalK: 8
+RetrievalNdcgMin: 0.70
+RetrievalContextPrecisionMin: 0.60
+GroundednessMin: 0.85
+AnswerRelevanceMin: 0.80
+CitationResolveRateMin: 0.98
+RetrievalGoldenMinQueries: 50
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Modes des reviewers : off | manual | full
+# ═══════════════════════════════════════════════════════════════════════════
+SpecComplianceMode: full
+AgentSafetyMode: full
+CostLatencyMode: full
+OrchestrationReviewMode: full
+RagQualityMode: full                  # auto-skip si pas de RAG
+AdversarialMode: full
+
+# AgentSafetyMode: off est REFUSÉ quand un run est marqué production
+# (SDDA_RUN_PROFILE=production) -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION].
+# La raison est simple : la surface d'attaque d'un système agentic, c'est
+# chaque document qu'il récupère. Débrayer la revue sécurité, c'est livrer
+# sans avoir regardé.
+AgentSafetyRequiredInProduction: true
+
+# Étagement de la revue (hérité SDD_Pro two-stage)
+AuditorBatchMode: three-stage         # three-stage | parallel
+                                      # A: spec-compliance seul
+                                      # B: safety ∥ cost ∥ orchestration ∥ rag
+                                      # C: adversarial sur système vivant
+
+# Seuils de blocage : info | minor | moderate | serious | critical
+SpecComplianceFailOn: serious
+AgentSafetyFailOn: critical
+CostLatencyFailOn: serious
+OrchestrationFailOn: serious
+RagQualityFailOn: serious
+AdversarialFailOn: critical
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Gates — mode de chacune : strict | warn | off
+# ═══════════════════════════════════════════════════════════════════════════
+# `off` sur une gate ne la contourne pas silencieusement : elle est inscrite
+# dans workspace/.sys/.audit/bypasses.jsonl et apparaît dans le rapport final.
+MissionGate: strict          # G0
+CapGate: strict              # G1
+TopologyGate: strict         # G2
+ToolGate: strict             # G3
+RetrievalGate: strict        # G4
+AgentGate: strict            # G5
+OrchGate: strict             # G6
+SafetyGate: strict           # G7
+AcceptanceGate: strict       # G8
+
+# Cumul de bypasses — hérité de SDD_Pro (preflight_force_cumul)
+MaxBypassesPerRun: 1                  # >= 2 bypasses sur un même run -> bloquant
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Granularité de la spécification
+# ═══════════════════════════════════════════════════════════════════════════
+CapGranularityTarget: 4
+CapGranularityWarnAt: 8
+CapGranularityHardCap: 15
+
+# Simplicité topologique (P7)
+MaxAgentsWarnAt: 4                    # au-delà, justification renforcée exigée
+MaxNestingDepth: 2                    # imbrication de patterns — dur
+TopologyJustificationRequired: true   # la section « Alternative écartée » est obligatoire
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Prompts
+# ═══════════════════════════════════════════════════════════════════════════
+PromptMaxTokens: 4000                 # au-delà, WARN : un prompt long dilue
+PromptInlineForbidden: true           # invariant prompts-are-files (P1)
+PromptHashPinning: true               # invariant eval-baseline-hash-pinned (P10)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Observabilité
+# ═══════════════════════════════════════════════════════════════════════════
+TraceLevel: full                      # off | errors-only | sampled | full
+TraceSampleRate: 1.0
+TracePIIPolicy: redact                # redact | hash | raw
+CostTrackingEnabled: true
+TraceRequiredPerRun: true             # invariant trace-emitted-per-run
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Modèles — sélection de tier
+# ═══════════════════════════════════════════════════════════════════════════
+BuildModelMode: static                # static | dynamic
+                                      # dynamic : scorer déterministe par work-item,
+                                      # CLAMPÉ par tier_floor/tier_ceiling de
+                                      # agent-bounds.yaml (bornes non surchargeables)
+
+# Inférence locale (provider local-ollama, vLLM…) : le prix par token est nul,
+# mais le coût ne l'est pas. Sans cette clé, `estimate_budget.py` verrait un
+# budget gratuit et la TOPOLOGY GATE laisserait passer n'importe quelle
+# topologie — un faux vert budgétaire, exactement ce que P6 refuse.
+# 0 = ne pas modéliser (assumé, et le rapport de budget le dit).
+LocalComputeCostPerHourUsd: 0.0
+LocalComputeThroughputTokensPerSec: 0  # 0 = inconnu -> la latence estimée est
+                                       # marquée « non modélisable » plutôt
+                                       # qu'affichée à zéro
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Livrable
+# ═══════════════════════════════════════════════════════════════════════════
+# CE QU'ON INSTALLE à la fin. Jusqu'ici seule la SURFACE était déclarée
+# (`## Active Serving Surface`), ce qui laissait la question « et on livre
+# quoi ? » sans réponse dans la configuration — donc arbitrée par l'agent, donc
+# différemment à chaque run.
+#
+# La distinction qui compte : la SURFACE est par où l'on entre (CLI, HTTP,
+# MCP, lot), le LIVRABLE est ce qu'on installe (un service, un exécutable, une
+# bibliothèque, une image). Les deux sont indépendants — un même `RunService`
+# s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable.
+#
+# Ces clés vivent dans `## Project Config` et non dans une section `## Active *`
+# parce qu'elles relèvent de la POLITIQUE : une équipe doit pouvoir interdire
+# `ApiAuthMode: none` ou `ApiContractFirst: false` en production. Les clés de
+# section `## Active *` (ChunkSize, DbAgentRole, TraceLevel…) sont du réglage
+# par projet et se lisent par `read_stack_section_kv`.
+DeliverableType: cli-exe              # backend-api | cli-exe | batch-job |
+                                      # library | container | mcp-server
+                                      #
+                                      # Le DÉFAUT DU FRAMEWORK est `cli-exe`, pas
+                                      # `backend-api`, parce qu'un défaut doit
+                                      # désigner ce que le framework sait livrer
+                                      # AUJOURD'HUI : la combo C1 de la ROADMAP
+                                      # est CLI-first, et la CLI est la surface
+                                      # que le runner d'eval invoque. Un défaut
+                                      # qui pointe une fiche non validée fait
+                                      # échouer chaque nouveau projet au premier
+                                      # preflight — et on apprend à couper le
+                                      # preflight.
+                                      #
+                                      # `backend-api` est le cas nominal d'une
+                                      # application agentique d'entreprise : c'est
+                                      # ce que STACK.md.template propose au
+                                      # bootstrap, donc le choix par défaut de
+                                      # l'UTILISATEUR, distinct du défaut du
+                                      # FRAMEWORK.
+
+ApiFramework: none                    # none (si DeliverableType != backend-api)
+                                      # Python  : fastapi | django-ninja | flask
+                                      # .NET    : aspnet-minimal | aspnet-mvc
+                                      # Java    : spring-boot
+                                      # Node    : express | nestjs
+                                      # DOIT être cohérent avec le langage
+                                      # actif -> [PACKAGING_LANG_MISMATCH]
+
+ApiArchitecture: layered              # layered | hexagonal | vertical-slice
+                                      # Architecture interne du back-end livré.
+                                      # Sans ce choix, chaque `dev-*` impose la
+                                      # sienne et le projet en porte trois.
+
+ApiContractFirst: true                # l'OpenAPI est dérivé des schémas de l'IR
+                                      # et vérifié contre eux (API GATE, G6.5).
+                                      # `false` : l'API peut diverger de la spec
+                                      # — exige un ADR.
+
+ApiAuthMode: none                     # none | api-key | oauth2 | azure-ad | mtls
+                                      # L'identité de l'appelant entre par là
+                                      # (dev-api STEP 3) : `none` n'est
+                                      # acceptable qu'en POC ou derrière une
+                                      # passerelle qui l'établit déjà.
+
+# `ServingLocalPort`, `StreamingEnabled` et `HumanInTheLoopEnabled` ne sont PAS
+# ici : ils vivent dans `## Active Serving Surface` et `ir_compiler.py` les y
+# lit. Les dupliquer donnerait deux sources de vérité pour la même valeur, et
+# c'est toujours celle que personne ne relit qui finit par gouverner.
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Reprise / idempotence
+# ═══════════════════════════════════════════════════════════════════════════
+CheckpointMode: "on"                  # on | off — reprise après interruption
+ResumeReusesIdentifiers: true         # pas d'orphelins, pas de doublons
+PreserveHumanEdits: true              # empreinte du contenu généré ; un fichier
+                                      # édité à la main n'est jamais écrasé
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Combos de stack
+# ═══════════════════════════════════════════════════════════════════════════
+StackComboCheck: strict               # strict | warn
+                                      # une combinaison absente de
+                                      # registry/compatibility.matrix.json bloque.
+                                      # Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Clés protégées contre le relâchement par la couche projet
+# ═══════════════════════════════════════════════════════════════════════════
+# Si la couche team les a durcies, le projet peut durcir davantage mais
+# jamais relâcher. Violation -> [CONFIG_SECURITY_DOWNGRADE].
+security_down_protected:
+  - ApiAuthMode
+  - ApiContractFirst
+  - AgentSafetyFailOn
+  - AgentSafetyMode
+  - AgentSafetyRequiredInProduction
+  - AdversarialFailOn
+  - SafetyGate
+  - EvalRuns
+  - HoldoutDisjointCheck
+  - GroundednessMin
+  - RetrievalRecallAtK
+  - CitationResolveRateMin
+  - JudgeCalibrationMinKappa
+  - MaxBypassesPerRun
+  - PromptInlineForbidden
+  - TopologyJustificationRequired

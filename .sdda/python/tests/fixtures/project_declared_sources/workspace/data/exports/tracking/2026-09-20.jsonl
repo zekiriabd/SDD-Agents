@@ -1,0 +1,2 @@
+{"order_id":"ORD-000101","customer_id":"CUS-1","carrier":"DPD","status":"in_transit","last_scan_at":"2026-09-20T08:10:00+00:00","recipient_name":"A. Dupont","carrier_message":"Colis en transit"}
+{"order_id":"ORD-000102","customer_id":"CUS-2","carrier":"UPS","status":"delivered","last_scan_at":"2026-09-20T11:42:00+00:00","recipient_name":"B. Martin","carrier_message":"Remis au gardien"}
