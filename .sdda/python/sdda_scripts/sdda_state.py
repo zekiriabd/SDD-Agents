@@ -71,7 +71,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, paths  # noqa: E402
+from sdda_lib import hashing, paths, tracing  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_json, now_iso, run_id_now  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, resolve_root  # noqa: E402
@@ -104,6 +104,11 @@ PHASE_STATUSES: tuple[str, ...] = ("pass", "warn", "fail")
 RUN_STATUSES: tuple[str, ...] = ("running", "pass", "partial", "fail", "aborted")
 
 RESUME_DONE = "done"
+
+#: Identifiant du span racine de la trace de construction. Fixe et partagé avec
+#: `build_trace.py` : un fichier de trace vaut pour UN run, donc la racine n'a
+#: pas besoin d'être transmise entre deux processus qui ne se connaissent pas.
+TRACE_ROOT_SPAN_ID = "root"
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +443,40 @@ def items_summary(run: dict[str, Any]) -> dict[str, dict[str, str]]:
     return out
 
 
+def close_trace(root: Path, run: dict[str, Any]) -> Path | None:
+    """Écrit le span racine `sdda.run` de la trace de construction.
+
+    C'est ici et nulle part ailleurs, parce que le journal est le seul à
+    connaître le début, la fin et le cumul du run. Les spans enfants
+    (`sdda.build.agent`, `sdda.gate`) sont écrits au fil de l'eau par
+    `build_trace.py` et référencent cette racine avant qu'elle existe : l'ordre
+    d'écriture n'a pas de sens dans un exportateur de spans, `summarize` lit le
+    fichier entier.
+
+    Sans cette racine, une trace de construction serait refusée par
+    `postflight_trace_present` — et ARCHITECTURE §8 promet une trace pour tout
+    run, de construction comme d'exécution.
+    """
+    run_id = str(run.get("runId") or "")
+    if not run_id:
+        return None
+    writer = tracing.TraceWriter(root, run_id)
+    writer.emit(
+        f"{tracing.RUN_SPAN} {run.get('mission') or '?'}",
+        span_id=TRACE_ROOT_SPAN_ID,
+        start=str(run.get("startedAt") or ""), end=str(run.get("endedAt") or ""),
+        status="ERROR" if run.get("status") == "fail" else "OK",
+        attributes={
+            "sdda.run.id": run_id,
+            "sdda.mission.id": str(run.get("mission") or ""),
+            "sdda.command": str(run.get("command") or ""),
+            "sdda.run.status": str(run.get("status") or ""),
+            tracing.A_COST_DECLARED: float(run.get("costUsd") or 0.0),
+        },
+    )
+    return writer.path
+
+
 def end_run(root: Path, run_id: str, *, status: str | None = None) -> dict[str, Any]:
     run = load_run(root, run_id)
     if run is None:
@@ -446,6 +485,7 @@ def end_run(root: Path, run_id: str, *, status: str | None = None) -> dict[str, 
     run["endedAt"] = now_iso()
     _write_json(run_path(root, run_id), run)
     _append_journal(root, {"event": "end-run", "at": run["endedAt"], "runId": run_id, "status": run["status"]})
+    close_trace(root, run)
     return run
 
 
