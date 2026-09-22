@@ -504,42 +504,26 @@ def write_gitignore() -> None:
 # Smoke
 # ---------------------------------------------------------------------------
 def smoke(stack_path: Path, combo: Combo) -> list[str]:
-    """Vérifications immédiates. Renvoie la liste des anomalies."""
+    """Vérifications immédiates. Renvoie la liste des anomalies.
+
+    Le contrôle de `STACK.md` et de l'arborescence est délégué à
+    `sdda_scripts/smoke_check.py` — le script que `/sdda-bootstrap` STEP 5
+    rappelle. Deux implémentations rendraient deux verdicts.
+    """
     problems: list[str] = []
 
     if not stack_path.is_file():
         problems.append("workspace/stack/STACK.md n'a pas été écrit")
         return problems
 
-    content = stack_path.read_text(encoding="utf-8")
-
-    required_sections = [
-        "## Active Harness",
-        "## Build Models",
-        "## Runtime Models",
-        "## Project Config",
-        "## Active Language & Runtime",
-        "## Active Agent Framework",
-        "## Active Orchestration Pattern",
-        "## Active RAG Pattern",
-        "## Active Reranker",
-        "## Active Data Access",
-        "## Active Observability",
-        "## Active Eval Stack",
-    ]
-    for section in required_sections:
-        if section not in content:
-            problems.append(f"section manquante dans STACK.md : {section}")
-
-    # Les fiches de stack référencées existent-elles ?
-    for match in re.finditer(r"^\s*-\s+(\.sdda/stacks/[\w\-/]+\.md)\s*$", content, re.M):
-        ref = ROOT / match.group(1)
-        if not ref.is_file():
-            problems.append(f"fiche de stack référencée mais absente : {match.group(1)}")
-
-    for rel in WORKSPACE_TREE:
-        if not (WORKSPACE / rel).is_dir():
-            problems.append(f"répertoire manquant : workspace/{rel}")
+    sys.path.insert(0, str(SDDA / "python"))
+    try:
+        from sdda_scripts import smoke_check
+    except Exception as exc:  # framework incomplet : dire, ne pas planter le bootstrap
+        problems.append(f"smoke_check.py non chargeable ({type(exc).__name__}) — lancer "
+                        "`python .sdda/python/sdda_scripts/smoke_check.py` à la main")
+    else:
+        problems.extend(smoke_check.problems(ROOT))
 
     if combo.status not in ("validated", "bench-validated"):
         problems.append(
