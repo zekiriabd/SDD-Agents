@@ -259,9 +259,24 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
             agent["promptHash"] = hashing.sha256_file(prompt_path)
         elif hashing.is_hash_ref(pinned):
             agent["promptHash"] = pinned
-        else:
-            ctx.fail(f"agent `{aid}` : prompt `{prompt_ref}` absent et aucun hash épinglé dans le contrat",
-                     "produire le prompt (dev-prompt) ou épingler `- Hash : sha256:…` — un hash ne s'invente pas (P10)", f"{loc}:3")
+        # Sinon : pas de `promptHash`, et ce n'est pas une faute — c'est la PHASE 2.
+        #
+        # L'IR se compile après les architectes ; les prompts naissent en PHASE 4,
+        # chez `dev-prompt`, qui lit l'IR pour savoir quoi écrire. Exiger ici le
+        # hash d'un fichier qui n'existe pas encore fermait la boucle sur
+        # elle-même : aucune MISSION neuve ne compilait, et le contrat au gabarit
+        # (`Hash : sha256:…`) était le premier à tomber. La fixture de référence
+        # livre ses prompts, donc aucun test ne voyait le cas d'un workspace vide.
+        #
+        # Ce qui remplace l'exigence, et la rend tenable :
+        #   - `source_hashes` suit les prompts : l'IR redevient périmé dès qu'ils
+        #     apparaissent, et la recompilation épingle le hash ;
+        #   - `preflight_agent_bounds` refuse de lancer `dev-agent` sur un IR dont
+        #     un agent n'a pas de `promptHash` — c'est là, et seulement là, qu'un
+        #     prompt non épinglé coûte quelque chose : implémenter un prompt qui
+        #     n'existe pas.
+        # Un hash ne s'invente toujours pas (P10) ; il est simplement exigé au
+        # moment où il peut exister.
 
     # Tier -------------------------------------------------------------------
     tier = header.get("Model Tier", "").strip().lower()
@@ -1005,6 +1020,12 @@ def source_hashes(root: Path, number: int) -> dict[str, Any]:
         # produise le jeu, doit donc redevenir périmé dès que ce jeu apparaît —
         # sinon il se déclarerait frais en restant sans rien à mesurer en G8.
         "holdoutHash": hashing.sha256_file(holdouts[0]) if len(holdouts) == 1 else "",
+        # Les prompts sont une SOURCE de l'IR au même titre : compilé en PHASE 2
+        # sans eux, il doit redevenir périmé quand `dev-prompt` les écrit, sinon
+        # `agents[].promptHash` reste absent pour toujours et G5 n'a rien à
+        # épingler. Clé par slug de prompt, comme `capHashes` par CAP.
+        "promptHashes": {p.stem.removesuffix(".system"): hashing.sha256_file(p)
+                         for p in sorted(paths.prompts_dir(root).glob("*.system.md"))},
     }
 
 

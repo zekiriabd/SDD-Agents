@@ -108,9 +108,14 @@ def test_a_command_naming_no_governed_path_is_free(project: Path) -> None:
         assert code == ALLOW, (command, err)
 
 
-def test_the_main_thread_and_unknown_agents_are_not_the_hooks_call(project: Path) -> None:
+def test_the_main_thread_is_free_but_an_unknown_subagent_is_not(project: Path) -> None:
+    """Le fil principal est l'humain : libre. Un sous-agent que la matrice ne
+    connaît pas n'a ni droits ni interdits — donc rien sous `workspace/`."""
     assert bash(project, None, "rm -rf workspace/proof/datasets")[0] == ALLOW
-    assert bash(project, "un-agent-tiers", "rm -rf workspace/proof/datasets")[0] == ALLOW
+    code, err = bash(project, "un-agent-tiers", "rm -rf workspace/proof/datasets")
+    assert code == DENY and "OWNERSHIP_AGENT_UNKNOWN" in err
+    assert bash(project, "un-agent-tiers", "cat workspace/proof/datasets/holdout/mission-1-v1.jsonl")[0] == DENY
+    assert bash(project, "un-agent-tiers", "pip install rich")[0] == ALLOW
 
 
 def test_chained_commands_are_each_judged(project: Path) -> None:

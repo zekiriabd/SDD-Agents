@@ -59,7 +59,7 @@ SDD-Agents/
 │   │                                  #   vivent au §5 des contrats et dans les
 │   │                                  #   prompts (cf. §7, rules/ownership.md §2.2)
 │   ├── providers/                     # anthropic / openai / google / azure / local
-│   ├── stacks/                        # ── LE CATALOGUE — 30 fiches sur disque ─
+│   ├── stacks/                        # ── LE CATALOGUE — 31 fiches sur disque ─
 │   │   │                    # Chaque fiche déclare `Languages:` (un langage,
 │   │   │                    # plusieurs, ou `*` si elle n'en suppose aucun).
 │   │   │                    # C'est la SSoT du couplage : preflight_stack_combo
@@ -512,7 +512,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **378**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **379**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

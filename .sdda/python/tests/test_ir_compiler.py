@@ -175,11 +175,21 @@ def test_missing_bound_is_a_compile_error_not_a_default(project: Path) -> None:
     assert not paths.ir_path(project, 1).exists()
 
 
-def test_missing_prompt_and_no_pinned_hash_is_a_compile_error(project: Path) -> None:
+def test_missing_prompt_and_no_pinned_hash_leaves_the_agent_unpinned_not_uncompilable(project: Path) -> None:
+    """Le contrat inverse de l'ancien test, et pour une raison de séquence.
+
+    L'IR se compile en PHASE 2 ; les prompts naissent en PHASE 4 chez `dev-prompt`,
+    qui lit l'IR. Exiger ici le hash d'un fichier qui n'existe pas encore fermait
+    la boucle : aucune MISSION neuve ne compilait. L'agent reste sans `promptHash`,
+    et c'est `preflight_agent_bounds` qui refuse de lancer `dev-agent` tant qu'il
+    en est ainsi — l'exigence vit là où elle est actionnable (P10 intact).
+    """
     (project / "workspace/src/prompts/billing-specialist.system.md").unlink()
-    with pytest.raises(ir_compiler.CompileError) as exc:
-        ir_compiler.compile_mission(project, 1)
-    assert any("prompt" in f.message.lower() for f in exc.value.report.errors)
+    ir, report = ir_compiler.compile_mission(project, 1)
+    assert report.ok
+    by_id = {a["id"]: a for a in ir["agents"]}
+    assert "promptHash" not in by_id["1-billing-specialist"]
+    assert by_id["1-intent-classifier"].get("promptHash"), "l'autre prompt, présent, reste épinglé"
 
 
 def test_unknown_tool_in_agent_contract_is_a_compile_error(project: Path) -> None:

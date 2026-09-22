@@ -109,18 +109,27 @@ Lancer : python bootstrap.py (sans --force : les MISSIONs sont conservées)
 
 ```
 workspace/
-├── stack/STACK.md                 # gitignored — secrets en clair
-├── missions/  caps/  topology/
-├── contracts/{agents,tools,retrieval,memory}/
-├── prompts/
-├── datasets/{golden,holdout,calibration,adversarial}/
-├── evals/{suites,baselines,reports,calibration}/
-├── traces/runs/
-├── src/
-├── docs/
-├── .sys/{.ir,.context,.state,.validation,.audit}/
-└── .sys/workspace.json            # workspaceVersion — ce que migrate_workspace.py fait monter
+├── stack/                         # CE QU'ON CONFIGURE
+│   ├── STACK.md                   #   gitignored — secrets en clair
+│   └── sources/  topology/        #   manifestes versionnés
+├── feats/                         # CE QU'ON SPÉCIFIE
+│   ├── missions/  caps/  topology/
+│   ├── contracts/{agents,tools,retrieval,memory,dataaccess/schemas}/
+│   ├── decisions/                 #   ADR — un seul endroit
+│   └── briefs/
+├── src/                           # CE QU'ON PRODUIT — prompts compris
+│   └── prompts/
+├── proof/                         # CE QUI JUGE — jamais écrit par un dev-*
+│   ├── datasets/{golden,holdout,calibration,adversarial}/
+│   └── suites/  baselines/  calibration/
+├── .sys/                          # ÉTAT INTERNE ET SORTIES DE RUN — régénérable
+│   ├── .ir/  .context/  .state/  .validation/  .audit/
+│   ├── reports/  traces/runs/
+│   └── workspace.json             #   workspaceVersion — ce que migrate_workspace.py fait monter
 ```
+
+La SSoT de cet arbre est `sdda_scripts.smoke_check.WORKSPACE_TREE` ; ce dessin
+n'en est que la lecture. Le sens des cinq entrées : `ARCHITECTURE.md §2.ter`.
 
 Les trois blocs de `STACK.md` qui doivent être **vérifiés par l'humain** après
 rendu — les confondre rend le budget d'exécution incalculable

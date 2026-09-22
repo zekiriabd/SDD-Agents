@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import ALLOW, agent_of, deny, run  # noqa: E402
+from _hook import ALLOW, agent_of, deny, run, unknown_subagent  # noqa: E402
 
 HOOK = "preflight_forbidden_reads"
 
@@ -80,7 +80,16 @@ def check(root: Path, data: dict) -> int:
 
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
-        return ALLOW  # agent hors matrice : ce n'est pas au hook de le trancher
+        # Sous-agent hors matrice : il ne lit pas `proof/`. Le reste du
+        # workspace lui reste lisible — un `Explore` lancé par l'utilisateur
+        # doit pouvoir chercher dans les specs. Ce qu'il ne doit jamais voir est
+        # le jeu de verdict : un agent blanchi qui lit le holdout est exactement
+        # « optimiser contre le jeu qui rend le verdict », par un autre chemin.
+        proof = "workspace/proof"
+        normalized = rel.replace("\\", "/").lstrip("./")
+        if normalized == proof or normalized.startswith(proof + "/") or normalized in (".", "workspace"):
+            return unknown_subagent(HOOK, agent, normalized if normalized not in (".", "workspace") else proof)
+        return ALLOW
     if not ao.forbidden_reads_of(loader, agent):
         return ALLOW
 

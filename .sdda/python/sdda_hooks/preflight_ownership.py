@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import ALLOW, agent_of, deny, run  # noqa: E402
+from _hook import ALLOW, agent_of, deny, run, unknown_subagent  # noqa: E402
 
 HOOK = "preflight_ownership"
 
@@ -27,16 +27,49 @@ HOOK = "preflight_ownership"
 WIRING = {"event": "PreToolUse", "matcher": "Write|Edit", "applies_to": ()}
 
 
-#: Zone que personne n'écrit avec un outil d'édition, quel qu'en soit l'auteur.
+#: Zones que personne n'écrit avec un outil d'édition, quel qu'en soit l'auteur.
 #:
-#: `workspace/proof/baselines/` est déclarée « script déterministe uniquement,
-#: Write atomique » par la matrice d'ownership. `promote_baseline.py` y écrit en
-#: E/S Python, jamais par l'outil `Write` — donc un `Write`/`Edit` sur ce chemin
-#: est fautif sans qu'on ait besoin de savoir QUI le tente. C'est le seul
-#: contrôle d'ownership qui ne dépend pas de l'identification de l'auteur, et
-#: c'est pour cela qu'il est joué avant elle : une baseline retouchée à la main
-#: rend toute non-régression tautologique, et rien en aval ne le rattrape.
-IDENTITY_FREE_ZONE = "workspace/proof/baselines"
+#: Trois répertoires ne sont écrits QUE par des scripts, en E/S Python, jamais
+#: par l'outil `Write` ou `Edit`. Un `Write` sur l'un d'eux est donc fautif sans
+#: qu'on ait besoin de savoir QUI le tente — c'est le seul contrôle d'ownership
+#: qui ne dépend pas de l'identification de l'auteur, et il est joué avant elle.
+#:
+#:   proof/baselines/    `promote_baseline.py` — retouchée à la main, la
+#:                       référence rend toute non-régression tautologique ;
+#:   .sys/.validation/   les rapports de gate. Ils sont du JSON en clair, non
+#:                       signé, et `gate_status` ne lit que leur `ok` : un
+#:                       rapport `{"ok": true}` déposé par `Write` rendait
+#:                       n'importe quelle gate verte, et `.sys/` est gitignoré,
+#:                       donc la contrefaçon n'atteignait jamais une revue ;
+#:   .sys/.audit/        `bypasses.jsonl`, que la matrice déclare append-only
+#:                       « hooks framework » — sans qu'aucun enforcer n'existe.
+#:
+#: Ce que ce contrôle ne couvre pas, et qu'il faut dire : une écriture par
+#: `python -c` ou par un shell contourne l'outil `Write`. C'est la limite
+#: lexicale du hook Bash, assumée dans son propre docstring. Ce qui reste vrai
+#: est plus modeste et suffisant : aucun agent ne peut le faire par l'outil
+#: qu'on lui donne pour écrire, et il doit donc le faire *sciemment*.
+IDENTITY_FREE_ZONES: dict[str, tuple[str, str]] = {
+    "workspace/proof/baselines": (
+        "BASELINE_OWNERSHIP_VIOLATION",
+        "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
+        "déplacer la référence rend toute non-régression tautologique"),
+    "workspace/.sys/.validation": (
+        "GATE_REPORT_FORGERY",
+        "un rapport de gate est écrit par le script de la gate, jamais par Write/Edit : "
+        "un `{\"ok\": true}` déposé à la main rend verte une gate que rien n'a mesurée"),
+    "workspace/.sys/.audit": (
+        "GATE_REPORT_FORGERY",
+        "le journal des bypasses est append-only et n'est écrit que par les scripts : "
+        "un audit qu'on peut réécrire n'est pas un audit"),
+}
+
+
+def identity_free_violation(rel: str) -> tuple[str, str] | None:
+    for zone, (cls, fix) in IDENTITY_FREE_ZONES.items():
+        if rel == zone or rel.startswith(zone + "/"):
+            return cls, fix
+    return None
 
 
 def _relative(root: Path, target: str) -> str:
@@ -59,11 +92,10 @@ def check(root: Path, data: dict) -> int:
 
     rel = _relative(root, str(target))
 
-    if rel == IDENTITY_FREE_ZONE or rel.startswith(IDENTITY_FREE_ZONE + "/"):
-        return deny(HOOK, "BASELINE_OWNERSHIP_VIOLATION",
-                    f"`{rel}` édité à la main{f' par `{agent}`' if agent else ''}",
-                    "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
-                    "déplacer la référence rend toute non-régression tautologique")
+    violation = identity_free_violation(rel)
+    if violation:
+        cls, fix = violation
+        return deny(HOOK, cls, f"`{rel}` édité par un outil d'édition{f' (`{agent}`)' if agent else ''}", fix)
 
     if not agent:
         # Écriture par le fil principal (l'humain, ou une commande) : la matrice
@@ -73,7 +105,7 @@ def check(root: Path, data: dict) -> int:
     report = Report(name="OWNERSHIP-HOOK", target=str(root))
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
-        return ALLOW  # agent hors matrice : ce n'est pas au hook de le trancher
+        return unknown_subagent(HOOK, agent, rel)
 
     if ao.check_write(loader, agent, rel, report):
         return ALLOW

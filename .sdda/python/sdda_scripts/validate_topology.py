@@ -116,7 +116,13 @@ def parse_topology(text: str, path: Path | None = None) -> TopologySpec:
         return markdown_io.section_body(text, title)
 
     allocation = markdown_io.parse_table(sec("Allocation des capabilities") or "")
-    alt = sec("Alternative plus simple écartée")
+    # Le gabarit, la fixture, la fiche de l'architecte et le message d'erreur
+    # de ce même script disent « considérée » ; seul cet appel disait
+    # « écartée ». La section était donc lue comme ABSENTE quoi que l'architecte
+    # écrive, la table de justification jamais parsée, et l'avertissement
+    # « agent sans raison nommée » tombait sur chaque topologie. On accepte les
+    # deux graphies : un workspace existant a pu adopter l'une ou l'autre.
+    alt = sec("Alternative plus simple considérée") or sec("Alternative plus simple écartée")
     justifications = [r for r in markdown_io.parse_table(alt or "") if not markdown_io.is_placeholder(markdown_io.strip_code(_col(r, "Agent")))]
     graph_sec = sec("Le graphe") or ""
     meta = {_norm(k).replace("œ", "oe"): markdown_io.strip_code(v) for k, v in markdown_io.parse_kv_list(graph_sec).items()}

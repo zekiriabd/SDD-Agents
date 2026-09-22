@@ -67,6 +67,18 @@ REVIEWERS = {
     "review-orchestration": ("OrchestrationFailOn", "serious", "ORCH_FINDING_BLOCKING"),
 }
 
+#: Le nom du rapport que chaque reviewer ÉCRIT, tel que sa fiche le déclare.
+#:
+#: `reviewer_findings` cherchait `review-safety-{n}.md` ; la fiche écrit
+#: `agent-safety-{n}.md`. Aucun rapport n'était jamais trouvé, donc aucun
+#: finding, donc `AgentSafetyFailOn` et `OrchestrationFailOn` ne se
+#: déclenchaient sur rien — deux seuils de blocage morts, et le test qui les
+#: couvrait n'exerçait que les noms faux.
+REPORT_STEM = {
+    "review-safety": "agent-safety",
+    "review-orchestration": "orchestration",
+}
+
 _SEV_RE = re.compile(r"\b(info|minor|moderate|serious|critical)\b", re.I)
 
 
@@ -113,7 +125,9 @@ def reviewer_findings(root: Path, mission: str) -> dict[str, list[tuple[str, str
     number = mission.split("-", 1)[0]
     for reviewer in REVIEWERS:
         findings: list[tuple[str, str]] = []
-        for candidate in (f"{reviewer}-{mission}.md", f"{reviewer}-{number}.md",
+        stem = REPORT_STEM.get(reviewer, reviewer)
+        for candidate in (f"{stem}-{number}.md", f"{stem}-{mission}.md",
+                          f"{reviewer}-{mission}.md", f"{reviewer}-{number}.md",
                           f"{number}-{reviewer}.md"):
             path = reports_dir / candidate
             if not path.is_file():

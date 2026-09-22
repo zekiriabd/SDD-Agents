@@ -214,7 +214,11 @@ def _looks_like_credential(candidate: str) -> bool:
 
 
 def runs_dir(root: Path) -> Path:
-    return root / "workspace" / ".sys" / "traces" / "runs"
+    # Un seul constructeur de chemin, dans `paths` : deux copies du même chemin
+    # ont déjà divergé une fois lors d'une réorganisation de l'arbre.
+    from sdda_lib import paths  # import tardif : `paths` n'importe rien d'ici
+
+    return paths.traces_dir(root)
 
 
 def trace_path(root: Path, run_id: str) -> Path:
