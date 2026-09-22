@@ -144,6 +144,16 @@ def forbidden_of(loader: dict[str, Any], agent: str) -> list[str]:
     return [str(w) for w in (spec.get("forbidden_writes") or [])] if isinstance(spec, dict) else []
 
 
+def forbidden_reads_of(loader: dict[str, Any], agent: str) -> list[str]:
+    spec = loader.get(agent)
+    return [str(w) for w in (spec.get("forbidden_reads") or [])] if isinstance(spec, dict) else []
+
+
+def reads_of(loader: dict[str, Any], agent: str) -> list[str]:
+    spec = loader.get(agent)
+    return [str(w) for w in (spec.get("reads") or [])] if isinstance(spec, dict) else []
+
+
 def _covers(broad: str, narrow: str) -> bool:
     """Le motif `broad` recouvre-t-il tout ce que `narrow` autorise ?
 
@@ -308,6 +318,82 @@ def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -
         f"`{agent}` a écrit `{path}`, hors de ses `writes:`",
         fix=f"zones autorisées : {allowed or 'aucune'}. Élargir la matrice si c'est légitime — "
             "mais explicitement, parce que c'est elle qui rend le parallélisme sûr",
+        location=".sdda/loader.yml",
+    )
+    return False
+
+
+# ---------------------------------------------------------------------------
+# 3. Une lecture donnée est-elle autorisée ?
+# ---------------------------------------------------------------------------
+#: Ce qu'un outil de lecture rend, et donc ce qu'un interdit doit couvrir.
+#: `Read` rend le CONTENU d'un fichier ; `Grep` rend le contenu de tout ce qui
+#: est sous sa racine ; `Glob` ne rend que des NOMS — un nom n'est pas une
+#: information interdite, un contenu si.
+READ_TOOL_SCOPE = {"Read": "file", "Grep": "content", "Glob": "names"}
+
+
+def _zone_root(pattern: str) -> str:
+    """Le préfixe littéral d'un motif : `workspace/src/**` -> `workspace/src`."""
+    out: list[str] = []
+    for seg in pattern.replace("\\", "/").split("/"):
+        if any(ch in seg for ch in "*?{["):
+            break
+        out.append(seg)
+    return "/".join(out)
+
+
+def read_violation(loader: dict[str, Any], agent: str, path: str, *, scope: str = "file") -> str | None:
+    """Le motif `forbidden_reads` que cette lecture viole, ou None.
+
+    Trois cas selon ce que l'outil RENVOIE :
+
+    - `file`  (Read) : le chemin lui-même matche un interdit ;
+    - `names` (Glob) : la racine de recherche est À L'INTÉRIEUR d'une zone
+      interdite — chercher depuis la zone, c'est lister ce qu'elle contient ;
+    - `content` (Grep) : comme `names`, PLUS la racine est un ANCÊTRE d'une
+      zone interdite — un grep sur `workspace/` rend le contenu de
+      `workspace/stack/STACK.md` à qui n'a pas le droit de le lire. Le hook
+      refuse et dit où restreindre `path` : un agent qui grep tout le
+      workspace cherche en réalité ce que `forbidden_reads` lui cache.
+    """
+    normalized = path.replace("\\", "/").lstrip("./").rstrip("/") or "."
+    for pattern in forbidden_reads_of(loader, agent):
+        if matches(pattern, normalized):
+            return pattern
+        if scope in ("names", "content") and matches(pattern, normalized + "/x"):
+            return pattern
+        if scope == "content":
+            zone = _zone_root(pattern)
+            if zone and (normalized == "." or zone.startswith(normalized + "/")):
+                return pattern
+    return None
+
+
+def check_read(loader: dict[str, Any], agent: str, path: str, report: Report, *, scope: str = "file") -> bool:
+    """Une lecture hors `forbidden_reads` ? Sinon `[OWNERSHIP_READ_FORBIDDEN]`.
+
+    `forbidden_reads` n'est pas une politique de confidentialité : c'est ce qui
+    empêche un agent de décider à partir d'une information qui ne le regarde
+    pas — `po-elicitor` qui lit `STACK.md` écrit une MISSION teintée de choix
+    techniques, et personne ne voit d'où vient la teinte.
+    """
+    if not isinstance(loader.get(agent), dict):
+        report.error("OWNERSHIP_AGENT_UNKNOWN", f"agent `{agent}` absent de loader.yml",
+                     fix=f"agents déclarés : {', '.join(agent_names(loader))}")
+        return False
+    pattern = read_violation(loader, agent, path, scope=scope)
+    if pattern is None:
+        return True
+    how = {"file": "a lu", "names": "a listé", "content": "a cherché dans"}[scope]
+    allowed = reads_of(loader, agent)
+    report.error(
+        "OWNERSHIP_READ_FORBIDDEN",
+        f"`{agent}` {how} `{path}` — couvert par `forbidden_reads: {pattern}`",
+        fix=("ce que l'agent doit savoir de cette zone lui est INJECTÉ par le brief "
+             "(spawn_brief.py, faits injectés), il ne le lit pas. "
+             + (f"Restreindre la recherche à ses `reads:` : {allowed}" if scope == "content"
+                else f"Zones lisibles : {allowed or 'aucune déclarée'}")),
         location=".sdda/loader.yml",
     )
     return False

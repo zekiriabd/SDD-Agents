@@ -23,7 +23,7 @@
 
 schema_version: 1
 status: design-phase-0        # enforcers à implémenter — cf. docs/ROADMAP.md
-total: 20
+total: 21
 
 invariants:
 
@@ -372,3 +372,26 @@ invariants:
       - .sdda/python/sdda_hooks/postflight_trace_present.py
     bypasses:
       - "Project Config: TraceLevel: off (POC jetable uniquement)"
+
+  # ── Ownership ────────────────────────────────────────────────────────────
+  - id: ownership-matrix-enforced
+    name: Tout agent écrit dans sa zone et ne lit pas ce qui ne le regarde pas
+    rationale: |
+      Le parallélisme des `dev-*` n'est sûr que parce que leurs répertoires
+      sont disjoints, et la mesure n'a de valeur que parce que `dev-agent` ne
+      peut ni retoucher le jeu qui le juge (`datasets/`) ni réécrire le prompt
+      qu'il implémente (`prompts/`). Les interdits de LECTURE tiennent
+      l'altitude : `po-elicitor` qui lit STACK.md écrit une MISSION teintée
+      de choix techniques, et la teinte est indiscernable d'une décision.
+      La matrice vit dans `loader.yml` ; elle est appliquée sur `Write`/`Edit`,
+      sur `Bash` (redirections, rm, mv, cp, tee, sed -i…) et sur
+      `Read`/`Glob`/`Grep` — sans le hook Bash, `echo > datasets/x.jsonl`
+      contournait tout.
+    severity: critical
+    principle: P4
+    enforcers:
+      - .sdda/python/sdda_scripts/audit_ownership.py
+      - .sdda/python/sdda_hooks/preflight_ownership.py
+      - .sdda/python/sdda_hooks/preflight_bash_ownership.py
+      - .sdda/python/sdda_hooks/preflight_forbidden_reads.py
+    bypasses: []
