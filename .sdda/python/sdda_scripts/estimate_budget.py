@@ -15,6 +15,7 @@ autre que le compilateur a le droit d'y écrire) et comparé aux cibles de la
 MISSION :
 
     pire cas > costPerRunHardCapUsd   -> [BUDGET_EXCEEDED_ESTIMATE]  (bloquant)
+    modèle sans tarif connu           -> [BUDGET_PRICING_UNKNOWN]    (bloquant)
     nominal  > costPerRunTargetUsd    -> WARN [BUDGET_TARGET_MISSED]
     pire cas > tokenCeilingPerRun     -> WARN [TOKEN_CEILING_EXCEEDED] (le plafond coupera le run)
     p95 estimé > latencyP95TargetMs   -> WARN [LATENCY_P95_EXCEEDED]
@@ -25,6 +26,11 @@ comparables : tokens d'entrée et de sortie par tier (`TIER_INPUT_TOKENS`,
 `TIER_OUTPUT_TOKENS`), auxquels s'ajoute la taille réelle du prompt système
 (fichier lu, ~4 caractères par token). Le modèle est résolu depuis
 `STACK.md ## Runtime Models` (`RuntimeTierMap`), jamais nommé dans l'IR (P11).
+
+Un modèle que `sdda_lib/pricing.py` ne connaît pas n'est PAS tarifé au repli :
+la gate passe au rouge (`[BUDGET_PRICING_UNKNOWN]`) et `budget.estimated`
+n'est pas écrit dans l'IR — un chiffre deviné qui ressemble à un fait est pire
+qu'un chiffre absent. Le bypass ci-dessous ne couvre pas ce cas.
 
 Bypass (INVARIANTS budget-estimated-before-code) : `SDDA_BYPASS_BUDGET_ESTIMATE=1`
 avec `SDDA_BYPASS_REASON` — audit-loggué dans `.sys/.audit/bypasses.jsonl` (R5).
@@ -102,25 +108,42 @@ def _retries(retry_policy: Any) -> int:
     return 0
 
 
-def node_visits(ir: dict[str, Any], *, root: Path | None, tier_map: dict[str, str]) -> tuple[dict[str, Visit], dict[str, Visit], list[str]]:
-    """(visite nominale, visite pire cas) par nœud, + avertissements de tarification."""
+def _unknown_pricing(model: str, origin: str, subject: str) -> dict[str, str]:
+    """Un modèle sans tarif : QUI (subject), QUOI (model), D'OÙ (origin) — pour l'ERROR."""
+    return {"model": model, "origin": origin, "subject": subject}
+
+
+def node_visits(ir: dict[str, Any], *, root: Path | None, tier_map: dict[str, str]) -> tuple[dict[str, Visit], dict[str, Visit], list[dict[str, str]]]:
+    """(visite nominale, visite pire cas) par nœud, + modèles SANS tarif connu.
+
+    Le troisième élément n'est pas un avertissement : chaque entrée devient un
+    ERROR `[BUDGET_PRICING_UNKNOWN]` dans `estimate()`. Les visites concernées
+    sont tout de même chiffrées au repli (`strict=False`) pour que les chemins
+    restent calculables et le rapport lisible — mais le verdict est rouge et
+    l'estimation n'est pas écrite dans l'IR.
+    """
     agents = {a["id"]: a for a in ir.get("agents", [])}
     tools = {t["id"]: t for t in ir.get("tools", [])}
     retrievers = {r["id"]: r for r in ir.get("retrievers", []) or []}
     nominal: dict[str, Visit] = {}
     worst: dict[str, Visit] = {}
-    warnings: list[str] = []
+    unknown: list[dict[str, str]] = []
     for node in ir.get("orchestration", {}).get("nodes", []):
         nid, kind, ref = node["id"], node.get("kind"), str(node.get("ref", ""))
         if kind == "agent" and ref in agents:
             a = agents[ref]
             tier = str(a.get("modelTier", "balanced"))
             model = pricing.resolve_model(tier, tier_map)
-            if not pricing.has_known_pricing(model):
-                warnings.append(f"modèle `{model}` (tier {tier}) absent de la table de prix : repli Sonnet")
             in_tok = TIER_INPUT_TOKENS.get(tier, TIER_INPUT_TOKENS["balanced"]) + _prompt_tokens(root, a)
             out_tok = TIER_OUTPUT_TOKENS.get(tier, TIER_OUTPUT_TOKENS["balanced"])
-            call = Visit(pricing.estimate_cost_usd(model, in_tok, out_tok), pricing.estimate_latency_ms(tier, out_tok), in_tok + out_tok)
+            try:
+                cost = pricing.estimate_cost_usd(model, in_tok, out_tok)
+            except pricing.UnknownModelPricing:
+                origin = (f"STACK.md `## Runtime Models` -> RuntimeTierMap.{tier}" if tier in tier_map
+                          else f"DEFAULT_TIER_MAP.{tier} de pricing.py (RuntimeTierMap sans entrée `{tier}`)")
+                unknown.append(_unknown_pricing(model, origin, f"agent `{ref}` (tier {tier})"))
+                cost = pricing.estimate_cost_usd(model, in_tok, out_tok, strict=False)
+            call = Visit(cost, pricing.estimate_latency_ms(tier, out_tok), in_tok + out_tok)
             bounds = a.get("bounds", {})
             iters = max(1, int(bounds.get("maxIterations", 1)))
             budget = float(bounds.get("budgetUsd", call.cost_usd * iters))
@@ -140,12 +163,20 @@ def node_visits(ir: dict[str, Any], *, root: Path | None, tier_map: dict[str, st
             # contrôle qui a légitimement besoin d'y descendre — elle chiffre
             # ce que coûte la réalisation, pas ce qu'exige l'intention.
             emb = str((retrievers[ref].get("binding") or {}).get("embeddingModel", ""))
-            cost = pricing.estimate_cost_usd(emb, QUERY_EMBED_TOKENS, 0) if pricing.has_known_pricing(emb) else 0.0
+            try:
+                cost = pricing.estimate_cost_usd(emb, QUERY_EMBED_TOKENS, 0)
+            except pricing.UnknownModelPricing:
+                # Un embedding non tarifé valait 0.0 en silence : un retriever
+                # « gratuit » est un mensonge de la même famille que le repli Sonnet.
+                unknown.append(_unknown_pricing(emb or "<vide>", f"IR retrievers[`{ref}`].binding.embeddingModel "
+                                                "(contrat de retrieval `Embedding Model:` / STACK.md `EmbeddingModel`)",
+                                                f"retriever `{ref}`"))
+                cost = 0.0
             nominal[nid] = Visit(cost, RETRIEVER_LATENCY_MS[0], QUERY_EMBED_TOKENS)
             worst[nid] = Visit(cost, RETRIEVER_LATENCY_MS[1], QUERY_EMBED_TOKENS)
         else:
             nominal[nid] = worst[nid] = ZERO
-    return nominal, worst, warnings
+    return nominal, worst, unknown
 
 
 def nominal_path(ir: dict[str, Any], visits: dict[str, Visit]) -> tuple[Visit, list[str]]:
@@ -230,9 +261,14 @@ def estimate(ir: dict[str, Any], *, root: Path | None = None, config: LayeredCon
     if stale:
         report.warn("BUDGET_PRICING_STALE", stale.split("] ", 1)[1], "", loc)
 
-    nominal_v, worst_v, warns = node_visits(ir, root=root, tier_map=tier_map)
-    for w in warns:
-        report.warn("BUDGET_PRICING_STALE", w, "", loc)
+    nominal_v, worst_v, unknown = node_visits(ir, root=root, tier_map=tier_map)
+    for u in unknown:
+        # Pas de bypass ici : on peut assumer un dépassement, pas un chiffre inventé.
+        report.error("BUDGET_PRICING_UNKNOWN",
+                     f"{u['subject']} : modèle `{u['model']}` absent de la table de prix (origine : {u['origin']}) — "
+                     f"aucun coût ne peut être estimé sans deviner",
+                     "ajouter le modèle à `.sdda/python/sdda_lib/pricing.py` (PRICING + PRICING_META avec `reviewed` et `source`), "
+                     "ou corriger la tier map / le modèle d'embedding pour pointer un modèle tarifé", loc)
     nominal, npath = nominal_path(ir, nominal_v)
     worst, wpath = worst_walk(ir, worst_v)
     estimated = {
@@ -243,7 +279,8 @@ def estimate(ir: dict[str, Any], *, root: Path | None = None, config: LayeredCon
         "worstCasePath": wpath,
     }
     report.data = {"missionId": mid, "estimated": estimated, "nominalPath": npath, "nominalTokens": nominal.tokens, "worstCaseTokens": worst.tokens,
-                   "tierMap": tier_map, "assumptions": {"tierInputTokens": TIER_INPUT_TOKENS, "tierOutputTokens": TIER_OUTPUT_TOKENS}}
+                   "tierMap": tier_map, "pricingUnknown": unknown,
+                   "assumptions": {"tierInputTokens": TIER_INPUT_TOKENS, "tierOutputTokens": TIER_OUTPUT_TOKENS}}
 
     budget = ir.get("budget", {})
     hard_cap = budget.get("costPerRunHardCapUsd")
@@ -263,10 +300,14 @@ def estimate(ir: dict[str, Any], *, root: Path | None = None, config: LayeredCon
         else:
             report.error(cls, msg, fix, loc)
 
-    if isinstance(hard_cap, (int, float)) and worst.cost_usd > hard_cap + 1e-9:
+    # Les comparaisons de COÛT n'ont de sens que si chaque modèle est tarifé : un
+    # dépassement (ou un passage) calculé au repli serait une conclusion tirée
+    # d'un chiffre inventé. Un modèle inconnu a déjà mis la gate au rouge.
+    priced = not unknown
+    if priced and isinstance(hard_cap, (int, float)) and worst.cost_usd > hard_cap + 1e-9:
         blocking("BUDGET_EXCEEDED_ESTIMATE", f"pire cas {worst.cost_usd:.4f} USD/run > costPerRunHardCapUsd {hard_cap} (chemin {' -> '.join(wpath)})",
                  "retirer un agent, abaisser un tier, resserrer maxHops/maxIterations/budget_usd, ou déplacer un jugement vers un outil déterministe")
-    if isinstance(target, (int, float)) and nominal.cost_usd > target + 1e-9:
+    if priced and isinstance(target, (int, float)) and nominal.cost_usd > target + 1e-9:
         report.warn("BUDGET_TARGET_MISSED", f"nominal {nominal.cost_usd:.4f} USD/run > costPerRunTargetUsd {target}", "la cible est manquée avant même le pire cas", loc)
     # Le plafond de tokens est lui-même une borne du système généré : un pire cas
     # au-dessus sera COUPÉ par lui (comportement OnBoundExceeded), pas dépassé.
@@ -291,7 +332,9 @@ def estimate_file(path: Path, root: Path, config: LayeredConfig | None, *, write
         return r
     ir = ir_compiler.load_ir(path)
     report, estimated = estimate(ir, root=root, config=config, ir_location=loc)
-    if write_ir and isinstance(ir.get("budget"), dict):
+    # Une estimation bâtie sur un tarif deviné n'entre pas dans l'IR : elle y
+    # deviendrait un fait que les gates suivantes liraient sans le questionner.
+    if write_ir and isinstance(ir.get("budget"), dict) and not report.has("BUDGET_PRICING_UNKNOWN"):
         ir["budget"]["estimated"] = estimated
         path.write_bytes(ir_compiler.dump_ir(ir))
     if write_report and ir.get("missionId"):
