@@ -1,0 +1,80 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "rerank-bge-reranker-local",
+  "category": "rerank",
+  "schemaVersion": 1,
+  "buildSystem": "uv",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/pyproject.toml",
+      "workspace/src/{AppName}/uv.lock"
+    ]
+  },
+  "versions": {
+    "python": "3.12",
+    "sentence-transformers": "6.1.0",
+    "torch": "2.14.0",
+    "numpy": "2.5.3",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "structlog": "26.1.0",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  },
+  "core": [
+    {
+      "module": "sentence-transformers",
+      "ref": "sentence-transformers",
+      "rationale": "CrossEncoder — chargement du modèle BGE et scoring des paires (requête, document). Seule API utilisée : CrossEncoder.predict."
+    },
+    {
+      "module": "torch",
+      "ref": "torch",
+      "rationale": "Runtime d'inférence de sentence-transformers. Pinné explicitement parce qu'il décide la taille de l'image (~2 Go) et le temps de démarrage à froid : le laisser flotter en transitif rend ces deux coûts imprévisibles."
+    },
+    {
+      "module": "numpy",
+      "ref": "numpy",
+      "rationale": "Tableaux de scores rendus par CrossEncoder.predict."
+    },
+    {
+      "module": "pydantic",
+      "ref": "pydantic"
+    },
+    {
+      "module": "pydantic-settings",
+      "ref": "pydantic-settings"
+    },
+    {
+      "module": "structlog",
+      "ref": "structlog"
+    },
+    {
+      "module": "ruff",
+      "ref": "ruff"
+    },
+    {
+      "module": "mypy",
+      "ref": "mypy"
+    }
+  ],
+  "onDemand": [],
+  "plugins": [],
+  "metadata": {
+    "lastUpdated": "2026-09-22",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur libs-catalog.schema.json",
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "pypi.org via `uv pip compile` (résolution conjointe des catalogues Python, Python 3.12)",
+    "notes": [
+      "Ce catalogue n'est résolu que si `rerank/bge-reranker-local.md` est la fiche active : c'est tout l'intérêt d'avoir sorti le reranking dans sa propre catégorie. Un projet en `rerank/none.md` ou `rerank/cohere-rerank.md` ne paie ni `torch` ni les ~2 Go d'image qui vont avec.",
+      "Aucune variante CUDA épinglée ici. L'index PyTorch par défaut sert la build CPU sur Linux/Windows ; une cible GPU se déclare dans le `[tool.uv.sources]` du projet, pas dans ce catalogue — le choix dépend du runner de déploiement, pas de la stack.",
+      "`FlagEmbedding` (le paquet de référence de BAAI) n'est PAS retenu : il tire une arborescence de dépendances beaucoup plus large pour la seule API dont on a besoin, que `sentence-transformers.CrossEncoder` expose déjà.",
+      "Le modèle lui-même (`BAAI/bge-reranker-v2-m3`, ~1,1 Go) n'est pas une dépendance de paquet : il est intégré à l'image au build, cf. la fiche §5."
+    ],
+    "changeLog": [
+      "2026-09-22 — Création (design-phase). Pins résolus conjointement avec les autres catalogues Python."
+    ]
+  }
+}

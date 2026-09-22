@@ -1,0 +1,69 @@
+# .sdda/providers/anthropic.yaml — provider de référence
+#
+# ============================================================================
+# CE FICHIER RÉSOUT DES TIERS, PAS DES MODÈLES
+# ============================================================================
+# Les agents — les 22 Developer Agents de construction comme les agents du
+# produit généré — déclarent un TIER (`fast` | `balanced` | `deep`), jamais un
+# nom de modèle (P11, ARCHITECTURE §6). La résolution tier -> modèle appartient
+# au provider actif, c'est-à-dire à ce fichier (`tier_map`).
+#
+# Conséquence : ajouter un provider, changer un modèle ou une génération ne
+# touche AUCUN agent, AUCUN contrat, AUCUN prompt. Seul `model_id` bouge dans
+# le tuple d'épinglage des baselines d'eval (P10) — ce qui est exactement le
+# comportement voulu : un changement de modèle périme les résultats d'eval.
+#
+# Aucun secret ici : uniquement des NOMS de variables d'environnement. Les
+# valeurs vivent dans workspace/stack/STACK.md (gitignored).
+# ============================================================================
+
+schema: sdda.provider/v1
+name: anthropic
+endpoint_kind: native                 # API Anthropic native (Messages API)
+base_url_env: ANTHROPIC_BASE_URL      # défaut SDK : https://api.anthropic.com
+auth_env: ANTHROPIC_API_KEY
+
+tier_map:
+  deep: claude-opus-5
+  balanced: claude-sonnet-5
+  fast: claude-haiku-4-5
+
+context_window:                       # tokens d'entrée
+  deep: 1000000
+  balanced: 1000000
+  fast: 200000
+
+capabilities:
+  structured_output_fidelity: unknown # à mesurer au 1er conformance run — jamais déclaré sans mesure
+  tool_calling: native
+  prompt_caching: anthropic-ephemeral # cache_control explicite par bloc ; préfixe stable en premier
+  streaming: true
+  notes:
+    - "Famille 4.6+ : pas de prefill assistant ; contrôler le format par structured outputs (output_config.format)."
+    - "Thinking adaptatif par défaut sur Opus 5 / Sonnet 5 ; budget_tokens refusé sur ces modèles."
+
+embedding_models: []                  # Anthropic n'expose pas de modèle d'embedding.
+embedding_partner:                    # Partenaire recommandé, provider distinct :
+  stack: .sdda/stacks/embedding/voyage.md
+  auth_env: VOYAGE_API_KEY
+  default_model: voyage-3-large
+
+telemetry:
+  # Les prompts peuvent contenir des données sensibles (documents RAG, PII,
+  # extraits de base). Consommé par le scan de secrets de la SAFETY GATE et
+  # par le architect-rag pour décider si un corpus peut transiter.
+  default_retention_days: 30          # suppression des entrées/sorties API « within 30 days » (compte standard)
+  optout_available: true              # Zero Data Retention sur accord (entreprise)
+  optout_mechanism: "Zero Data Retention agreement (Anthropic, offre entreprise). Attention : certains modèles frontière (famille Fable 5.x) exigent la rétention 30 jours et ne sont pas éligibles ZDR sans autorisation expresse."
+  training_on_api_data: false
+  reference_url: "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data"
+  last_reviewed: 2026-09-20
+
+pricing:                              # USD par million de tokens — tarif API Anthropic (revu 2026-09-20)
+  # SSoT machine : sdda_lib/pricing.py. Ce bloc miroir sert à estimate_budget.py
+  # et au grader `cost`. Toute modification doit être répercutée dans pricing.py.
+  # cache_read = 10 % de input ; cache_creation (écriture ephemeral 5 min) = 125 % de input.
+  claude-opus-5:    {input: 5.00, output: 25.00, cache_read: 0.50, cache_creation: 6.25}
+  claude-sonnet-5:  {input: 2.00, output: 10.00, cache_read: 0.20, cache_creation: 2.50}
+  claude-haiku-4-5: {input: 1.00, output:  5.00, cache_read: 0.10, cache_creation: 1.25}
+pricing_last_reviewed: 2026-09-20

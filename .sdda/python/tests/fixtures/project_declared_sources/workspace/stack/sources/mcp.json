@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "internal-crm": {
+      "command": "python",
+      "args": ["-m", "crm_mcp"],
+      "env": { "CRM_MCP_TOKEN": "${CRM_MCP_TOKEN}" }
+    }
+  }
+}

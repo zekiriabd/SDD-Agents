@@ -1,0 +1,165 @@
+# .sdda/capability-matrix.yml — Matrice harnais x mécanismes SDD_Agents
+#
+# SSoT machine de la portabilité multi-harnais. Consommée par harness_build.py
+# pour compiler `.sdda/` vers les façades (`.claude/`, `.codex/`, `.gemini/`)
+# et pour imprimer le RAPPORT D'IMPACT obligatoire à chaque build : ce que
+# chaque harnais perd, et par quoi c'est remplacé.
+#
+# Valeurs : native | emulated | ci_fallback | unsupported
+#   native      = fourni par le harnais lui-même
+#   emulated    = dégradation contrôlée via wrapper (spawn_agent.py, inline statique)
+#   ci_fallback = reporté au CI-time / aux scripts déterministes
+#   unsupported = absent, aucune émulation prévue — DOIT être documenté dans le rapport
+#
+# protection_level :
+#   A = référence (toutes les gates s'appliquent au runtime)
+#   B = émulations, gates déplacées vers le wrapper + CI
+#   C = mono-agent seulement, ou combo non éprouvé par un run de conformance
+
+schema: sdda.capabilities/v1
+status: design-phase-0
+
+# ---------------------------------------------------------------------------
+# Les mécanismes dont SDD_Agents dépend
+# ---------------------------------------------------------------------------
+mechanisms:
+  subagent_spawn:
+    description: sous-agents isolés + parallélisme borné (MaxParallel)
+    why_it_matters: |
+      Les phases 2, 3, 4, 6 et 7B sont parallèles par conception. Sans spawn
+      isolé, elles se sérialisent : le pipeline reste correct mais la durée de
+      construction se multiplie. Ce n'est PAS un mécanisme de correction — sa
+      dégradation coûte du temps, pas de la qualité.
+
+  runtime_hooks:
+    description: hooks bloquants avant/après appel d'outil
+    why_it_matters: |
+      C'est le mécanisme le plus critique de SDD_Agents. Les gates G3, G4, G7 et
+      les invariants `tool-gate-before-agent-wiring`, `retrieval-gate-before-agent`,
+      `prompts-are-files` sont appliqués par des hooks. Sans hooks au runtime, ils
+      doivent TOUS basculer en ci_fallback — sinon le framework prétend garantir
+      ce qu'il n'applique plus. C'est la ligne rouge du rapport d'impact.
+
+  deterministic_python:
+    description: scripts 0-token (validateurs, ir_compiler, eval_runner, gates)
+    why_it_matters: |
+      Le cœur de SDD_Agents. Indépendant du harnais par construction : tout ce
+      qui compte vraiment (P4) tourne ici. C'est ce qui rend la portabilité
+      réaliste — un harnais dégradé perd du confort, pas la validation.
+
+  slash_commands:
+    description: les 10 commandes d'orchestration
+
+  skills_autotrigger:
+    description: skills à déclenchement contextuel
+
+  at_include:
+    description: lazy-load `@file` dans les prompts et la mémoire
+
+  mcp:
+    description: Model Context Protocol
+    why_it_matters: |
+      Double rôle en agentic : le harnais peut consommer du MCP pour CONSTRUIRE,
+      et le produit généré consomme du MCP pour FONCTIONNER. Le second ne dépend
+      PAS du harnais — un produit MCP construit sous Codex tourne à l'identique.
+
+  structured_output:
+    description: sorties structurées fiables (JSON Schema)
+    why_it_matters: |
+      Propre à SDD_Agents, sans équivalent SDD_Pro : les rapports d'eval, les
+      verdicts de gate et les contrats compilés sont du JSON. Un harnais qui rend
+      du JSON approximatif oblige à un parsing défensif et à une passe de
+      réparation — coût réel, et source de faux verts.
+
+# ---------------------------------------------------------------------------
+# Les harnais
+# ---------------------------------------------------------------------------
+harnesses:
+
+  claude-code:
+    protection_level: A
+    status: reference
+    mechanisms:
+      subagent_spawn: native          # tool Agent/Task
+      runtime_hooks: native           # PreToolUse / SubagentStop — .claude/settings.json
+      deterministic_python: native
+      slash_commands: native          # .claude/commands/*.md
+      skills_autotrigger: native
+      at_include: native
+      mcp: native
+      structured_output: native
+    memory_file: CLAUDE.md
+    notes: |
+      Harnais de référence. Toutes les gates s'appliquent au runtime. Les mesures
+      de coût et de latence du pipeline de construction sont calibrées ici.
+
+  codex:
+    protection_level: B
+    status: planned
+    mechanisms:
+      subagent_spawn: emulated        # sous-processus `codex exec` isolé
+      runtime_hooks: ci_fallback      # pas d'équivalent -> gates pre/post-exec du wrapper + CI
+      deterministic_python: native
+      slash_commands: emulated        # .codex/prompts/*.md
+      skills_autotrigger: emulated    # injection statique dans AGENTS.md
+      at_include: unsupported         # repli : inline, ou consigne « Read X avant STEP n »
+      mcp: native
+      structured_output: native
+    memory_file: AGENTS.md
+    impact: |
+      PERD : l'application des gates AU MOMENT de l'action. Les invariants
+      tool-gate-before-agent-wiring et retrieval-gate-before-agent deviennent des
+      contrôles pre-exec du wrapper + un gate CI. Conséquence assumée et à dire
+      clairement : entre deux exécutions du wrapper, rien n'empêche une écriture
+      hors scope. Le CI la rattrape, plus tard.
+      GARDE : tout le noyau déterministe, donc toute la validation réelle.
+
+  gemini-cli:
+    protection_level: B
+    status: planned
+    mechanisms:
+      subagent_spawn: emulated        # `gemini -p` non interactif via wrapper
+      runtime_hooks: ci_fallback
+      deterministic_python: native
+      slash_commands: native          # .gemini/commands/*.toml
+      skills_autotrigger: emulated
+      at_include: emulated
+      mcp: native
+      structured_output: emulated     # à mesurer au premier run de conformance
+    memory_file: GEMINI.md
+    impact: |
+      Idem codex pour les hooks. `structured_output: emulated` est le point à
+      surveiller : les rapports d'eval et les verdicts de gate sont du JSON, et
+      un parsing défensif est un coût réel. À requalifier après mesure — pas
+      avant.
+
+  antigravity:
+    protection_level: B
+    status: planned
+    mechanisms:
+      subagent_spawn: emulated
+      runtime_hooks: ci_fallback
+      deterministic_python: native
+      slash_commands: native
+      skills_autotrigger: emulated
+      at_include: emulated
+      mcp: native
+      structured_output: native
+    memory_file: GEMINI.md
+
+# ---------------------------------------------------------------------------
+# Règle du rapport d'impact
+# ---------------------------------------------------------------------------
+impact_report_policy: |
+  harness_build.py REFUSE de produire une façade sans émettre son rapport
+  d'impact. Le rapport nomme, mécanisme par mécanisme, ce que le harnais cible
+  ne fait pas nativement et par quoi c'est remplacé.
+
+  Règle dure : un invariant de INVARIANTS.yml dont TOUS les enforcers sont
+  `runtime_hooks` sur un harnais où runtime_hooks != native doit apparaître
+  dans le rapport sous la mention « appliqué en différé (CI) ». Le prétendre
+  appliqué au runtime serait exactement le doc-theater que INVARIANTS.yml
+  existe pour empêcher.
+
+  Un harnais ne peut pas être annoncé au niveau A sans un run de conformance
+  mesuré. `status: planned` signifie « compilable », jamais « validé ».

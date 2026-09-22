@@ -1,0 +1,167 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "serving-aspnet-minimal",
+  "category": "serving",
+  "schemaVersion": 1,
+  "buildSystem": "dotnet",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/src/{AppName}.Serving.Http/{AppName}.Serving.Http.csproj"
+    ]
+  },
+  "metadata": {
+    "status": "design-phase",
+    "lastUpdated": "2026-09-22",
+    "versionsVerified": true,
+    "notes": [
+      "Versions portées de SDD_Pro .sdd/stacks/backend/dotnet-minimalapi.libs.json, qui les audite (CVE, LTS). Les paquets OpenTelemetry sont propres à l'agentic : unverified.",
+      "Pins résolus contre nuget.org le 2026-09-22 via l'index plat, en passant par les `module` (les clés de versions{} sont des ALIAS internes, pas des IDs NuGet). Les paquets OpenTelemetry étaient en 1.13.0 alors que framework/ms-agent-framework.libs.json épingle 1.19.1 : les deux catalogues d'un même projet .NET se contredisaient sur la même famille. Alignés."
+    ],
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "nuget.org (index plat v3-flatcontainer), dernières stables, previews et rc exclus",
+    "changeLog": [
+      "2026-09-22 — Résolution nuget.org (8) : jwt-bearer 10.0.11→10.0.12 · asp-openapi 10.0.11→10.0.12 · healthchecks 10.0.11→10.0.12 · http-resilience 10.9.0→10.10.0 · microsoft-identity-web 4.14.2→4.15.0 · opentelemetry-exporter-otlp 1.13.0→1.19.1 · opentelemetry-instrumentation-aspnetcore 1.13.0→1.19.0 · polly 8.7.0→8.8.0"
+    ]
+  },
+  "versions": {
+    "dotnet": "9.0",
+    "asp-openapi": "10.0.12",
+    "microsoft-openapi": "3.10.2",
+    "serilog-aspnetcore": "10.0.0",
+    "serilog-sinks-console": "6.1.1",
+    "microsoft-identity-web": "4.15.0",
+    "jwt-bearer": "10.0.12",
+    "fluentvalidation": "12.1.1",
+    "fluentvalidation-di": "12.1.1",
+    "polly": "8.8.0",
+    "http-resilience": "10.10.0",
+    "healthchecks": "10.0.12",
+    "opentelemetry-instrumentation-aspnetcore": "1.19.0",
+    "opentelemetry-exporter-otlp": "1.19.1",
+    "asp-versioning": "10.2.3"
+  },
+  "core": [
+    {
+      "module": "Microsoft.AspNetCore.OpenApi",
+      "ref": "asp-openapi",
+      "rationale": "Document OpenAPI 3.1 généré depuis les endpoints. C'est ce document que l'API GATE confronte à l'IR (fiche §6) : l'écrire à la main est le raccourci qui fait diverger le contrat au premier changement de schéma."
+    },
+    {
+      "module": "Microsoft.OpenApi",
+      "ref": "microsoft-openapi",
+      "rationale": "Modèle objet du document — nécessaire pour comparer champ à champ avec l'IR dans OpenApiMatchesIrTests."
+    },
+    {
+      "module": "Microsoft.Extensions.Diagnostics.HealthChecks",
+      "ref": "healthchecks",
+      "rationale": "/healthz et /readyz en DEUX tags distincts. Les confondre fait redémarrer en boucle un service dont la seule faute est une base momentanément injoignable (fiche §5.7)."
+    },
+    {
+      "module": "Serilog.AspNetCore",
+      "ref": "serilog-aspnetcore",
+      "rationale": "Logs structurés. Un log non structuré est [LOG_UNSTRUCTURED] en revue : il rend le post-mortem d'un run non déterministe impossible à automatiser."
+    },
+    {
+      "module": "Serilog.Sinks.Console",
+      "ref": "serilog-sinks-console",
+      "rationale": "Sortie conteneur standard."
+    },
+    {
+      "module": "FluentValidation",
+      "ref": "fluentvalidation",
+      "rationale": "Validation de RunRequest contre l'inputSchema de l'IR, AVANT tout appel de modèle — donc avant tout coût."
+    },
+    {
+      "module": "FluentValidation.DependencyInjectionExtensions",
+      "ref": "fluentvalidation-di",
+      "rationale": "Enregistrement des validateurs générés."
+    },
+    {
+      "module": "Microsoft.Extensions.Http.Resilience",
+      "ref": "http-resilience",
+      "rationale": "Backoff et circuit-breaker sur les appels sortants (fournisseur de modèles, serveurs MCP)."
+    },
+    {
+      "module": "Polly",
+      "ref": "polly",
+      "rationale": "Politiques de résilience explicites. Un retry sur un outil non idempotent crée trois tickets : la classe d'effet de bord de l'outil gouverne, jamais le défaut de la librairie."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "Microsoft.Identity.Web",
+      "ref": "microsoft-identity-web",
+      "capability": "auth-azure-ad",
+      "rationale": "ApiAuthMode: azure-ad. Établit le ClaimsPrincipal d'où dérive l'Identity — jamais le corps de la requête.",
+      "triggers": [
+        "ApiAuthMode:\\s*azure-ad",
+        "azure.?ad",
+        "entra"
+      ]
+    },
+    {
+      "module": "Microsoft.AspNetCore.Authentication.JwtBearer",
+      "ref": "jwt-bearer",
+      "capability": "auth-jwt",
+      "rationale": "ApiAuthMode: oauth2 hors Entra ID.",
+      "triggers": [
+        "ApiAuthMode:\\s*oauth2",
+        "jwt",
+        "bearer"
+      ]
+    },
+    {
+      "module": "OpenTelemetry.Instrumentation.AspNetCore",
+      "ref": "opentelemetry-instrumentation-aspnetcore",
+      "capability": "otel-http",
+      "rationale": "Propagation du traceparent W3C : sans elle, la trace commence au RunService et la latence réellement vue par le client est perdue.",
+      "triggers": [
+        "otel",
+        "opentelemetry",
+        "traceparent"
+      ]
+    },
+    {
+      "module": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
+      "ref": "opentelemetry-exporter-otlp",
+      "capability": "otel-export",
+      "rationale": "Export OTLP vers la stack d'observabilité active.",
+      "triggers": [
+        "otlp",
+        "observability"
+      ]
+    },
+    {
+      "module": "Asp.Versioning.Http",
+      "ref": "asp-versioning",
+      "capability": "api-versioning",
+      "rationale": "Nécessaire seulement quand plusieurs versions du contrat coexistent. Le chemin /v1/ du MVP suffit tant qu'il n'y en a qu'une.",
+      "triggers": [
+        "api.?version",
+        "/v2/"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "Microsoft.EntityFrameworkCore",
+      "reason": "La surface ne touche aucune donnée : l'accès appartient à `dev-data`, derrière l'enveloppe de `## Active Data Access`. Un DbContext injecté dans un endpoint est le premier pas vers une règle métier hors du chemin que les evals parcourent."
+    },
+    {
+      "module": "AutoMapper",
+      "reason": "Les contrats HTTP sont GÉNÉRÉS depuis l'IR : il n'y a rien à mapper à la main, et un mapping manuel est précisément ce par quoi le contrat se met à diverger."
+    },
+    {
+      "module": "MediatR",
+      "reason": "L'orchestration appartient à `dev-orchestration` et vit dans le graphe de l'IR. Une seconde couche de dispatch dans la surface rendrait la trajectoire mesurée illisible."
+    },
+    {
+      "module": "Swashbuckle.AspNetCore",
+      "reason": "Microsoft.AspNetCore.OpenApi est natif depuis .NET 9 et suffit. Deux générateurs de document produiraient deux contrats, et l'API GATE ne saurait pas lequel confronter à l'IR."
+    }
+  ],
+  "runtimeRequirements": {
+    "dotnet": ">=9.0",
+    "notes": "PublishAot n'est PAS activé par défaut : le gain au démarrage est réel, le coût l'est aussi (toute réflexion non annotée casse à l'exécution, pas à la compilation). JsonSerializerContext source-generated est en revanche obligatoire pour le flux d'événements."
+  }
+}

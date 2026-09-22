@@ -1,0 +1,576 @@
+# Agentic Stack
+#
+# Généré par bootstrap.py — éditer les valeurs ci-dessous.
+# Lu par TOUS les agents SDD_Agents à CHAQUE invocation.
+# `workspace/stack/STACK.md` est gitignored (secrets en clair) ; ce fichier
+# `.template` est le squelette versionné.
+#
+# ============================================================================
+# CONTRAT DE PROPAGATION DES SECRETS
+# ============================================================================
+# Ce fichier contient des valeurs REELLES en clair (clés API, mots de passe
+# base, tokens MCP). Il est gitignored — jamais commité.
+#   1. Le Tech Lead écrit les valeurs dans les sections `## Active *` ci-dessous.
+#   2. `dev-api` les projette dans la config native de la stack cible
+#      (.env chargé par pydantic-settings, appsettings.json, application.yml) :
+#      c'est lui qui possède `workspace/src/serving/`, donc la couche Settings.
+#   3. Le code généré lit UNIQUEMENT la config native — jamais os.environ
+#      directement pour ces clés. Violation = [SEC_ENV_VAR_FORBIDDEN].
+#   4. Aucune clé ne doit apparaître dans un prompt, un trace span ou un dataset.
+#      Vérifié par la SAFETY GATE (scan déterministe). Violation = [SECRET_LEAK].
+# ============================================================================
+
+
+## Active Harness
+# Où tourne l'orchestration de CONSTRUCTION (les 22 Developer Agents).
+# Options : claude-code | codex | gemini-cli | antigravity | cursor
+# SSoT machine : .sdda/capability-matrix.yml
+Harness: claude-code
+
+
+## Build Models
+# Quels modèles paient les tokens de CONSTRUCTION. Indépendant du Harness
+# ET des Runtime Models. Les agents déclarent un TIER, jamais un modèle ;
+# la résolution tier -> modèle appartient au provider (.sdda/providers/*.yaml).
+Provider: anthropic
+Endpoint: default
+TierMap:
+  deep: anthropic
+  balanced: anthropic
+  fast: anthropic
+# Mode : static (chaque agent prend son tier_default) | dynamic (scorer
+# déterministe par work-item, clampé par tier_floor/tier_ceiling).
+Mode: static
+
+
+## Runtime Models
+# Quels modèles fait tourner L'APPLICATION GENEREE. C'est CE bloc qui
+# détermine le coût d'exécution du produit — ne jamais le confondre avec
+# Build Models.
+# Un agent du produit déclare un tier dans son contrat ; la résolution se
+# fait ici. Le mixage cross-provider est autorisé (deep=anthropic pour le
+# raisonnement critique, fast=openai-mini comme levier de coût).
+RuntimeProvider: anthropic
+RuntimeTierMap:
+  deep: claude-opus-5
+  balanced: claude-sonnet-5
+  fast: claude-haiku-4-5
+# Modèles spécialisés hors tiers :
+EmbeddingModel: voyage-3-large        # cf. ## Active Retrieval Stack
+RerankModel: none                     # IDENTIFIANT du modèle seulement. La fiche
+                                      # qui décide COMMENT on rerank vit dans
+                                      # `## Active Reranker` ; ce champ doit
+                                      # s'accorder avec elle (`none` <-> none.md).
+                                      # Deux sources de vérité sur le même sujet,
+                                      # c'est celle que personne ne relit qui
+                                      # gouverne le code.
+JudgeModel: claude-sonnet-5           # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
+# Règle : JudgeModel != le modèle évalué quand c'est possible. Un modèle qui
+# se note lui-même mesure sa propre complaisance.
+
+
+## Project Config
+AppName: {{AppName}}
+SystemName: {{SystemName}}
+
+# --- Budget d'EXECUTION du produit généré (exigence fonctionnelle, cf. P6) ---
+CostPerRunTargetUsd: 0.05           # coût cible d'une exécution bout-en-bout
+CostPerRunHardCapUsd: 0.25          # au-delà -> [BUDGET_EXCEEDED_MEASURED], bloquant
+LatencyP95TargetMs: 8000
+TokenCeilingPerRun: 60000
+
+# --- Bornes de boucle imposées à TOUT agent généré (cf. P12) ---
+MaxIterations: 12
+MaxToolCalls: 25
+MaxDelegationDepth: 3
+AgentTimeoutSec: 120
+OnBoundExceeded: fail-explicit      # fail-explicit | degrade | escalate-human
+
+# --- Budget de CONSTRUCTION (le pipeline SDD_Agents lui-même) ---
+MaxCostPerRun: 50.00
+BuildLoopMaxCostUsd: 15.00
+BuildLoopMaxIter: 3
+MaxParallel: 3
+
+# --- Evaluation (cf. P3) ---
+EvalRuns: 3                         # k runs par item — 5 pour les CAPs critiques
+EvalVarianceWarnPct: 15             # écart-type du score au-delà -> verdict JAUNE
+JudgeCalibrationMinKappa: 0.6
+JudgeCalibrationMinItems: 50
+HoldoutDisjointCheck: strict        # strict | warn — vérifie golden ∩ holdout = 0 par hash
+RegressionTolerancePct: 3           # baisse tolérée vs baseline avant [REGRESSION]
+
+# --- Seuils de gate retrieval (cf. G4) ---
+RetrievalRecallAtK: 0.80
+RetrievalK: 8
+RetrievalNdcgMin: 0.70
+GroundednessMin: 0.85
+CitationResolveRateMin: 0.98
+
+# --- Modes des reviewers : off | manual | full ---
+SpecComplianceMode: full
+AgentSafetyMode: full               # JAMAIS off sur un run de production
+CostLatencyMode: full
+OrchestrationReviewMode: full
+RagQualityMode: full                # auto-skip si RAG Pattern = none
+AdversarialMode: full
+
+# --- Seuils de blocage : info | minor | moderate | serious | critical ---
+SpecComplianceFailOn: serious
+AgentSafetyFailOn: critical
+OrchestrationFailOn: serious
+
+# --- LIVRABLE : ce qu'on installe à la fin ---
+# À ne pas confondre avec `## Active Serving Surface`, qui dit PAR OÙ L'ON
+# ENTRE. Les deux sont indépendants : un même RunService s'expose en HTTP ou en
+# lot, et se livre en conteneur ou en exécutable. Sans cette déclaration, la
+# question « et on livre quoi ? » n'a pas de réponse dans la configuration —
+# elle est donc arbitrée par l'agent, donc différemment à chaque run.
+DeliverableType: {{DeliverableType}}  # backend-api | cli-exe | batch-job |
+                                    # library | container | mcp-server
+ApiFramework: {{ApiFramework}}        # none si DeliverableType != backend-api
+                                    # Python : fastapi | django-ninja | flask
+                                    # .NET   : aspnet-minimal | aspnet-mvc
+                                    # Java   : spring-boot
+                                    # Node   : express | nestjs
+                                    # Incohérent avec le langage actif ->
+                                    # [PACKAGING_LANG_MISMATCH], bloquant.
+ApiArchitecture: layered            # layered | hexagonal | vertical-slice
+                                    # Déclarée une fois, sinon chaque dev-*
+                                    # impose la sienne et le projet en porte trois.
+ApiContractFirst: true              # l'OpenAPI est DÉRIVÉ des inputSchema /
+                                    # outputSchema de l'IR et vérifié contre eux
+                                    # (API GATE, G6.5). `false` autorise l'API à
+                                    # diverger de la spec : exige un ADR.
+ApiAuthMode: {{ApiAuthMode}}          # none | api-key | oauth2 | azure-ad | mtls
+                                    # C'est ICI qu'entre l'identité de l'appelant.
+                                    # `none` n'est acceptable qu'en POC ou derrière
+                                    # une passerelle qui l'établit déjà : sans
+                                    # identité au transport, tout le filtrage à la
+                                    # source (vues SQL, filtres RAG) est contournable.
+
+# --- Granularité ---
+CapGranularityTarget: 4             # CAPs par MISSION (cible)
+CapGranularityWarnAt: 8
+CapGranularityHardCap: 15
+MaxAgentsWarnAt: 4                  # au-delà, justification renforcée exigée (cf. P7)
+
+
+## Active Language & Runtime
+# Exactement 1 actif.
+ - .sdda/stacks/lang/{{Language}}.md
+# - .sdda/stacks/lang/python.md          # [python] 3.12+
+# - .sdda/stacks/lang/typescript.md               # (fiche absente) Node 22+
+# - .sdda/stacks/lang/csharp.md          # [csharp] .NET 9+
+# - .sdda/stacks/lang/java.md                     # (fiche absente) 21+
+
+
+## Active Agent Framework
+# La composition est EXPLICITE : activer exactement ce qu'on veut.
+# LangChain seul, LangChain+LangGraph, ou +LangSmith sont trois stacks
+# différentes — c'est précisément ce que ce bloc rend déclaratif.
+{{FrameworkActiveLines}}
+# --- Python ---
+# - .sdda/stacks/framework/langchain.md        # [python] chaînes + tools, sans graphe
+# - .sdda/stacks/framework/langgraph.md        # [python] graphe d'état, cycles, checkpointing, HITL
+# - .sdda/stacks/framework/langsmith.md           # (fiche absente) tracing + evals managés (complément, pas runtime)
+# - .sdda/stacks/framework/pydantic-ai.md         # (fiche absente) typé, léger, sorties structurées
+# - .sdda/stacks/framework/llamaindex.md          # (fiche absente) centré RAG/ingestion
+# - .sdda/stacks/framework/crewai.md              # (fiche absente) rôles + tâches
+# - .sdda/stacks/framework/autogen.md             # (fiche absente) conversation multi-agents
+# - .sdda/stacks/framework/agno.md                # (fiche absente)
+# - .sdda/stacks/framework/google-adk.md          # (fiche absente)
+# - .sdda/stacks/framework/raw-sdk.md             # (fiche absente) SDK provider brut — aucun framework
+# --- TypeScript ---
+# - .sdda/stacks/framework/langchain-js.md        # (fiche absente)
+# - .sdda/stacks/framework/langgraph-js.md        # (fiche absente)
+# - .sdda/stacks/framework/mastra.md              # (fiche absente)
+# - .sdda/stacks/framework/vercel-ai-sdk.md       # (fiche absente)
+# --- .NET ---
+# - .sdda/stacks/framework/semantic-kernel.md     # (fiche absente)
+# - .sdda/stacks/framework/ms-agent-framework.md  # [csharp]
+# --- Java ---
+# - .sdda/stacks/framework/spring-ai.md           # (fiche absente)
+# - .sdda/stacks/framework/langchain4j.md         # (fiche absente)
+#
+# ATTENTION : toute combinaison langage x framework x pattern n'est pas
+# validée. SSoT machine : .sdda/registry/compatibility.matrix.json,
+# vérifiée par le hook preflight_stack_combo. Bypass audit-loggué :
+# SDDA_ALLOW_UNTESTED_COMBO=1
+
+
+## Active Orchestration Pattern
+# Exactement 1 actif. C'est l'ARCHITECTE qui choisit — le LLM implémente (P7).
+# Ce choix IMPOSE des champs au roster (`## Active Agent Topology`) : nombre
+# d'agents, orchestrateur, relations, bornes. Incomplet = [ARCH_SPEC_INCOMPLETE],
+# bloquant en G2. Ce qu'il exige exactement :
+#   python .sdda/python/sdda_scripts/validate_architecture.py --explain
+ - .sdda/stacks/orchestration/{{OrchestrationPattern}}.md
+# - .sdda/stacks/orchestration/single-agent.md    # [*] 1 agent + outils  <- DEFAUT
+# - .sdda/stacks/orchestration/router.md          # [*] classification -> spécialiste
+# - .sdda/stacks/orchestration/sequential.md      # [*] pipeline d'étapes ordonnées
+# - .sdda/stacks/orchestration/parallel.md        # (fiche absente) fan-out / gather
+# - .sdda/stacks/orchestration/supervisor.md      # (fiche absente) hiérarchique, délégation dynamique
+# - .sdda/stacks/orchestration/graph.md           # (fiche absente) machine à états, cycles, HITL
+# - .sdda/stacks/orchestration/plan-execute.md    # (fiche absente) plan explicite puis exécution
+# - .sdda/stacks/orchestration/reflection.md      # (fiche absente) boucle rédacteur/critique
+# - .sdda/stacks/orchestration/blackboard.md      # (fiche absente) état partagé, contributions multiples
+#
+# Composition autorisée : un pattern peut en imbriquer un autre (ex. un nœud
+# d'un graphe est un reflection loop). Déclarer le pattern RACINE ici ;
+# les imbrications vivent dans topology/{n}-topology.md.
+
+
+## Active RAG Pattern
+# `none` est un choix légitime et fréquent — ne pas mettre du RAG par réflexe.
+ - .sdda/stacks/rag/{{RagPattern}}.md
+# - .sdda/stacks/rag/none.md                 # [*] aucun corpus — le modèle ou les outils suffisent
+# - .sdda/stacks/rag/classic.md                   # (fiche absente) chunk -> embed -> top-k -> stuff
+# - .sdda/stacks/rag/hybrid.md               # [python] BM25 + vecteur, fusion RRF
+# - .sdda/stacks/rag/contextual.md                # (fiche absente) chunk préfixé du contexte du document
+# - .sdda/stacks/rag/hyde.md                      # (fiche absente) hypothetical document embeddings
+# - .sdda/stacks/rag/sequential-multihop.md       # (fiche absente) décomposition + récupération en chaîne
+# - .sdda/stacks/rag/agentic.md                   # (fiche absente) le retriever est un outil appelé itérativement
+# - .sdda/stacks/rag/self-rag.md                  # (fiche absente) l'agent note la pertinence et décide de re-récupérer
+# - .sdda/stacks/rag/corrective-rag.md            # (fiche absente) CRAG — évaluation + repli (web/autre corpus)
+# - .sdda/stacks/rag/graph-rag.md                 # (fiche absente) graphe d'entités + résumés de communautés
+# - .sdda/stacks/rag/raptor.md                    # (fiche absente) arbre hiérarchique de résumés
+
+
+## Active Retrieval Stack
+# Ignoré si RAG Pattern = none.
+#
+# ATTENTION LANGAGE : chaque fiche déclare son en-tête `Languages:`. Une fiche
+# d'un autre runtime que `## Active Language & Runtime` est refusée par
+# preflight_stack_combo -> [STACK_LANGUAGE_MISMATCH]. Aujourd'hui, TOUTE la
+# chaîne de retrieval est Python : csharp n'a aucun vector store, aucun pattern
+# RAG et aucun reranker (cf. ROADMAP Lot 7).
+{{RetrievalActiveLines}}
+# - .sdda/stacks/vectorstore/pgvector.md          # [python] recommandé si PostgreSQL déjà présent
+# - .sdda/stacks/vectorstore/qdrant.md            # (fiche absente)
+# - .sdda/stacks/vectorstore/chroma.md            # (fiche absente) dev/POC uniquement
+# - .sdda/stacks/vectorstore/azure-ai-search.md   # (fiche absente) hybride + sémantique natif
+# - .sdda/stacks/vectorstore/pinecone.md          # (fiche absente)
+# - .sdda/stacks/vectorstore/weaviate.md          # (fiche absente)
+# - .sdda/stacks/vectorstore/elasticsearch.md     # (fiche absente)
+# - .sdda/stacks/embedding/voyage.md              # [*]
+# - .sdda/stacks/embedding/openai.md                # (fiche absente)
+# - .sdda/stacks/embedding/cohere.md                # (fiche absente)
+# - .sdda/stacks/embedding/bge-local.md           # [*]
+
+# OÙ EST L'INDEX, et avec quelles clés. Distinct du bloc `DB_*` de
+# `## Active Data Access` : celui-ci décrit la base MÉTIER, celui-là l'index
+# VECTORIEL. Les confondre ne se voit pas tant que le store est pgvector — il
+# vit alors dans la même base, par coïncidence — et devient bloquant au premier
+# store externe, qui n'a nulle part où déclarer son endpoint.
+VectorStoreConnection:
+  Mode: same-as-database         # same-as-database | dedicated
+                                 # `same-as-database` : l'index vit dans la base
+                                 # de `## Active Data Access` (cas pgvector).
+                                 # Les clés ci-dessous sont alors ignorées.
+  Endpoint:                      # ex. https://qdrant.internal:6333
+  Collection:                    # nom de la collection / index / namespace
+  ApiKeyEnv:                     # NOM de variable, jamais la valeur
+  Dimensions: 1024               # DOIT correspondre au modèle d'embedding actif
+  Metric: cosine                 # cosine | dot | l2
+  TlsVerify: true                # `false` exige un ADR
+
+# Stratégie de découpage — décision de première importance sur la qualité :
+ChunkStrategy: recursive-structural   # fixed | recursive-structural | semantic | document-aware | parent-child
+ChunkSize: 800                        # tokens
+ChunkOverlap: 120
+ParentChildEnabled: false             # récupérer le petit chunk, servir le parent
+HybridEnabled: true
+HybridWeights: { vector: 0.6, lexical: 0.4 }
+RerankEnabled: false                  # DOIT s'accorder avec `## Active Reranker`
+                                      # ci-dessous : `true` avec rerank/none.md
+                                      # est [RETRIEVAL_CONFIG_DRIFT].
+RetrievalTopK: 8                      # avec un reranker, récupérer large (20-25)
+RerankTopN: 4                         # et ne servir que le meilleur
+CitationMode: required                # required | optional | none
+                                      # `required` : toute affirmation factuelle
+                                      # porte un pointeur résolvable. Vérifié en G4.
+IngestionMode: batch                  # batch | incremental | streaming
+IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
+
+
+## Active Reranker
+# Exactement 1 actif. Ignoré si RAG Pattern = none.
+#
+# Le reranking est le premier levier de qualité APRÈS l'hybride, et il se
+# décide sur une MESURE, pas sur une intuition. Le diagnostic tient en deux
+# chiffres que run_retrieval_eval.py produit déjà :
+#   recall@25 bon  + nDCG@5 bon       -> rester en `none`
+#   recall@25 bon  + nDCG@5 médiocre  -> c'est le cas du reranker
+#   recall@25 mauvais                 -> réparer le retrieval ; reclasser de
+#                                        mauvais résultats en produit de
+#                                        meilleurs mauvais
+ - .sdda/stacks/rerank/{{Reranker}}.md
+# - .sdda/stacks/rerank/none.md                    # [*] DEFAUT — aucun réordonnancement
+# - .sdda/stacks/rerank/cohere-rerank.md           # [*] API — le corpus SORT à chaque requête
+# - .sdda/stacks/rerank/bge-reranker-local.md      # [python] local — rien ne sort, mais ~2 Go d'image (torch)
+
+
+## Active Agent Topology
+# QUI sont les agents. C'est l'ARCHITECTE qui décide — jamais le LLM (P7).
+# Le pattern ci-dessus dit COMMENT ils s'orchestrent ; le roster dit QUI ils
+# sont : nombre d'agents, rôle et responsabilités de chacun, outils et skills,
+# modèle, orchestrateur, relations, bornes.
+#
+# Le manifeste est VERSIONNÉ, contrairement à ce fichier (gitignoré, il porte
+# les secrets) : une décision d'architecture doit être relisible en revue.
+# Gabarit : .sdda/templates/roster.manifest.template.yml
+#
+# Convention : `{n}-roster.yml` est chargé même sans être listé ci-dessous.
+# Repli accepté pour un projet mono-agent : la section `## 2. Roster déclaré`
+# de workspace/topology/{n}-topology.md. Jamais les deux — une seule source
+# de vérité, sinon c'est celle que personne ne relit qui gouverne le code.
+#
+# Ce que le pattern actif EXIGE du roster :
+#   python .sdda/python/sdda_scripts/validate_architecture.py --explain
+RosterManifestRoot: workspace/stack/topology
+RosterManifests:
+#  - path: 1-roster.yml
+
+
+## Active Data Access
+# COMMENT les agents touchent la base. C'est une décision de SECURITE autant
+# que d'architecture : un agent avec text-to-SQL non contraint sur une base
+# de production est un incident qui attend son heure.
+ - .sdda/stacks/dataaccess/{{DataAccess}}.md
+# - .sdda/stacks/dataaccess/none.md              # [*] aucun accès à des données structurées
+# - .sdda/stacks/dataaccess/declared-sources.md  # [python] fichiers (json/csv/xlsx/parquet) + API + MCP  <- pas de base
+# - .sdda/stacks/dataaccess/view-per-agent.md    # [python] 1 vue SQL dédiée par agent/CAP  <- le plus sûr
+# - .sdda/stacks/dataaccess/repository-tools.md   # (fiche absente) outils paramétrés typés, requêtes figées
+# - .sdda/stacks/dataaccess/semantic-layer.md     # (fiche absente) couche métrique (dbt/Cube) exposée en outil
+# - .sdda/stacks/dataaccess/text-to-sql.md        # (fiche absente) génération SQL — exige l'enveloppe complète
+# - .sdda/stacks/dataaccess/graphql.md            # (fiche absente)
+
+DatabaseType: {{DatabaseType}}        # none | PostgreSql | SqlServer | MySql | Oracle | Sqlite | MongoDb
+# Valeurs réelles en clair (STACK.md gitignored) :
+ - DB_HOST: {{DbHost}}
+ - DB_PORT: {{DbPort}}
+ - DB_NAME: {{DbName}}
+ - DB_USER: {{DbUser}}
+ - DB_PASSWORD: {{DbPassword}}
+
+# Enveloppe de sûreté — OBLIGATOIRE dès que DatabaseType != none :
+DbAgentRole: readonly                 # readonly | scoped-write | full   (`full` exige un ADR)
+DbStatementTimeoutMs: 5000
+DbMaxRowsReturned: 500
+DbAllowedSchemas: [public]
+DbForbiddenStatements: [DROP, TRUNCATE, ALTER, GRANT, CREATE, DELETE, UPDATE, INSERT]
+DbQueryLogging: full                  # toute requête émise par un agent est tracée
+
+
+## Active Data Sources
+# Lu UNIQUEMENT si Active Data Access = declared-sources. C'est la déclaration
+# complète de la surface de données, tous supports confondus : fichiers
+# (json/jsonl/csv/tsv/xlsx/parquet) sur un répertoire local, un partage réseau
+# ou un stockage objet, APIs HTTP authentifiées, et outils MCP.
+# L'agent ne voit jamais un chemin, une URL ni un nom de serveur : il ne voit
+# que des outils nommés d'après les `id` des sources.
+# Spécification : .sdda/stacks/dataaccess/declared-sources.md §3
+
+# Secrets : les déclarations ne portent que des NOMS de variables (clés `*_env`).
+# Les valeurs vivent ici, et ce fichier est gitignoré. Jamais de secret en clair
+# dans STACK.md ni dans un manifeste.
+SourceSecretsFile: .env
+
+# La déclaration peut être éclatée en manifestes VERSIONNÉS (STACK.md, lui, est
+# gitignoré : sans manifestes, la surface de données du projet n'est nulle part).
+# Extensions : .yml / .yaml / .json / .md (1er bloc ```yaml du fichier).
+# `kind: mcp-config` importe un fichier MCP standard ({"mcpServers": {...}}).
+SourceManifestRoot: workspace/stack/sources
+SourceManifests:
+#  - path: files.sources.yml
+#  - path: apis.sources.json
+#  - { path: mcp.json, kind: mcp-config }
+
+# OÙ est la donnée, et avec quelles clés. Seul endroit qui touche à un secret.
+Stores:
+#  - id: exports_local
+#    kind: local                      # local|smb|nfs|s3|azure-blob|gcs|http|sftp|mcp
+#    root: workspace/data/exports
+#    auth: { mode: none }
+#  - id: ops_share
+#    kind: smb
+#    root: //fs01/ops/exports
+#    auth: { mode: windows-integrated }
+#  - id: archive_s3
+#    kind: s3
+#    bucket: acme-exports
+#    prefix: tracking/
+#    region: eu-west-3
+#    auth: { mode: aws-sigv4, access_key_env: S3_ACCESS_KEY, secret_key_env: S3_SECRET_KEY }
+#  - id: crm_api
+#    kind: http
+#    base_url: https://crm.example.com/api/v2
+#    rate_limit_rpm: 60
+#    auth: { mode: api-key, header: X-API-Key, key_env: CRM_API_KEY }
+#  - id: internal_crm_mcp
+#    kind: mcp
+#    server: internal-crm             # -> MCPServers[] ou manifeste mcp-config
+#    auth: { mode: none }
+
+# CE QUE C'EST, et ce qu'on en expose. Aucune URL, aucun chemin absolu, aucun secret.
+Sources:
+#  - id: order_tracking
+#    connector: file                  # file | http-api | mcp
+#    store: ops_share
+#    glob: tracking/*.jsonl
+#    format: jsonl                    # object|array|jsonl|csv|tsv|xlsx|parquet
+#    key: order_id
+#    filters: [order_id, customer_id, carrier, status]
+#    ranges:  [last_scan_at]
+#    pii:     [recipient_name]
+#    free_text: [carrier_message]     # -> l'outil passe trust: untrusted
+#    date_field: last_scan_at
+#    max_staleness_hours: 24
+#    description: |
+#      >= 200 caractères. C'est la description de l'outil vue par le modèle :
+#      quand utiliser / quand NE PAS utiliser / ce qui est retourné / unités /
+#      fuseau / ce que signifie as_of.
+
+# Enveloppe de sûreté — OBLIGATOIRE dès que Active Data Access = declared-sources.
+# Mêmes garanties que l'enveloppe DB, transposées à toutes les sources :
+SourceAgentRole: readonly             # readonly — seule valeur admise sur cette stack
+SourceReadTimeoutMs: 5000             # budget de lecture+filtrage d'UN appel d'outil
+SourceMaxRecordsReturned: 200         # on lit maxRows+1 -> truncated: true
+SourceMaxObjectBytes: 52428800        # 50 Mo — fichier ou réponse d'API plus gros : refusé
+SourceSchemaCheckSample: 500          # enregistrements revalidés contre le schéma figé au boot
+SourceMaxStalenessHours: 24           # au-delà -> erreur SOURCE_STALE, pas un log
+SourceForbiddenOps: [WRITE, DELETE, EXEC, SYMLINK_FOLLOW, UNDECLARED_EGRESS]
+SourceAllowedStores:                  # allowlist d'id ; vide = tous les stores déclarés
+SourceAllowedSources:                 # allowlist d'id ; vide = toutes les sources déclarées
+SourceEgressAllowlist: []             # hôtes joignables. VIDE = AUCUNE SORTIE RÉSEAU.
+SourceQueryLogging: full              # chaque lecture d'un agent est tracée
+
+
+## Active Tools & Integrations
+# Chaque outil déclaré ici DOIT avoir un contrat dans
+# workspace/contracts/tools/ avant d'être câblé à un agent (TOOL GATE).
+# Les outils d'accès aux données ne se déclarent PAS ici : ils sont générés
+# depuis `## Active Data Access` (une vue SQL ou une source déclarée produit
+# son outil et son contrat).
+{{ToolsActiveLines}}
+# - .sdda/stacks/tools/mcp.md                    # [python] serveurs Model Context Protocol
+# - .sdda/stacks/tools/openapi.md                   # (fiche absente)
+# - .sdda/stacks/tools/rest.md                      # (fiche absente)
+# - .sdda/stacks/tools/sql.md                       # (fiche absente)
+# - .sdda/stacks/tools/filesystem.md                # (fiche absente)
+# - .sdda/stacks/tools/web-search.md                # (fiche absente)
+# - .sdda/stacks/tools/code-exec.md                 # (fiche absente)
+# Serveurs MCP actifs. `trust` gouverne le traitement de leurs sorties :
+#   trusted   = sortie traitée normalement
+#   untrusted = sortie encadrée comme donnée hostile (cf. P8) + suite d'injection exigée
+MCPServers:
+#  - name: internal-crm
+#    transport: stdio                 # stdio | http | sse
+#    command: "python -m crm_mcp"
+#    trust: trusted
+#    tools_allowlist: [crm_search_customer, crm_get_contract]
+#  - name: web-fetch
+#    transport: http
+#    url: "https://mcp.example.com"
+#    auth_env: MCP_WEBFETCH_TOKEN
+#    trust: untrusted
+#    tools_allowlist: [fetch_url]
+
+# APIs externes (hors MCP) :
+ExternalAPIs:
+#  - name: zendesk
+#    base_url: "https://acme.zendesk.com/api/v2"
+#    auth_env: ZENDESK_TOKEN
+#    side_effect_class: write-scoped   # read-only | write-scoped | write-destructive | external-side-effect
+#    rate_limit_rpm: 60
+#    idempotency: header               # header | natural-key | none
+#    contract: workspace/contracts/tools/1-zendesk-create-ticket.tool.md
+
+
+## Active Memory Strategy
+ - .sdda/stacks/memory/{{MemoryStrategy}}.md
+# - .sdda/stacks/memory/buffer.md                 # [*]
+# - .sdda/stacks/memory/summary.md                  # (fiche absente)
+# - .sdda/stacks/memory/vector.md                   # (fiche absente)
+# - .sdda/stacks/memory/entity.md                   # (fiche absente)
+# - .sdda/stacks/memory/store.md                    # (fiche absente)
+ShortTermPolicy: sliding-window       # none | sliding-window | summarize-over | hybrid
+ShortTermMaxTurns: 12
+SummarizeTriggerTokens: 24000
+LongTermEnabled: false
+LongTermStore: none                   # none | pgvector | redis | store-backed
+LongTermWritePolicy: explicit         # explicit (l'agent décide via un outil) | automatic
+LongTermRetentionDays: 90
+MemoryPIIPolicy: redact-before-write  # forbid | redact-before-write | allow (allow exige un ADR)
+CrossAgentSharedState: scoped         # none | scoped | full  — qui lit l'état de qui
+
+
+## Active Guardrails
+{{GuardrailActiveLines}}
+# - .sdda/stacks/guardrails/schema-validation.md   # [*] sortie structurée validée — quasi toujours actif
+# - .sdda/stacks/guardrails/injection-detection.md # [*] obligatoire si une source untrusted existe
+# - .sdda/stacks/guardrails/pii-redaction.md      # [*]
+# - .sdda/stacks/guardrails/llm-judge.md          # (fiche absente) garde de qualité en ligne
+# - .sdda/stacks/guardrails/nemo-guardrails.md    # (fiche absente)
+InputGuardrails: [injection-detection]
+OutputGuardrails: [schema-validation]
+OnGuardrailTrip: block-and-log        # block-and-log | sanitize-and-continue | escalate-human
+
+
+## Active Observability
+# Sans trace, un système non déterministe n'est pas débogable (invariant
+# trace-emitted-per-run). `none` n'est acceptable qu'en POC jetable.
+ - .sdda/stacks/observability/{{Observability}}.md
+# - .sdda/stacks/observability/langsmith.md         # (fiche absente)
+# - .sdda/stacks/observability/langfuse.md          # (fiche absente)
+# - .sdda/stacks/observability/otel-genai.md      # [python]
+# - .sdda/stacks/observability/none.md              # (fiche absente)
+TraceLevel: full                      # off | errors-only | sampled | full
+TraceSampleRate: 1.0
+TracePIIPolicy: redact                # redact | hash | raw (raw exige un ADR)
+CostTrackingEnabled: true
+
+
+## Active Eval Stack
+ - .sdda/stacks/eval/{{EvalStack}}.md
+# - .sdda/stacks/eval/pytest-eval.md              # [python]
+# - .sdda/stacks/eval/ragas.md                      # (fiche absente)
+# - .sdda/stacks/eval/deepeval.md                   # (fiche absente)
+# - .sdda/stacks/eval/promptfoo.md                  # (fiche absente)
+# - .sdda/stacks/eval/langsmith.md                  # (fiche absente)
+GoldenSetMinItems: 50
+HoldoutSetMinItems: 30
+AdversarialSetMinItems: 25
+BaselineStorage: workspace/evals/baselines/
+
+
+## Active Serving Surface
+# PAR OÙ L'ON ENTRE dans l'application agentic. À ne pas confondre avec
+# `## Active Packaging` ci-dessous, qui dit CE QU'ON LIVRE : un même RunService
+# s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable.
+#
+# ATTENTION : une ligne activée pour une fiche absente NE CHARGE RIEN.
+# Vérifié par le hook preflight_stack_combo -> [STACK_COMBO_UNLOADABLE].
+ - .sdda/stacks/serving/{{Serving}}.md
+# - .sdda/stacks/serving/cli.md                     # [python] ligne de commande + NDJSON
+# - .sdda/stacks/serving/fastapi-sse.md             # [python] HTTP + SSE (Python)
+# - .sdda/stacks/serving/batch.md                   # [python] traitement de lot ordonnancé
+# - .sdda/stacks/serving/aspnet-minimal.md          # [csharp] HTTP + SSE (.NET)
+# - .sdda/stacks/serving/mcp-server.md              # (fiche absente)
+# - .sdda/stacks/serving/slack-bot.md               # (fiche absente)
+# - .sdda/stacks/serving/chainlit.md                # (fiche absente)
+
+
+ServingLocalPort: {{ServingPort}}
+StreamingEnabled: true
+HumanInTheLoopEnabled: false          # exige un pattern d'orchestration avec checkpointing
+
+
+## Active Secrets
+# Valeurs réelles en clair — STACK.md est gitignored.
+# Ne DOIVENT apparaître dans aucun prompt, aucun trace span, aucun dataset.
+ - LLM_API_KEY: {{LlmApiKey}}
+# - EMBEDDING_API_KEY: <...>
+# - LANGSMITH_API_KEY: <...>
+# - ZENDESK_TOKEN: <...>

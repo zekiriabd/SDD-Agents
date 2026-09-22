@@ -1,0 +1,12 @@
+# SDD_Agents — secrets et artefacts générés
+workspace/stack/STACK.md*
+workspace/traces/
+workspace/src/
+workspace/.sys/
+workspace/evals/reports/
+/.env
+workspace/**/.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

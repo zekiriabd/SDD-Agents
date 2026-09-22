@@ -1,0 +1,109 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "vectorstore-pgvector",
+  "category": "vectorstore",
+  "schemaVersion": 1,
+  "buildSystem": "uv",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/pyproject.toml",
+      "workspace/src/{AppName}/uv.lock"
+    ]
+  },
+  "versions": {
+    "python": "3.12",
+    "postgresql": "17",
+    "pgvector-extension": "0.8.1",
+    "pgvector": "0.3.6",
+    "psycopg": "3.3.6",
+    "sqlalchemy": "2.0.54",
+    "alembic": "1.20.0",
+    "langchain-postgres": "0.0.18",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "structlog": "26.1.0",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  },
+  "dbDrivers": {
+    "postgres": {
+      "module": "psycopg[binary,pool]",
+      "ref": "psycopg",
+      "scope": "runtime"
+    }
+  },
+  "core": [
+    {
+      "module": "pgvector",
+      "ref": "pgvector",
+      "rationale": "Adaptateur types vector/halfvec/sparsevec pour psycopg 3 et SQLAlchemy ; register_vector_async."
+    },
+    {
+      "module": "psycopg[binary,pool]",
+      "ref": "psycopg",
+      "rationale": "Driver async + AsyncConnectionPool ; SET LOCAL par transaction (tenant, hnsw.ef_search, statement_timeout)."
+    },
+    {
+      "module": "sqlalchemy[asyncio]",
+      "ref": "sqlalchemy",
+      "rationale": "Modèle déclaratif rag.documents / rag.chunks / rag.index_meta ; partagé avec dataaccess/view-per-agent."
+    },
+    {
+      "module": "alembic",
+      "ref": "alembic",
+      "rationale": "Migrations : extension, schéma rag, GIN, HNSW (migration séparée), rôles."
+    },
+    {
+      "module": "pydantic",
+      "ref": "pydantic"
+    },
+    {
+      "module": "pydantic-settings",
+      "ref": "pydantic-settings"
+    },
+    {
+      "module": "structlog",
+      "ref": "structlog"
+    },
+    {
+      "module": "ruff",
+      "ref": "ruff"
+    },
+    {
+      "module": "mypy",
+      "ref": "mypy"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "langchain-postgres",
+      "ref": "langchain-postgres",
+      "capability": "langchain-vectorstore",
+      "rationale": "PGVector LangChain — POC uniquement : son schéma ne porte ni tsvector, ni tenant_id, ni content_hash, ni index_meta. Déconseillé en production.",
+      "triggers": [
+        "PGVector\\(",
+        "langchain_postgres",
+        "poc.*pgvector"
+      ]
+    }
+  ],
+  "plugins": [],
+  "metadata": {
+    "lastUpdated": "2026-09-22",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "`postgresql` et `pgvector-extension` dans versions{} sont des versions SERVEUR (non installées par uv) : elles pilotent le smoke (extversion >= 0.8) et la doc, pas l'installCommand.",
+      "Extension 0.8.x requise pour hnsw.iterative_scan (filtrage tenant sans perte de résultats) et halfvec indexable jusqu'à 4000 dims.",
+      "asyncpg n'est PAS retenu ici : pgvector fournit un adaptateur psycopg 3 de première classe et SET LOCAL/set_config sont plus simples avec psycopg. Cohérent avec langgraph.libs.json (checkpointer Postgres sur psycopg).",
+      "Pins résolus conjointement le 2026-09-22 : l'union des catalogues Python est passée à `uv pip compile --python-version 3.12`, donc les versions sont mutuellement compatibles et non « la dernière de chaque paquet ». `pgvector` reste en 0.3.6 parce que `langchain-postgres` le contraint — 0.5.0 est publié mais incompatible avec le reste du catalogue."
+    ],
+    "changeLog": [
+      "2026-09-20 — Création (design-phase).",
+      "2026-09-22 — Résolution PyPI (5) : pgvector 0.4.2→0.3.6 · psycopg 3.3.2→3.3.6 · sqlalchemy 2.0.52→2.0.54 · alembic 1.19.1→1.20.0 · ruff 0.16.5→0.16.8"
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "pypi.org via `uv pip compile` (résolution conjointe des catalogues Python, Python 3.12)"
+  }
+}

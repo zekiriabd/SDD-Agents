@@ -1,0 +1,740 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdd-agents.dev/schemas/project-config.schema.json",
+  "title": "SDD_Agents Project Config",
+  "description": "Schéma de TOUTES les clés du Project Config à 3 couches : .sdda/config.base.yml (défauts du framework), ~/.sdda/config.team.yml (politique d'équipe), workspace/stack/STACK.md ## Project Config (override final). Deep-merge : scalaires remplacés, listes remplacées. additionalProperties: false est ce qui permet de détecter [CONFIG_UNKNOWN_KEY] (WARN ; fatal avec SDDA_CONFIG_STRICT=1). Les clés listées dans security_down_protected ne peuvent pas être relâchées par la couche projet quand la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. Les valeurs `default` ci-dessous MIROIRENT config.base.yml : toute modification de l'un doit être répercutée dans l'autre. AppName et SystemName figurent dans STACK.md ## Project Config sans être dans config.base.yml : ils sont acceptés ici pour ne pas être signalés comme inconnus.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "AppName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+      "description": "Nom de l'application générée (namespace racine en snake_case côté Python). Présent dans STACK.md ## Project Config uniquement."
+    },
+    "SystemName": {
+      "type": "string",
+      "description": "Nom métier du système agentic. Présent dans STACK.md ## Project Config uniquement."
+    },
+    "CostPerRunTargetUsd": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0,
+      "default": null,
+      "description": "Budget d'EXECUTION (P6) : coût cible d'une exécution bout-en-bout du produit généré, USD. null = doit être déclaré par la MISSION (G0 refuse un budget absent)."
+    },
+    "CostPerRunHardCapUsd": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0,
+      "default": null,
+      "description": "Plafond dur par run, USD. Dépassement estimé -> [BUDGET_EXCEEDED_ESTIMATE] (G2) ; mesuré -> [BUDGET_EXCEEDED_MEASURED] (G6), rouge. Doit être >= CostPerRunTargetUsd."
+    },
+    "LatencyP95TargetMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "exclusiveMinimum": 0,
+      "default": null,
+      "description": "Latence p95 cible d'un run, millisecondes. null = à déclarer par la MISSION."
+    },
+    "TokenCeilingPerRun": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "exclusiveMinimum": 0,
+      "default": null,
+      "description": "Plafond de tokens (entrée + sortie) par run. null = à déclarer par la MISSION."
+    },
+    "MaxIterations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 12,
+      "description": "Borne imposée à TOUT agent généré (P12) : nombre max de tours de boucle."
+    },
+    "MaxToolCalls": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 500,
+      "default": 25,
+      "description": "Borne P12 : nombre max d'appels d'outils par run et par agent."
+    },
+    "MaxDelegationDepth": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 3,
+      "description": "Borne P12 : profondeur max de délégation entre agents."
+    },
+    "AgentTimeoutSec": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "default": 120,
+      "description": "Borne P12 : timeout d'un agent, secondes."
+    },
+    "OnBoundExceeded": {
+      "enum": [
+        "fail-explicit",
+        "degrade",
+        "escalate-human"
+      ],
+      "default": "fail-explicit",
+      "description": "Comportement par défaut à l'atteinte d'une borne (P12). Surchargé par agent dans son contrat."
+    },
+    "MaxCostPerRun": {
+      "type": "number",
+      "minimum": 0,
+      "default": 50.0,
+      "description": "Budget de CONSTRUCTION : coût max d'un run du pipeline SDD_Agents lui-même, USD. 0 = désactivé."
+    },
+    "BuildLoopMaxCostUsd": {
+      "type": "number",
+      "minimum": 0,
+      "default": 15.0,
+      "description": "Coût max d'une boucle de construction (itérations dev -> gate), USD."
+    },
+    "BuildLoopMaxIter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 3,
+      "description": "Nombre max d'itérations d'une boucle de construction."
+    },
+    "MaxParallel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16,
+      "default": 3,
+      "description": "Nombre max de Developer Agents exécutés en parallèle."
+    },
+    "EvalRuns": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 3,
+      "description": "k runs par item pour toute eval médiée par un LLM (P3). 1 = dev local, REFUSÉ en CI. Protégée security-down."
+    },
+    "EvalRunsCritical": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 5,
+      "description": "k runs pour les CAPs Criticality: critical. Doit être >= EvalRuns."
+    },
+    "EvalVarianceWarnPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 15,
+      "description": "Écart-type du score (en %) au-delà duquel le verdict est JAUNE."
+    },
+    "EvalSeedPolicy": {
+      "enum": [
+        "vary",
+        "fixed"
+      ],
+      "default": "vary",
+      "description": "`fixed` masque la variance : réservé au débogage d'un cas précis."
+    },
+    "JudgeCalibrationMinKappa": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.6,
+      "description": "Accord minimal (kappa de Cohen) entre le juge LLM et les labels humains pour que le juge rende un verdict bloquant (P9). Protégée security-down."
+    },
+    "JudgeCalibrationMinItems": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Taille minimale du set de calibration humain d'un juge LLM."
+    },
+    "JudgeAdvisoryFallback": {
+      "type": "boolean",
+      "default": true,
+      "description": "Sous le seuil de calibration, le juge devient advisory (informe, ne bloque plus) au lieu de faire échouer la suite."
+    },
+    "JudgeMustDifferFromEvaluated": {
+      "type": "boolean",
+      "default": true,
+      "description": "Le modèle juge doit différer du modèle évalué : un modèle qui se note mesure sa complaisance."
+    },
+    "GoldenSetMinItems": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Taille minimale d'un jeu golden (ajustement)."
+    },
+    "HoldoutSetMinItems": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30,
+      "description": "Taille minimale d'un jeu holdout (verdict)."
+    },
+    "CalibrationSetMinItems": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Taille minimale d'un jeu de calibration (labels humains)."
+    },
+    "AdversarialSetMinItems": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 25,
+      "description": "Taille minimale du jeu adversarial. Le jeu grandit : toute attaque réussie devient un item permanent."
+    },
+    "HoldoutDisjointCheck": {
+      "enum": [
+        "strict",
+        "warn"
+      ],
+      "default": "strict",
+      "description": "Vérification par hash que golden et holdout sont disjoints. `warn` autorise l'optimisation contre le jeu qui rend le verdict : POC uniquement. Protégée security-down."
+    },
+    "RegressionTolerancePct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 3,
+      "description": "Baisse tolérée (en %) vs la baseline épinglée avant [REGRESSION] (L9)."
+    },
+    "BaselinePromotionPolicy": {
+      "enum": [
+        "explicit",
+        "auto"
+      ],
+      "default": "explicit",
+      "description": "`auto` rend la dérive lente invisible : la baseline doit se déplacer par une action tracée."
+    },
+    "RetrievalRecallAtK": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.8,
+      "description": "Seuil G4 : recall@k minimal. Protégée security-down."
+    },
+    "RetrievalK": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 8,
+      "description": "k utilisé pour recall@k et nDCG@k."
+    },
+    "RetrievalNdcgMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7,
+      "description": "Seuil G4 : nDCG@k minimal."
+    },
+    "RetrievalContextPrecisionMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.6,
+      "description": "Seuil G4 : proportion minimale de contexte non bruité."
+    },
+    "GroundednessMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.85,
+      "description": "Seuil G4 : groundedness minimale (juge LLM calibré). Protégée security-down."
+    },
+    "AnswerRelevanceMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.8,
+      "description": "Seuil G4 : answer_relevance minimale (juge LLM calibré)."
+    },
+    "CitationResolveRateMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.98,
+      "description": "Seuil G4 : taux minimal de citations pointant vers un passage réel. Protégée security-down."
+    },
+    "RetrievalGoldenMinQueries": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Nombre minimal de requêtes dans le golden set de retrieval (G4)."
+    },
+    "SpecComplianceMode": {
+      "enum": [
+        "off",
+        "manual",
+        "full"
+      ],
+      "default": "full",
+      "description": "Mode du reviewer spec-compliance (étage A)."
+    },
+    "AgentSafetyMode": {
+      "enum": [
+        "off",
+        "manual",
+        "full"
+      ],
+      "default": "full",
+      "description": "Mode du reviewer agent-safety. `off` REFUSÉ si SDDA_RUN_PROFILE=production -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION]. Protégée security-down."
+    },
+    "CostLatencyMode": {
+      "enum": [
+        "off",
+        "manual",
+        "full"
+      ],
+      "default": "full",
+      "description": "Mode du reviewer cost-latency."
+    },
+    "OrchestrationReviewMode": {
+      "enum": [
+        "off",
+        "manual",
+        "full"
+      ],
+      "default": "full",
+      "description": "Mode du reviewer orchestration."
+    },
+    "RagQualityMode": {
+      "enum": [
+        "off",
+        "manual",
+        "full"
+      ],
+      "default": "full",
+      "description": "Mode du reviewer rag-quality. Auto-skip si le pattern RAG actif est none."
+    },
+    "AdversarialMode": {
+      "enum": [
+        "off",
+        "manual",
+        "full"
+      ],
+      "default": "full",
+      "description": "Mode de l'review-adversarial (étage C, système vivant)."
+    },
+    "AgentSafetyRequiredInProduction": {
+      "type": "boolean",
+      "default": true,
+      "description": "Interdit AgentSafetyMode: off quand SDDA_RUN_PROFILE=production. Protégée security-down."
+    },
+    "AuditorBatchMode": {
+      "enum": [
+        "three-stage",
+        "parallel"
+      ],
+      "default": "three-stage",
+      "description": "Étagement de la revue : A spec-compliance seul ; B safety, cost, orchestration, rag en parallèle ; C adversarial sur système vivant."
+    },
+    "SpecComplianceFailOn": {
+      "enum": [
+        "info",
+        "minor",
+        "moderate",
+        "serious",
+        "critical"
+      ],
+      "default": "serious",
+      "description": "Sévérité minimale d'un finding spec-compliance qui bloque."
+    },
+    "AgentSafetyFailOn": {
+      "enum": [
+        "info",
+        "minor",
+        "moderate",
+        "serious",
+        "critical"
+      ],
+      "default": "critical",
+      "description": "Sévérité minimale d'un finding agent-safety qui bloque. Protégée security-down."
+    },
+    "CostLatencyFailOn": {
+      "enum": [
+        "info",
+        "minor",
+        "moderate",
+        "serious",
+        "critical"
+      ],
+      "default": "serious",
+      "description": "Sévérité minimale d'un finding cost-latency qui bloque."
+    },
+    "OrchestrationFailOn": {
+      "enum": [
+        "info",
+        "minor",
+        "moderate",
+        "serious",
+        "critical"
+      ],
+      "default": "serious",
+      "description": "Sévérité minimale d'un finding orchestration qui bloque."
+    },
+    "RagQualityFailOn": {
+      "enum": [
+        "info",
+        "minor",
+        "moderate",
+        "serious",
+        "critical"
+      ],
+      "default": "serious",
+      "description": "Sévérité minimale d'un finding rag-quality qui bloque."
+    },
+    "AdversarialFailOn": {
+      "enum": [
+        "info",
+        "minor",
+        "moderate",
+        "serious",
+        "critical"
+      ],
+      "default": "critical",
+      "description": "Sévérité minimale d'un finding adversarial qui bloque. Protégée security-down."
+    },
+    "MissionGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G0 MISSION. `off` est inscrit dans .sys/.audit/bypasses.jsonl et compte dans MaxBypassesPerRun."
+    },
+    "CapGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G1 CAP."
+    },
+    "TopologyGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G2 TOPOLOGY (s'exécute sur l'IR)."
+    },
+    "ToolGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G3 TOOL."
+    },
+    "RetrievalGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G4 RETRIEVAL. Auto-skip si RAG = none."
+    },
+    "AgentGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G5 AGENT."
+    },
+    "OrchGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G6 ORCH."
+    },
+    "SafetyGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G7 SAFETY. Protégée security-down."
+    },
+    "AcceptanceGate": {
+      "enum": [
+        "strict",
+        "warn",
+        "off"
+      ],
+      "default": "strict",
+      "description": "Mode de G8 ACCEPTANCE."
+    },
+    "MaxBypassesPerRun": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9,
+      "default": 1,
+      "description": "Nombre max de bypasses (gate off, env SDDA_BYPASS_*) sur un même run ; au-delà, bloquant. Protégée security-down."
+    },
+    "CapGranularityTarget": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 4,
+      "description": "Nombre cible de CAPs par MISSION."
+    },
+    "CapGranularityWarnAt": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 8,
+      "description": "Nombre de CAPs au-delà duquel un WARN est émis. Doit être >= CapGranularityTarget."
+    },
+    "CapGranularityHardCap": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 15,
+      "description": "Nombre max de CAPs par MISSION, bloquant. Doit être >= CapGranularityWarnAt."
+    },
+    "MaxAgentsWarnAt": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 4,
+      "description": "Nombre d'agents au-delà duquel une justification renforcée est exigée (P7)."
+    },
+    "MaxNestingDepth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2,
+      "default": 2,
+      "description": "Profondeur max d'imbrication de patterns d'orchestration. Dur : 2 (ORCHESTRATION-PATTERNS.md §3) — le maximum du schéma l'interdit au-delà."
+    },
+    "TopologyJustificationRequired": {
+      "type": "boolean",
+      "default": true,
+      "description": "La section « Alternative plus simple écartée » de la TOPOLOGY est obligatoire (P7). Protégée security-down."
+    },
+    "PromptMaxTokens": {
+      "type": "integer",
+      "minimum": 100,
+      "default": 4000,
+      "description": "Taille de prompt système au-delà de laquelle un WARN est émis : un prompt long dilue."
+    },
+    "PromptInlineForbidden": {
+      "type": "boolean",
+      "default": true,
+      "description": "Aucun prompt inline dans le code généré (P1, invariant prompts-are-files). Protégée security-down."
+    },
+    "PromptHashPinning": {
+      "type": "boolean",
+      "default": true,
+      "description": "Le hash du prompt fait partie du tuple d'épinglage des baselines (P10, invariant eval-baseline-hash-pinned)."
+    },
+    "TraceLevel": {
+      "enum": [
+        "off",
+        "errors-only",
+        "sampled",
+        "full"
+      ],
+      "default": "full",
+      "description": "Niveau de trace. `off` n'est acceptable qu'en POC jetable (invariant trace-emitted-per-run)."
+    },
+    "TraceSampleRate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 1.0,
+      "description": "Taux d'échantillonnage des traces quand TraceLevel = sampled."
+    },
+    "TracePIIPolicy": {
+      "enum": [
+        "redact",
+        "hash",
+        "raw"
+      ],
+      "default": "redact",
+      "description": "Traitement des PII dans les spans. `raw` exige un ADR."
+    },
+    "CostTrackingEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enregistre tokens et coût par appel LLM dans les traces (nécessaire aux graders cost et au coût par CAP)."
+    },
+    "TraceRequiredPerRun": {
+      "type": "boolean",
+      "default": true,
+      "description": "Un run sans trace est un échec (invariant trace-emitted-per-run)."
+    },
+    "BuildModelMode": {
+      "enum": [
+        "static",
+        "dynamic"
+      ],
+      "default": "static",
+      "description": "static : chaque Developer Agent prend son tier_default. dynamic : scorer déterministe par work-item, clampé par tier_floor / tier_ceiling d'agent-bounds.yaml (non surchargeables)."
+    },
+    "CheckpointMode": {
+      "enum": [
+        "on",
+        "off"
+      ],
+      "default": "on",
+      "description": "Reprise après interruption du pipeline de construction. Toujours écrire la valeur entre guillemets en YAML (\"on\") pour éviter la conversion booléenne."
+    },
+    "ResumeReusesIdentifiers": {
+      "type": "boolean",
+      "default": true,
+      "description": "Une reprise réutilise les identifiants déjà attribués : pas d'orphelins, pas de doublons."
+    },
+    "PreserveHumanEdits": {
+      "type": "boolean",
+      "default": true,
+      "description": "Un fichier généré puis édité à la main (empreinte de contenu) n'est jamais écrasé."
+    },
+    "StackComboCheck": {
+      "enum": [
+        "strict",
+        "warn"
+      ],
+      "default": "strict",
+      "description": "strict : une combinaison absente de registry/compatibility.matrix.json bloque. Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1."
+    },
+    "security_down_protected": {
+      "type": "array",
+      "uniqueItems": true,
+      "default": [
+        "AgentSafetyFailOn",
+        "AgentSafetyMode",
+        "AgentSafetyRequiredInProduction",
+        "AdversarialFailOn",
+        "SafetyGate",
+        "EvalRuns",
+        "HoldoutDisjointCheck",
+        "GroundednessMin",
+        "RetrievalRecallAtK",
+        "CitationResolveRateMin",
+        "JudgeCalibrationMinKappa",
+        "MaxBypassesPerRun",
+        "PromptInlineForbidden",
+        "TopologyJustificationRequired"
+      ],
+      "items": {
+        "enum": [
+          "AgentSafetyFailOn",
+          "AgentSafetyMode",
+          "AgentSafetyRequiredInProduction",
+          "AdversarialFailOn",
+          "SafetyGate",
+          "EvalRuns",
+          "EvalRunsCritical",
+          "HoldoutDisjointCheck",
+          "GroundednessMin",
+          "RetrievalRecallAtK",
+          "RetrievalNdcgMin",
+          "RetrievalContextPrecisionMin",
+          "AnswerRelevanceMin",
+          "CitationResolveRateMin",
+          "JudgeCalibrationMinKappa",
+          "JudgeCalibrationMinItems",
+          "JudgeMustDifferFromEvaluated",
+          "MaxBypassesPerRun",
+          "PromptInlineForbidden",
+          "PromptHashPinning",
+          "TopologyJustificationRequired",
+          "TracePIIPolicy",
+          "TraceRequiredPerRun",
+          "StackComboCheck",
+          "BaselinePromotionPolicy",
+          "RegressionTolerancePct"
+        ]
+      },
+      "description": "Clés que la couche projet ne peut pas relâcher si la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. La liste ne peut contenir que des clés dont la direction « plus dur » est définie (l'enum ci-dessus). Seule la couche base ou team peut modifier cette liste."
+    },
+    "DeliverableType": {
+      "enum": [
+        "backend-api",
+        "cli-exe",
+        "batch-job",
+        "library",
+        "container",
+        "mcp-server"
+      ],
+      "default": "backend-api",
+      "description": "CE QU'ON LIVRE, distinct de la surface d'exposition (`## Active Serving Surface`, qui dit par où l'on entre). Les deux sont indépendants : un même RunService s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable. Sans cette clé, la question « on livre quoi ? » était arbitrée par l'agent, donc différemment à chaque run."
+    },
+    "ApiFramework": {
+      "enum": [
+        "none",
+        "fastapi",
+        "django-ninja",
+        "flask",
+        "aspnet-minimal",
+        "aspnet-mvc",
+        "spring-boot",
+        "express",
+        "nestjs"
+      ],
+      "default": "none",
+      "description": "Framework HTTP du back-end livré. Obligatoirement != none quand DeliverableType = backend-api, et cohérent avec `## Active Language & Runtime` -> [PACKAGING_LANG_MISMATCH]."
+    },
+    "ApiArchitecture": {
+      "enum": [
+        "layered",
+        "hexagonal",
+        "vertical-slice"
+      ],
+      "default": "layered",
+      "description": "Architecture interne du back-end livré. Déclarée une fois, sinon chaque dev-* impose la sienne et le projet en porte trois."
+    },
+    "ApiContractFirst": {
+      "type": "boolean",
+      "default": true,
+      "description": "L'OpenAPI est dérivé des inputSchema/outputSchema de l'IR et vérifié contre eux (API GATE, G6.5). `false` autorise l'API à diverger de la spécification : exige un ADR."
+    },
+    "ApiAuthMode": {
+      "enum": [
+        "none",
+        "api-key",
+        "oauth2",
+        "azure-ad",
+        "mtls"
+      ],
+      "default": "none",
+      "description": "Par où entre l'identité de l'appelant (dev-api STEP 3). `none` n'est acceptable qu'en POC ou derrière une passerelle qui l'établit déjà : sans identité établie au transport, tout le filtrage à la source est contournable."
+    }
+  },
+  "allOf": [
+    {
+      "description": "Le plafond dur est au moins égal à la cible.",
+      "if": {
+        "properties": {
+          "CostPerRunTargetUsd": {
+            "type": "number"
+          },
+          "CostPerRunHardCapUsd": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "CostPerRunTargetUsd",
+          "CostPerRunHardCapUsd"
+        ]
+      },
+      "then": {
+        "$comment": "Contrainte inter-clés non exprimable en JSON Schema pur (HardCap >= Target) : vérifiée par validate_config.py."
+      }
+    }
+  ]
+}

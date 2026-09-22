@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "crm_contract",
+  "type": "object",
+  "required": ["contract_id", "customer_id", "signed_at"],
+  "properties": {
+    "contract_id": { "type": "string" },
+    "customer_id": { "type": "string" },
+    "signed_at": { "type": "string", "format": "date-time" },
+    "clause_text": { "type": "string" }
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "framework-langgraph",
+  "category": "framework",
+  "schemaVersion": 1,
+  "buildSystem": "uv",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/pyproject.toml",
+      "workspace/src/{AppName}/uv.lock"
+    ]
+  },
+  "versions": {
+    "python": "3.12",
+    "langgraph": "1.2.12",
+    "langchain-core": "1.6.4",
+    "langgraph-checkpoint": "4.2.0",
+    "langgraph-checkpoint-postgres": "3.1.2",
+    "langgraph-checkpoint-sqlite": "3.1.1",
+    "langchain-anthropic": "1.7.2",
+    "langchain-openai": "1.6.3",
+    "langchain-google-genai": "4.4.0",
+    "langchain-mcp-adapters": "0.3.2",
+    "psycopg": "3.3.6",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "structlog": "26.1.0",
+    "httpx": "0.28.1",
+    "tenacity": "9.1.4",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  },
+  "core": [
+    {
+      "module": "langgraph",
+      "ref": "langgraph",
+      "rationale": "StateGraph, arêtes conditionnelles, Command/Send, interrupt — cible du générateur IR→Python."
+    },
+    {
+      "module": "langchain-core",
+      "ref": "langchain-core",
+      "rationale": "Messages, @tool, BaseChatModel.bind_tools / with_structured_output. Dépendance de fait de langgraph."
+    },
+    {
+      "module": "langgraph-checkpoint",
+      "ref": "langgraph-checkpoint",
+      "rationale": "Interface BaseCheckpointSaver + InMemorySaver (tests L1/L4)."
+    },
+    {
+      "module": "langgraph-checkpoint-postgres",
+      "ref": "langgraph-checkpoint-postgres",
+      "rationale": "PostgresSaver/AsyncPostgresSaver — checkpointing de production (reprise, escalate-human)."
+    },
+    {
+      "module": "langgraph-checkpoint-sqlite",
+      "ref": "langgraph-checkpoint-sqlite",
+      "rationale": "SqliteSaver — dev local et evals sans Postgres."
+    },
+    {
+      "module": "psycopg[binary,pool]",
+      "ref": "psycopg",
+      "rationale": "Driver du checkpointer Postgres (pool requis par PostgresSaver.from_conn_string)."
+    },
+    {
+      "module": "pydantic",
+      "ref": "pydantic"
+    },
+    {
+      "module": "pydantic-settings",
+      "ref": "pydantic-settings"
+    },
+    {
+      "module": "structlog",
+      "ref": "structlog"
+    },
+    {
+      "module": "httpx",
+      "ref": "httpx"
+    },
+    {
+      "module": "tenacity",
+      "ref": "tenacity",
+      "rationale": "Retry exponentiel — UNIQUEMENT sur outils idempotents (retry_policy != none)."
+    },
+    {
+      "module": "ruff",
+      "ref": "ruff"
+    },
+    {
+      "module": "mypy",
+      "ref": "mypy"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "langchain-anthropic",
+      "ref": "langchain-anthropic",
+      "capability": "provider-anthropic",
+      "rationale": "Adaptateur ChatAnthropic. Installé si un tier de RuntimeTierMap résout vers anthropic.",
+      "triggers": [
+        "RuntimeProvider:\\s*anthropic",
+        "claude-"
+      ]
+    },
+    {
+      "module": "langchain-openai",
+      "ref": "langchain-openai",
+      "capability": "provider-openai",
+      "rationale": "Adaptateur ChatOpenAI / AzureChatOpenAI. Installé si un tier résout vers openai ou azure.",
+      "triggers": [
+        "RuntimeProvider:\\s*(openai|azure)",
+        "gpt-",
+        "o[0-9]-mini"
+      ]
+    },
+    {
+      "module": "langchain-google-genai",
+      "ref": "langchain-google-genai",
+      "capability": "provider-google",
+      "rationale": "Adaptateur ChatGoogleGenerativeAI. Installé si un tier résout vers google.",
+      "triggers": [
+        "RuntimeProvider:\\s*google",
+        "gemini-"
+      ]
+    },
+    {
+      "module": "langchain-mcp-adapters",
+      "ref": "langchain-mcp-adapters",
+      "capability": "mcp-tools",
+      "rationale": "Pont MCP → BaseTool. Optionnel : tools/mcp.md recommande un adaptateur maison pour garder l'allowlist et l'enveloppe untrusted sous contrôle.",
+      "triggers": [
+        "stacks/tools/mcp\\.md",
+        "MCPServers:\\s*\\n\\s*-"
+      ]
+    }
+  ],
+  "plugins": [],
+  "metadata": {
+    "lastUpdated": "2026-09-22",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "stackId est préfixé par la catégorie (framework-) parce que des noms collisionnent entre catégories dans SDD_Agents (langsmith existe en framework, eval et observability).",
+      "L'enum `category` du schéma SDD_Pro doit être étendu aux catégories SDD_Agents (framework, vectorstore, observability, eval, ...) lors de la copie du schéma dans .sdda/templates/.",
+      "Le socle commun (pydantic, pydantic-settings, structlog, ruff, mypy) reprend exactement les pins du catalogue SDD_Pro backend/python-fastapi (rebase 2026-09-02).",
+      "Pins résolus conjointement le 2026-09-22 : l'union des catalogues Python est passée à `uv pip compile --python-version 3.12`, donc les versions sont mutuellement compatibles et non « la dernière de chaque paquet ». `pgvector` reste en 0.3.6 parce que `langchain-postgres` le contraint — 0.5.0 est publié mais incompatible avec le reste du catalogue."
+    ],
+    "changeLog": [
+      "2026-09-20 — Création (design-phase). Catalogue initial LangGraph 1.x + checkpointers Postgres/SQLite + adaptateurs provider en on-demand.",
+      "2026-09-22 — Résolution PyPI (11) : langgraph 1.0.9→1.2.12 · langchain-core 1.1.6→1.6.4 · langgraph-checkpoint 3.0.2→4.2.0 · langgraph-checkpoint-postgres 3.0.4→3.1.2 · langgraph-checkpoint-sqlite 3.0.2→3.1.1 · langchain-anthropic 1.2.3→1.7.2 · langchain-openai 1.2.1→1.6.3 · langchain-google-genai 3.2.0→4.4.0 · langchain-mcp-adapters 0.2.3→0.3.2 · psycopg 3.3.2→3.3.6 · ruff 0.16.5→0.16.8"
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "pypi.org via `uv pip compile` (résolution conjointe des catalogues Python, Python 3.12)"
+  }
+}

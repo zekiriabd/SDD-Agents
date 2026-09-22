@@ -1,0 +1,65 @@
+# .sdda/providers/openai.yaml — OpenAI API native
+#
+# ============================================================================
+# CE FICHIER RÉSOUT DES TIERS, PAS DES MODÈLES
+# ============================================================================
+# Les agents déclarent un TIER (`fast` | `balanced` | `deep`), jamais un nom de
+# modèle (P11, ARCHITECTURE §6). La résolution tier -> modèle appartient au
+# provider actif, c'est-à-dire à ce fichier (`tier_map`). Ajouter ou modifier
+# un provider ne touche aucun agent. Seul `model_id` bouge dans le tuple
+# d'épinglage des baselines (P10).
+#
+# Aucun secret ici : uniquement des NOMS de variables d'environnement.
+# ============================================================================
+
+schema: sdda.provider/v1
+name: openai
+endpoint_kind: openai-compat          # Responses API / Chat Completions
+base_url_env: OPENAI_BASE_URL         # défaut SDK : https://api.openai.com/v1
+auth_env: OPENAI_API_KEY
+
+tier_map:
+  # Résolution 2026-09-20 depuis la page de tarifs officielle. Le mapping
+  # tier <-> modèle est CONFIRMÉ au 1er conformance run, pas avant.
+  deep: gpt-5.6-sol                   # flagship ; gpt-6-astra existe au-dessus (10/50 USD) — hors tier par défaut, coût
+  balanced: gpt-5.4
+  fast: gpt-5.4-nano
+
+context_window:                       # tokens d'entrée — « à confirmer » : la page de tarifs indique « <272K » pour gpt-5.5/5.4
+  deep: 272000                        # à confirmer
+  balanced: 272000                    # à confirmer
+  fast: 272000                        # à confirmer
+
+capabilities:
+  structured_output_fidelity: unknown # verdict au 1er conformance run
+  tool_calling: openai-native
+  prompt_caching: implicit            # cache automatique sur préfixe répété, facturé à 10 % du tarif input
+  streaming: true
+
+embedding_models:
+  - id: text-embedding-3-large
+    dimensions: 3072
+    price_per_million_input_usd: 0.13
+  - id: text-embedding-3-small
+    dimensions: 1536
+    price_per_million_input_usd: 0.02
+
+telemetry:
+  # Les prompts peuvent contenir des données sensibles. Consommé par la
+  # SAFETY GATE et le architect-rag.
+  default_retention_days: 30          # rétention API jusqu'à 30 jours pour revue d'abus (compte standard)
+  optout_available: true              # Zero Data Retention sur contrat Enterprise
+  optout_mechanism: "Compte OpenAI Enterprise avec clause ZDR (signature contractuelle requise) ; certains endpoints restent exclus"
+  training_on_api_data: false
+  reference_url: "https://openai.com/enterprise-privacy"
+  last_reviewed: 2026-09-20
+
+pricing:                              # USD par million de tokens — tarif public OpenAI (revu 2026-09-20)
+  # cache_read = « cached input » publié. OpenAI ne facture pas l'écriture de
+  # cache : cache_creation = input pour compatibilité de schéma (le grader
+  # `cost` n'utilise que input/output/cache_read).
+  # gpt-5.6-sol : tarif PROMOTIONNEL annoncé « au moins jusqu'au 2026-11-21 » — à revoir.
+  gpt-5.6-sol:  {input: 4.00, output: 20.00, cache_read: 0.40, cache_creation: 4.00}
+  gpt-5.4:      {input: 2.50, output: 15.00, cache_read: 0.25, cache_creation: 2.50}
+  gpt-5.4-nano: {input: 0.20, output:  1.25, cache_read: 0.02, cache_creation: 0.20}
+pricing_last_reviewed: 2026-09-20

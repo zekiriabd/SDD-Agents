@@ -1,0 +1,123 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "observability-otel-genai",
+  "category": "observability",
+  "schemaVersion": 1,
+  "buildSystem": "uv",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/pyproject.toml",
+      "workspace/src/{AppName}/uv.lock"
+    ]
+  },
+  "versions": {
+    "python": "3.12",
+    "opentelemetry-api": "1.44.0",
+    "opentelemetry-sdk": "1.44.0",
+    "opentelemetry-exporter-otlp-proto-http": "1.44.0",
+    "opentelemetry-exporter-otlp-proto-grpc": "1.44.0",
+    "opentelemetry-semantic-conventions": "0.65b0",
+    "opentelemetry-instrumentation-httpx": "0.65b0",
+    "opentelemetry-instrumentation-psycopg": "0.65b0",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "structlog": "26.1.0",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  },
+  "core": [
+    {
+      "module": "opentelemetry-api",
+      "ref": "opentelemetry-api",
+      "rationale": "API tracer/meter, propagation de contexte. Même version que sdk et exporter."
+    },
+    {
+      "module": "opentelemetry-sdk",
+      "ref": "opentelemetry-sdk",
+      "rationale": "TracerProvider, BatchSpanProcessor / SimpleSpanProcessor, SpanExporter (base du JsonlSpanExporter), MeterProvider."
+    },
+    {
+      "module": "opentelemetry-exporter-otlp-proto-http",
+      "ref": "opentelemetry-exporter-otlp-proto-http",
+      "rationale": "Export OTLP/HTTP protobuf vers Collector ou récepteur OTLP (Langfuse, Tempo, Datadog...)."
+    },
+    {
+      "module": "opentelemetry-semantic-conventions",
+      "ref": "opentelemetry-semantic-conventions",
+      "rationale": "Constantes gen_ai.* (incubating) et db.*. Épinglée : les noms GenAI sont encore en développement — semconv_version émis dans chaque ligne JSONL."
+    },
+    {
+      "module": "pydantic",
+      "ref": "pydantic"
+    },
+    {
+      "module": "pydantic-settings",
+      "ref": "pydantic-settings"
+    },
+    {
+      "module": "structlog",
+      "ref": "structlog",
+      "rationale": "Logs corrélés : processor qui injecte trace_id / span_id."
+    },
+    {
+      "module": "ruff",
+      "ref": "ruff"
+    },
+    {
+      "module": "mypy",
+      "ref": "mypy"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "opentelemetry-instrumentation-httpx",
+      "ref": "opentelemetry-instrumentation-httpx",
+      "capability": "instrument-httpx",
+      "rationale": "Spans HTTP client des outils REST/OpenAPI et des appels provider. Version alignée sur semantic-conventions (0.NNb0).",
+      "triggers": [
+        "stacks/tools/(rest|openapi)\\.md",
+        "httpx\\.AsyncClient"
+      ]
+    },
+    {
+      "module": "opentelemetry-instrumentation-psycopg",
+      "ref": "opentelemetry-instrumentation-psycopg",
+      "capability": "instrument-psycopg",
+      "rationale": "Spans SQL de view-per-agent et pgvector. db.query.text doit rester paramétré (enable_commenter=False, vérification L1).",
+      "triggers": [
+        "stacks/dataaccess/view-per-agent\\.md",
+        "stacks/vectorstore/pgvector\\.md",
+        "psycopg"
+      ]
+    },
+    {
+      "module": "opentelemetry-exporter-otlp-proto-grpc",
+      "ref": "opentelemetry-exporter-otlp-proto-grpc",
+      "capability": "exporter-grpc",
+      "rationale": "Si le Collector n'expose que gRPC (4317). Tire grpcio (wheel native) — préférer HTTP quand possible.",
+      "triggers": [
+        "OTEL_EXPORTER_OTLP_PROTOCOL\\s*=\\s*grpc",
+        ":4317"
+      ]
+    }
+  ],
+  "plugins": [],
+  "metadata": {
+    "lastUpdated": "2026-09-22",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Règle de cohérence : opentelemetry-api, -sdk et -exporter-* partagent EXACTEMENT la même version (1.NN.0) ; semantic-conventions et instrumentation-* partagent la leur (0.NNb0). Un désalignement casse l'import au démarrage.",
+      "Les conventions sémantiques GenAI sont en statut Development : les noms d'attributs peuvent changer entre deux versions de semconv. Tous les noms vivent dans tracing/semconv.py et chaque ligne JSONL porte semconv_version.",
+      "Aucune dépendance LangSmith/Langfuse ici : ce sont des stacks distinctes (observability/langsmith.md, langfuse.md). Langfuse peut recevoir l'OTLP produit par cette stack.",
+      "Pins résolus conjointement le 2026-09-22 : l'union des catalogues Python est passée à `uv pip compile --python-version 3.12`, donc les versions sont mutuellement compatibles et non « la dernière de chaque paquet ». `pgvector` reste en 0.3.6 parce que `langchain-postgres` le contraint — 0.5.0 est publié mais incompatible avec le reste du catalogue."
+    ],
+    "changeLog": [
+      "2026-09-20 — Création (design-phase).",
+      "2026-09-22 — Résolution PyPI (8) : opentelemetry-api 1.40.0→1.44.0 · opentelemetry-sdk 1.40.0→1.44.0 · opentelemetry-exporter-otlp-proto-http 1.40.0→1.44.0 · opentelemetry-exporter-otlp-proto-grpc 1.40.0→1.44.0 · opentelemetry-semantic-conventions 0.61b0→0.65b0 · opentelemetry-instrumentation-httpx 0.61b0→0.65b0 · opentelemetry-instrumentation-psycopg 0.61b0→0.65b0 · ruff 0.16.5→0.16.8"
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-22",
+    "verifiedAgainst": "pypi.org via `uv pip compile` (résolution conjointe des catalogues Python, Python 3.12)"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdd-agents.dev/schemas/tool-schema.schema.json",
+  "title": "Schéma d'entrée ou de sortie d'un outil",
+  "description": "MÉTA-schéma : il décrit la forme que doit avoir le JSON Schema d'entrée ou de sortie d'un TOOL CONTRACT (§2 Schémas), pas les données de l'outil. Contrôlé par la TOOL GATE (G3) via validate_tool_contract.py. Ce que ce méta-schéma impose tient en une idée : le schéma d'un outil est lu par un modèle avant d'être lu par un parseur. Un paramètre sans `description` est un paramètre que le modèle remplira au jugé, et un `required` qui nomme une propriété inexistante est une erreur qui ne se voit qu'au premier appel en production.",
+  "type": "object",
+  "required": ["type", "properties"],
+
+  "properties": {
+    "type": {
+      "const": "object",
+      "description": "Toujours `object` : un outil reçoit et rend des champs nommés. Un scalaire nu interdit d'ajouter un champ sans casser tous les appelants."
+    },
+    "properties": {
+      "type": "object",
+      "description": "Au moins un champ. Un outil sans aucun paramètre d'entrée existe (déclarer `{}` explicitement), mais il est assez rare pour mériter d'être écrit à la main plutôt qu'obtenu par oubli.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "description": "Type JSON Schema du champ.",
+            "type": ["string", "array"]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "description": "C'est du prompt engineering : le modèle décide de la valeur d'après ce texte. `identifiant` ne dit rien ; `identifiant client au format C-00000, tel que rendu par invoice_lookup` dit tout."
+          },
+          "enum": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Toute valeur fermée se déclare en enum : le modèle n'invente pas dans une liste close."
+          },
+          "format": { "type": "string" },
+          "items": { "type": "object" },
+          "properties": { "type": "object" },
+          "minimum": { "type": "number" },
+          "maximum": { "type": "number" },
+          "minLength": { "type": "integer" },
+          "maxLength": { "type": "integer" },
+          "pattern": { "type": "string" },
+          "default": {}
+        }
+      }
+    },
+    "required": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Chaque nom doit exister dans `properties` — vérifié par validate_tool_contract.py, hors de portée d'un méta-schéma."
+    },
+    "additionalProperties": {
+      "type": "boolean",
+      "description": "`false` recommandé sur une entrée : un champ non prévu accepté en silence est un champ que personne ne lit."
+    },
+    "description": { "type": "string" },
+    "title": { "type": "string" },
+    "$schema": { "type": "string" }
+  }
+}

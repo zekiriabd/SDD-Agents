@@ -1,0 +1,1743 @@
+{
+  "$id": "https://sdd-agents.dev/registry/patterns.registry.json",
+  "schemaVersion": 1,
+  "title": "SDD_Agents — registre machine des patterns",
+  "description": "SSoT machine de tous les patterns du framework. Transcription STRICTE des documents de référence listés dans syncedFrom : aucune entrée n'ajoute un critère, un coût ou un mode d'échec absent de ces documents. Consommé par architect-topology (famille orchestration), architect-rag (familles rag, chunking), architect-data (famille dataaccess), architect-memory (famille memory), qa-evals (famille grader), et par validate_topology.py / validate_ir.py pour vérifier les mandatoryGuards. Toute modification d'un document source doit être répercutée ici, et inversement.",
+  "syncedFrom": [
+    ".sdda/PHILOSOPHY.md",
+    ".sdda/docs/DATA-ACCESS.md",
+    ".sdda/docs/DATA-SOURCES.md",
+    ".sdda/docs/DOMAIN-MODEL.md",
+    ".sdda/docs/MEMORY-PATTERNS.md",
+    ".sdda/docs/ORCHESTRATION-PATTERNS.md",
+    ".sdda/docs/RAG-PATTERNS.md",
+    ".sdda/docs/TESTING-AND-EVAL.md"
+  ],
+  "lastSynced": "2026-09-22",
+  "statusLevels": {
+    "description": "Posture de RECOMMANDATION architecturale du catalogue. Ce n'est PAS un niveau de validation d'implémentation : celui-ci vit dans compatibility.matrix.json (componentLevels). Un pattern peut être `recommended` ici et `untested` là-bas — c'est précisément le cas du framework en phase de conception.",
+    "recommended": "Défaut ou choix par défaut documenté — s'y écarter exige une justification écrite.",
+    "supported": "Documenté avec critères, coût, mode d'échec et obligations. Choix légitime quand ses critères sont remplis.",
+    "experimental": "Présent au catalogue mais couverture documentaire partielle (coût ou mode d'échec non caractérisé) ou usage rarement justifié. Exige une justification renforcée.",
+    "refused-by-default": "Interdit sans ADR. La TOPOLOGY GATE refuse son activation en l'absence d'ADR référencé."
+  },
+  "families": {
+    "orchestration": {
+      "description": "Pattern racine déclaré dans STACK.md ## Active Orchestration Pattern ; imbrications dans topology/{n}-topology.md et dans l'IR (nodes[].nestedPattern).",
+      "default": "single-agent",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md",
+      "compositionRules": {
+        "nestingAllowed": true,
+        "maxNestingDepth": 2,
+        "rationale": "Au-delà de 2, plus personne ne peut raisonner sur le coût ni sur les trajectoires — et une architecture sur laquelle on ne peut pas raisonner ne peut pas être évaluée.",
+        "configKey": "MaxNestingDepth"
+      },
+      "selectionMatrix": {
+        "description": "Transcription de ORCHESTRATION-PATTERNS.md §2. Valeurs : suited (●), possible (◐), unsuited (○).",
+        "criteria": {
+          "disjoint-intents": {
+            "single-agent": "unsuited",
+            "router": "suited",
+            "sequential": "unsuited",
+            "parallel": "unsuited",
+            "supervisor": "possible",
+            "graph": "possible",
+            "plan-execute": "unsuited",
+            "reflection": "unsuited"
+          },
+          "business-imposed-order": {
+            "single-agent": "unsuited",
+            "router": "unsuited",
+            "sequential": "suited",
+            "parallel": "unsuited",
+            "supervisor": "unsuited",
+            "graph": "suited",
+            "plan-execute": "possible",
+            "reflection": "unsuited"
+          },
+          "decomposition-unknown-upfront": {
+            "single-agent": "unsuited",
+            "router": "unsuited",
+            "sequential": "unsuited",
+            "parallel": "unsuited",
+            "supervisor": "suited",
+            "graph": "possible",
+            "plan-execute": "suited",
+            "reflection": "unsuited"
+          },
+          "latency-constrained": {
+            "single-agent": "suited",
+            "router": "suited",
+            "sequential": "possible",
+            "parallel": "suited",
+            "supervisor": "unsuited",
+            "graph": "possible",
+            "plan-execute": "possible",
+            "reflection": "unsuited"
+          },
+          "tight-budget": {
+            "single-agent": "suited",
+            "router": "suited",
+            "sequential": "possible",
+            "parallel": "unsuited",
+            "supervisor": "unsuited",
+            "graph": "possible",
+            "plan-execute": "suited",
+            "reflection": "unsuited"
+          },
+          "cycles-required": {
+            "single-agent": "unsuited",
+            "router": "unsuited",
+            "sequential": "unsuited",
+            "parallel": "unsuited",
+            "supervisor": "possible",
+            "graph": "suited",
+            "plan-execute": "possible",
+            "reflection": "suited"
+          },
+          "human-in-the-loop": {
+            "single-agent": "unsuited",
+            "router": "unsuited",
+            "sequential": "possible",
+            "parallel": "unsuited",
+            "supervisor": "possible",
+            "graph": "suited",
+            "plan-execute": "suited",
+            "reflection": "unsuited"
+          },
+          "resume-after-interruption": {
+            "single-agent": "unsuited",
+            "router": "unsuited",
+            "sequential": "possible",
+            "parallel": "unsuited",
+            "supervisor": "unsuited",
+            "graph": "suited",
+            "plan-execute": "suited",
+            "reflection": "unsuited"
+          },
+          "quality-over-cost-explicit-rubric": {
+            "single-agent": "unsuited",
+            "router": "unsuited",
+            "sequential": "unsuited",
+            "parallel": "unsuited",
+            "supervisor": "possible",
+            "graph": "suited",
+            "plan-execute": "possible",
+            "reflection": "suited"
+          },
+          "reasoning-auditability": {
+            "single-agent": "possible",
+            "router": "suited",
+            "sequential": "suited",
+            "parallel": "possible",
+            "supervisor": "possible",
+            "graph": "suited",
+            "plan-execute": "suited",
+            "reflection": "suited"
+          },
+          "ease-of-evaluation": {
+            "single-agent": "suited",
+            "router": "suited",
+            "sequential": "suited",
+            "parallel": "possible",
+            "supervisor": "unsuited",
+            "graph": "possible",
+            "plan-execute": "suited",
+            "reflection": "possible"
+          }
+        },
+        "bestFit": {
+          "disjoint-intents": "router",
+          "business-imposed-order": "sequential",
+          "decomposition-unknown-upfront": "supervisor",
+          "latency-constrained": "parallel",
+          "tight-budget": "single-agent",
+          "cycles-required": "graph",
+          "human-in-the-loop": "graph",
+          "resume-after-interruption": "graph",
+          "quality-over-cost-explicit-rubric": "reflection",
+          "reasoning-auditability": "plan-execute",
+          "ease-of-evaluation": "single-agent"
+        }
+      },
+      "extraAgentJustifications": {
+        "description": "Liste CLOSE des raisons recevables pour ajouter un agent au-delà du premier (P7). « Séparation des responsabilités » n'en fait pas partie. Invariant topology-simplicity-justified.",
+        "allowed": [
+          {
+            "id": "tool-scope-isolation",
+            "label": "Isolation de scope d'outils",
+            "detail": "un outil destructif ne doit pas être dans le même contexte qu'un outil exposé à du texte non fiable"
+          },
+          {
+            "id": "distinct-model-tier",
+            "label": "Tier de modèle distinct",
+            "detail": "une étape mérite fast quand une autre exige deep"
+          },
+          {
+            "id": "context-pressure-measured",
+            "label": "Pression de contexte",
+            "detail": "la fenêtre ne tient pas, mesurée, pas supposée"
+          },
+          {
+            "id": "different-objective-function",
+            "label": "Fonction objectif différente",
+            "detail": "un critique qui note ne peut pas être le rédacteur qu'il note"
+          },
+          {
+            "id": "parallelism-required",
+            "label": "Parallélisme requis",
+            "detail": "la latence l'exige et les sous-tâches sont indépendantes"
+          }
+        ],
+        "rejected": [
+          {
+            "label": "Séparation des responsabilités",
+            "reason": "C'est le raisonnement qui produit un graphe à cinq agents pour ce qu'un agent à quatre outils faisait mieux, moins cher et de façon débogable."
+          }
+        ]
+      },
+      "antiPatterns": [
+        {
+          "id": "one-agent-per-tool",
+          "label": "Un agent par outil",
+          "why": "Confusion entre « séparation des responsabilités » et topologie. Un outil est un outil",
+          "errorClass": "TOPOLOGY_UNJUSTIFIED"
+        },
+        {
+          "id": "supervisor-single-specialist",
+          "label": "Superviseur à 1 seul spécialiste",
+          "why": "Reste d'une conception abandonnée. Un hop payé pour rien",
+          "errorClass": "TOPOLOGY_REDUNDANT_HOP"
+        },
+        {
+          "id": "loop-without-hop-cap",
+          "label": "Boucle sans plafond de hops",
+          "why": "« L'agent s'arrêtera quand il aura fini »",
+          "errorClass": "UNBOUNDED_LOOP"
+        },
+        {
+          "id": "router-without-fallback",
+          "label": "Routeur sans repli",
+          "why": "Le cas « aucune classe ne correspond » n'a pas été pensé",
+          "errorClass": "ROUTER_NO_FALLBACK"
+        },
+        {
+          "id": "critic-equals-writer",
+          "label": "Critique = rédacteur",
+          "why": "Économie apparente. Le modèle valide sa propre sortie",
+          "errorClass": "REFLECTION_SELF_GRADING"
+        },
+        {
+          "id": "handoff-without-state-contract",
+          "label": "Handoff sans contrat d'état",
+          "why": "On suppose que « le contexte suit »",
+          "errorClass": "HANDOFF_UNCONTRACTED"
+        },
+        {
+          "id": "agent-without-cap",
+          "label": "Agent sans CAP",
+          "why": "Ajouté « pour la structure »",
+          "errorClass": "AGENT_SERVES_NO_CAP"
+        },
+        {
+          "id": "agent-with-unrequired-tools",
+          "label": "Agent avec des outils qu'aucune de ses CAPs n'exige",
+          "why": "Copie d'une liste d'outils globale",
+          "errorClass": "TOOL_SCOPE_EXCESS"
+        }
+      ]
+    },
+    "rag": {
+      "description": "Pattern de retrieval déclaré dans STACK.md ## Active RAG Pattern. `none` est un choix légitime et fréquent : mettre du RAG par réflexe sur un problème que trois outils déterministes résolvent mieux est l'erreur la plus coûteuse du domaine.",
+      "default": "none",
+      "recommendedWhenRagNeeded": "hybrid",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md",
+      "subsystems": {
+        "description": "Les trois sous-systèmes échouent séparément et produisent le même symptôme (« l'agent invente »). Transcription de RAG-PATTERNS.md §1.",
+        "items": [
+          {
+            "id": "corpus",
+            "failsAs": "le document n'existe pas dans l'index",
+            "measuredBy": "couverture du corpus vs questions du golden set"
+          },
+          {
+            "id": "chunking",
+            "failsAs": "le document est là, coupé au mauvais endroit",
+            "measuredBy": "recall@k avec la vérité au niveau document"
+          },
+          {
+            "id": "index-embedding",
+            "failsAs": "le chunk est bon, la similarité ne le remonte pas",
+            "measuredBy": "recall@k, nDCG"
+          },
+          {
+            "id": "query-strategy",
+            "failsAs": "la question ne ressemble pas au texte de la réponse",
+            "measuredBy": "delta de recall avec et sans transformation de requête"
+          },
+          {
+            "id": "generation",
+            "failsAs": "tout est remonté correctement, la réponse invente",
+            "measuredBy": "groundedness (la seule qui isole ce cas)"
+          }
+        ]
+      },
+      "selectionMatrix": {
+        "description": "Transcription de RAG-PATTERNS.md §3 : besoin -> pattern recommandé.",
+        "rows": [
+          {
+            "need": "Factuel, corpus homogène",
+            "recommended": [
+              "hybrid"
+            ]
+          },
+          {
+            "need": "Documents longs et structurés",
+            "recommended": [
+              "contextual",
+              "hybrid"
+            ],
+            "composition": true
+          },
+          {
+            "need": "Identifiants, codes, références exactes",
+            "recommended": [
+              "hybrid"
+            ],
+            "constraint": "poids lexical >= 0.5"
+          },
+          {
+            "need": "Question != lexique de la réponse",
+            "recommended": [
+              "hyde"
+            ],
+            "alternative": "décomposition de requête"
+          },
+          {
+            "need": "Multi-sauts / relationnel",
+            "recommended": [
+              "sequential-multihop"
+            ]
+          },
+          {
+            "need": "Besoin d'info imprévisible",
+            "recommended": [
+              "agentic"
+            ]
+          },
+          {
+            "need": "Coût d'une erreur > coût d'un aveu d'ignorance",
+            "recommended": [
+              "self-rag"
+            ]
+          },
+          {
+            "need": "Couverture incomplète assumée",
+            "recommended": [
+              "corrective-rag"
+            ]
+          },
+          {
+            "need": "Questions globales / thématiques",
+            "recommended": [
+              "graph-rag"
+            ]
+          },
+          {
+            "need": "Détail ET synthèse",
+            "recommended": [
+              "raptor"
+            ]
+          },
+          {
+            "need": "Les données sont dans une base, pas dans des documents",
+            "recommended": [],
+            "redirect": "dataaccess",
+            "note": "aucun RAG -> DATA-ACCESS.md"
+          }
+        ]
+      },
+      "gateMetrics": {
+        "description": "Métriques de la RETRIEVAL GATE (G4), mesurées SANS aucun agent. Seuils par défaut de RAG-PATTERNS.md §5, alignés sur config.base.yml.",
+        "items": [
+          {
+            "id": "recall@k",
+            "measures": "le document pertinent est-il dans le top-k",
+            "defaultThreshold": 0.8,
+            "configKey": "RetrievalRecallAtK",
+            "deterministic": true
+          },
+          {
+            "id": "nDCG@k",
+            "measures": "est-il bien classé",
+            "defaultThreshold": 0.7,
+            "configKey": "RetrievalNdcgMin",
+            "deterministic": true
+          },
+          {
+            "id": "context_precision",
+            "measures": "proportion de bruit dans le contexte servi",
+            "defaultThreshold": 0.6,
+            "configKey": "RetrievalContextPrecisionMin",
+            "deterministic": false
+          },
+          {
+            "id": "groundedness",
+            "measures": "chaque affirmation de la réponse est-elle soutenue par le contexte",
+            "defaultThreshold": 0.85,
+            "configKey": "GroundednessMin",
+            "deterministic": false,
+            "requiresCalibratedJudge": true
+          },
+          {
+            "id": "answer_relevance",
+            "measures": "la réponse répond-elle à la question posée",
+            "defaultThreshold": 0.8,
+            "configKey": "AnswerRelevanceMin",
+            "deterministic": false,
+            "requiresCalibratedJudge": true
+          },
+          {
+            "id": "citation_resolve_rate",
+            "measures": "chaque citation pointe-t-elle vers un passage réel",
+            "defaultThreshold": 0.98,
+            "configKey": "CitationResolveRateMin",
+            "deterministic": true
+          }
+        ],
+        "diagnosticRule": "recall@k haut + groundedness bas => le problème est la génération, pas le retrieval. recall@k bas => inutile de toucher au prompt."
+      },
+      "corpusSecurity": {
+        "description": "Un corpus est une surface d'attaque (P8). Transcription de RAG-PATTERNS.md §6.",
+        "rules": [
+          {
+            "id": "poisoning-tested",
+            "detail": "la suite adversariale de G7 injecte volontairement des documents « ignore les instructions précédentes » dans un index de test"
+          },
+          {
+            "id": "pii-scanned-at-ingestion",
+            "detail": "MemoryPIIPolicy et le scan PII de G7 s'appliquent à l'index ; ce qui entre dans le vector store est difficile à retirer sélectivement"
+          },
+          {
+            "id": "identity-filter-at-source",
+            "detail": "si le corpus mélange des niveaux d'accès, le retrieval DOIT être filtré par identité de l'appelant, jamais après coup par le modèle. Un filtrage post-génération est une fuite avec une étape de plus"
+          }
+        ]
+      }
+    },
+    "chunking": {
+      "description": "Stratégie de découpage — plus déterminante pour la qualité finale que le choix du modèle d'embedding, et systématiquement sous-traitée à une valeur par défaut. Déclarée dans STACK.md (ChunkStrategy / ChunkSize / ChunkOverlap / ParentChildEnabled) et dans le retrieval-contract.",
+      "default": "recursive-structural",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md",
+      "universalGuard": {
+        "id": "comparative-measure-required",
+        "detail": "ChunkSize et ChunkOverlap ne sont pas des constantes universelles : le architect-rag doit produire une mesure comparative d'au moins deux configurations sur le golden set, et le résultat va dans le retrieval-contract. Choisir 512/50 parce que c'est le défaut d'un tutoriel n'est pas une décision d'architecture.",
+        "irField": "retrievers[].chunk.comparativeMeasureRef"
+      }
+    },
+    "dataaccess": {
+      "description": "Comment un agent touche une base. Décision de SÉCURITÉ autant que d'architecture. Si la réponse est dans une base, ce n'est pas un problème de RAG : vectoriser des lignes de table pour ensuite ne pas savoir compter est l'erreur classique.",
+      "default": "view-per-agent",
+      "docRef": ".sdda/docs/DATA-ACCESS.md",
+      "decisionMatrix": {
+        "description": "Transcription de DATA-ACCESS.md §2.",
+        "rows": [
+          {
+            "situation": "Aucun agent ne lit de données structurées — absence déclarée, pas oubli",
+            "strategy": "none"
+          },
+          {
+            "situation": "Besoins connus, lecture, production",
+            "strategy": "view-per-agent"
+          },
+          {
+            "situation": "Les données ne sont pas dans une base : fichiers, API authentifiées, serveurs MCP",
+            "strategy": "declared-sources"
+          },
+          {
+            "situation": "Opérations énumérables, écriture impliquée",
+            "strategy": "repository-tools"
+          },
+          {
+            "situation": "Couche sémantique déjà en place",
+            "strategy": "semantic-layer"
+          },
+          {
+            "situation": "Exploration analytique ouverte, données non sensibles, humain dans la boucle",
+            "strategy": "text-to-sql",
+            "constraint": "sous enveloppe"
+          },
+          {
+            "situation": "GraphQL gouverné existant",
+            "strategy": "graphql"
+          },
+          {
+            "situation": "Les données sont des documents, pas des lignes",
+            "strategy": null,
+            "redirect": "rag"
+          },
+          {
+            "situation": "Les deux",
+            "strategy": "view-per-agent",
+            "composition": "+ RAG documentaire, deux outils distincts"
+          }
+        ]
+      },
+      "safetyEnvelope": {
+        "description": "Obligatoire dès que DatabaseType != none. Déclarée dans STACK.md ## Active Data Access, portée dans l'IR (dataAccess[].envelope), vérifiée par la TOOL GATE et la SAFETY GATE. Invariant db-safety-envelope-present.",
+        "keys": [
+          {
+            "configKey": "DbAgentRole",
+            "default": "readonly",
+            "reason": "scoped-write et full exigent un ADR"
+          },
+          {
+            "configKey": "DbStatementTimeoutMs",
+            "default": 5000,
+            "reason": "une requête d'agent qui dure est une requête qui a dérapé"
+          },
+          {
+            "configKey": "DbMaxRowsReturned",
+            "default": 500,
+            "reason": "protège le budget de tokens autant que la base"
+          },
+          {
+            "configKey": "DbAllowedSchemas",
+            "default": [
+              "public"
+            ],
+            "reason": "allowlist, jamais denylist"
+          },
+          {
+            "configKey": "DbForbiddenStatements",
+            "default": [
+              "DROP",
+              "TRUNCATE",
+              "ALTER",
+              "GRANT",
+              "CREATE",
+              "DELETE",
+              "UPDATE",
+              "INSERT"
+            ],
+            "reason": "vérifié sur l'AST, pas par regex"
+          },
+          {
+            "configKey": "DbQueryLogging",
+            "default": "full",
+            "reason": "sans le journal, aucun post-mortem n'est possible"
+          }
+        ],
+        "identityFilterRule": "si les données sont cloisonnées par utilisateur ou tenant, le filtre est appliqué dans la vue ou dans le paramètre du repository, jamais délégué au modèle. Finding bloquant de review-safety."
+      },
+      "sideEffectClasses": {
+        "description": "Transcription de DATA-ACCESS.md §4 / PHILOSOPHY P8. Tout outil d'écriture porte side_effect_class + safety_strategy.",
+        "items": [
+          {
+            "id": "read-only",
+            "example": "list_unpaid_invoices",
+            "requiredStrategy": "aucune"
+          },
+          {
+            "id": "write-scoped",
+            "example": "update_ticket_status",
+            "requiredStrategy": "clé d'idempotence + allowlist de transitions"
+          },
+          {
+            "id": "write-destructive",
+            "example": "delete_customer_record",
+            "requiredStrategy": "dry-run + confirmation + plafond par run + journal"
+          },
+          {
+            "id": "external-side-effect",
+            "example": "send_email, create_refund",
+            "requiredStrategy": "idempotence sur clé naturelle + plafond + confirmation au-dessus d'un seuil"
+          }
+        ],
+        "retryRule": "La retry_policy d'un outil non idempotent doit être no-retry — ou l'outil doit devenir idempotent. Un agent qui réessaie un outil d'écriture non idempotent crée trois tickets, envoie trois e-mails, émet trois remboursements."
+      }
+    },
+    "memory": {
+      "description": "Stratégies de mémoire (STACK.md ## Active Memory Strategy, IR memory). ATTENTION : aucun document de référence dédié (pas de MEMORY-PATTERNS.md) — les entrées ci-dessous se limitent à ce que DOMAIN-MODEL.md (MEMORY SCOPE), le template STACK.md et ir.schema.json déclarent. Elles ne portent ni coût ni mode d'échec caractérisé : c'est un TROU documentaire, signalé, pas comblé par invention.",
+      "default": "buffer",
+      "docRef": null,
+      "scopes": [
+        "short-term",
+        "long-term",
+        "shared"
+      ],
+      "universalGuards": [
+        {
+          "id": "pii-policy-declared",
+          "configKey": "MemoryPIIPolicy",
+          "detail": "forbid | redact-before-write | allow — `allow` exige un ADR (invariant pii-not-in-vector-store)"
+        },
+        {
+          "id": "retention-declared",
+          "configKey": "LongTermRetentionDays",
+          "detail": "toute mémoire longue porte une rétention"
+        },
+        {
+          "id": "write-policy-declared",
+          "configKey": "LongTermWritePolicy",
+          "detail": "explicit (l'agent décide via un outil) | automatic"
+        },
+        {
+          "id": "cross-agent-state-scoped",
+          "configKey": "CrossAgentSharedState",
+          "detail": "none | scoped | full — qui lit l'état de qui ; matrice read/write par agent (memoryScopes dans l'IR)"
+        }
+      ]
+    },
+    "grader": {
+      "description": "Familles de graders d'évaluation (DOMAIN-MODEL.md §4, TESTING-AND-EVAL.md). Un test assert, une eval score : le grader produit un score, comparé à un seuil, sur k runs.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md",
+      "verdictRules": {
+        "description": "Verdict à trois couleurs (TESTING-AND-EVAL.md §2, P3).",
+        "green": "mean >= seuil ET pass_rate = 1.0 ET stddev <= EvalVarianceWarnPct",
+        "yellow": "seuil franchi en moyenne mais variance élevée ou pass_rate < 1.0",
+        "red": "mean < seuil, ou une classe critique échoue, ou un budget est dépassé",
+        "reportedFields": [
+          "score_mean",
+          "score_stddev",
+          "pass_rate",
+          "min",
+          "max"
+        ],
+        "runsDefault": {
+          "configKey": "EvalRuns",
+          "value": 3
+        },
+        "runsCritical": {
+          "configKey": "EvalRunsCritical",
+          "value": 5
+        }
+      }
+    }
+  },
+  "patterns": [
+    {
+      "id": "single-agent",
+      "family": "orchestration",
+      "status": "recommended",
+      "isDefault": true,
+      "summary": "Un modèle, une boucle, N outils. L'agent décide quoi appeler.",
+      "useWhen": [
+        "<= ~8 outils",
+        "un seul domaine",
+        "une seule posture de sortie"
+      ],
+      "avoidWhen": [
+        "au-delà de ~10-15 outils : la sélection devient bruitée",
+        "au-delà de ~2 personas contradictoires dans un prompt : les instructions se neutralisent"
+      ],
+      "costShape": "1 x (tours). Le moins cher, le plus rapide, le plus débogable.",
+      "dominantFailureMode": "Sélection d'outils bruitée au-delà de ~10-15 outils ; instructions qui se neutralisent au-delà de ~2 personas.",
+      "mandatoryGuards": [
+        "agent-bounds-declared"
+      ],
+      "escalationSignal": "La matrice de confusion des appels d'outils montre des erreurs systématiques entre outils voisins, MESURÉE, pas soupçonnée.",
+      "evalNotes": "Facilité d'évaluation : suited (la meilleure). Le signal d'escalade vers un autre pattern est une mesure (matrice de confusion des appels d'outils), jamais une intuition.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#single-agent"
+    },
+    {
+      "id": "router",
+      "family": "orchestration",
+      "status": "recommended",
+      "summary": "Classifier puis déléguer : un nœud de classification bon marché route vers un spécialiste.",
+      "useWhen": [
+        "intentions disjointes traitées très différemment"
+      ],
+      "avoidWhen": [
+        "les intentions se chevauchent ou ne sont pas séparables par un classifieur fast",
+        "aucun chemin de repli n'est concevable pour « aucune classe ne correspond »"
+      ],
+      "costShape": "1 classification fast + 1 spécialiste. Souvent MOINS cher que single-agent, parce que chaque spécialiste a un prompt court.",
+      "dominantFailureMode": "Le misroute silencieux et irrécupérable. Une fois parti chez le mauvais spécialiste, rien ne le rattrape.",
+      "mandatoryGuards": [
+        "fallback-path-required",
+        "confidence-threshold-declared",
+        "routing-golden-set-per-class-accuracy"
+      ],
+      "errorClasses": [
+        "ROUTER_NO_FALLBACK"
+      ],
+      "irRule": "Tout nœud router DOIT avoir au moins une arête isFallback (fallback ou clarify).",
+      "evalNotes": "Golden set de routing avec accuracy PAR CLASSE, pas globale — une accuracy globale de 0.95 peut cacher 0.40 sur la classe critique. Eval L5 : le routeur a-t-il routé correctement, accuracy par classe.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#router"
+    },
+    {
+      "id": "sequential",
+      "family": "orchestration",
+      "status": "recommended",
+      "aliases": [
+        "SeqAgent"
+      ],
+      "summary": "Pipeline d'étapes ordonnées : étapes fixes et connues, chacune raffine la précédente.",
+      "useWhen": [
+        "l'ordre est une propriété du métier (extraire -> normaliser -> valider -> rédiger)"
+      ],
+      "avoidWhen": [
+        "la décomposition n'est pas connue d'avance",
+        "les étapes sont indépendantes (préférer parallel si la latence contraint)"
+      ],
+      "costShape": "Somme des étapes. Prévisible, linéaire.",
+      "dominantFailureMode": "L'erreur compose. Une extraction à 0.9 suivie d'une normalisation à 0.9 donne 0.81, et personne ne l'a vu passer.",
+      "mandatoryGuards": [
+        "per-step-validation",
+        "per-step-eval"
+      ],
+      "evalNotes": "Validation par étape (schéma ou grader), et une eval PAR ÉTAPE en plus de l'eval bout-en-bout. Sinon on débogue un résultat final sans savoir quelle étape l'a abîmé.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#sequential"
+    },
+    {
+      "id": "parallel",
+      "family": "orchestration",
+      "status": "supported",
+      "summary": "Fan-out / gather : N sous-tâches indépendantes lancées ensemble, puis fusionnées.",
+      "useWhen": [
+        "la latence contraint",
+        "les sous-tâches sont vraiment indépendantes"
+      ],
+      "avoidWhen": [
+        "budget serré (N x tokens)",
+        "les sous-tâches dépendent l'une de l'autre",
+        "la stratégie de fusion ne peut pas être spécifiée"
+      ],
+      "costShape": "N x tokens, 1 x latence. On achète du temps avec de l'argent.",
+      "dominantFailureMode": "L'étape de fusion, systématiquement sous-estimée. Réconcilier des sorties contradictoires est le vrai travail.",
+      "mandatoryGuards": [
+        "merge-strategy-specified",
+        "merge-evaluated-separately"
+      ],
+      "mergeStrategies": [
+        "vote",
+        "priorité",
+        "synthèse LLM",
+        "échec si divergence"
+      ],
+      "evalNotes": "La stratégie de fusion est spécifiée et évaluée SÉPARÉMENT du reste.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#parallel"
+    },
+    {
+      "id": "supervisor",
+      "family": "orchestration",
+      "status": "supported",
+      "summary": "Hiérarchique, délégation dynamique : un superviseur décompose, délègue à des spécialistes, recueille, décide de continuer ou de conclure.",
+      "useWhen": [
+        "tâches hétérogènes",
+        "décomposition non connue d'avance"
+      ],
+      "avoidWhen": [
+        "budget serré ou latence contrainte",
+        "un seul spécialiste (TOPOLOGY_REDUNDANT_HOP)",
+        "la décomposition est connue d'avance (préférer sequential ou plan-execute)"
+      ],
+      "costShape": "Overhead du superviseur À CHAQUE hop, et le contexte grossit à chaque retour. Le pattern le plus cher et celui qui dérape le plus vite.",
+      "dominantFailureMode": "Le ping-pong superviseur <-> spécialiste, qui consomme le budget sans progresser.",
+      "mandatoryGuards": [
+        "max-hops-hard",
+        "handoff-state-contract",
+        "trajectory-eval-hop-distribution"
+      ],
+      "errorClasses": [
+        "TOPOLOGY_REDUNDANT_HOP",
+        "HANDOFF_UNCONTRACTED",
+        "UNBOUNDED_LOOP"
+      ],
+      "evalNotes": "Une eval de trajectoire vérifie la DISTRIBUTION du nombre de hops (et sa queue), pas seulement la réponse finale. Facilité d'évaluation : unsuited.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#supervisor"
+    },
+    {
+      "id": "graph",
+      "family": "orchestration",
+      "status": "supported",
+      "summary": "Machine à états explicite : nœuds, arêtes conditionnelles, cycles bornés, état persisté, reprise possible, interruption humaine.",
+      "useWhen": [
+        "il faut des cycles contrôlés",
+        "human-in-the-loop",
+        "reprise après interruption",
+        "durabilité"
+      ],
+      "avoidWhen": [
+        "un pattern plus simple couvre le besoin sans cycle",
+        "le graphe ne peut pas être dessiné et validé (au-delà de ~15 nœuds jamais dessinés, ingérable)"
+      ],
+      "costShape": "Explicite et calculable — c'est son principal avantage.",
+      "dominantFailureMode": "La complexité de conception. Un graphe à 15 nœuds qu'on n'a jamais dessiné est ingérable.",
+      "mandatoryGuards": [
+        "graph-drawn-mmd",
+        "ir-reachability-validated",
+        "ir-termination-validated",
+        "cycles-bounded"
+      ],
+      "evalNotes": "Le graphe est dessiné ({n}-topology.mmd) et validé DÉTERMINISTIQUEMENT sur l'IR — atteignabilité, terminaison, cycles bornés. HumanInTheLoopEnabled exige ce pattern (ou un pattern avec checkpointing).",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#graph"
+    },
+    {
+      "id": "plan-execute",
+      "family": "orchestration",
+      "status": "supported",
+      "summary": "Plan explicite puis exécution : un appel deep produit un plan ; des appels fast l'exécutent étape par étape.",
+      "useWhen": [
+        "horizon long, nombreuses étapes",
+        "le plan a de la valeur pour l'humain (auditabilité)"
+      ],
+      "avoidWhen": [
+        "la réalité diverge fréquemment du plan sans condition de replanification exprimable",
+        "tâche courte où le plan coûte plus que l'exécution"
+      ],
+      "costShape": "1 cher + N bon marché. Souvent le meilleur rapport qualité/prix sur les tâches longues.",
+      "dominantFailureMode": "Le plan périmé — la réalité diverge et l'exécuteur suit quand même.",
+      "mandatoryGuards": [
+        "replan-condition-specified",
+        "max-replans"
+      ],
+      "replanTriggers": [
+        "échec d'étape",
+        "découverte contredisant une prémisse"
+      ],
+      "evalNotes": "Auditabilité du raisonnement : suited (la meilleure). Vérifier en L5 que la replanification se déclenche sur les conditions déclarées et respecte son plafond.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#plan-execute"
+    },
+    {
+      "id": "reflection",
+      "family": "orchestration",
+      "status": "supported",
+      "summary": "Rédacteur / critique : un agent produit, un critique note selon une grille, on itère.",
+      "useWhen": [
+        "la qualité prime",
+        "il existe une GRILLE EXPLICITE — pas un « c'est mieux »"
+      ],
+      "avoidWhen": [
+        "budget serré ou latence contrainte (x2 à x4)",
+        "aucune grille explicite",
+        "le critique serait le même agent que le rédacteur"
+      ],
+      "costShape": "x2 à x4.",
+      "dominantFailureMode": "Le polissage infini, ou pire, la dérive où chaque itération dégrade.",
+      "mandatoryGuards": [
+        "max-reflections",
+        "improvement-delta-stop",
+        "critic-differs-from-writer"
+      ],
+      "errorClasses": [
+        "REFLECTION_SELF_GRADING"
+      ],
+      "p7Justification": "different-objective-function",
+      "evalNotes": "max_reflections ET un critère d'arrêt sur delta d'amélioration (on s'arrête si le gain < seuil). Le critique ne peut pas être le même agent que le rédacteur (P7, raison 4). Mesurer que l'itération améliore réellement le score de la grille.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#reflection"
+    },
+    {
+      "id": "blackboard",
+      "family": "orchestration",
+      "status": "experimental",
+      "summary": "État partagé : plusieurs agents contribuent à un artefact commun.",
+      "useWhen": [
+        "élaboration collaborative d'un document ou d'un plan"
+      ],
+      "avoidWhen": [
+        "l'état commun est volumineux (chaque agent relit tout)",
+        "aucune matrice d'ownership sur les sections de l'état ne peut être définie"
+      ],
+      "costShape": "Croît avec la taille de l'état — chaque agent relit tout.",
+      "dominantFailureMode": "Conflits d'écriture et écrasements.",
+      "mandatoryGuards": [
+        "state-section-ownership-matrix"
+      ],
+      "evalNotes": "La matrice d'ownership sur les sections de l'état est exactement le mécanisme de la matrice d'ownership de SDD_Pro, appliqué au runtime. Absent de la matrice de sélection §2 et de la ROADMAP : statut experimental pour cette raison.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#blackboard"
+    },
+    {
+      "id": "network",
+      "family": "orchestration",
+      "status": "refused-by-default",
+      "summary": "Handoff libre entre pairs : tout agent peut passer la main à tout agent.",
+      "refusalReason": "Coût non borné, trajectoires non prédictibles, évaluation quasi impossible.",
+      "useWhen": [],
+      "avoidWhen": [
+        "toujours, sauf ADR démontrant qu'aucun graph ne convient"
+      ],
+      "costShape": "Non borné.",
+      "dominantFailureMode": "Trajectoires non prédictibles ; évaluation quasi impossible.",
+      "mandatoryGuards": [
+        "adr-required",
+        "adr-proves-no-graph-fits"
+      ],
+      "irNote": "Délibérément ABSENT de l'enum orchestrationPattern de ir.schema.json : l'IR ne peut pas le représenter sans modification de schéma accompagnée d'un ADR.",
+      "evalNotes": "Aucune méthode d'évaluation documentée. C'est la raison du refus.",
+      "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#network"
+    },
+    {
+      "id": "none",
+      "family": "rag",
+      "status": "recommended",
+      "isDefault": true,
+      "summary": "Aucun corpus : le modèle sait, ou des outils déterministes savent. Envisager d'abord.",
+      "useWhen": [
+        "le modèle sait",
+        "des outils déterministes savent",
+        "les données sont dans une base, pas dans des documents (-> dataaccess)"
+      ],
+      "avoidWhen": [
+        "la réponse exige une source documentaire que ni le modèle ni un outil ne fournit"
+      ],
+      "costShape": "Aucune chaîne d'ingestion, aucun index à maintenir, aucune dérive de fraîcheur.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md. Le risque documenté est INVERSE : ajouter du RAG par réflexe — une chaîne d'ingestion, un index, une dérive de fraîcheur et une source d'hallucination pour un gain nul.",
+      "mandatoryGuards": [],
+      "evalNotes": "La RETRIEVAL GATE (G4) et RagQualityMode sont auto-skip quand le pattern actif est none.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#none"
+    },
+    {
+      "id": "classic",
+      "family": "rag",
+      "status": "supported",
+      "summary": "chunk -> embed -> top-k -> stuff.",
+      "useWhen": [
+        "corpus homogène",
+        "questions factuelles",
+        "une réponse par document"
+      ],
+      "avoidWhen": [
+        "questions multi-sauts, comparatives ou agrégatives",
+        "correspondances exactes fréquentes (références, identifiants, codes d'erreur, noms propres rares) — le vecteur les rate"
+      ],
+      "costShape": "Ingestion + un embedding par requête. Le plus simple ; hybrid fait quasi toujours mieux pour un surcoût faible.",
+      "dominantFailureMode": "Les questions multi-sauts, comparatives ou agrégatives échouent.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Sert de baseline pour mesurer le gain de hybrid.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#classic"
+    },
+    {
+      "id": "hybrid",
+      "family": "rag",
+      "status": "recommended",
+      "summary": "BM25 + vecteur, fusion RRF. Recommandation par défaut dès qu'il y a du RAG.",
+      "useWhen": [
+        "quasi toujours mieux que classic, pour un surcoût faible",
+        "factuel, corpus homogène",
+        "identifiants, codes, références exactes (poids lexical >= 0.5)"
+      ],
+      "avoidWhen": [
+        "aucun cas documenté ; les limites de classic (multi-sauts, agrégatif) demeurent"
+      ],
+      "costShape": "Surcoût faible par rapport à classic (un index lexical en plus).",
+      "dominantFailureMode": "Hérite des limites de classic sur les questions multi-sauts, comparatives ou agrégatives.",
+      "mandatoryGuards": [
+        "comparative-measure-required",
+        "hybrid-weights-declared"
+      ],
+      "configKeys": [
+        "HybridEnabled",
+        "HybridWeights"
+      ],
+      "rationale": "Le vecteur rate les correspondances exactes (références, identifiants, codes d'erreur, noms propres rares) ; le lexical les trouve. Le lexical rate les paraphrases ; le vecteur les trouve.",
+      "evalNotes": "Pour les identifiants et références exactes : poids lexical >= 0.5. Mesurer le delta de recall@k vs classic sur le golden set.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#hybrid"
+    },
+    {
+      "id": "contextual",
+      "family": "rag",
+      "status": "supported",
+      "summary": "Chunk préfixé du contexte de son document : chaque chunk est stocké avec 1-2 phrases situant sa place dans le document.",
+      "useWhen": [
+        "documents longs et structurés (contrats, normes, manuels), où un chunk isolé perd son sujet"
+      ],
+      "avoidWhen": [
+        "corpus de documents courts ou non structurés où le chunk se suffit"
+      ],
+      "costShape": "Une passe LLM à l'ingestion, AMORTIE sur toutes les requêtes.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "typicalGain": "La plus forte amélioration par euro dépensé sur des corpus documentaires structurés.",
+      "evalNotes": "Se compose avec hybrid (contextual + hybrid pour les documents longs et structurés). Mesurer le delta de recall@k / nDCG avec et sans préfixe contextuel.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#contextual"
+    },
+    {
+      "id": "hyde",
+      "family": "rag",
+      "status": "supported",
+      "summary": "Hypothetical document embeddings : générer une réponse hypothétique, l'embedder, chercher avec elle.",
+      "useWhen": [
+        "les questions ne ressemblent pas lexicalement aux réponses (question courte, corpus verbeux)"
+      ],
+      "avoidWhen": [
+        "latence contrainte (+1 appel LLM sur le chemin de latence)"
+      ],
+      "costShape": "+1 appel LLM par requête, sur le chemin de latence.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "alternative": "décomposition de requête",
+      "evalNotes": "Mesure de la sous-couche query-strategy : delta de recall avec et sans transformation de requête.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#hyde"
+    },
+    {
+      "id": "sequential-multihop",
+      "family": "rag",
+      "status": "supported",
+      "summary": "Décomposition + récupération en chaîne.",
+      "useWhen": [
+        "multi-sauts / relationnel : « Quelle clause du contrat de ce client couvre l'incident de mars ? » — trouver le client, puis son contrat, puis la clause"
+      ],
+      "avoidWhen": [
+        "questions à un seul saut (surcoût sans gain)"
+      ],
+      "costShape": "Un retrieval (et potentiellement un appel LLM) par saut.",
+      "dominantFailureMode": "La chaîne dérive sans plafond de sauts.",
+      "mandatoryGuards": [
+        "max-hops",
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Vérifier en L5 que le nombre de sauts respecte le plafond ; vérité terrain multi-documents dans le golden set (expected_documents).",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#sequential-multihop"
+    },
+    {
+      "id": "agentic",
+      "family": "rag",
+      "status": "supported",
+      "summary": "Le retriever est un outil : l'agent décide QUAND chercher, QUOI chercher, et s'il cherche encore.",
+      "useWhen": [
+        "besoin d'information imprévisible",
+        "sources multiples"
+      ],
+      "avoidWhen": [
+        "budget serré : coût variable par nature",
+        "besoin d'information prévisible (préférer un pattern à coût fixe)"
+      ],
+      "costShape": "Variable par nature — c'est son principal défaut budgétaire.",
+      "dominantFailureMode": "Dérive du nombre d'appels de retrieval, donc du coût.",
+      "mandatoryGuards": [
+        "max-retrieval-calls",
+        "comparative-measure-required"
+      ],
+      "irRule": "retrievers[].maxRetrievalCalls obligatoire quand pattern = agentic.",
+      "evalNotes": "max_retrieval_calls par run, TRACÉ et PLAFONNÉ. Eval L5 sur la distribution du nombre d'appels de retrieval.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#agentic"
+    },
+    {
+      "id": "self-rag",
+      "family": "rag",
+      "status": "supported",
+      "summary": "Noter la pertinence et décider : l'agent évalue les documents remontés et décide de répondre, re-chercher, ou déclarer qu'il ne sait pas.",
+      "useWhen": [
+        "le coût d'une réponse fausse dépasse le coût d'un « je ne sais pas »"
+      ],
+      "avoidWhen": [
+        "l'abstention n'a pas de valeur métier"
+      ],
+      "costShape": "Un appel d'évaluation de pertinence par requête, plus les re-recherches éventuelles.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "realGain": "C'est le pattern qui fabrique l'abstention — rare et précieux.",
+      "evalNotes": "Mesurer le taux d'abstention (TESTING-AND-EVAL.md §6) : un système qui ne dit jamais « je ne sais pas » sur un domaine ouvert ne fait pas bien son travail, il ment mieux.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#self-rag"
+    },
+    {
+      "id": "corrective-rag",
+      "family": "rag",
+      "status": "supported",
+      "aliases": [
+        "CRAG"
+      ],
+      "summary": "Évaluer puis se rabattre : si le retrieval est jugé insuffisant, repli sur une autre source (web, autre corpus, escalade humaine).",
+      "useWhen": [
+        "couverture du corpus incomplète et assumée"
+      ],
+      "avoidWhen": [
+        "aucune source de repli maîtrisée ou encadrable"
+      ],
+      "costShape": "Un appel d'évaluation par requête, plus le coût de la source de repli.",
+      "dominantFailureMode": "Le repli web introduit une source NON MAÎTRISÉE.",
+      "mandatoryGuards": [
+        "fallback-source-declared",
+        "injection-suite-mandatory-if-untrusted-fallback",
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Le repli web rend la suite d'injection obligatoire (P8, invariant injection-suite-mandatory). Mesurer le taux de déclenchement du repli.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#corrective-rag"
+    },
+    {
+      "id": "graph-rag",
+      "family": "rag",
+      "status": "experimental",
+      "summary": "Graphe d'entités + résumés de communautés.",
+      "useWhen": [
+        "questions globales (« quels sont les thèmes récurrents des réclamations ? ») qu'aucun top-k ne peut satisfaire"
+      ],
+      "avoidWhen": [
+        "sous ~10 000 documents",
+        "questions factuelles"
+      ],
+      "costShape": "Construction du graphe chère, maintenance lourde.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md ; le coût de construction et de maintenance est le risque documenté.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "candor": "Rarement justifié sous ~10 000 documents ou pour des questions factuelles.",
+      "evalNotes": "Les métriques top-k de G4 (recall@k, nDCG) ne capturent pas les questions globales : le golden set doit porter une vérité terrain adaptée (thèmes attendus).",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#graph-rag"
+    },
+    {
+      "id": "raptor",
+      "family": "rag",
+      "status": "experimental",
+      "summary": "Arbre hiérarchique de résumés : récupération à plusieurs niveaux d'abstraction.",
+      "useWhen": [
+        "il faut à la fois le détail et la synthèse selon la question"
+      ],
+      "avoidWhen": [
+        "un seul niveau d'abstraction suffit"
+      ],
+      "costShape": "Non caractérisé dans RAG-PATTERNS.md (construction de l'arbre de résumés à l'ingestion).",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Couverture documentaire partielle (ni coût ni mode d'échec) : statut experimental pour cette raison.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#raptor"
+    },
+    {
+      "id": "fixed",
+      "family": "chunking",
+      "status": "supported",
+      "summary": "Découpage à taille fixe.",
+      "useWhen": [
+        "corpus non structuré",
+        "baseline uniquement"
+      ],
+      "avoidWhen": [
+        "tout corpus structuré (titres, paragraphes, listes, articles)"
+      ],
+      "costShape": "Le moins cher à l'ingestion.",
+      "dominantFailureMode": "Coupe au mauvais endroit : le document est là, coupé au mauvais endroit (sous-système chunking).",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Sert de baseline dans la mesure comparative obligatoire.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#4-le-decoupage"
+    },
+    {
+      "id": "recursive-structural",
+      "family": "chunking",
+      "status": "recommended",
+      "isDefault": true,
+      "summary": "Respecte titres, paragraphes, listes.",
+      "useWhen": [
+        "défaut raisonnable pour un corpus structuré"
+      ],
+      "avoidWhen": [
+        "juridique et normes (préférer document-aware)"
+      ],
+      "costShape": "Faible à l'ingestion (déterministe).",
+      "dominantFailureMode": "Coupe au mauvais endroit quand la structure du document n'est pas celle attendue.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Défaut de STACK.md (ChunkStrategy: recursive-structural, ChunkSize: 800, ChunkOverlap: 120) — ces valeurs doivent être CONFIRMÉES par la mesure comparative, pas héritées.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#4-le-decoupage"
+    },
+    {
+      "id": "semantic",
+      "family": "chunking",
+      "status": "supported",
+      "summary": "Coupe aux ruptures de sens.",
+      "useWhen": [
+        "la structure typographique ne reflète pas la structure sémantique"
+      ],
+      "avoidWhen": [
+        "budget d'ingestion contraint"
+      ],
+      "costShape": "Coûteuse à l'ingestion.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Le surcoût d'ingestion doit être justifié par un delta mesuré de recall@k.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#4-le-decoupage"
+    },
+    {
+      "id": "document-aware",
+      "family": "chunking",
+      "status": "supported",
+      "summary": "Par article / section / clause.",
+      "useWhen": [
+        "juridique et normes — le meilleur pour ces corpus"
+      ],
+      "avoidWhen": [
+        "corpus sans structure d'articles, sections ou clauses"
+      ],
+      "costShape": "Dépend du parseur de structure ; déterministe.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "evalNotes": "Se compose naturellement avec contextual pour les documents longs et structurés.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#4-le-decoupage"
+    },
+    {
+      "id": "parent-child",
+      "family": "chunking",
+      "status": "recommended",
+      "summary": "Chercher sur le petit chunk, servir le parent.",
+      "useWhen": [
+        "le meilleur compromis précision / contexte"
+      ],
+      "avoidWhen": [
+        "aucun cas documenté"
+      ],
+      "costShape": "Deux niveaux de chunks à stocker.",
+      "dominantFailureMode": "Non caractérisé dans RAG-PATTERNS.md.",
+      "mandatoryGuards": [
+        "comparative-measure-required"
+      ],
+      "configKeys": [
+        "ParentChildEnabled"
+      ],
+      "evalNotes": "La vérité terrain de recall@k reste au niveau document ; context_precision se mesure sur le parent servi.",
+      "docRef": ".sdda/docs/RAG-PATTERNS.md#4-le-decoupage"
+    },
+    {
+      "id": "view-per-agent",
+      "family": "dataaccess",
+      "status": "recommended",
+      "isDefault": true,
+      "summary": "Une vue SQL dédiée par agent ou par CAP : l'agent ne voit QUE des vues taillées pour ses besoins, sur un rôle en lecture seule.",
+      "useWhen": [
+        "les besoins sont connus et stables",
+        "lecture, production — défaut recommandé, et de loin"
+      ],
+      "avoidWhen": [
+        "écriture impliquée (-> repository-tools)",
+        "exploration analytique ouverte"
+      ],
+      "costShape": "Coût cognitif pour le modèle : le plus bas (une vue bien nommée avec cinq colonnes métier bat n'importe quel schéma de 200 tables). Coût de maintenance : une vue par besoin ; le schéma évolue, les vues suivent.",
+      "dominantFailureMode": "Non caractérisé dans DATA-ACCESS.md au-delà du coût de maintenance des vues.",
+      "safetyLevel": "la plus haute — la surface est définie en SQL, par un humain, et versionnée. Le modèle ne peut pas atteindre ce que la vue n'expose pas.",
+      "mandatoryGuards": [
+        "db-safety-envelope-present",
+        "readonly-role",
+        "view-versioned-with-intent-comment",
+        "identity-filter-in-view"
+      ],
+      "contract": "Chaque vue est un artefact versionné dans workspace/src/data/views/, avec un commentaire décrivant son intention métier — commentaire qui devient la description de l'outil, donc du prompt.",
+      "evalNotes": "Testable en L2 sans LLM (contrat de la vue). Le filtre d'identité est DANS la vue, jamais délégué au modèle.",
+      "docRef": ".sdda/docs/DATA-ACCESS.md#view-per-agent"
+    },
+    {
+      "id": "declared-sources",
+      "family": "dataaccess",
+      "status": "recommended",
+      "summary": "Une seule grammaire pour une surface de données hétérogène : fichiers (json, jsonl, csv, tsv, xlsx, parquet) sur disque, partage réseau ou stockage objet, API HTTP authentifiées, et outils MCP. Deux registres séparés — Stores[] dit OÙ et avec quelles clés, Sources[] dit CE QUE C'EST et ce qu'on en expose.",
+      "useWhen": [
+        "les données ne sont pas dans une base : exports, référentiels métier, dépôts de fichiers",
+        "la source est une API tierce authentifiée ou un serveur MCP déjà en place",
+        "plusieurs formats et plusieurs emplacements cohabitent — c'est le cas nominal en entreprise"
+      ],
+      "avoidWhen": [
+        "la source est une base relationnelle interrogeable (-> view-per-agent ou repository-tools)",
+        "les données sont des documents à retrouver par le sens (-> rag)"
+      ],
+      "costShape": "Aucune dépendance obligatoire (json, csv, sqlite3 sont dans la stdlib) ; openpyxl et pyarrow sont des ajouts optionnels. Coût de maintenance : un bloc de déclaration par source, et une ré-inférence de schéma à chaque changement de format amont.",
+      "dominantFailureMode": "Le schéma qui dérive en silence. Ni un CSV, ni un XLSX, ni une réponse d'API n'ont de schéma : sans épinglage, une colonne qui change de type change le comportement de l'agent sans que rien ne le signale. D'où [DATA_SOURCE_SCHEMA_DRIFT] au démarrage plutôt qu'une hallucination en production.",
+      "safetyLevel": "haute, mais conditionnée à l'enveloppe : l'agent ne voit jamais un chemin, une URL ni un nom de serveur — seulement des outils nommés d'après les id de sources. Les frontières sont vérifiées et fail-closed ([DATA_SOURCE_PATH_ESCAPE], [DATA_EGRESS_UNDECLARED]), pas conventionnelles.",
+      "mandatoryGuards": [
+        "db-safety-envelope-present",
+        "store-root-boundary",
+        "egress-allowlist-non-empty",
+        "schema-inferred-then-pinned",
+        "secrets-by-env-name-only",
+        "as-of-returned-with-data",
+        "free-text-fields-treated-as-untrusted"
+      ],
+      "contract": "Stores[] et Sources[] sont déclarés dans STACK.md ## Active Data Sources, ou éclatés en manifestes .yml / .json / .md — y compris un fichier de configuration MCP au format standard. La description d'une source EST la description de l'outil exposé : un seul artefact porte l'intention métier, l'analogue exact du COMMENT ON VIEW de view-per-agent.",
+      "evalNotes": "Testable en L2 sans LLM : frontières, allowlists, plafonds, épinglage de schéma, présence de as_of. La présence d'un connecteur http-api ou mcp exige en plus une egressAllowlist non vide ET une suite d'injection, parce que la sortie est écrite par un tiers.",
+      "docRef": ".sdda/docs/DATA-SOURCES.md"
+    },
+    {
+      "id": "repository-tools",
+      "family": "dataaccess",
+      "status": "recommended",
+      "summary": "Outils paramétrés, requêtes figées : le SQL est écrit par des humains et figé dans le code ; l'agent ne fournit que des paramètres typés et validés.",
+      "useWhen": [
+        "les opérations sont énumérables (get_customer_by_id, list_unpaid_invoices(period))",
+        "le meilleur choix dès qu'il y a ÉCRITURE"
+      ],
+      "avoidWhen": [
+        "exploration analytique ouverte (non couverte)"
+      ],
+      "costShape": "Un outil par opération ; testable en L1 et L2 sans LLM.",
+      "dominantFailureMode": "Ne couvre pas l'exploration analytique ouverte.",
+      "safetyLevel": "très haute — aucune génération de SQL. Injection impossible par construction.",
+      "mandatoryGuards": [
+        "db-safety-envelope-present",
+        "typed-validated-parameters",
+        "side-effect-class-declared",
+        "identity-filter-in-parameter"
+      ],
+      "evalNotes": "Testabilité : la meilleure. Chaque outil est une fonction testable en L1 et L2 sans LLM. Les outils d'écriture portent side_effect_class + safety_strategy + retry no-retry si non idempotent.",
+      "docRef": ".sdda/docs/DATA-ACCESS.md#repository-tools"
+    },
+    {
+      "id": "semantic-layer",
+      "family": "dataaccess",
+      "status": "supported",
+      "summary": "Couche métrique exposée en outil : l'agent interroge des métriques et dimensions définies (dbt Semantic Layer, Cube, LookML), pas des tables.",
+      "useWhen": [
+        "l'organisation possède DÉJÀ une couche sémantique"
+      ],
+      "avoidWhen": [
+        "construire une couche sémantique pour un agent — ne pas le faire"
+      ],
+      "costShape": "Nul si la couche existe ; prohibitif s'il faut la construire.",
+      "dominantFailureMode": "Non caractérisé dans DATA-ACCESS.md.",
+      "safetyLevel": "haute — la couche impose les jointures et les agrégations correctes.",
+      "mandatoryGuards": [
+        "db-safety-envelope-present",
+        "existing-semantic-layer-required"
+      ],
+      "properGain": "Élimine la classe d'erreur la plus insidieuse du text-to-SQL — le SQL syntaxiquement valide et métier-ment faux (mauvaise jointure, double comptage, filtre de soft-delete oublié).",
+      "evalNotes": "Les métriques sont définies hors de l'agent : tester l'outil (L2), pas la couche.",
+      "docRef": ".sdda/docs/DATA-ACCESS.md#semantic-layer"
+    },
+    {
+      "id": "text-to-sql",
+      "family": "dataaccess",
+      "status": "supported",
+      "summary": "Génération de SQL par le modèle. Ne s'envisage que sous enveloppe complète.",
+      "useWhen": [
+        "exploration analytique ouverte",
+        "données non sensibles",
+        "un humain dans la boucle pour les décisions"
+      ],
+      "avoidWhen": [
+        "données sensibles",
+        "écriture (DbAgentRole: full exige un ADR)",
+        "besoins connus et stables (-> view-per-agent)"
+      ],
+      "costShape": "Une génération LLM par requête, plus EXPLAIN préalable.",
+      "dominantFailureMode": "Pas l'erreur SQL — la réponse plausible et fausse. La précision sur un schéma d'entreprise réel (jointures implicites, colonnes homonymes, soft-delete, conventions historiques) est TRÈS inférieure aux démonstrations sur des schémas jouets.",
+      "safetyLevel": "la plus basse.",
+      "mandatoryGuards": [
+        "db-safety-envelope-present",
+        "readonly-role-replica-preferred",
+        "schema-table-allowlist",
+        "forbidden-statements-ast-checked",
+        "statement-timeout",
+        "forced-limit-by-rewrite",
+        "ast-parsing-before-execution",
+        "explain-with-cost-refusal",
+        "full-query-logging",
+        "restricted-annotated-schema",
+        "adr-required-for-full-role"
+      ],
+      "envelope": [
+        "rôle base en lecture seule, sur un réplica de préférence",
+        "allowlist de schémas et de tables",
+        "statements interdits : DROP, TRUNCATE, ALTER, GRANT, CREATE, DELETE, UPDATE, INSERT",
+        "statement_timeout serveur (5 s par défaut)",
+        "LIMIT forcé par réécriture, jamais par confiance dans le modèle",
+        "parsing de l'AST avant exécution — pas une regex : une regex se contourne",
+        "EXPLAIN préalable avec refus au-delà d'un coût estimé",
+        "journalisation intégrale de toute requête émise",
+        "le schéma servi au modèle est restreint et annoté, jamais un dump"
+      ],
+      "evalNotes": "L'eval doit mesurer la justesse MÉTIER du résultat, pas la validité syntaxique du SQL. Golden set avec résultats attendus (numeric-tolerance / exact).",
+      "docRef": ".sdda/docs/DATA-ACCESS.md#text-to-sql"
+    },
+    {
+      "id": "graphql",
+      "family": "dataaccess",
+      "status": "supported",
+      "summary": "Un endpoint typé comme outil.",
+      "useWhen": [
+        "un GraphQL gouverné existe déjà et porte les autorisations"
+      ],
+      "avoidWhen": [
+        "aucun GraphQL gouverné existant"
+      ],
+      "costShape": "Non caractérisé dans DATA-ACCESS.md.",
+      "dominantFailureMode": "Profondeur et complexité des requêtes non plafonnées côté serveur.",
+      "safetyLevel": "dépend des autorisations portées par l'endpoint.",
+      "mandatoryGuards": [
+        "db-safety-envelope-present",
+        "server-side-depth-complexity-cap"
+      ],
+      "evalNotes": "La profondeur et la complexité des requêtes doivent être plafonnées côté serveur, pas espérées côté agent.",
+      "docRef": ".sdda/docs/DATA-ACCESS.md#graphql"
+    },
+    {
+      "id": "none",
+      "family": "dataaccess",
+      "status": "recommended",
+      "summary": "Absence DÉCLARÉE de stratégie d'accès aux données structurées : aucun agent ne lit ni base ni fichier de données. Les entrées viennent des outils, du corpus documentaire ou du message de l'utilisateur.",
+      "useWhen": [
+        "l'agent raisonne sur ce que l'utilisateur fournit (résumé, rédaction, classification d'un texte transmis)",
+        "toutes les données arrivent par des outils tiers contractualisés — ce sont alors des TOOL, pas du DATA ACCESS",
+        "le système est documentaire : le corpus est couvert par la famille rag"
+      ],
+      "avoidWhen": [
+        "un agent doit répondre « quel est le statut de la commande X » — il lui faut une source structurée"
+      ],
+      "costShape": "Aucune dépendance, aucun fichier généré, aucune enveloppe à maintenir.",
+      "dominantFailureMode": "Le `none` par OUBLI plutôt que par décision. Le symptôme arrive tard : un agent à qui il manque une source invente une réponse plausible. C'est la TOPOLOGY GATE qui le voit, en exigeant que chaque CAP nomme d'où vient sa donnée.",
+      "safetyLevel": "sans objet — il n'y a pas de surface. L'invariant db-safety-envelope-present n'a rien à vérifier, et ne peut pas non plus être contourné : une entrée dataAccess[] apparue sans changement de STACK.md est rapportée par validate_data_access.py.",
+      "mandatoryGuards": [],
+      "contract": "`DatabaseType: none` dans ## Active Data Access, aucun bloc ## Active Data Sources, aucune clé Db*/Json* effective. Ne produit AUCUNE entrée dans dataAccess[] de l'IR : l'absence est la représentation de none, et il n'existe donc pas de valeur `none` dans l'énumération strategy du schéma d'IR.",
+      "evalNotes": "`none` est un CHOIX, pas un trou — et c'est ce qui le rend vérifiable. Sans lui, l'absence de section serait ambiguë (oubli ou décision ?) et la TOOL GATE ne saurait pas si une enveloppe manquante est une violation ou le comportement attendu.",
+      "docRef": ".sdda/docs/DATA-ACCESS.md"
+    },
+    {
+      "id": "buffer",
+      "family": "memory",
+      "status": "recommended",
+      "isDefault": true,
+      "summary": "Mémoire court terme par fenêtre glissante de tours (ShortTermPolicy: sliding-window, ShortTermMaxTurns).",
+      "useWhen": [
+        "conversations <= ~20 tours",
+        "aucune continuite exigee entre deux sessions",
+        "defaut du framework : la memoire long terme se merite"
+      ],
+      "avoidWhen": [
+        "conversations longues : le cout quadratique devient dominant",
+        "l'utilisateur attend une continuite inter-session"
+      ],
+      "costShape": "QUADRATIQUE : au tour N on refacture les N-1 precedents. 20 tours x 500 tokens coutent ~100k tokens, pas 10k. Deuxieme cause d'explosion de budget, invisible en test sur 3 tours.",
+      "dominantFailureMode": "Debordement silencieux : les vieux tours tombent et le modele reference ce qu'il ne voit plus.",
+      "mandatoryGuards": [
+        "summarize-trigger-tokens",
+        "pii-policy-declared",
+        "cross-agent-state-scoped"
+      ],
+      "configKeys": [
+        "ShortTermPolicy",
+        "ShortTermMaxTurns"
+      ],
+      "evalNotes": "S'evalue UNIQUEMENT sur des conversations multi-tours. Mesurer cost_usd par conversation complete (seule facon de voir l'effet quadratique), multiturn_consistency, reference_resolution.",
+      "docRef": ".sdda/docs/MEMORY-PATTERNS.md"
+    },
+    {
+      "id": "summary",
+      "family": "memory",
+      "status": "recommended",
+      "summary": "Mémoire court terme résumée au-delà d'un seuil de tokens (ShortTermPolicy: summarize-over, SummarizeTriggerTokens).",
+      "useWhen": [
+        "conversations depassant une dizaine de tours",
+        "presque toujours rentable face a `buffer` sur du long"
+      ],
+      "avoidWhen": [
+        "les faits structures (identifiants, montants, dates) doivent survivre intacts"
+      ],
+      "costShape": "Un appel `fast` par compaction, amorti sur tous les tours suivants.",
+      "dominantFailureMode": "Perte IRREVERSIBLE : ce que le resume omet est perdu, et le modele ignore qu'il l'ignore.",
+      "mandatoryGuards": [
+        "declare-summarization-to-model",
+        "structured-facts-kept-verbatim",
+        "pii-policy-declared",
+        "cross-agent-state-scoped"
+      ],
+      "configKeys": [
+        "ShortTermPolicy",
+        "SummarizeTriggerTokens"
+      ],
+      "evalNotes": "Mesurer la perte : un golden set multi-tours ou la reponse au tour N depend d'un fait enonce au tour 2.",
+      "docRef": ".sdda/docs/MEMORY-PATTERNS.md"
+    },
+    {
+      "id": "vector",
+      "family": "memory",
+      "status": "supported",
+      "summary": "Mémoire long terme dans un store vectoriel (LongTermEnabled, LongTermStore: pgvector).",
+      "useWhen": [
+        "rappeler un fait precis enonce longtemps avant",
+        "historique volumineux"
+      ],
+      "avoidWhen": [
+        "la donnee doit etre EXACTE (solde, statut, adresse) : lire a la source",
+        "corpus contenant des PII non redigees"
+      ],
+      "costShape": "Ingestion continue + une requete de retrieval par tour.",
+      "dominantFailureMode": "Souvenir hors contexte : un fragment vieux de six mois remonte sans sa condition de validite et est traite comme actuel.",
+      "mandatoryGuards": [
+        "timestamp-exposed-to-model",
+        "invalidation-policy-declared",
+        "pii-policy-declared",
+        "retention-declared",
+        "write-policy-declared",
+        "cross-agent-state-scoped"
+      ],
+      "configKeys": [
+        "LongTermEnabled",
+        "LongTermStore",
+        "LongTermWritePolicy",
+        "LongTermRetentionDays",
+        "MemoryPIIPolicy"
+      ],
+      "evalNotes": "Mesurer stale_memory_rate (souvenirs perimes servis comme actuels) et memory_injection_persistence (injection session 1 -> effet session 2). Le scan PII de G7 s'applique a ce store comme a tout index.",
+      "docRef": ".sdda/docs/MEMORY-PATTERNS.md"
+    },
+    {
+      "id": "entity",
+      "family": "memory",
+      "status": "supported",
+      "summary": "Mémoire long terme par entités (faits structurés par entité).",
+      "useWhen": [
+        "le domaine a des entites identifiables (client, dossier, produit)",
+        "petit nombre d'attributs durables par entite"
+      ],
+      "avoidWhen": [
+        "les attributs ne sont pas enumerables a l'avance"
+      ],
+      "costShape": "Faible et previsible : on charge une fiche, pas un historique.",
+      "dominantFailureMode": "Derive d'attribut : le modele accumule des inferences douteuses dans la fiche, qui deviennent ensuite des premisses.",
+      "mandatoryGuards": [
+        "closed-schema",
+        "explicit-write-policy",
+        "provenance-per-attribute",
+        "pii-policy-declared",
+        "retention-declared",
+        "cross-agent-state-scoped"
+      ],
+      "configKeys": [
+        "LongTermEnabled",
+        "LongTermWritePolicy",
+        "LongTermRetentionDays",
+        "MemoryPIIPolicy"
+      ],
+      "evalNotes": "Verifier qu'aucun attribut ne s'ecrit hors schema, et que la provenance est conservee.",
+      "docRef": ".sdda/docs/MEMORY-PATTERNS.md"
+    },
+    {
+      "id": "store",
+      "family": "memory",
+      "status": "recommended",
+      "summary": "Mémoire long terme adossée à un store clé-valeur / document (LongTermStore: redis | store-backed).",
+      "useWhen": [
+        "ce dont on a besoin est connu et enumerable (preferences, etat de workflow, drapeaux)",
+        "souvent le bon choix, systematiquement ecarte au profit d'un vector store"
+      ],
+      "avoidWhen": [
+        "le rappel doit etre semantique plutot qu'exact"
+      ],
+      "costShape": "Negligeable.",
+      "dominantFailureMode": "Aucun propre a la memoire : c'est de l'etat applicatif ordinaire.",
+      "mandatoryGuards": [
+        "pii-policy-declared",
+        "retention-declared",
+        "write-policy-declared",
+        "cross-agent-state-scoped"
+      ],
+      "configKeys": [
+        "LongTermEnabled",
+        "LongTermStore",
+        "LongTermWritePolicy",
+        "LongTermRetentionDays",
+        "MemoryPIIPolicy"
+      ],
+      "evalNotes": "Teste comme de l'etat applicatif : tests deterministes L1, pas d'eval LLM.",
+      "docRef": ".sdda/docs/MEMORY-PATTERNS.md"
+    },
+    {
+      "id": "exact",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Égalité stricte entre sortie et attendu.",
+      "useWhen": [
+        "sortie déterministe et canonique (identifiant, classe de routage, valeur énumérée)"
+      ],
+      "avoidWhen": [
+        "sortie en langage naturel"
+      ],
+      "costShape": "0 token.",
+      "dominantFailureMode": "Faux négatifs sur des variantes de forme équivalentes.",
+      "mandatoryGuards": [],
+      "deterministic": true,
+      "evalNotes": "Grader naturel de la routing accuracy (par classe) en L4 / L5.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l4"
+    },
+    {
+      "id": "regex",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Correspondance par expression régulière.",
+      "useWhen": [
+        "motif de sortie contraint (format de référence, présence d'une citation)"
+      ],
+      "avoidWhen": [
+        "jugement sémantique"
+      ],
+      "costShape": "0 token.",
+      "dominantFailureMode": "Motif trop permissif ou trop strict.",
+      "mandatoryGuards": [],
+      "deterministic": true,
+      "evalNotes": "Ne jamais l'utiliser pour de la sûreté (une regex se contourne — DATA-ACCESS.md).",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l4"
+    },
+    {
+      "id": "schema",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Validation de la sortie contre un JSON Schema.",
+      "useWhen": [
+        "sortie structurée (quasi toujours : une sortie structurée validée est le guardrail le moins cher et le plus efficace)"
+      ],
+      "avoidWhen": [
+        "sortie libre"
+      ],
+      "costShape": "0 token.",
+      "dominantFailureMode": "Valide en forme, faux en fond (le schéma ne juge pas le contenu).",
+      "mandatoryGuards": [],
+      "deterministic": true,
+      "evalNotes": "À combiner avec un grader de contenu. Aussi validation par étape des pipelines sequential.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l4"
+    },
+    {
+      "id": "numeric-tolerance",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Comparaison numérique à tolérance déclarée.",
+      "useWhen": [
+        "résultats numériques (montants, comptages, agrégats — text-to-sql, repository-tools)"
+      ],
+      "avoidWhen": [
+        "valeurs non numériques"
+      ],
+      "costShape": "0 token.",
+      "dominantFailureMode": "Tolérance mal calibrée masquant une erreur métier.",
+      "mandatoryGuards": [
+        "tolerance-declared"
+      ],
+      "deterministic": true,
+      "evalNotes": "Grader naturel de la justesse métier d'un accès données.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l4"
+    },
+    {
+      "id": "semantic-similarity",
+      "family": "grader",
+      "status": "supported",
+      "summary": "Similarité d'embeddings entre sortie et référence, au-dessus d'un seuil.",
+      "useWhen": [
+        "paraphrases acceptables d'une référence connue"
+      ],
+      "avoidWhen": [
+        "la justesse factuelle compte (deux phrases proches peuvent se contredire)"
+      ],
+      "costShape": "Coût d'embedding, pas de génération.",
+      "dominantFailureMode": "Similarité haute entre une réponse juste et une réponse fausse mais proche lexicalement.",
+      "mandatoryGuards": [
+        "threshold-declared",
+        "embedding-model-pinned"
+      ],
+      "deterministic": false,
+      "evalNotes": "Le modèle d'embedding fait partie de ce qui est évalué : à épingler avec la baseline.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l4"
+    },
+    {
+      "id": "llm-judge",
+      "family": "grader",
+      "status": "supported",
+      "summary": "Un LLM note la sortie selon une grille de critères vérifiables.",
+      "useWhen": [
+        "jugement sémantique gradé (groundedness, answer_relevance, qualité selon grille)"
+      ],
+      "avoidWhen": [
+        "un grader déterministe suffit (P4)",
+        "aucun set de calibration humain n'est disponible"
+      ],
+      "costShape": "Tokens à chaque item x k runs.",
+      "dominantFailureMode": "Mesurer la complaisance d'un modèle envers un autre modèle — souvent le même — et appeler ça de la qualité.",
+      "mandatoryGuards": [
+        "calibration-min-items",
+        "calibration-min-kappa",
+        "judge-differs-from-evaluated",
+        "advisory-fallback-below-threshold",
+        "rubric-is-verifiable-criteria",
+        "judge-sees-reference-when-available"
+      ],
+      "calibration": {
+        "minItems": {
+          "configKey": "JudgeCalibrationMinItems",
+          "value": 50
+        },
+        "minKappa": {
+          "configKey": "JudgeCalibrationMinKappa",
+          "value": 0.6
+        },
+        "agreementMetric": "kappa de Cohen pour du binaire/ordinal, corrélation pour du continu",
+        "reportPath": "workspace/evals/calibration/{grader}.json",
+        "belowThreshold": "la grille est retravaillée, ou le juge devient advisory — il produit un score informatif mais ne bloque plus",
+        "mustDifferFromEvaluated": {
+          "configKey": "JudgeMustDifferFromEvaluated",
+          "value": true
+        }
+      },
+      "irRule": "evaluation.suites[].judgeCalibrationRef obligatoire quand grader = llm-judge et advisory = false.",
+      "deterministic": false,
+      "evalNotes": "Invariant llm-judge-calibrated (P9). Le rapport de calibration est versionné à côté du juge et référencé depuis l'IR. La grille est une liste de critères vérifiables, pas « note de 1 à 10 la qualité ».",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#3-calibration-des-juges-llm"
+    },
+    {
+      "id": "trajectory",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Juge l'ordre et la nature des appels sur la trace, pas la réponse.",
+      "useWhen": [
+        "L5 : routage par classe, outils appelés et ordre admissible, distribution des hops, respect des bornes, comportement à l'atteinte, absence de boucle"
+      ],
+      "avoidWhen": [
+        "aucune trace disponible (TraceLevel: off)"
+      ],
+      "costShape": "0 token (lecture de trace).",
+      "dominantFailureMode": "Trajectoire attendue trop rigide (un ordre admissible, pas un ordre unique).",
+      "mandatoryGuards": [
+        "trace-emitted-per-run"
+      ],
+      "deterministic": true,
+      "evalNotes": "Une réponse correcte obtenue par une trajectoire aberrante est un faux vert : elle coûte dix fois le budget et cassera au prochain changement de prompt.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l5"
+    },
+    {
+      "id": "cost",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Coût mesuré d'un run comparé au budget déclaré.",
+      "useWhen": [
+        "L7 : mesure conjointe qualité / coût / latence (ORCH GATE)"
+      ],
+      "avoidWhen": [
+        "CostTrackingEnabled: false"
+      ],
+      "costShape": "0 token (lecture de trace).",
+      "dominantFailureMode": "Pricing du provider périmé (pricing dans .sdda/providers/*.yaml).",
+      "mandatoryGuards": [
+        "provider-pricing-present"
+      ],
+      "deterministic": true,
+      "evalNotes": "Un run qui atteint le score en dépassant CostPerRunHardCapUsd est ROUGE, pas jaune. Rapport : coût par CAP.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l7"
+    },
+    {
+      "id": "latency",
+      "family": "grader",
+      "status": "recommended",
+      "summary": "Latence mesurée comparée à LatencyP95TargetMs.",
+      "useWhen": [
+        "L7 : mesure conjointe qualité / coût / latence (ORCH GATE)"
+      ],
+      "avoidWhen": [],
+      "costShape": "0 token (lecture de trace).",
+      "dominantFailureMode": "Mesurer la moyenne au lieu du p95.",
+      "mandatoryGuards": [],
+      "deterministic": true,
+      "evalNotes": "La cible est un p95, pas une moyenne : la queue de distribution est l'information.",
+      "docRef": ".sdda/docs/TESTING-AND-EVAL.md#l7"
+    }
+  ]
+}

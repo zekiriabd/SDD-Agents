@@ -1,0 +1,374 @@
+# SDD_Agents — INVARIANTS Manifest
+#
+# Les CONTRATS PORTEURS du framework : ce qui doit être vrai pour que le
+# pipeline fonctionne. Chaque invariant pointe son ENFORCER sur disque.
+#
+# Objet : empêcher le doc-theater. Un audit doit pouvoir vérifier que chaque
+# entrée ci-dessous a un enforcer vivant qui attrape réellement la violation.
+# Si un enforcer disparaît sans que l'invariant soit explicitement retiré, le
+# smoke test de ce manifeste échoue.
+#
+# Schéma :
+#   id          identifiant kebab-case unique
+#   name        titre court lisible
+#   rationale   pourquoi ce contrat existe (la défaillance qu'il empêche)
+#   severity    critical | major | minor
+#   principle   renvoi vers PHILOSOPHY.md
+#   gate        gate qui l'applique, si applicable
+#   enforcers   fichiers qui l'appliquent au runtime ou le détectent en CI
+#   bypasses    désactivations légitimes (opt-in, audit-logguées)
+#
+# Smoke test : .sdda/python/tests/test_invariants_manifest.py vérifie que
+# chaque enforcer listé existe sur disque.
+
+schema_version: 1
+status: design-phase-0        # enforcers à implémenter — cf. docs/ROADMAP.md
+total: 20
+
+invariants:
+
+  # ── Spécification ────────────────────────────────────────────────────────
+  - id: cap-ac-must-be-evaluable
+    name: Tout critère d'acceptation de CAP nomme métrique, seuil et dataset
+    rationale: |
+      Une sortie de LLM est toujours observable et jamais déterministe. Un AC
+      « l'agent répond de manière utile » est invérifiable et sera déclaré vert
+      par complaisance. Forcer la mesurabilité au moment de la spécification
+      pose la question « comment saura-t-on que ça marche ? » pendant qu'elle
+      est encore bon marché.
+    severity: critical
+    principle: P2
+    gate: G1
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_cap.py
+      - .sdda/python/sdda_hooks/preflight_cap_gate.py
+    bypasses: []
+
+  - id: mission-budget-declared
+    name: Toute MISSION déclare coût, latence et plafond de tokens
+    rationale: |
+      En agentic, le coût d'exécution est une exigence fonctionnelle, pas un
+      sujet d'exploitation. Une topologie élégante à $0.40 l'appel pour un
+      produit qui en facture $0.05 est une erreur qu'on découvre six semaines
+      trop tard.
+    severity: critical
+    principle: P6
+    gate: G0
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_mission.py
+    bypasses: []
+
+  - id: holdout-disjoint-from-golden
+    name: Les jeux d'ajustement et de verdict sont disjoints, vérifié par hash
+    rationale: |
+      Optimiser les prompts contre le jeu qui rend le verdict est la manière
+      agentic de se mentir, et elle est silencieuse.
+    severity: critical
+    principle: P2
+    gate: G8
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_datasets.py
+    bypasses:
+      - "Project Config: HoldoutDisjointCheck: warn (audit-loggué)"
+
+  # ── Topologie ────────────────────────────────────────────────────────────
+  - id: architecture-declared-by-architect
+    name: L'architecture est déclarée par l'architecte, complète avant toute génération
+    rationale: |
+      Le LLM ne choisit pas l'architecture : il implémente celle que
+      l'architecte a déclarée. `STACK.md` porte le CHOIX (pattern
+      d'orchestration, RAG, accès aux données, MCP, modèles) ; la spécification
+      porte tout ce qu'il faut pour le construire — roster nominatif des
+      agents, rôle et responsabilités de chacun, outils et skills, modèle,
+      orchestrateur, relations, bornes de boucle.
+
+      Chaque choix de STACK.md impose des champs, déclarés dans
+      `registry/architecture-requirements.yml`. Un champ manquant est bloquant,
+      parce qu'il ne reste pas manquant : il est comblé au moment de la
+      génération par un modèle qui inventera un rôle plausible. Une
+      architecture partiellement spécifiée est une architecture partiellement
+      ÉMERGENTE — c'est-à-dire une architecture que personne n'a décidée et que
+      personne ne peut auditer.
+
+      Le biais de simplicité de P7 subsiste en AVERTISSEMENT
+      (`[TOPOLOGY_SIMPLICITY_ADVISORY]`) : un graphe à cinq agents reste une
+      erreur fréquente et coûteuse, mais c'est celle de l'architecte, et il a
+      le droit de la commettre en connaissance de cause.
+    severity: critical
+    principle: P7
+    gate: G2
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_architecture.py
+      - .sdda/registry/architecture-requirements.yml
+      - .sdda/python/sdda_scripts/validate_topology.py
+      - .sdda/agents/architect-topology.md
+    bypasses: []
+
+  - id: no-unbounded-loop
+    name: Tout agent et tout cycle du graphe porte des bornes explicites
+    rationale: |
+      Une boucle ReAct sans plafond est l'équivalent agentic d'un while(true) —
+      sauf qu'elle facture. Chaque borne porte aussi un comportement défini à
+      son atteinte : échouer, dégrader ou escalader.
+    severity: critical
+    principle: P12
+    gate: G2
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_ir.py
+      - .sdda/python/sdda_hooks/preflight_agent_bounds.py
+    bypasses: []
+
+  - id: framework-neutral-contracts
+    name: Aucun identifiant de framework ni d'infrastructure hors de `binding`
+    rationale: |
+      C'est ce qui rend STACK.md réellement déclaratif : changer de framework
+      doit invalider le code, jamais la spécification. Un `StateGraph` qui
+      remonte dans un contrat soude la spec à LangGraph.
+
+      La neutralité FRAMEWORK ne suffisait pas. `store: "pgvector"` et
+      `embeddingModel: "voyage-3-large"` étaient des champs OBLIGATOIRES de
+      l'IR : ils couplent exactement de la même façon, et le contrôle ne les
+      voyait pas parce qu'il ne cherchait que des noms d'API. Pire, la même
+      décision vivait déjà dans `STACK.md ## Active Retrieval Stack` — deux
+      vérités sur le même fait, que rien ne confrontait.
+
+      L'IR porte donc deux branches : l'INTENTION (ce qui s'exige et se mesure)
+      et `binding` (les composants qui la réalisent, réconciliés avec les
+      stacks actives à la compilation). Un composant nommé hors de `binding`
+      est `[INFRA_LEAK_IN_INTENT]` ; un `binding` en désaccord avec la stack
+      active est `[RETRIEVAL_BINDING_MISMATCH]`.
+
+      Le critère d'acceptation est exécutable, pas déclaratif : un générateur
+      doit dériver son plan d'appel complet SANS lire `binding`, et ce plan doit
+      être identique quel que soit le store. Sans ce test, on n'apprend l'échec
+      de l'abstraction qu'au deuxième générateur — donc après avoir écrit le
+      premier contre un contrat déjà faux.
+    severity: major
+    principle: P11
+    gate: G2
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_ir.py
+      - .sdda/python/sdda_scripts/ir_compiler.py
+      - .sdda/python/tests/test_contract_neutrality.py
+      - .sdda/python/tests/test_ir_compiler.py
+    bypasses: []
+
+  - id: budget-estimated-before-code
+    name: Le budget estimé de la topologie est sous le plafond avant génération
+    rationale: |
+      Découvrir qu'une architecture est économiquement impossible après l'avoir
+      construite est le gaspillage le plus cher du domaine. L'estimation se
+      calcule sur le graphe de l'IR, pas sur une intuition.
+    severity: major
+    principle: P6
+    gate: G2
+    enforcers:
+      - .sdda/python/sdda_scripts/estimate_budget.py
+    bypasses:
+      - "Env: SDDA_BYPASS_BUDGET_ESTIMATE=1 (audit-loggué)"
+
+  - id: activated-stack-is-loadable
+    name: Toute ligne activée dans STACK.md a sa fiche sur disque
+    rationale: |
+      Une ligne activée pour un composant sans fiche NE CHARGE RIEN
+      (ARCHITECTURE.md §2). L'agent travaille alors sans mapping de couches,
+      sans idiomes et sans `.libs.json` : il invente une API, une version, une
+      convention — et le résultat compile parfois, ce qui est pire. Le catalogue
+      annoncé n'est pas le catalogue chargeable, et c'est le disque qui fait foi,
+      jamais le registre.
+    severity: major
+    principle: P11
+    gate: G2
+    enforcers:
+      - .sdda/python/sdda_hooks/preflight_stack_combo.py
+    bypasses:
+      - "Env: SDDA_ALLOW_UNTESTED_COMBO=1 (audit-loggué, hérité de SDD_Pro)"
+
+  # ── Outils et données ────────────────────────────────────────────────────
+  - id: tool-side-effect-declared
+    name: Tout outil déclare sa classe d'effet de bord, et sa stratégie de sûreté si non read-only
+    rationale: |
+      Un agent avec un outil d'écriture non idempotent qui réessaie crée trois
+      tickets, envoie trois e-mails, émet trois remboursements. La classe
+      d'effet de bord rend ce risque visible au moment de la conception.
+    severity: critical
+    principle: P8
+    gate: G3
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_tool_contract.py
+      - .sdda/python/sdda_hooks/preflight_tool_gate.py
+    bypasses: []
+
+  - id: tool-gate-before-agent-wiring
+    name: Aucun agent n'est câblé à un outil dont les tests de contrat ne sont pas verts
+    rationale: |
+      Un outil dont le schéma ment se présente comme « le superviseur route
+      mal ». Prouver la couche basse avant de s'appuyer dessus évite de déboguer
+      le mauvais étage — et de le déboguer avec un LLM, donc cher.
+    severity: critical
+    principle: P5
+    gate: G3
+    enforcers:
+      - .sdda/python/sdda_hooks/preflight_tool_gate.py
+    bypasses:
+      - "Env: SDDA_BYPASS_TOOL_GATE=1 (audit-loggué)"
+
+  - id: db-safety-envelope-present
+    name: Toute stratégie d'accès base porte son enveloppe de sûreté
+    rationale: |
+      Un agent avec du text-to-SQL non contraint sur une base de production est
+      un incident qui attend son heure. Rôle lecture seule, timeout, plafond de
+      lignes, allowlist de schémas, statements interdits vérifiés sur l'AST.
+    severity: critical
+    principle: P8
+    gate: G3
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_data_access.py
+      - .sdda/python/sdda_hooks/preflight_db_envelope.py
+    bypasses:
+      - "ADR explicite requis pour DbAgentRole: full"
+
+  # ── Retrieval ────────────────────────────────────────────────────────────
+  - id: retrieval-gate-before-agent
+    name: Aucun agent n'est câblé à un index qui n'a pas passé son eval
+    rationale: |
+      Un retriever à recall 0.4 se présente comme « l'agent hallucine ». Mesurer
+      le retrieval SANS agent est la seule façon de distinguer les deux, et
+      c'est l'origine de la majorité des diagnostics erronés du domaine.
+    severity: critical
+    principle: P5
+    gate: G4
+    enforcers:
+      - .sdda/python/sdda_scripts/run_retrieval_eval.py
+      - .sdda/python/sdda_hooks/preflight_retrieval_gate.py
+    bypasses:
+      - "Env: SDDA_BYPASS_RETRIEVAL_GATE=1 (audit-loggué)"
+
+  - id: pii-not-in-vector-store
+    name: Aucune PII non déclarée n'entre dans un index
+    rationale: |
+      Ce qui entre dans un vector store est difficile à retirer sélectivement.
+      La décision se prend à l'ingestion, pas après l'incident.
+    severity: critical
+    principle: P8
+    gate: G7
+    enforcers:
+      - .sdda/python/sdda_scripts/scan_pii.py
+    bypasses:
+      - "ADR explicite requis pour MemoryPIIPolicy: allow"
+
+  # ── Prompts et évaluation ────────────────────────────────────────────────
+  - id: prompts-are-files
+    name: Aucun prompt inline dans le code généré
+    rationale: |
+      Un prompt noyé dans une f-string au milieu d'un service est un changement
+      de comportement invisible à la revue et introuvable en production. Les
+      prompts sont des fichiers, versionnés, hashés, chargés au runtime.
+    severity: major
+    principle: P1
+    enforcers:
+      - .sdda/python/sdda_scripts/lint_prompts.py
+      - .sdda/python/sdda_hooks/postflight_no_inline_prompt.py
+    bypasses: []
+
+  - id: eval-baseline-hash-pinned
+    name: Un résultat d'eval est périmé dès qu'un de ses hashes épinglés bouge
+    rationale: |
+      L'édition d'un prompt est le seul changement de comportement qu'aucun
+      compilateur n'attrape. Sans épinglage, on livre un vert obtenu contre un
+      prompt qui n'existe plus. Le tuple : prompt, modèle, index, schémas
+      d'outils, dataset.
+    severity: critical
+    principle: P10
+    gate: G8
+    enforcers:
+      - .sdda/python/sdda_lib/eval_pinning.py
+      - .sdda/python/sdda_scripts/check_baseline_freshness.py
+    bypasses: []
+
+  - id: llm-judge-calibrated
+    name: Un grader LLM non calibré ne rend pas de verdict bloquant
+    rationale: |
+      Sans calibration contre des labels humains, on mesure la complaisance d'un
+      modèle envers un autre modèle — souvent le même — et on appelle ça de la
+      qualité. Sous le seuil, le juge devient advisory : il informe, il ne bloque
+      plus.
+    severity: critical
+    principle: P9
+    gate: G5
+    enforcers:
+      - .sdda/python/sdda_scripts/calibrate_judge.py
+      - .sdda/python/sdda_hooks/preflight_judge_calibration.py
+    bypasses:
+      - "Grader marqué advisory: true (ne bloque plus, score informatif)"
+
+  - id: non-determinism-k-runs
+    name: Aucune eval médiée par un LLM n'est rapportée depuis un seul run
+    rationale: |
+      Un run vert n'est pas une preuve. Le rapport porte moyenne, écart-type et
+      taux de réussite sur k runs. Aplatir cela en un booléen est la façon la
+      plus courante de livrer un agent qui casse en production.
+    severity: critical
+    principle: P3
+    enforcers:
+      - .sdda/python/sdda_scripts/eval_runner.py
+    bypasses:
+      - "Project Config: EvalRuns: 1 (dev local uniquement, refusé en CI)"
+
+  # ── Exposition ───────────────────────────────────────────────────────────
+  - id: api-contract-derived-from-ir
+    name: Le contrat exposé est dérivé de l'IR, jamais écrit à la main
+    rationale: |
+      C'est l'API Gate de SDD_Pro transposée : là-bas la couture était
+      back↔front, ici elle est entre l'IR et le monde extérieur. Un OpenAPI
+      rédigé à côté de l'IR diverge en silence — un champ publié que l'agent ne
+      connaît pas est une entrée que rien ne valide, un champ requis absent du
+      contrat échoue au premier appel réel, et une route non soutenue est un
+      point d'entrée que personne n'a évalué et qu'aucune borne ne protège.
+
+      Cet invariant est arrivé APRÈS ses classes d'erreur, et c'est la leçon :
+      `[API_CONTRACT_DRIFT]` et `[API_ROUTE_UNBACKED]` étaient annoncés
+      bloquants dans ARCHITECTURE.md §4 pendant tout un lot sans qu'aucun
+      script ne les émette. Le registre canonique, régénéré depuis les
+      émetteurs réels, se déclarait « à jour » en les ignorant — une classe qui
+      ne vit que dans la prose n'y entre jamais. Le contrôle `errors.documented`
+      de `framework_smoke.py` ferme cette porte pour toutes les autres.
+    severity: major
+    principle: P11
+    gate: G6
+    enforcers:
+      - .sdda/python/sdda_scripts/validate_api_contract.py
+      - .sdda/python/sdda_scripts/validate_packaging.py
+    bypasses:
+      - "Project Config: ApiContractFirst: false (ADR référencé exigé ; ne relâche QUE les schémas, jamais les routes ni les statuts)"
+
+  # ── Sécurité et observabilité ────────────────────────────────────────────
+  - id: injection-suite-mandatory
+    name: Tout agent consommant du texte non maîtrisé porte une suite d'injection
+    rationale: |
+      Un document retrouvé, une réponse d'API, une page web sont du contenu,
+      jamais des instructions. L'injection indirecte est la voie d'attaque
+      dominante des systèmes RAG et elle ne se relit pas dans le code : elle se
+      teste contre le système vivant.
+    severity: critical
+    principle: P8
+    gate: G7
+    enforcers:
+      - .sdda/python/sdda_scripts/run_adversarial_suite.py
+      - .sdda/python/sdda_scripts/validate_ir.py
+    bypasses: []
+
+  - id: trace-emitted-per-run
+    name: Tout run émet une trace de spans
+    rationale: |
+      Il n'existe pas de stack trace dans un système non déterministe. Sans
+      trace — tours d'agent, appels d'outils, documents retournés, tokens, coût,
+      latence — un post-mortem est impossible et une dérive de qualité est
+      invisible.
+    severity: major
+    principle: P1
+    enforcers:
+      - .sdda/python/sdda_lib/tracing.py
+      - .sdda/python/sdda_hooks/postflight_trace_present.py
+    bypasses:
+      - "Project Config: TraceLevel: off (POC jetable uniquement)"

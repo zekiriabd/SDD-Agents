@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdda"
+version = "0.1.0"
+description = "SDD_Agents — outillage déterministe (0 token, 0 réseau) : compilateur d'IR, gates, machine à états"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+# Le moteur est stdlib uniquement : pas de PyYAML, pas de jsonschema, pas de client HTTP (P4).
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+sdda-ir-compile = "sdda_scripts.ir_compiler:main"
+sdda-validate-mission = "sdda_scripts.validate_mission:main"
+sdda-validate-cap = "sdda_scripts.validate_cap:main"
+sdda-validate-topology = "sdda_scripts.validate_topology:main"
+sdda-validate-ir = "sdda_scripts.validate_ir:main"
+sdda-estimate-budget = "sdda_scripts.estimate_budget:main"
+sdda-validate-datasets = "sdda_scripts.validate_datasets:main"
+sdda-status = "sdda_scripts.compute_status:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sdda_lib*", "sdda_scripts*", "sdda_admin*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
