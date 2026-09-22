@@ -115,7 +115,8 @@ workspace/
 ├── traces/runs/
 ├── src/
 ├── docs/
-└── .sys/{.ir,.context,.state,.validation,.audit,.routing,.cache}/
+├── .sys/{.ir,.context,.state,.validation,.audit}/
+└── .sys/workspace.json            # workspaceVersion — ce que migrate_workspace.py fait monter
 ```
 
 Les trois blocs de `STACK.md` qui doivent être **vérifiés par l'humain** après
@@ -151,6 +152,12 @@ catégorie obligatoire (`lang`, `framework`, `orchestration`, `serving`),
 | `0` | projet prêt — `/sdda-mission` peut démarrer |
 | `1` | `[STACK_MALFORMED]` — clé manquante ou stack ambiguë, détail sur stderr |
 | `2` | `[INVARIANT_ENFORCER_MISSING]` — un enforcer déclaré n'existe pas (doc-theater détecté) |
+
+Un workspace amorcé par un framework plus ancien sort `[WORKSPACE_VERSION_MISSING]`
+ou `[WORKSPACE_VERSION_OUTDATED]` : le faire monter avec
+`python .sdda/python/sdda_scripts/migrate_workspace.py` (`--dry-run` d'abord ;
+un répertoire retiré de l'arborescence mais non vide est conservé et signalé
+`[WORKSPACE_GHOST_DIR_NOT_EMPTY]`).
 
 ---
 
