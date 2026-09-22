@@ -35,7 +35,7 @@ MISSION            versioned business specification (quantified goal, budget, gr
 The IR is designed multi-language and checks it: `validate_ir.py` rejects any
 framework API name inside a contract, including `spring-ai`, `langchain4j` and
 `vercel-ai-sdk`. But **a generator only exists where the stack sheets exist**,
-and the catalogue covers 30 of the 96 lines that `STACK.md` offers. The gap is
+and the catalogue covers <!--sdda:count stacks-->31<!--/sdda:count--> of the 99 lines that `STACK.md` offers. The gap is
 announced line by line — `(fiche absente)`, "sheet missing" — rather than
 implied.
 
@@ -56,6 +56,34 @@ implied.
 
 Nothing here is *validated*: `frameworkStatus: design-phase`, and every
 component is `untested` until a measured run has taken place (Lot 6).
+
+---
+
+## Where your work lives — the workspace
+
+Four entries, four natures. The tree used to have twelve directories at the
+same level, and nothing said that `caps/` is reviewed by humans while
+`traces/` can be deleted without loss.
+
+```
+workspace/
+├── stack/     what you CONFIGURE — STACK.md (gitignored: secrets) + versioned manifests
+├── feats/     what you SPECIFY  — missions · caps · topology · contracts · decisions (ADR) · briefs
+├── src/       what gets PRODUCED — the generated application, prompts included
+├── proof/     what JUDGES        — datasets · suites · baselines · calibration
+└── .sys/      internal state and run output — IR, validation, reports, traces (regenerable)
+```
+
+You write in `feats/` (the Markdown specification) and `stack/` (the technical
+choices). Everything else is produced. **No `dev-*` agent may ever write under
+`proof/`**: the agent that writes the code cannot touch the dataset that grades
+it, nor the baseline its regression is measured against. That is the one
+boundary of the framework with no exception, and it is enforced at runtime by
+the ownership hook, not by convention.
+
+An older workspace moves to this layout with
+`python .sdda/sdda.py migrate-workspace`, which relocates content instead of
+creating the new tree next to the old one.
 
 ---
 
@@ -340,6 +368,50 @@ doing it after Lot 4 would have cost six generators already written against a
 contract known to be wrong. `memory.longTermStore` also names a component and
 stays out of scope: its own split is not done, and the check says so rather
 than staying silent.
+
+**Audit lot — the pipeline could not complete once, and five controls were
+inert.** A full source-by-source audit, then every finding fixed. What it found:
+
+- `ir_compiler` demanded the holdout that `qa-evals` only produces three phases
+  later, so no fresh mission ever passed G2. The requirement moved to
+  `validate_datasets` (G8), where it is actionable, and the holdout became a
+  compiled source so its arrival stales the IR;
+- **no L9 suite was ever compiled**: G8's `acceptance` part had no execution
+  able to turn it green. It is now derived from `Grader:` in the mission's
+  `## Quantified Goal`;
+- nine CLI options were cited by prompts and existed in no script (`--pre`,
+  `--static`, `--isolated`, `--dataset`, `--require`, `--min-items`, …). argparse
+  answered with a `usage:` instead of an `ERROR/CAUSE/FIX` block, so the
+  orchestrating model concluded the check "had nothing to say". A new scanner,
+  `command-flags`, resolves every cited option against the real parser and
+  runs in `framework-smoke` as `refs.flags`;
+- five controls declared themselves active and never ran: the ownership hooks
+  read the sub-agent identity in the wrong payload slot (every sub-agent write
+  was allowed); the spawn hooks matched `Task` only, never `Agent`; the facades
+  carried `model_tier` but no `model:` (all 22 agents inherited the parent
+  model); `MaxCostPerRun` had no writer feeding the cumulative cost; the
+  `build_loop` bounds lived only in the prompt they were meant to bound;
+- hook commands were relative to the current directory: one `cd` disarmed all
+  fourteen. They are anchored on `$CLAUDE_PROJECT_DIR`.
+
+What it delivered:
+
+- **a Python runtime skeleton** (`.sdda/templates/runtime/python/app/`, 18
+  files): entry point, tiered LLM client, bounds in code, OTel-GenAI tracing,
+  orchestration loop, console surface, and the two eval executors G5/G6/G8
+  needed. `python .sdda/sdda.py gen-app-skeleton --write` materialises it; the
+  generated console starts, resolves its tiers, returns one exit code per error
+  class, and emits a trace the framework reader parses;
+- evaluation items measured in parallel (`EvalMaxParallel`, order preserved);
+  context packs sliced to the *active* stack sheets — the most saturated agent
+  went from 93 % to 61 % of its budget with no ceiling raised;
+- the four-entry workspace (`feats/ · stack/ · src/ · proof/ · .sys/`) and a
+  migration that moves existing content.
+
+Honest maturity after this lot: the deterministic layer is beta; the generation
+layer is a skeleton plus six agent prompts that **have still never been run end
+to end**. Nothing above changes the language table: Python is the only runtime
+with a skeleton, .NET has no retrieval chain, TypeScript and Java have no sheet.
 
 Remaining: the six generator agents and their stacks (Lot 4), then review
 (Lot 5). Order and reasons: [ROADMAP.md](.sdda/docs/ROADMAP.md).

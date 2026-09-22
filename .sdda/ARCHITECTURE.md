@@ -55,7 +55,7 @@ SDD-Agents/
 │   │                                  #   vivent au §5 des contrats et dans les
 │   │                                  #   prompts (cf. §7, rules/ownership.md §2.2)
 │   ├── providers/                     # anthropic / openai / google / azure / local
-│   ├── stacks/                        # ── LE CATALOGUE — 30 fiches sur disque ─
+│   ├── stacks/                        # ── LE CATALOGUE — <!--sdda:count stacks-->31<!--/sdda:count--> fiches sur disque ─
 │   │   │                    # Chaque fiche déclare `Languages:` (un langage,
 │   │   │                    # plusieurs, ou `*` si elle n'en suppose aucun).
 │   │   │                    # C'est la SSoT du couplage : preflight_stack_combo
