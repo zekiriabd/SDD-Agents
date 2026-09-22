@@ -960,10 +960,9 @@ def load_ir(path: Path) -> dict[str, Any]:
 
 def default_compiled_at() -> str:
     """`SOURCE_DATE_EPOCH` (builds reproductibles) sinon l'horloge UTC, à la seconde."""
-    epoch = os.environ.get("SOURCE_DATE_EPOCH")
-    if epoch and epoch.isdigit():
-        return _dt.datetime.fromtimestamp(int(epoch), _dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    from sdda_lib.runtime_io import now_iso
+
+    return now_iso()
 
 
 # --------------------------------------------------------------------------

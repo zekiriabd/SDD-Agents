@@ -23,6 +23,7 @@ from typing import Any
 
 from sdda_lib import paths
 from sdda_lib.errors import Report
+from sdda_lib.runtime_io import now_iso  # noqa: F401 — ré-exporté : `from sdda_lib.gate_reports import now_iso` reste valide
 
 _NAME_RE = re.compile(r"^(?P<gate>G[0-8]|PLAN)-(?P<artifact>[A-Za-z0-9-]+?)(?:\.(?P<part>[a-z]+))?\.json$")
 
@@ -70,10 +71,6 @@ GATE_PARTS_ADVISORY: dict[str, tuple[str, ...]] = {
 #: `scan_secrets` scanne la stack entière. Sans cette convention, leur rapport
 #: n'est rattachable à aucune mission et redevient invisible.
 GLOBAL_ARTIFACT = "stack"
-
-
-def now_iso() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def report_path(root: Path, gate: str, artifact: str, part: str | None = None) -> Path:

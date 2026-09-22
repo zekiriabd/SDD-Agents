@@ -23,12 +23,13 @@ import re
 import sys
 from pathlib import Path
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-except Exception:
-    pass
-
 SDDA = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(SDDA / "python"))
+
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
+
+ensure_utf8_stdout()
+
 AGENTS = SDDA / "agents"
 DIGESTS = SDDA / "digests"
 TAXONOMY = SDDA / "rules" / "error-classification.md"

@@ -36,13 +36,4 @@ def finish(report: Report, args: argparse.Namespace) -> int:
     return emit(report, args.json)
 
 
-def ensure_utf8_stdout() -> None:
-    """Sortie UTF-8 tolérante : un glyphe 🟢 ne doit pas faire planter une console cp1252.
-
-    Sans effet quand stdout est redirigé vers un tampon (tests) ou ne sait pas
-    se reconfigurer.
-    """
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
-        pass
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402,F401 — ré-exporté : tous les scripts l'importent d'ici

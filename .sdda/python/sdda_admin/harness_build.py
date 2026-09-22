@@ -42,11 +42,9 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import hashing, yaml_mini  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-except Exception:
-    pass
+ensure_utf8_stdout()
 
 SDDA = Path(__file__).resolve().parents[2]
 ROOT = SDDA.parent

@@ -17,6 +17,7 @@ from typing import Any
 
 from sdda_lib import paths
 from sdda_lib.eval_pinning import PinTuple
+from sdda_lib.runtime_io import atomic_write_json  # noqa: F401 — ré-exporté : les appelants historiques l'importent d'ici
 
 REPORT_SUFFIX = ".json"
 
@@ -95,10 +96,4 @@ def suite_pins(entry: dict[str, Any]) -> PinTuple:
     return PinTuple.from_dict(entry.get("pins"))
 
 
-def atomic_write_json(path: Path, payload: dict[str, Any]) -> Path:
-    """Temporaire + `os.replace` : une baseline n'est jamais lue à moitié écrite."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
-    return path
+# `atomic_write_json` vit dans `sdda_lib.runtime_io` (ré-exporté ci-dessus).

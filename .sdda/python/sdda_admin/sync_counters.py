@@ -48,16 +48,14 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-except Exception:
-    pass
-
 SDDA = Path(__file__).resolve().parents[2]
 ROOT = SDDA.parent
 sys.path.insert(0, str(SDDA / "python"))
 
 from sdda_lib import yaml_mini  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
+
+ensure_utf8_stdout()
 
 COUNT_RE = re.compile(r"<!--sdda:count (?P<name>[a-z_]+)-->(?P<value>.*?)<!--/sdda:count-->", re.S)
 CONFIG_RE = re.compile(r"<!--sdda:config (?P<key>[A-Za-z0-9_]+)-->(?P<value>.*?)<!--/sdda:config-->", re.S)
