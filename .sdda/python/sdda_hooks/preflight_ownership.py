@@ -49,17 +49,24 @@ WIRING = {"event": "PreToolUse", "matcher": "Write|Edit", "applies_to": ()}
 #: lexicale du hook Bash, assumée dans son propre docstring. Ce qui reste vrai
 #: est plus modeste et suffisant : aucun agent ne peut le faire par l'outil
 #: qu'on lui donne pour écrire, et il doit donc le faire *sciemment*.
+#: Nommée en constante pour que `sync_error_registry` la voie : il ne lit que les
+#: littéraux (`deny(HOOK, "CLASS", …)` ou `CLS_X = "CLASS"`), et une classe
+#: émise depuis la valeur d'un dictionnaire n'entrait jamais au registre — tout
+#: en étant réellement émise. C'est la définition même d'une classe orpheline.
+CLS_GATE_REPORT_FORGERY = "GATE_REPORT_FORGERY"
+CLS_BASELINE_OWNERSHIP_VIOLATION = "BASELINE_OWNERSHIP_VIOLATION"
+
 IDENTITY_FREE_ZONES: dict[str, tuple[str, str]] = {
     "workspace/proof/baselines": (
-        "BASELINE_OWNERSHIP_VIOLATION",
+        CLS_BASELINE_OWNERSHIP_VIOLATION,
         "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
         "déplacer la référence rend toute non-régression tautologique"),
     "workspace/.sys/.validation": (
-        "GATE_REPORT_FORGERY",
+        CLS_GATE_REPORT_FORGERY,
         "un rapport de gate est écrit par le script de la gate, jamais par Write/Edit : "
         "un `{\"ok\": true}` déposé à la main rend verte une gate que rien n'a mesurée"),
     "workspace/.sys/.audit": (
-        "GATE_REPORT_FORGERY",
+        CLS_GATE_REPORT_FORGERY,
         "le journal des bypasses est append-only et n'est écrit que par les scripts : "
         "un audit qu'on peut réécrire n'est pas un audit"),
 }
