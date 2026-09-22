@@ -126,8 +126,26 @@ OrchestrationFailOn: serious
 # lot, et se livre en conteneur ou en exécutable. Sans cette déclaration, la
 # question « et on livre quoi ? » n'a pas de réponse dans la configuration —
 # elle est donc arbitrée par l'agent, donc différemment à chaque run.
-DeliverableType: {{DeliverableType}}  # backend-api | cli-exe | batch-job |
-                                    # library | container | mcp-server
+#
+# LE DÉFAUT EST `cli-exe`, QUEL QUE SOIT LE LANGAGE. Un système agentic se livre
+# d'abord comme un programme qu'on lance : une entrée, une sortie, un code de
+# retour. Rien à déployer, rien à authentifier, et c'est la surface que le
+# runner d'eval invoque en L4-L7 — donc ce qu'on mesure est ce qu'on livre.
+# Chaque langage a sa fiche console (§ Active Serving Surface).
+#
+# `backend-api` n'est PAS une variante de présentation : c'est un changement de
+# nature. Le moteur agentic cesse d'être un programme que quelqu'un lance et
+# devient un SERVICE qu'une autre application appelle — elle lui envoie une
+# requête, il exécute la MISSION, il rend la réponse et les événements. On le
+# choisit quand l'appelant est un logiciel (un front, un back métier, un
+# ordonnanceur), jamais pour « faire plus propre ». Ce choix rend obligatoires
+# trois choses qui n'existent pas en `cli-exe` : un `ApiFramework` cohérent avec
+# le langage, une identité d'appelant établie au transport (`ApiAuthMode`), et un
+# contrat public dérivé de l'IR (`ApiContractFirst`) — un appelant qu'on ne
+# contrôle pas ne se corrige pas après coup. La CLI reste générée : elle porte le
+# smoke et les evals.
+DeliverableType: {{DeliverableType}}  # cli-exe (défaut) | backend-api | library |
+                                    # batch-job | container | mcp-server
 ApiFramework: {{ApiFramework}}        # none si DeliverableType != backend-api
                                     # Python : fastapi | django-ninja | flask
                                     # .NET   : aspnet-minimal | aspnet-mvc
@@ -552,11 +570,18 @@ BaselineStorage: workspace/evals/baselines/
 #
 # ATTENTION : une ligne activée pour une fiche absente NE CHARGE RIEN.
 # Vérifié par le hook preflight_stack_combo -> [STACK_COMBO_UNLOADABLE].
+# CONSOLE = LE DÉFAUT, une fiche par langage. `DeliverableType: cli-exe` exige
+# la fiche console DU LANGAGE ACTIF : activer `cli.md` (Python) sur une stack
+# C# est refusé par preflight_stack_combo -> [STACK_LANGUAGE_MISMATCH].
  - .sdda/stacks/serving/{{Serving}}.md
 # - .sdda/stacks/serving/cli.md                     # [python] ligne de commande + NDJSON
+# - .sdda/stacks/serving/cli-dotnet.md              # [csharp] idem, System.CommandLine
+# - .sdda/stacks/serving/cli-java.md                # (fiche absente) — lang/java.md non plus
+# - .sdda/stacks/serving/cli-node.md                # (fiche absente) — lang/typescript.md non plus
+# --- Surfaces réseau : uniquement si DeliverableType = backend-api ---
 # - .sdda/stacks/serving/fastapi-sse.md             # [python] HTTP + SSE (Python)
-# - .sdda/stacks/serving/batch.md                   # [python] traitement de lot ordonnancé
 # - .sdda/stacks/serving/aspnet-minimal.md          # [csharp] HTTP + SSE (.NET)
+# - .sdda/stacks/serving/batch.md                   # [python] traitement de lot ordonnancé
 # - .sdda/stacks/serving/mcp-server.md              # (fiche absente)
 # - .sdda/stacks/serving/slack-bot.md               # (fiche absente)
 # - .sdda/stacks/serving/chainlit.md                # (fiche absente)

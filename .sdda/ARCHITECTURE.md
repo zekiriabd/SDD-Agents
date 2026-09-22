@@ -147,7 +147,7 @@ SDD-Agents/
 
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
 annoncé, pas encore écrit. La règle vaut surtout pour `stacks/` —
-<!--sdda:count stacks-->30<!--/sdda:count--> fiches existent, quand le
+<!--sdda:count stacks-->31<!--/sdda:count--> fiches existent, quand le
 catalogue visé en compte trois fois plus. Ce n'est pas un
 manque à combler avant d'annoncer : c'est la séquence de
 [docs/ROADMAP.md](docs/ROADMAP.md), qui livre **une combinaison validée de bout en
@@ -295,13 +295,34 @@ diluerait la lecture des neuf autres. Détail :
 qui exige un ADR.
 
 **Le livrable est déclaré, pas déduit.** `DeliverableType` (`## Project Config`)
-dit ce qu'on **installe** — `backend-api`, `cli-exe`, `batch-job`, `library`,
+dit ce qu'on **installe** — `cli-exe`, `backend-api`, `library`, `batch-job`,
 `container`, `mcp-server` — là où `## Active Serving Surface` dit par où l'on
 **entre**. Les deux sont indépendants : un même `RunService` s'expose en HTTP ou
 en lot, et se livre en conteneur ou en exécutable. Leur cohérence (livrable x
 langage x surface x identité d'appelant) est vérifiée par
 `validate_packaging.py`, en **part `packaging` de G2** : c'est une décision
 d'architecture, et elle doit être tranchée avant qu'une ligne de code en dépende.
+
+**Le défaut est `cli-exe`, dans les quatre langages.** Un système agentic se
+livre d'abord comme un programme qu'on lance : une entrée, une sortie, un code
+de retour. Rien à déployer, rien à authentifier, et c'est la surface que le
+runner d'eval invoque en L4-L7 — donc ce qu'on mesure est ce qu'on livre. Chaque
+langage a sa fiche console (`serving/cli.md` en Python, `serving/cli-dotnet.md`
+en C#) ; un défaut qu'un langage ne peut pas honorer se voit au preflight
+(`[STACK_LANGUAGE_MISMATCH]`) et non en silence.
+
+**`backend-api` n'est pas une variante de présentation, c'est un changement de
+nature.** Le moteur agentic cesse d'être un programme que quelqu'un lance et
+devient un **service qu'une autre application appelle** : elle lui envoie une
+requête, il exécute la MISSION, il rend la réponse et les événements. On le
+choisit quand l'appelant est un logiciel — un front, un back métier, un
+ordonnanceur — jamais pour faire plus propre. Il rend alors obligatoires trois
+choses qui n'existent pas en `cli-exe` : un `ApiFramework` cohérent avec le
+langage (`fastapi`, `aspnet-minimal`, `spring-boot`, `express`…), une identité
+d'appelant établie au transport (`ApiAuthMode`, sans quoi tout le filtrage à la
+source est contournable), et un contrat public dérivé de l'IR
+(`ApiContractFirst`) — un appelant qu'on ne contrôle pas ne se corrige pas après
+coup. La CLI reste générée : elle porte le smoke et les evals.
 
 ---
 

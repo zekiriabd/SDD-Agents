@@ -114,12 +114,24 @@ Un axe à la fois, chacun validé avant le suivant :
    `serving/aspnet-minimal.libs.json`. C'est ce manque qui a fait retirer la
    combo `dotnet-api` du bootstrap : elle activait des fiches Python sur un
    projet C#, et rien ne le disait.
-1. **Frameworks** : Semantic Kernel (.NET) puis LangChain.js (TypeScript) — ce
-   sont eux qui prouvent que l'IR tient sa promesse. Si un second générateur
-   demande de modifier les contrats, l'IR a échoué et doit être corrigé.
-   Note : `framework/ms-agent-framework.md` existe déjà et couvre la
+1. **Frameworks** : .NET puis TypeScript — ce sont eux qui prouvent que l'IR
+   tient sa promesse. Si un second générateur demande de modifier les contrats,
+   l'IR a échoué et doit être corrigé.
+   Note .NET : `framework/ms-agent-framework.md` existe déjà et couvre la
    convergence Semantic Kernel + AutoGen, qui est la cible .NET actuelle de
-   Microsoft — l'axe porte donc sur le GÉNÉRATEUR, pas sur la fiche.
+   Microsoft — l'axe porte donc sur le GÉNÉRATEUR, pas sur la fiche. Écrire
+   `framework/semantic-kernel.md` serait construire sur la branche que
+   l'éditeur n'avance plus.
+   Note TypeScript : la cible est **LangGraph.js**, pas LangChain.js. L'argument
+   qui a écarté LangChain seul en Python (tableau du MVP ci-dessus) vaut mot
+   pour mot en TypeScript : il ne borne pas les boucles et ne persiste pas
+   l'état, or P12 et la reprise sont structurants. Annoncer LangChain.js
+   contredisait ce tableau dans le même document.
+   Note Java : aucun des deux candidats n'apporte l'équivalent de LangGraph.
+   Entre Spring AI et Semantic Kernel Java, c'est Spring AI — Microsoft
+   n'avance pas le portage Java. Mais l'absence de graphe borné avec
+   checkpointing reporte la charge sur `dev-orchestration`, et c'est un coût à
+   déclarer dans la fiche, pas à découvrir au premier cycle non borné.
 2. **Patterns d'orchestration** : `supervisor`, `graph`, `plan-execute`,
    `reflection`.
 3. **Patterns RAG** : `contextual`, `agentic`, `self-rag`, `corrective-rag`.
