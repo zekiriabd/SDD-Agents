@@ -103,7 +103,10 @@ le court-circuit :
 ## STEP 4 — `architect-topology` (SEUL — barrière)
 
 Agent : `architect-topology` (`.sdda/agents/architect-topology.md`). Tier
-**`deep`** (`tier_floor: deep`, non surchargeable). Owner exclusif de
+**`deep`** par défaut (`tier_floor: balanced`, `tier_ceiling: deep` — bornes
+d'`agent-bounds.yaml`, non surchargeables par le Project Config ; aucun agent
+n'a de plancher `deep`, sinon le mode `dynamic` serait une décoration). Owner
+exclusif de
 `workspace/topology/{n}-*`.
 
 Il s'exécute **seul et avant** les quatre architectes de contrats : c'est lui

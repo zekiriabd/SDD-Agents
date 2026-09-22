@@ -1,6 +1,6 @@
 # Les Developer Agents de SDD_Agents
 
-22 agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
+<!--sdda:count agents-->22<!--/sdda:count--> agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
 confondre avec les agents du produit généré, décrits dans `contracts/agents/`.
 
 Règle d'orchestration interne héritée de SDD_Pro : **aucun agent ne spawne un

@@ -161,14 +161,14 @@ its available languages.
 | [DOMAIN-MODEL.md](.sdda/docs/DOMAIN-MODEL.md) | The closed vocabulary: MISSION, CAP, AGENT, TOOL, RETRIEVER… |
 | [AGENTIC-IR.md](.sdda/docs/AGENTIC-IR.md) | The intermediate representation that makes multi-framework deterministic |
 | [LIFECYCLE.md](.sdda/docs/LIFECYCLE.md) | State machine Draft → Approved, derived from the gates |
-| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | The 22 Developer Agents and their internal orchestration |
+| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | The <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents and their internal orchestration |
 | [ORCHESTRATION-PATTERNS.md](.sdda/docs/ORCHESTRATION-PATTERNS.md) | Catalogue + selection matrix |
 | [RAG-PATTERNS.md](.sdda/docs/RAG-PATTERNS.md) | Catalogue + gate metrics |
 | [MEMORY-PATTERNS.md](.sdda/docs/MEMORY-PATTERNS.md) | Scopes, costs, and memory as a persistent attack surface |
 | [DATA-ACCESS.md](.sdda/docs/DATA-ACCESS.md) | Database access strategies for agents |
 | [MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md) | Compilation to Claude Code / Codex / Gemini CLI |
 | [TESTING-AND-EVAL.md](.sdda/docs/TESTING-AND-EVAL.md) | The L0→L9 pyramid |
-| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | The 20 load-bearing contracts + their enforcer |
+| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | The <!--sdda:count invariants-->21<!--/sdda:count--> load-bearing contracts + their enforcer |
 | [ROADMAP.md](.sdda/docs/ROADMAP.md) | Build order + the MVP |
 | [PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md) | The deterministic backlog, generated — who asks for what |
 
@@ -206,7 +206,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (787 tests):
+and are tested (<!--sdda:count tests-->857<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

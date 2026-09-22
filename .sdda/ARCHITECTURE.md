@@ -34,7 +34,7 @@ SDD-Agents/
 ├── .sdda/                             # ── FRAMEWORK (source neutre) ──────────
 │   ├── PHILOSOPHY.md
 │   ├── ARCHITECTURE.md
-│   ├── INVARIANTS.yml                 # 20 contrats porteurs + enforcer sur disque
+│   ├── INVARIANTS.yml                 # contrats porteurs + enforcer sur disque (compte : sync_counters)
 │   ├── config.base.yml                # couche 1/3 du Project Config
 │   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache par agent
 │   ├── agent-bounds.yaml              # tier_default / floor / ceiling par agent
@@ -140,8 +140,9 @@ SDD-Agents/
 ```
 
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
-annoncé, pas encore écrit. La règle vaut surtout pour `stacks/` — 27 fiches
-existent, quand le catalogue visé en compte quatre fois plus. Ce n'est pas un
+annoncé, pas encore écrit. La règle vaut surtout pour `stacks/` —
+<!--sdda:count stacks-->30<!--/sdda:count--> fiches existent, quand le
+catalogue visé en compte trois fois plus. Ce n'est pas un
 manque à combler avant d'annoncer : c'est la séquence de
 [docs/ROADMAP.md](docs/ROADMAP.md), qui livre **une combinaison validée de bout en
 bout** (C1) avant d'en annoncer douze. Le catalogue cible et le niveau de
@@ -296,7 +297,7 @@ obligatoire en agentic :
 | Notion | Qui exécute | Déclaré dans |
 |---|---|---|
 | **Harness** | où tourne l'orchestration de *construction* (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
-| **Build models** | quels modèles paient les tokens de *construction* (les 22 Developer Agents) | `STACK.md ## Build Models` |
+| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents) | `STACK.md ## Build Models` |
 | **Runtime models** | quels modèles fait tourner l'**application générée** | `STACK.md ## Runtime Models` |
 
 Les trois sont indépendants. Construire avec Claude Code + Opus une application
@@ -371,7 +372,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **328**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->359<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :
