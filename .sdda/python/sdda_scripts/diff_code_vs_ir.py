@@ -31,8 +31,8 @@ terminaux différents) → [ORCH_DIVERGES_FROM_IR], bloquant. Manifeste absent �
 [ORCH_MANIFEST_MISSING] : rien n'est comparable, donc rien n'est vert.
 
 Usage :
-    python diff_code_vs_ir.py --mission 1 --scope orchestration
-    python diff_code_vs_ir.py --mission 1 --scope orchestration --manifest path/to/graph.manifest.json --json
+    python .sdda/sdda.py diff-code-vs-ir --mission 1 --scope orchestration
+    python .sdda/sdda.py diff-code-vs-ir --mission 1 --scope orchestration --manifest path/to/graph.manifest.json --json
 """
 from __future__ import annotations
 
@@ -190,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     report = Report(name=f"DIFF.{args.scope}", target=str(root))
     ir_file, why = find_ir_file(root, args.mission)
     if ir_file is None:
-        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
     manifest = args.manifest if args.manifest is None or args.manifest.is_absolute() else root / args.manifest

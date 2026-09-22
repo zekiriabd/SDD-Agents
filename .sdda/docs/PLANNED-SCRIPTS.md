@@ -10,7 +10,7 @@ lots d'implémentation, pas une liste de bugs.
 six endroits est un besoin établi ; un script réclamé une seule fois a pu
 être inventé au fil de la plume et mérite une question avant d'être écrit.
 
-- **54** écrits · **6** à écrire · **0** cité(s) sans déclaration
+- **57** écrits · **6** à écrire · **0** cité(s) sans déclaration
 
 **Déclaré** : le prompt qui appelle le script dit « Planifié » à la ligne
 suivante, avec la conduite à tenir tant qu'il manque. Un script absent cité

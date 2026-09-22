@@ -28,9 +28,9 @@ Il n'exécute rien, n'ouvre aucun enregistrement, n'appelle aucun réseau, ne li
 avant que le code existe, ce qui est le seul moment où corriger est bon marché.
 
 Usage :
-    python validate_data_access.py --json
-    python validate_data_access.py --mission 1
-    python validate_data_access.py --source order_tracking
+    python .sdda/sdda.py validate-data-access --json
+    python .sdda/sdda.py validate-data-access --mission 1
+    python .sdda/sdda.py validate-data-access --source order_tracking
 
 Variable d'environnement :
     SDDA_SKIP_STORE_PROBE=1   un store local/réseau absent devient un WARN.

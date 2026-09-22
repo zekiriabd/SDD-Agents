@@ -6,9 +6,9 @@ Un grader LLM non calibré ne rend pas de verdict bloquant. Sous le seuil, il
 bascule en `advisory` : il informe, il ne bloque plus.
 
 Usage :
-    python .sdda/python/sdda_scripts/calibrate_judge.py --root .
-    python .sdda/python/sdda_scripts/calibrate_judge.py --root . --grader groundedness
-    python .sdda/python/sdda_scripts/calibrate_judge.py --root . --json
+    python .sdda/sdda.py calibrate-judge --root .
+    python .sdda/sdda.py calibrate-judge --root . --grader groundedness
+    python .sdda/sdda.py calibrate-judge --root . --json
 
 Exit : 0 si tous les juges BLOQUANTS sont calibrés · 1 sinon.
 Un juge déjà déclaré `advisory` dans l'IR ne fait pas échouer.

@@ -184,7 +184,7 @@ Le framework porte son propre dispositif anti-pourrissement — celui qui refuse
 qu'une règle écrite ne soit plus appliquée par rien :
 
 ```bash
-python .sdda/python/sdda_admin/framework_smoke.py
+python .sdda/sdda.py framework-smoke
 ```
 
 Il vérifie : parité agents ↔ bornes de tier, invariants ↔ enforcers sur disque,
@@ -193,8 +193,8 @@ réciprocité des classes d'erreur, digests à jour, références internes, et
 sans qu'un run l'ait mesurée.
 
 ```bash
-python .sdda/python/sdda_admin/sync_error_registry.py --check   # taxonomie
-python .sdda/python/sdda_admin/sync_digests.py --check          # digests par agent
+python .sdda/sdda.py sync-error-registry --check   # taxonomie
+python .sdda/sdda.py sync-digests --check          # digests par agent
 python -m pytest .sdda/python/tests/ -q                         # couche déterministe
 ```
 
@@ -203,7 +203,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->929<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->947<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification

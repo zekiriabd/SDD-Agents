@@ -35,9 +35,9 @@ Sémantique du contrôle 4 — un cycle est BORNÉ si :
 Sinon il est non borné : `[UNBOUNDED_LOOP]`, bloquant, sans bypass (P12).
 
 Usage :
-    python validate_ir.py --ir workspace/.sys/.ir/1-system.ir.json [--json]
-    python validate_ir.py --mission 1
-    python validate_ir.py                 # tous les IR compilés
+    python .sdda/sdda.py validate-ir --ir workspace/.sys/.ir/1-system.ir.json [--json]
+    python .sdda/sdda.py validate-ir --mission 1
+    python .sdda/sdda.py validate-ir                 # tous les IR compilés
 
 Rapport : `G2-{missionId}.ir.json`.
 """
@@ -260,7 +260,7 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
         if compiled and compiled != current:
             moved = sorted(k for k in current if compiled.get(k) != current[k])
             report.error("IR_STALE", f"l'IR ne reflète plus les sources ({', '.join(moved)} ont bougé)",
-                         f"recompiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", loc)
+                         f"recompiler : python .sdda/sdda.py ir-compiler --mission {n}", loc)
 
     # 2. Références closes -----------------------------------------------------
     def dangling(what: str, ref: str, fix: str) -> None:
@@ -557,7 +557,7 @@ def validate_ir_file(path: Path, root: Path, config: LayeredConfig | None, *, wr
     loc = paths.rel(root, path)
     if not path.is_file():
         r = Report(name="G2.ir", target=loc)
-        r.error("IR_NOT_FOUND", f"IR `{loc}` introuvable", "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", loc)
+        r.error("IR_NOT_FOUND", f"IR `{loc}` introuvable", "compiler : python .sdda/sdda.py ir-compiler --mission {n}", loc)
         return r
     try:
         ir = ir_compiler.load_ir(path)
@@ -591,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
     if not files:
-        combined.error("IR_NOT_FOUND", "aucun IR compilé dans workspace/.sys/.ir/", "compiler : python .sdda/python/sdda_scripts/ir_compiler.py", str(paths.ir_dir(root)))
+        combined.error("IR_NOT_FOUND", "aucun IR compilé dans workspace/.sys/.ir/", "compiler : python .sdda/sdda.py ir-compiler", str(paths.ir_dir(root)))
     for f in files:
         combined.extend(validate_ir_file(f, root, config, write_report=not args.no_report))
     return finish(combined, args)

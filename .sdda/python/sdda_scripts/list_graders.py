@@ -6,11 +6,11 @@ répond à la question d'un AC (eval-protocol.md §4), et à vérifier qu'une
 `metric` déclarée dans une CAP a bien un grader qui la sert.
 
 Usage :
-    python list_graders.py                         # tableau
-    python list_graders.py --json
-    python list_graders.py --metric groundedness   # qui sert cette métrique ? exit 1 si personne
-    python list_graders.py --grader trajectory     # fiche d'un grader
-    python list_graders.py --caps [--root …]       # chaque AC des CAPs : grader connu, métrique servie
+    python .sdda/sdda.py list-graders                         # tableau
+    python .sdda/sdda.py list-graders --json
+    python .sdda/sdda.py list-graders --metric groundedness   # qui sert cette métrique ? exit 1 si personne
+    python .sdda/sdda.py list-graders --grader trajectory     # fiche d'un grader
+    python .sdda/sdda.py list-graders --caps [--root …]       # chaque AC des CAPs : grader connu, métrique servie
 
 Classes : `[AC_GRADER_UNKNOWN]` (erreur) — grader hors registre ;
 `[EVAL_METRIC_UNSERVED]` — aucun grader ne déclare la métrique (erreur en

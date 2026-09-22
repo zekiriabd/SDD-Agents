@@ -74,7 +74,7 @@ Le script vérifie les quatre ; la commande relaie ses blocs ERROR tels quels.
 ## STEP 3 — Scaffold (sauf `--validate`)
 
 ```bash
-python .sdda/python/sdda_scripts/roster.py scaffold --mission {n} \
+python .sdda/sdda.py roster scaffold --mission {n} \
   $( [ "$FORCE" = "true" ] && echo --force --reason "$REASON" ) --json
 ```
 
@@ -102,7 +102,7 @@ décision en cours — ni l'un ni l'autre ne s'écrase en silence.
 ## STEP 4 — Validate
 
 ```bash
-python .sdda/python/sdda_scripts/roster.py validate --mission {n} --json
+python .sdda/sdda.py roster validate --mission {n} --json
 ```
 
 | # | Contrôle | Classe si KO |

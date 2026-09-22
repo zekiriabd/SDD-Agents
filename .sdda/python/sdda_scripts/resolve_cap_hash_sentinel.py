@@ -21,8 +21,8 @@ Exit : 0 résolu (ou rien à faire) · 2 le sentinel persiste après écriture
 [INFRA_BLOCKED].
 
 Usage :
-    python resolve_cap_hash_sentinel.py --mission 1
-    python resolve_cap_hash_sentinel.py --mission 1 --check   # ne rien écrire, dire
+    python .sdda/sdda.py resolve-cap-hash-sentinel --mission 1
+    python .sdda/sdda.py resolve-cap-hash-sentinel --mission 1 --check   # ne rien écrire, dire
 """
 from __future__ import annotations
 

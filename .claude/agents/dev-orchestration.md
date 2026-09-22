@@ -56,7 +56,7 @@ Read **uniquement** :
 
 Validation préalable, 0 token :
 ```bash
-python .sdda/python/sdda_scripts/validate_ir.py workspace/.sys/.ir/{n}-system.ir.json
+python .sdda/sdda.py validate-ir workspace/.sys/.ir/{n}-system.ir.json
 ```
 Rouge → tu ne construis pas sur un graphe invalide : `[IR_INVALID]`, STOP.
 

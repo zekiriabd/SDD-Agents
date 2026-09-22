@@ -28,8 +28,8 @@ détecter ici, avant le premier spawn, coûte cinquante millisecondes ; la
 détecter au spawn coûte un agent qui a déjà inventé.
 
 Usage :
-    python .sdda/python/sdda_scripts/smoke_check.py
-    python .sdda/python/sdda_scripts/smoke_check.py --json
+    python .sdda/sdda.py smoke-check
+    python .sdda/sdda.py smoke-check --json
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.workspace import WORKSPACE_JSON_REL, WORKSPACE_VERSION, read_workspace_version  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
-MIGRATE_CMD = "python .sdda/python/sdda_scripts/migrate_workspace.py"
+MIGRATE_CMD = "python .sdda/sdda.py migrate-workspace"
 
 #: Arborescence attendue sous `workspace/` — SSoT partagée avec `bootstrap.py`
 #: (qui l'importe pour la CRÉER) et `migrate_workspace.py` (qui la COMPLÈTE) ;

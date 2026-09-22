@@ -36,8 +36,8 @@ Bypass (INVARIANTS budget-estimated-before-code) : `SDDA_BYPASS_BUDGET_ESTIMATE=
 avec `SDDA_BYPASS_REASON` — audit-loggué dans `.sys/.audit/bypasses.jsonl` (R5).
 
 Usage :
-    python estimate_budget.py --ir workspace/.sys/.ir/1-system.ir.json [--json] [--no-write]
-    python estimate_budget.py --mission 1
+    python .sdda/sdda.py estimate-budget --ir workspace/.sys/.ir/1-system.ir.json [--json] [--no-write]
+    python .sdda/sdda.py estimate-budget --mission 1
 
 Rapport : `G2-{missionId}.budget.json`.
 """
@@ -328,7 +328,7 @@ def estimate_file(path: Path, root: Path, config: LayeredConfig | None, *, write
     loc = paths.rel(root, path)
     if not path.is_file():
         r = Report(name="G2.budget", target=loc)
-        r.error("IR_NOT_FOUND", f"IR `{loc}` introuvable", "compiler : python .sdda/python/sdda_scripts/ir_compiler.py", loc)
+        r.error("IR_NOT_FOUND", f"IR `{loc}` introuvable", "compiler : python .sdda/sdda.py ir-compiler", loc)
         return r
     ir = ir_compiler.load_ir(path)
     report, estimated = estimate(ir, root=root, config=config, ir_location=loc)

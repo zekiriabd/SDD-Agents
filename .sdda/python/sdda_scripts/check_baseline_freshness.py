@@ -19,7 +19,7 @@ Exit 1 si au moins une baseline BLOQUANTE est périmée. `--strict` rend aussi
 bloquantes les baselines advisory périmées.
 
 Usage :
-    python check_baseline_freshness.py --mission 1 [--json] [--strict]
+    python .sdda/sdda.py check-baseline-freshness --mission 1 [--json] [--strict]
 """
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     report = Report(name="EVAL.freshness", target=str(root))
     ir_file, why = find_ir_file(root, args.mission)
     if ir_file is None:
-        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
     bfile = args.baseline if args.baseline is None or args.baseline.is_absolute() else root / args.baseline

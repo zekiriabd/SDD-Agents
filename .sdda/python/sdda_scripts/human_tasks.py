@@ -19,7 +19,7 @@ C'est un LISTING, pas une gate : exit 0 toujours, aucun rapport écrit. Ordre
 stable : kind (roster, labels, adr, findings), puis mission, puis référence.
 
 Usage :
-    python human_tasks.py [--mission 1] [--json]
+    python .sdda/sdda.py human-tasks [--mission 1] [--json]
 """
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def roster_tasks(root: Path, number: int, mission_id: str, index: compute_status
         return [task("roster", number, f"Compléter le manifeste de roster ({holes} `<à préciser>`)",
                      "chaque trou est une décision d'architecture ; laissé vide, il serait comblé par un LLM "
                      "au moment de la génération, sans que personne l'ait décidé ni relu (P7)",
-                     f"éditer `{rel}`, puis python .sdda/python/sdda_scripts/roster.py validate --mission {number}",
+                     f"éditer `{rel}`, puis python .sdda/sdda.py roster validate --mission {number}",
                      blocking=True, ref=rel)]
     if not report.ok:
         classes = sorted({f.cls for f in report.errors})
@@ -88,7 +88,8 @@ def roster_tasks(root: Path, number: int, mission_id: str, index: compute_status
         return [task("roster", number, f"Corriger le manifeste de roster ({len(report.errors)} finding(s))",
                      f"[{first.cls}] {first.message}" + (f" · {len(report.errors) - 1} autre(s)" if len(report.errors) > 1 else "")
                      + f" — classes : {', '.join(classes)}",
-                     f"éditer `{rel}` puis roster.py validate --mission {number} ; /sdda-topology {number} refuse de démarrer tant que c'est rouge",
+                     f"éditer `{rel}` puis python .sdda/sdda.py roster validate --mission {number} ; "
+                     f"/sdda-topology {number} refuse de démarrer tant que c'est rouge",
                      blocking=True, ref=rel)]
     return []
 

@@ -32,9 +32,9 @@ n'existe pas serait exactement le faux vert que ce framework existe pour
 empêcher.
 
 Usage :
-    python validate_api_contract.py --mission 1
-    python validate_api_contract.py --mission 1 --json
-    python validate_api_contract.py --explain
+    python .sdda/sdda.py validate-api-contract --mission 1
+    python .sdda/sdda.py validate-api-contract --mission 1 --json
+    python .sdda/sdda.py validate-api-contract --explain
 """
 from __future__ import annotations
 
@@ -310,7 +310,7 @@ def run(root: Path, mission: str, report: Report) -> bool:
     ir_file = paths.ir_path(root, mission)
     if not ir_file.is_file():
         report.error("IR_NOT_FOUND", f"IR `{paths.rel(root, ir_file)}` absent",
-                     f"compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {mission}",
+                     f"compiler : python .sdda/sdda.py ir-compiler --mission {mission}",
                      paths.rel(root, ir_file))
         report.data["applicable"] = True
         return True

@@ -22,7 +22,7 @@ Le script écrit l'audit **même quand il autorise** : un bypass légitime qui n
 laisse pas de trace produit exactement le même dossier qu'un bypass dissimulé.
 
 Usage :
-    python .sdda/python/sdda_scripts/preflight_force_cumul.py \\
+    python .sdda/sdda.py preflight-force-cumul \\
         --force --no-review --env-bypasses "SDDA_BYPASS_TOOL_GATE=1,"
 
 Exit : 0 autorise · 1 refuse (ERROR sur stdout, format CAUSE/FIX).

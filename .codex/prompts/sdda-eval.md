@@ -65,7 +65,7 @@ Invalide → ERROR `[INVALID_ARG]`.
    des AC pour nommer les datasets) ; **G6 franchie** pour le mode complet et
    `--acceptance`.
    ```bash
-   python .sdda/python/sdda_scripts/compute_status.py --mission {n} --require-gate {G1|G6}
+   python .sdda/sdda.py compute-status --mission {n} --require-gate {G1|G6}
    ```
    KO → ERROR `[CAP_GATE_NOT_PASSED]` ou `[ORCH_GATE_NOT_PASSED]` (FIX :
    `/sdda-caps {n}` ou `/sdda-build {n}`).
@@ -75,7 +75,7 @@ Invalide → ERROR `[INVALID_ARG]`.
    `MaxParallel`. Lire `## Runtime Models` (`JudgeModel`) et `## Active Eval`.
 
 ```bash
-RUN_ID=${SDDA_RUN_ID:-$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-eval" --tags "$TAGS")}
 ```
 
@@ -127,7 +127,7 @@ Si `--datasets-only` → STEP 4 puis récap court, STOP.
 ## STEP 4 — Figer les datasets (déterministe)
 
 ```bash
-python .sdda/python/sdda_scripts/validate_datasets.py --mission {n} --freeze --json \
+python .sdda/sdda.py validate-datasets --mission {n} --freeze --json \
   > workspace/.sys/.validation/{n}-datasets.json
 ```
 
@@ -148,7 +148,7 @@ ultérieure change le hash et périme les résultats (R2).
 Pour chaque grader `llm-judge` des suites :
 
 ```bash
-python .sdda/python/sdda_scripts/calibrate_judge.py --mission {n} --grader {g} --json \
+python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json \
   > workspace/evals/calibration/{g}.json
 ```
 
@@ -165,7 +165,7 @@ mesure la complaisance d'un modèle envers un autre.
 ## STEP 5 — Exécution des suites L0 → L7 (script, k runs)
 
 ```bash
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} \
+python .sdda/sdda.py eval-runner --mission {n} \
   --levels ${LEVELS:-L0,L1,L2,L3,L4,L5,L6,L7} --runs ${RUNS:-EvalRuns} \
   --report workspace/evals/reports/{n}-{RUN_ID}.md --json \
   > workspace/.sys/.validation/{n}-eval.json
@@ -251,13 +251,13 @@ Uniquement sur **holdout**, jamais sur le golden. Pré-requis : G6 et G7
 franchies (`--require-gate G7`) ; sinon ERROR `[SAFETY_GATE_NOT_PASSED]`.
 
 ```bash
-python .sdda/python/sdda_scripts/check_baseline_freshness.py --mission {n} --strict
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L7 --dataset holdout \
+python .sdda/sdda.py check-baseline-freshness --mission {n} --strict
+python .sdda/sdda.py eval-runner --mission {n} --level L7 --dataset holdout \
   --runs ${RUNS:-EvalRuns} --json > workspace/.sys/.validation/{n}-G8-acceptance.json
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L9 \
+python .sdda/sdda.py eval-runner --mission {n} --level L9 \
   --baseline workspace/evals/baselines/{n}-system.json --json \
   >> workspace/.sys/.validation/{n}-G8-acceptance.json
-python .sdda/python/sdda_scripts/check_regression.py --mission {n} --run {RUN_ID} --json \
+python .sdda/sdda.py check-regression --mission {n} --run {RUN_ID} --json \
   > workspace/.sys/.validation/regression-{n}.json
 ```
 

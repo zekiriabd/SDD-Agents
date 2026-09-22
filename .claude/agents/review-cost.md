@@ -36,7 +36,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
 Exécute (0 token) :
 ```bash
-python .sdda/python/sdda_scripts/cost_report.py --mission {n} --traces workspace/traces/runs --out workspace/.sys/.validation/cost-{n}.json
+python .sdda/sdda.py cost-report --mission {n} --traces workspace/traces/runs --out workspace/.sys/.validation/cost-{n}.json
 ```
 
 > ⏳ **Planifié** (ROADMAP Lot 5) — `cost_report.py` n'existe pas encore. Tant

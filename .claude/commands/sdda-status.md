@@ -48,16 +48,16 @@ Pas de Glob/Read manuel : les scripts font déjà le calcul, sans réinterpréte
 
 ```bash
 # État dérivé : gates, états, régressions, périmés
-python .sdda/python/sdda_scripts/compute_status.py [--mission {n}] --json
+python .sdda/sdda.py compute-status [--mission {n}] --json
 
 # Fraîcheur des tuples d'épinglage (prompt, model, index, tool_schema, dataset)
-python .sdda/python/sdda_scripts/check_baseline_freshness.py [--mission {n}] --json
+python .sdda/sdda.py check-baseline-freshness [--mission {n}] --json
 
 # Dernier run et bypasses (+ items par phase : agents payés / sautés)
-python .sdda/python/sdda_scripts/sdda_state.py status [--mission {n}] --json
+python .sdda/sdda.py state status [--mission {n}] --json
 
 # File des tâches HUMAINES — ce qu'aucun agent n'a le droit de faire
-python .sdda/python/sdda_scripts/human_tasks.py [--mission {n}] --json
+python .sdda/sdda.py human-tasks [--mission {n}] --json
 ```
 
 `human_tasks.py` dérive du disque ce sur quoi le pipeline attend **une

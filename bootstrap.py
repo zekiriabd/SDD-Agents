@@ -513,7 +513,7 @@ def smoke(stack_path: Path, combo: Combo) -> list[str]:
         from sdda_scripts import smoke_check
     except Exception as exc:  # framework incomplet : dire, ne pas planter le bootstrap
         problems.append(f"smoke_check.py non chargeable ({type(exc).__name__}) — lancer "
-                        "`python .sdda/python/sdda_scripts/smoke_check.py` à la main")
+                        "`python .sdda/sdda.py smoke-check` à la main")
     else:
         problems.extend(smoke_check.problems(ROOT))
 

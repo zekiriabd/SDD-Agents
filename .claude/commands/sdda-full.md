@@ -106,7 +106,7 @@ FIX: relancer sans --no-review, ou exécuter en local (SDDA_ENV=dev)
 ## STEP 1.bis — HARD-GATE anti-cumul (avant tout coût LLM)
 
 ```bash
-python .sdda/python/sdda_scripts/preflight_force_cumul.py \
+python .sdda/sdda.py preflight-force-cumul \
   $( [ "$FORCE" = "true" ] && echo --force ) \
   $( [ "$NO_REVIEW" = "true" ] && echo --no-review ) \
   --env-bypasses "$(env | grep -o '^SDDA_BYPASS_[A-Z_]*=1' | tr '\n' ',')"
@@ -123,15 +123,15 @@ python .sdda/python/sdda_scripts/preflight_force_cumul.py \
 ## STEP 1.ter — État du run et reprise
 
 ```bash
-RUN_ID=$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-full" --tags "$TAGS")     # TAGS = force,resume,from-phase=…,no-review
 export SDDA_RUN_ID="$RUN_ID"      # propagé à toutes les sous-commandes : un seul audit-trail
 ```
 
 **Si `--resume`** :
 ```bash
-RUN_ID=$(python .sdda/python/sdda_scripts/sdda_state.py get-run --mission {n} --latest)
-RESUME_TARGET=$(python .sdda/python/sdda_scripts/sdda_state.py resume-target --run-id "$RUN_ID")
+RUN_ID=$(python .sdda/sdda.py state get-run --mission {n} --latest)
+RESUME_TARGET=$(python .sdda/sdda.py state resume-target --run-id "$RUN_ID")
 echo "RESUME: reprise à $RESUME_TARGET"
 ```
 
@@ -155,7 +155,7 @@ Mode existant → Glob `workspace/missions/{n}-*.md` :
 `[MISSION_NOT_FOUND]` / `[MISSION_AMBIGUOUS]` → STOP.
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n} --json
+python .sdda/sdda.py compute-status --mission {n} --json
 ```
 
 Le point de départ est **dérivé** des rapports de gate sur disque (R1) :
@@ -344,8 +344,8 @@ refusée). Ne jamais recalculer un delta à la main dans le récap.
 
 ```bash
 FINAL_STATUS={success|partial|failed}    # success = toutes gates 🟢 ; partial = ≥ 1 🟡 assumé ou skip ; failed = STOP
-python .sdda/python/sdda_scripts/sdda_state.py end-run --run-id $RUN_ID --status $FINAL_STATUS
-python .sdda/python/sdda_scripts/compute_status.py --mission {n}
+python .sdda/sdda.py state end-run --run-id $RUN_ID --status $FINAL_STATUS
+python .sdda/sdda.py compute-status --mission {n}
 ```
 
 Émettre **un seul bloc** :
@@ -378,7 +378,7 @@ REVUE (phase 7)   {skipped (--no-review) |}
 ACCEPTATION (phase 8)   {non exécutée (G7 absente) |}
   Holdout          : {Metric} {mesuré} vs cible {Target} (k={k})                     G8 {🟢|🟡|🔴}
   Non-régression   : {ok | -x.x% sur {metric} (tolérance {t}%, hors bande {s}σ) | bruit : -x.x% sous {s}σ de la baseline}
-  Baseline         : {inchangée — promouvoir : python .sdda/python/sdda_scripts/promote_baseline.py --mission {n} --run {RUN_ID}}
+  Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID}}
 
 Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--force) · …}  → workspace/.sys/.audit/bypasses.jsonl
 Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {tokens} tokens · {durée}

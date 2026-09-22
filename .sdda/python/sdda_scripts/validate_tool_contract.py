@@ -25,9 +25,9 @@ Fusionner les deux rendrait la moitié statique otage d'un environnement
 exécutable, et une gate qu'on ne peut pas jouer est une gate qu'on saute.
 
 Usage :
-    python validate_tool_contract.py --mission 1 --json
-    python validate_tool_contract.py --mission 1 --require-code     # après génération
-    python validate_tool_contract.py --mission 1 --tool 1-invoice-lookup
+    python .sdda/sdda.py validate-tool-contract --mission 1 --json
+    python .sdda/sdda.py validate-tool-contract --mission 1 --require-code     # après génération
+    python .sdda/sdda.py validate-tool-contract --mission 1 --tool 1-invoice-lookup
 """
 from __future__ import annotations
 
@@ -390,12 +390,12 @@ def main(argv: list[str] | None = None) -> int:
         candidates = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
         if len(candidates) != 1:
             report.error("IR_NOT_FOUND", f"{len(candidates)} IR compilé(s) dans workspace/.sys/.ir/ : préciser --mission",
-                         "python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+                         "python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
             return finish(report, args)
         ir_file = candidates[0]
     if not ir_file.is_file():
         report.error("IR_NOT_FOUND", f"IR `{paths.rel(root, ir_file)}` introuvable",
-                     "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", paths.rel(root, ir_file))
+                     "compiler : python .sdda/sdda.py ir-compiler --mission {n}", paths.rel(root, ir_file))
         return finish(report, args)
 
     ir = ir_compiler.load_ir(ir_file)

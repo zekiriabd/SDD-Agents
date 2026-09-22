@@ -110,14 +110,15 @@ def test_smoke_flags_a_missing_then_an_outdated_version(v0: Path) -> None:
     assert code == 1
     errors = {e["class"]: e for e in json.loads(out)["errors"]}
     assert "WORKSPACE_VERSION_MISSING" in errors
-    assert "migrate_workspace.py" in errors["WORKSPACE_VERSION_MISSING"]["fix"]
+    # Le FIX doit être une commande qu'on TAPE, pas un fichier qu'on ouvre.
+    assert "python .sdda/sdda.py migrate-workspace" in errors["WORKSPACE_VERSION_MISSING"]["fix"]
 
     ws.write_workspace_version(v0, version=0)
     code, out = run_main(smoke_check.main, ["--root", str(v0), "--json"])
     assert code == 1
     errors = {e["class"]: e for e in json.loads(out)["errors"]}
     assert "WORKSPACE_VERSION_OUTDATED" in errors and "WORKSPACE_VERSION_MISSING" not in errors
-    assert "migrate_workspace.py" in errors["WORKSPACE_VERSION_OUTDATED"]["fix"]
+    assert "python .sdda/sdda.py migrate-workspace" in errors["WORKSPACE_VERSION_OUTDATED"]["fix"]
 
 
 def test_the_migration_chain_is_consecutive_up_to_the_current_version() -> None:

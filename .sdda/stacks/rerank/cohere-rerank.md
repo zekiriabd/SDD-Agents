@@ -139,7 +139,7 @@ python -m {AppName}.retrieval.{index_slug} smoke --query "facture INV-2024-0093 
 #   -> exit 0 ; exit 5 si l'ordre rendu n'est pas une permutation des candidats
 #      envoyés ([RETRIEVAL_RERANK_MISMATCH])
 
-python .sdda/python/sdda_scripts/run_retrieval_eval.py --index {index_slug} --ablation rerank --json
+python .sdda/sdda.py run-retrieval-eval --index {index_slug} --ablation rerank --json
 #   -> nDCG@5 avec et sans reranker sur le golden set. C'est CE chiffre qui
 #      justifie la dépense, pas la fiche.
 ```

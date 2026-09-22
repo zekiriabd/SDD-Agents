@@ -46,7 +46,7 @@ FIX: relancer /sdda-caps {n} avec n entier (ex. /sdda-caps 1)
 ```bash
 if [[ "$@" == *--allow-large-mission* ]]; then
   export SDDA_ALLOW_LARGE_MISSION=1
-  python .sdda/python/sdda_scripts/audit_bypass.py \
+  python .sdda/sdda.py audit-bypass \
     --command "/sdda-caps {n}" --bypass CapGranularityHardCap \
     --reason "${SDDA_BYPASS_REASON:-non renseignée}"
 fi
@@ -64,7 +64,7 @@ Vérifier que **G0 est franchie** — l'état est un fait dérivé, pas une lign
 `Status:` (LIFECYCLE R1) :
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n} --require-gate G0
+python .sdda/sdda.py compute-status --mission {n} --require-gate G0
 ```
 
 Exit ≠ 0 → ERROR :
@@ -97,7 +97,7 @@ Glob `workspace/caps/{n}-*.md` :
 ## STEP 4 — Initialiser l'état du run
 
 ```bash
-RUN_ID=${SDDA_RUN_ID:-$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-caps" --tags "$TAGS")}
 ```
 
@@ -139,7 +139,7 @@ L'agent n'a pas `Bash` et écrit `Parent MISSION hash: sha256:COMPUTE_REQUIRED`.
 Résoudre en post-step (0 token, ~50 ms, idempotent) :
 
 ```bash
-python .sdda/python/sdda_scripts/resolve_cap_hash_sentinel.py --mission {n}
+python .sdda/sdda.py resolve-cap-hash-sentinel --mission {n}
 ```
 
 | Exit | Action |
@@ -153,7 +153,7 @@ python .sdda/python/sdda_scripts/resolve_cap_hash_sentinel.py --mission {n}
 ## STEP 6 — CAP GATE (G1) — déterministe, 0 token
 
 ```bash
-python .sdda/python/sdda_scripts/validate_cap.py --mission {n} --json \
+python .sdda/sdda.py validate-cap --mission {n} --json \
   > workspace/.sys/.validation/{n}-G1-cap.json
 ```
 
@@ -198,7 +198,7 @@ passer rend toute la chaîne d'évaluation décorative.
 ## STEP 7 — Recalcul d'état + récap
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n}
+python .sdda/sdda.py compute-status --mission {n}
 ```
 
 ```

@@ -23,8 +23,8 @@ Le troisième est le seul qui attrape la régression réelle : les fichiers rest
 sagement en place pendant qu'une f-string les double dans le code.
 
 Usage :
-    python lint_prompts.py --mission 1 --json
-    python lint_prompts.py --mission 1 --require-code   # après génération
+    python .sdda/sdda.py lint-prompts --mission 1 --json
+    python .sdda/sdda.py lint-prompts --mission 1 --require-code   # après génération
 """
 from __future__ import annotations
 

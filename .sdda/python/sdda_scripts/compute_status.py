@@ -30,7 +30,7 @@ Un rapport `ok: false` rend l'artefact Blocked avec ses classes. Un rapport dont
 un hash épinglé a bougé ne compte pas (R2).
 
 Usage :
-    python compute_status.py [--mission 1] [--json] [--no-write] [--require-gate G1]
+    python .sdda/sdda.py compute-status [--mission 1] [--json] [--no-write] [--require-gate G1]
 
 Exit : 0 · 1 si un `Status:` non étayé a été trouvé ou si `--require-gate` n'est pas satisfaite.
 """

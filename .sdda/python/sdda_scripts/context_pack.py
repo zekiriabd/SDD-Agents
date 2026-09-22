@@ -29,10 +29,10 @@ réel, ce qui est pire qu'un pack trop gros : au moins celui-là se voit, parce
 qu'il dépasse le budget et refuse de partir.
 
 Usage :
-    python context_pack.py resolve --agent architect-topology --mission 1 --json
-    python context_pack.py build   --agent architect-topology
-    python context_pack.py check   --agent architect-rag --json
-    python context_pack.py prune   --dry-run
+    python .sdda/sdda.py context-pack resolve --agent architect-topology --mission 1 --json
+    python .sdda/sdda.py context-pack build   --agent architect-topology
+    python .sdda/sdda.py context-pack check   --agent architect-rag --json
+    python .sdda/sdda.py context-pack prune   --dry-run
 """
 from __future__ import annotations
 
@@ -363,7 +363,7 @@ def resolve_context(
         res.packs.append(state)
         if not state["fresh"]:
             report.error("PACK_UNUSABLE", f"agent `{agent}` : pack `{resolved}` {state['reason']}",
-                         f"reconstruire : python .sdda/python/sdda_scripts/context_pack.py build --agent {agent}", resolved)
+                         f"reconstruire : python .sdda/sdda.py context-pack build --agent {agent}", resolved)
 
     written = {str(w) for w in (spec.get("writes") or [])}
     for pattern in res.missing:
@@ -782,7 +782,7 @@ def main(argv: list[str] | None = None) -> int:
             if orphans:
                 report.warn("PACK_UNUSABLE", f"{len(orphans)} pack(s) orphelin(s) — aucun agent de loader.yml ne les lit : "
                             + ", ".join(o["path"] for o in orphans),
-                            "python .sdda/python/sdda_scripts/context_pack.py prune")
+                            "python .sdda/sdda.py context-pack prune")
                 report.data["orphans"] = orphans
         if not args.json:
             for entry in report.data.get("packs", []):
@@ -796,7 +796,7 @@ def main(argv: list[str] | None = None) -> int:
         states.append(state)
         if not state["fresh"]:
             report.error("PACK_UNUSABLE", f"pack de `{agent}` {state['reason']}",
-                         f"python .sdda/python/sdda_scripts/context_pack.py build --agent {agent}", state["path"])
+                         f"python .sdda/sdda.py context-pack build --agent {agent}", state["path"])
     report.data["packs"] = states
     if not args.json:
         for state in states:

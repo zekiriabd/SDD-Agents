@@ -187,7 +187,7 @@ The framework carries its own anti-rot device — the one that refuses to let a
 written rule go unenforced:
 
 ```bash
-python .sdda/python/sdda_admin/framework_smoke.py
+python .sdda/sdda.py framework-smoke
 ```
 
 It checks: agents ↔ tier bounds parity, invariants ↔ enforcers on disk, error
@@ -196,8 +196,8 @@ honesty** — no stack sheet can declare itself validated unless a run has
 measured it.
 
 ```bash
-python .sdda/python/sdda_admin/sync_error_registry.py --check   # taxonomy
-python .sdda/python/sdda_admin/sync_digests.py --check          # per-agent digests
+python .sdda/sdda.py sync-error-registry --check   # taxonomy
+python .sdda/sdda.py sync-digests --check          # per-agent digests
 python -m pytest .sdda/python/tests/ -q                         # deterministic layer
 ```
 
@@ -206,7 +206,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->929<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->947<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

@@ -140,7 +140,7 @@ rendu — les confondre rend le budget d'exécution incalculable
 ## STEP 5 — Smoke check (exécuté par `bootstrap.py`, rappelé ici)
 
 ```bash
-python .sdda/python/sdda_scripts/smoke_check.py
+python .sdda/sdda.py smoke-check
 ```
 
 Vérifie : `STACK.md` parsable et sans `{{`, exactement 1 stack active par
@@ -156,7 +156,7 @@ catégorie obligatoire (`lang`, `framework`, `orchestration`, `serving`),
 
 Un workspace amorcé par un framework plus ancien sort `[WORKSPACE_VERSION_MISSING]`
 ou `[WORKSPACE_VERSION_OUTDATED]` : le faire monter avec
-`python .sdda/python/sdda_scripts/migrate_workspace.py` (`--dry-run` d'abord ;
+`python .sdda/sdda.py migrate-workspace` (`--dry-run` d'abord ;
 un répertoire retiré de l'arborescence mais non vide est conservé et signalé
 `[WORKSPACE_GHOST_DIR_NOT_EMPTY]`).
 

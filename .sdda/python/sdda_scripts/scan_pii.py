@@ -23,8 +23,8 @@ son type, son fichier et sa ligne. Un rapport de gate n'est pas gitignoré
 partout, et un scanner de PII qui recopie des PII est un incident de plus.
 
 Usage :
-    python scan_pii.py --mission 1 --target vectorstore --json
-    python scan_pii.py --target datasets traces
+    python .sdda/sdda.py scan-pii --mission 1 --target vectorstore --json
+    python .sdda/sdda.py scan-pii --target datasets traces
 """
 from __future__ import annotations
 

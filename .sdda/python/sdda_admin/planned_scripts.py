@@ -11,10 +11,15 @@ Ce script transforme la dette en backlog : qui réclame quoi, et combien de fois
 Un script réclamé par un seul appelant mérite une question ; un script réclamé
 par six est un vrai besoin.
 
+Deux formes d'appel sont reconnues dans la prose scannée : le chemin complet
+`.sdda/python/{pkg}/{nom}.py` et la forme courte `python .sdda/sdda.py {cmd}`,
+résolue par `sdda_cli.resolve()`. Les compter séparément aurait fait
+réapparaître comme « à écrire » tout script migré vers la forme courte.
+
 Usage :
-    python .sdda/python/sdda_admin/planned_scripts.py
-    python .sdda/python/sdda_admin/planned_scripts.py --json
-    python .sdda/python/sdda_admin/planned_scripts.py --write   # écrit le .md
+    python .sdda/sdda.py planned-scripts
+    python .sdda/sdda.py planned-scripts --json
+    python .sdda/sdda.py planned-scripts --write   # écrit le .md
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from pathlib import Path
 SDDA = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SDDA / "python"))
 
+import sdda_cli  # noqa: E402
 from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
 
 ensure_utf8_stdout()
@@ -38,6 +44,12 @@ OUT = SDDA / "docs" / "PLANNED-SCRIPTS.md"
 SCAN = ("agents/*.md", "commands/*.md", "rules/*.md", "INVARIANTS.yml", "loader.yml")
 REF_RE = re.compile(r"(?<![~/\w])\.sdda/python/([\w\-./]+\.py)(?![\w.])")
 BARE_RE = re.compile(r"`([a-z][a-z0-9_]*\.py)`")
+
+#: La forme courte : `python .sdda/sdda.py validate-mission --mission 1`. Depuis
+#: qu'elle a remplacé les chemins à cinq segments dans les prompts, c'est elle
+#: que ce scanner doit résoudre — sinon le contrôle qui empêche un prompt
+#: d'annoncer un outil inexistant serait devenu muet le jour de la migration.
+LAUNCHER_RE = re.compile(r"python \.sdda/sdda\.py\s+([a-z][a-z0-9-]*)(?![\w-])")
 
 #: Un script absent cité par un prompt doit le DIRE au lecteur — l'agent qui le
 #: lit croirait sinon à un outil disponible et inventerait sa sortie. La
@@ -50,12 +62,16 @@ DECLARED_WINDOW_LINES = 8
 #: déclaration suffit : c'est le lecteur du fichier qu'on informe, pas la ligne.
 
 
-def is_declared_planned(text: str, ref: str) -> bool:
-    """La référence `ref` (chemin sous python/) est-elle suivie d'un « planifié » ?"""
+def is_declared_planned(text: str, needles: list[str]) -> bool:
+    """Un des appels (chemin complet ou forme courte) est-il suivi d'un « planifié » ?
+
+    Une seule déclaration suffit par fichier : c'est le lecteur qu'on informe,
+    pas la ligne. Un appel déclaré et un autre muet, dans le même fichier, ne
+    trompent personne — le fichier dit que le script n'existe pas encore.
+    """
     lines = text.splitlines()
-    needle = f".sdda/python/{ref}"
     for i, line in enumerate(lines):
-        if needle in line:
+        if any(needle in line for needle in needles):
             window = "\n".join(lines[i: i + DECLARED_WINDOW_LINES + 1])
             if DECLARED_RE.search(window):
                 return True
@@ -81,9 +97,16 @@ def collect() -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[s
             except Exception:
                 continue
             caller = str(path.relative_to(SDDA))
+            # {module rel-path: les textes d'appel qui le désignent dans CE fichier}
+            calls: dict[str, list[str]] = defaultdict(list)
             for ref in REF_RE.findall(text):
+                calls[ref].append(f".sdda/python/{ref}")
+            for name in LAUNCHER_RE.findall(text):
+                ref = sdda_cli.resolve(name) or sdda_cli.expected_path(name)
+                calls[ref].append(f"{sdda_cli.LAUNCHER} {name}")
+            for ref, needles in calls.items():
                 pathed[ref].add(caller)
-                if is_declared_planned(text, ref):
+                if is_declared_planned(text, needles):
                     declared[ref].add(caller)
             for ref in BARE_RE.findall(text):
                 bare[ref].add(caller)

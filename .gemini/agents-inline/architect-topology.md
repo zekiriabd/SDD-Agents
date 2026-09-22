@@ -121,7 +121,7 @@ Produire le tableau §1 du template.
 complétude, qui ne coûte aucun token :
 
 ```bash
-python .sdda/python/sdda_scripts/validate_architecture.py --mission {n} --json
+python .sdda/sdda.py validate-architecture --mission {n} --json
 ```
 
 Elle confronte `## 2. Roster déclaré` aux exigences du pattern actif
@@ -214,7 +214,7 @@ Défauts hérités de `STACK.md`. Les desserrer est une décision, pas un réfle
 
 Exécute (0 token) :
 ```bash
-python .sdda/python/sdda_scripts/estimate_budget.py --feat-number {n} --from-draft
+python .sdda/sdda.py estimate-budget --feat-number {n} --from-draft
 ```
 
 Remplis le tableau §5 du template : chemin **nominal** et **pire cas**

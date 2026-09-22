@@ -32,14 +32,14 @@ Toutes acceptent `--root <projet>` (défaut : détection du dossier qui contient
 
 | Gate | Commande | Rapport écrit |
 |---|---|---|
-| G0 MISSION | `python .sdda/python/sdda_scripts/validate_mission.py` | `G0-{mission}.json` |
-| G1 CAP | `python .sdda/python/sdda_scripts/validate_cap.py` | `G1-{cap}.json`, `G1-{mission}.json` |
-| G2 TOPOLOGY (Markdown) | `python .sdda/python/sdda_scripts/validate_topology.py` | `G2-{mission}.topology.json` |
-| 2.9 compilation IR | `python .sdda/python/sdda_scripts/ir_compiler.py --mission 1` | `workspace/.sys/.ir/1-system.ir.json` |
-| G2 TOPOLOGY (IR) | `python .sdda/python/sdda_scripts/validate_ir.py --mission 1` | `G2-{mission}.ir.json` |
-| G2 TOPOLOGY (budget) | `python .sdda/python/sdda_scripts/estimate_budget.py --mission 1` | `G2-{mission}.budget.json` + `budget.estimated` dans l'IR |
-| datasets (part de G8) | `python .sdda/python/sdda_scripts/validate_datasets.py` | `G8-{mission}.datasets.json` |
-| état dérivé | `python .sdda/python/sdda_scripts/compute_status.py [--require-gate G1]` | — (peut réécrire un `Status:` non étayé) |
+| G0 MISSION | `python .sdda/sdda.py validate-mission` | `G0-{mission}.json` |
+| G1 CAP | `python .sdda/sdda.py validate-cap` | `G1-{cap}.json`, `G1-{mission}.json` |
+| G2 TOPOLOGY (Markdown) | `python .sdda/sdda.py validate-topology` | `G2-{mission}.topology.json` |
+| 2.9 compilation IR | `python .sdda/sdda.py ir-compiler --mission 1` | `workspace/.sys/.ir/1-system.ir.json` |
+| G2 TOPOLOGY (IR) | `python .sdda/sdda.py validate-ir --mission 1` | `G2-{mission}.ir.json` |
+| G2 TOPOLOGY (budget) | `python .sdda/sdda.py estimate-budget --mission 1` | `G2-{mission}.budget.json` + `budget.estimated` dans l'IR |
+| datasets (part de G8) | `python .sdda/sdda.py validate-datasets` | `G8-{mission}.datasets.json` |
+| état dérivé | `python .sdda/sdda.py compute-status [--require-gate G1]` | — (peut réécrire un `Status:` non étayé) |
 
 G2 n'est franchie que quand ses **trois** parts (`topology`, `ir`, `budget`)
 sont vertes ; G8 exige `datasets` **et** `acceptance`.
@@ -83,6 +83,6 @@ dont un hash épinglé a bougé (R2), prend le minimum des CAPs pour la MISSION
 ## Santé du framework
 
 ```bash
-python .sdda/python/sdda_admin/framework_smoke.py            # cohérence de .sdda/
-python .sdda/python/sdda_admin/sync_error_registry.py --check # toute [CLASS] émise est enregistrée
+python .sdda/sdda.py framework-smoke            # cohérence de .sdda/
+python .sdda/sdda.py sync-error-registry --check # toute [CLASS] émise est enregistrée
 ```

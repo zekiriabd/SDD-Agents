@@ -71,7 +71,7 @@ de meilleurs mauvais résultats : le `nDCG@5` monte, la réponse reste fausse.
 ## 5. Commande de smoke
 
 ```bash
-python .sdda/python/sdda_scripts/run_retrieval_eval.py --index {index_slug} --json
+python .sdda/sdda.py run-retrieval-eval --index {index_slug} --json
 #   -> compare recall@k et nDCG@k ; si recall@25 est bon et nDCG@5 médiocre,
 #      le rapport recommande explicitement d'évaluer un reranker. exit 0.
 ```

@@ -56,7 +56,7 @@ def test_a_scaffolded_manifest_asks_to_fill_each_hole(project: Path) -> None:
     assert code == 0
     (found,) = only(tasks(project), "roster")
     assert found["blocking"] is True and "<à préciser>" in found["title"]
-    assert "roster.py validate --mission 1" in found["how"]
+    assert "python .sdda/sdda.py roster validate --mission 1" in found["how"]
 
 
 def test_a_red_manifest_names_its_first_class(project: Path) -> None:

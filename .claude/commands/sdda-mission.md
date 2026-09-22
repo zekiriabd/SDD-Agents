@@ -87,7 +87,7 @@ pour la section `## Required Stack` de la MISSION.
 ## STEP 4 — Initialiser l'état du run
 
 ```bash
-RUN_ID=$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-mission" --tags "$TAGS")
 ```
 
@@ -105,7 +105,7 @@ façade compilée `.claude/agents/`). Tier `balanced`. Owner exclusif de
 Le prompt d'invocation n'est plus recopié ici — il est **assemblé** :
 
 ```bash
-python .sdda/python/sdda_scripts/spawn_brief.py --agent po-elicitor --mission {n} \
+python .sdda/sdda.py spawn-brief --agent po-elicitor --mission {n} \
   --work-item "Éliciter la MISSION {n}-{Name}" --fact "brief={--from-brief path | aucun}" --prompt-only
 ```
 
@@ -139,7 +139,7 @@ Sur ERROR de l'agent → `set-phase --phase mission --status fail` + STOP.
 ## STEP 6 — MISSION GATE (G0) — déterministe, 0 token
 
 ```bash
-python .sdda/python/sdda_scripts/validate_mission.py --mission {n} --json \
+python .sdda/sdda.py validate-mission --mission {n} --json \
   > workspace/.sys/.validation/{n}-G0-mission.json
 ```
 
@@ -182,7 +182,7 @@ du domaine (PHILOSOPHY P6). `SDDA_BYPASS_MISSION_GATE` n'existe pas.
 ## STEP 7 — Recalcul d'état (LIFECYCLE R1)
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n}
+python .sdda/sdda.py compute-status --mission {n}
 ```
 
 L'état est **dérivé** des rapports `workspace/.sys/.validation/{n}-G*.json`,

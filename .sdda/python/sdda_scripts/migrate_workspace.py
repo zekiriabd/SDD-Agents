@@ -35,9 +35,9 @@ Classes émises :
                                      ou ne rejoint pas WORKSPACE_VERSION
 
 Usage :
-    python .sdda/python/sdda_scripts/migrate_workspace.py
-    python .sdda/python/sdda_scripts/migrate_workspace.py --dry-run
-    python .sdda/python/sdda_scripts/migrate_workspace.py --root <projet> --json
+    python .sdda/sdda.py migrate-workspace
+    python .sdda/sdda.py migrate-workspace --dry-run
+    python .sdda/sdda.py migrate-workspace --root <projet> --json
 """
 from __future__ import annotations
 

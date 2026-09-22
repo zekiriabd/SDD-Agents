@@ -113,7 +113,11 @@ SDD-Agents/
 │   │   └── runtime/                   # squelettes de code par langage
 │   │       # (les combinaisons de stack vivent dans registry/compatibility.matrix.json)
 │   ├── digests/                       # tranches de taxonomie par agent
+│   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
+│   │                                  #   marche depuis un clone nu, sans pip install
 │   └── python/                        # outillage déterministe 0-token
+│       ├── sdda_cli.py                # dispatcher des 60 sous-commandes ; registre
+│       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces
 │       ├── sdda_scripts/              # validate_*, estimate_budget, eval_runner, …
 │       ├── sdda_admin/                # harness_build, sync_digests, sync_error_registry
@@ -159,6 +163,33 @@ registres machine, donc vérifiables, là où un arbre en prose ne l'est pas.
 La conséquence opérationnelle, qui doit être dite : **une ligne activée dans
 `STACK.md` pour un composant sans fiche sur disque ne charge rien.** Le catalogue
 annoncé n'est pas un catalogue chargeable.
+
+### 2.ante Un seul point d'entrée pour l'outillage
+
+Les 60 scripts déterministes s'appellent par une forme unique :
+
+```bash
+python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
+sdda validate-mission --mission 1                     # après `pip install -e .sdda/python`
+```
+
+La première ne suppose **aucune installation**, et c'est elle qu'écrivent les
+22 fiches d'agents et les 11 commandes. Un framework dont les prompts exigent un
+`pip install` préalable échoue au premier clone — et l'agent qui reçoit
+`command not found` invente la sortie du script au lieu de s'arrêter.
+
+Le registre des sous-commandes est **dérivé du disque** (`sdda_cli.discover()`) :
+tout module de `sdda_scripts/`, `sdda_admin/` ou `sdda_hooks/` est une
+sous-commande nommée par son fichier (`validate_mission.py` -> `validate-mission`).
+Aucune table à tenir, donc aucune table à laisser dériver — même raison que pour
+le registre d'erreurs (§9).
+
+Ce n'est pas qu'une commodité d'écriture. `sdda_cli.resolve()` est la **SSoT que
+lisent les scanners** : `planned_scripts.py` et `framework_smoke.py` résolvent
+`python .sdda/sdda.py {cmd}` vers son module pour continuer de détecter un script
+qu'un prompt annonce sans que personne l'ait écrit. Migrer la prose vers la forme
+courte sans leur apprendre à la lire aurait rendu ce contrôle muet — c'est-à-dire
+aurait rouvert exactement la porte que `refs.planned.undeclared` a fermée.
 
 ### 2.bis L'Agentic IR — la charnière du multi-framework
 
@@ -378,7 +409,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **369**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **370**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

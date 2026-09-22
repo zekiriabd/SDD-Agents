@@ -28,9 +28,9 @@ absente et le verdict passe au jaune avec la raison écrite — jamais au vert p
 omission. C'est exactement le faux vert que ce framework existe pour empêcher.
 
 Usage :
-    python run_retrieval_eval.py --mission 1 --executor workspace.src.rag:Retriever
-    python run_retrieval_eval.py --mission 1 --replay workspace/evals/runs/retrieval.jsonl --json
-    python run_retrieval_eval.py --mission 1 --retriever 1-contracts-index --k 10
+    python .sdda/sdda.py run-retrieval-eval --mission 1 --executor workspace.src.rag:Retriever
+    python .sdda/sdda.py run-retrieval-eval --mission 1 --replay workspace/evals/runs/retrieval.jsonl --json
+    python .sdda/sdda.py run-retrieval-eval --mission 1 --retriever 1-contracts-index --k 10
 
 Bypass : `SDDA_BYPASS_RETRIEVAL_GATE=1` dégrade les erreurs en avertissements,
 journalise dans `workspace/.sys/.audit/bypasses.jsonl` et marque le rapport
@@ -504,7 +504,7 @@ def resolve_ir_path(root: Path, args: argparse.Namespace, report: Report) -> Pat
     candidates = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
     if len(candidates) != 1:
         report.error("IR_NOT_FOUND", f"{len(candidates)} IR compilé(s) dans workspace/.sys/.ir/ : préciser --mission",
-                     "python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+                     "python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
         return None
     return candidates[0]
 
@@ -540,7 +540,7 @@ def main(argv: list[str] | None = None, *, executor: Any = None) -> int:
         return finish(report, args)
     if not ir_file.is_file():
         report.error("IR_NOT_FOUND", f"IR `{paths.rel(root, ir_file)}` introuvable",
-                     "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", paths.rel(root, ir_file))
+                     "compiler : python .sdda/sdda.py ir-compiler --mission {n}", paths.rel(root, ir_file))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
 

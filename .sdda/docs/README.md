@@ -92,5 +92,5 @@ and every internal reference must resolve. A `.fr.md` twin is scanned under the
 same rule. Run it from the repository root:
 
 ```bash
-python .sdda/python/sdda_admin/framework_smoke.py
+python .sdda/sdda.py framework-smoke
 ```

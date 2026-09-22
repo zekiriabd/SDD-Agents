@@ -112,7 +112,7 @@ retour) via la couche d'observabilité de la stack active — invariant
 Exécute le smoke de la stack (`.sdda/stacks/lang/{lang}.md ## Smoke`) et la
 validation de schéma déterministe :
 ```bash
-python .sdda/python/sdda_scripts/validate_tool_contract.py --mission {n} --require-code
+python .sdda/sdda.py validate-tool-contract --mission {n} --require-code
 ```
 
 (méta-schéma des schémas d'outil, `required` ⊆ `properties`, cohérence de la

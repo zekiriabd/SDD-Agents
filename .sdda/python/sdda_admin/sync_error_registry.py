@@ -12,8 +12,8 @@ personne n'a documentées, et des classes documentées que plus rien n'émet. Le
 deux ruinent le classement automatique, et aucune des deux ne se voit.
 
 Usage :
-    python .sdda/python/sdda_admin/sync_error_registry.py           # met à jour
-    python .sdda/python/sdda_admin/sync_error_registry.py --check   # CI : exit 1 si dérive
+    python .sdda/sdda.py sync-error-registry           # met à jour
+    python .sdda/sdda.py sync-error-registry --check   # CI : exit 1 si dérive
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def main() -> int:
                 print(f"       non enregistrées : {', '.join(added[:12])}")
             if removed:
                 print(f"       orphelines       : {', '.join(removed[:12])}")
-            print("FIX: python .sdda/python/sdda_admin/sync_error_registry.py")
+            print("FIX: python .sdda/sdda.py sync-error-registry")
             return 1
         print(f"  ok — {len(emitted)} classes, registre à jour")
         return 0
