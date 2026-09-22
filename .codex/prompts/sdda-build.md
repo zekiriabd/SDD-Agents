@@ -109,6 +109,19 @@ Construire le `BATCH` depuis l'IR :
 Un seul message multi-`Agent`, **≤ `MaxParallel`** simultanés (3 agents au
 plus ici — sous le défaut `MaxParallel: 3`). Chemins disjoints par ownership.
 
+**Garde par couche** (reprise à la granularité de l'item, `sdda_state.py`) —
+avant d'ajouter une couche au `BATCH` :
+
+```bash
+H=$(python .sdda/python/sdda_scripts/sdda_state.py inputs-hash --mission {n} --phase build_socle --item {tools|retrieval|data})
+python .sdda/python/sdda_scripts/sdda_state.py should-skip-item --phase build_socle --item {couche} --inputs-hash "$H" \
+  && echo "⊘ {couche}: skipped (pass sur les mêmes entrées, run $SDDA_RUN_ID)"
+```
+
+Exit 0 → la couche ne part pas. Exit 1 → elle part. Le hash porte la tranche
+de l'IR dont la couche dépend (`tools[]`, `retrievers[]`, `dataAccess[]`) : un
+contrat d'outil modifié rend l'ancien `pass` caduc, un autre contrat non.
+
 Prompt commun :
 ```
 MISSION {n}. IR : workspace/.sys/.ir/{n}-system.ir.json (source close — n'implémenter
@@ -120,6 +133,16 @@ BuildLoopMaxCostUsd={…}, BuildLoopMaxIter={…}.
 ```
 
 Attendre la vague. Collecter les ERRORs ; un échec n'annule pas les autres.
+Pour chaque couche revenue, **avant** les gates :
+
+```bash
+python .sdda/python/sdda_scripts/sdda_state.py set-item --phase build_socle --item {couche} \
+  --status {pass|fail} --inputs-hash "$H" --payload-json '{"agent":"dev-{x}"}'
+```
+
+`fail` si l'agent a rendu un ERROR ; `pass` sinon. Le verdict de la **phase**
+reste celui de `set-phase` en 3.4 — les items disent ce qui a été payé, la
+phase dit si la couche tient.
 
 ### 3.2 — TOOL GATE (G3)
 
@@ -269,6 +292,21 @@ Dispatch en vagues de **≤ `MaxParallel`** instances (un message multi-`Agent`
 par vague). Ordre : agents feuilles d'abord, superviseur en dernier (il
 importe les autres).
 
+**Garde par agent** — avant de mettre une instance dans une vague :
+
+```bash
+H_{agent}=$(python .sdda/python/sdda_scripts/sdda_state.py inputs-hash --mission {n} --phase build_agents --item {agent})
+python .sdda/python/sdda_scripts/sdda_state.py should-skip-item --phase build_agents --item {agent} --inputs-hash "$H_{agent}" \
+  && echo "⊘ dev-agent {agent}: skipped (pass sur le même prompt et la même entrée IR)"
+```
+
+Le hash porte l'entrée `agents[{agent}]` de l'IR **et** le texte du prompt :
+c'est exactement ce que `dev-agent` lit. Un prompt réécrit par `dev-prompt` en
+4.1 change le hash, donc rejoue l'agent ; un voisin qui a échoué ne le rejoue
+pas. Sans cette garde, `--resume` après un `[AGENT_GATE_FAILED]` sur un agent
+repayait les N-1 autres. `--agent {id}` court-circuite la garde : c'est une
+demande explicite de re-matérialiser.
+
 Prompt par instance :
 ```
 Implémenter l'agent {agent} de la MISSION {n}. IR : agents[{agent}] (bornes, outils, retrievers,
@@ -292,6 +330,19 @@ python .sdda/python/sdda_hooks/preflight_agent_bounds.py --mission {n}
 précédent), ERROR. C'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de
 SDD_Pro : l'agent qui écrit le code ne modifie ni le jeu qui le juge ni le
 prompt qu'il implémente.
+
+Puis, **par instance** de la vague :
+
+```bash
+python .sdda/python/sdda_scripts/sdda_state.py set-item --phase build_agents --item {agent} \
+  --status {pass|fail} --inputs-hash "$H_{agent}"
+```
+
+`fail` : ERROR de l'agent, ou l'un des trois post-steps rouge sur ses fichiers.
+`pass` : le code est là et propre — **pas** « l'agent est évalué » : G5 (4.3)
+peut encore le rejeter, et c'est alors `set-item … --status fail` qu'il faut
+réécrire pour les agents nommés dans le rapport, pour que la reprise les
+rejoue.
 
 ### 4.3 — AGENT GATE (G5)
 
@@ -342,7 +393,10 @@ FIX: /sdda-build {n} --agent {agent} (dev-prompt + dev-agent relisent le rapport
 orchestration : on ne saurait plus attribuer une baisse de score.
 
 **State tracking** : `set-phase --phase build_agents --status {pass|warn|fail}
---payload-json '{"agents":N,"green":g,"yellow":y,"red":r,"advisoryJudges":j}'`.
+--payload-json '{"agents":N,"green":g,"yellow":y,"red":r,"advisoryJudges":j}'`,
+et pour chaque agent porté 🔴 par le rapport :
+`set-item --phase build_agents --item {agent} --status fail --inputs-hash "$H_{agent}"`
+— sinon `--resume` le croirait vert.
 
 ---
 
@@ -453,7 +507,7 @@ SOCLE (phase 3) :
 
 AGENTS (phase 4) :
   Prompts          : {P} fichiers hashés dans workspace/prompts/ · lint 🟢
-  Agents           : {N} implémentés ({vagues} vague(s), MaxParallel {mp})
+  Agents           : {N} implémentés ({vagues} vague(s), MaxParallel {mp}) · {S} sauté(s) (pass sur les mêmes entrées)
   G5 AGENT GATE    : {🟢|🟡|🔴} — {g} vert · {y} jaune · {r} rouge · juges advisory {j}
     CAP {n}-{m} {Name}   {mean} ±{std} (k={k})  {🟢|🟡|🔴}
 
@@ -480,6 +534,10 @@ Prochaine étape :
 - **Barrières** : `dev-prompt` seul avant les `dev-agent` ;
   `dev-orchestration` avant `dev-api`.
 - **Parallélisme borné** par `MaxParallel`, en vagues ; sûr par ownership.
+- **Reprise à l'item** : une couche du socle ou une instance de `dev-agent`
+  `pass` sur les **mêmes entrées** (`inputs-hash`) ne se repaie pas ; `warn`,
+  `fail`, ou des entrées modifiées se rejouent toujours. Le verdict de phase
+  reste celui de `set-phase`.
 - **Aucun agent ne spawne un autre agent.**
 - **`dev-*` n'écrit jamais** sous `workspace/datasets/` ni `workspace/prompts/`.
 - **Aucun prompt inline** dans `workspace/src/` (hook `postflight_no_inline_prompt`).
