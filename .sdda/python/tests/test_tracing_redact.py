@@ -202,12 +202,16 @@ def test_trace_writer_writes_a_redacted_line(tmp_path: Path) -> None:
     """De bout en bout : ce qui touche le disque ne contient aucun des secrets."""
     writer = tracing.TraceWriter(tmp_path, "run-redact")
     writer.emit(
-        "tool_call", "2026-09-22T10:00:00Z", tool="crm_lookup", sideEffectClass="read-only",
-        ok=True,
-        arguments={"accessToken": "tok-live-4f8a2b91", "customer_id": "CUS-1",
-                   "headers": {"X-API-Key": "k-1234", "Authorization": "Bearer abc123def456"}},
-        stderr="connexion à postgres://app:s3cr3tp4ssw0rd@db.internal/prod refusée ; "
-               "retry avec sk-abcdefghijklmnopqrstuvwx",
+        "execute_tool crm_lookup", span_id="s1", start="2026-09-22T10:00:00Z",
+        attributes={
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "crm_lookup",
+            "sdda.tool.side_effect_class": "read-only",
+            "arguments": {"accessToken": "tok-live-4f8a2b91", "customer_id": "CUS-1",
+                          "headers": {"X-API-Key": "k-1234", "Authorization": "Bearer abc123def456"}},
+            "stderr": "connexion à postgres://app:s3cr3tp4ssw0rd@db.internal/prod refusée ; "
+                      "retry avec sk-abcdefghijklmnopqrstuvwx",
+        },
     )
     raw = writer.path.read_text(encoding="utf-8")
     for secret in ("tok-live-4f8a2b91", "k-1234", "abc123def456", "s3cr3tp4ssw0rd",
@@ -215,11 +219,12 @@ def test_trace_writer_writes_a_redacted_line(tmp_path: Path) -> None:
         assert secret not in raw
     assert "CUS-1" in raw and "crm_lookup" in raw and REDACTED in raw
 
-    (event,) = list(tracing.read_events(writer.path))
-    assert event["arguments"]["customer_id"] == "CUS-1"
-    assert event["arguments"]["accessToken"] == REDACTED
-    assert event["arguments"]["headers"] == {"X-API-Key": REDACTED, "Authorization": REDACTED}
-    assert event["stderr"] == (f"connexion à {REDACTED}db.internal/prod refusée ; retry avec {REDACTED}")
+    (span,) = list(tracing.read_spans(writer.path))
+    attrs = span["attributes"]
+    assert attrs["arguments"]["customer_id"] == "CUS-1"
+    assert attrs["arguments"]["accessToken"] == REDACTED
+    assert attrs["arguments"]["headers"] == {"X-API-Key": REDACTED, "Authorization": REDACTED}
+    assert attrs["stderr"] == (f"connexion à {REDACTED}db.internal/prod refusée ; retry avec {REDACTED}")
 
     # Et le scan de G7, sur cette trace, ne trouve rien : les deux reconnaissent les mêmes formes.
     assert not scan_secrets.run(tmp_path, targets=["workspace/traces"]).errors

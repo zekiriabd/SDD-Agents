@@ -169,27 +169,39 @@ def observed_calls(root: Path, report: Report, ir: dict[str, Any], loc: str) -> 
     allowed = {a["id"]: set(a.get("tools") or []) for a in ir.get("agents") or [] if a.get("id")}
     seen = 0
     offenders: dict[tuple[str, str], int] = {}
+    unattributed = 0
 
     runs = tracing.runs_dir(root)
     for trace in sorted(runs.glob("*.jsonl")) if runs.is_dir() else ():
-        # Un span `tool_call` ne porte pas toujours son agent : on suit le
-        # dernier `agent_started` du flux. Sans ce report, un appel hors scope
-        # passerait pour anonyme — donc pour autorisé.
-        current = ""
-        for event in tracing.read_events(trace):
-            kind = str(event.get("kind") or event.get("event") or "")
-            if kind in ("agent_started", "agent_turn"):
-                current = str(event.get("agent_id") or event.get("agent") or current)
-                continue
-            if kind != "tool_call":
-                continue
-            agent = str(event.get("agent_id") or event.get("agent") or current)
-            tool = str(event.get("tool") or event.get("name") or "")
-            if not agent or not tool:
+        # L'agent responsable d'un appel d'outil se LIT dans l'arbre des spans
+        # (`parent_span_id`). Ce script suivait naguère « le dernier agent vu »
+        # dans un flux d'événements plat : faux dès que deux agents travaillent
+        # en parallèle, et surtout illisible sur une trace réelle, qui est faite
+        # de spans — il n'y voyait aucun appel, donc aucun dépassement.
+        for call in tracing.summarize(trace).tool_calls:
+            if not call.tool:
                 continue
             seen += 1
-            if agent in allowed and tool not in allowed[agent]:
-                offenders[(agent, tool)] = offenders.get((agent, tool), 0) + 1
+            # L'IR nomme ses agents et ses outils par identifiant de contrat ;
+            # la trace porte les deux. On compare d'abord l'identifiant, puis le
+            # nom — un appel légitime ne doit pas être signalé parce que
+            # l'application a tracé `invoice_lookup` là où l'IR dit
+            # `1-invoice-lookup`.
+            agent = next((a for a in (call.agent_id, call.agent) if a in allowed), "")
+            if not agent:
+                unattributed += 1
+                continue
+            if not call.matches_tool(allowed[agent]):
+                offenders[(agent, call.tool_id or call.tool)] = offenders.get((agent, call.tool_id or call.tool), 0) + 1
+
+    if unattributed:
+        report.warn(
+            "TRACE_MALFORMED",
+            f"{unattributed} appel(s) d'outil rattaché(s) à aucun agent de l'IR",
+            "un `execute_tool` doit être enfant de l'`invoke_agent` qui l'a déclenché "
+            "(observability/otel-genai.md §3.1), et cet agent doit porter son identifiant de "
+            "contrat : sans ce lien, l'appel n'est rattaché à personne, donc à aucun périmètre — "
+            "et un périmètre que rien ne confronte est un périmètre qui passe", loc)
 
     for (agent, tool), count in sorted(offenders.items()):
         report.error(

@@ -55,6 +55,15 @@ PY_EMIT_RE = re.compile(
 )
 PY_CONST_RE = re.compile(r"""^\s*(?:CLS_\w+|[A-Z_]*CLASS\w*)\s*=\s*["']([A-Z][A-Z0-9_]{2,})["']""", re.M)
 
+# `[CLASS]` en prose — mais PAS un indiçage Python. `attrs[A_BOUND_EXCEEDED]`
+# ressemble trait pour trait à un marqueur de classe, et en a fait entrer un au
+# registre : une constante d'attribut de trace y est devenue une classe d'erreur
+# que rien n'émet. Le lookbehind écarte ce qui suit immédiatement un
+# identifiant, une parenthèse ou un crochet fermants — c'est-à-dire un
+# subscript. Un vrai marqueur est précédé d'une espace, d'un début de ligne ou
+# d'un signe de ponctuation.
+BRACKET_RE = re.compile(r"(?<![\w\)\]])\[([A-Z][A-Z0-9_]{2,})\]")
+
 # Mots qui apparaissent entre crochets sans être des classes : préfixes de
 # sortie chat (`[CAPS] …`), placeholders de documentation, noms de section.
 NOT_A_CLASS = {
@@ -87,7 +96,7 @@ def collect() -> list[str]:
             # On ignore la section du registre lui-même, sinon il s'auto-alimente.
             if path == TAXONOMY:
                 text = text.split(MARKER)[0]
-            found.update(re.findall(r"\[([A-Z][A-Z0-9_]{2,})\]", text))
+            found.update(BRACKET_RE.findall(text))
             if path.suffix == ".py":
                 found.update(PY_EMIT_RE.findall(text))
                 found.update(PY_CONST_RE.findall(text))

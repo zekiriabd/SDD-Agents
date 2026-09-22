@@ -340,6 +340,32 @@ def test_an_unknown_scope_is_an_invalid_arg(compiled) -> None:
 
 
 # ---------------------------------------------------------------------------
+# sync_error_registry — un indiçage Python n'est pas un marqueur de classe
+# ---------------------------------------------------------------------------
+def test_a_python_subscript_is_not_mistaken_for_an_error_class() -> None:
+    """`attrs[A_BOUND_EXCEEDED]` en avait fait entrer une au registre.
+
+    Une constante d'attribut de trace y devenait une classe d'erreur que rien
+    n'émet — exactement le doc-theater que ce registre existe pour empêcher,
+    mais dans l'autre sens.
+    """
+    from sdda_admin.sync_error_registry import BRACKET_RE
+
+    assert BRACKET_RE.findall("if attrs[A_BOUND_EXCEEDED] is None:") == []
+    assert BRACKET_RE.findall("out[TOOL_NAME] = x") == []
+    assert BRACKET_RE.findall("CAUSE: [BUDGET_PRICING_UNKNOWN] modèle absent") == ["BUDGET_PRICING_UNKNOWN"]
+    assert BRACKET_RE.findall("| `[TOOL_SCHEMA_INVALID]` | schéma |") == ["TOOL_SCHEMA_INVALID"]
+    assert BRACKET_RE.findall("refuse -> [STACK_LANGUAGE_MISMATCH].") == ["STACK_LANGUAGE_MISMATCH"]
+
+
+def test_the_registry_holds_no_trace_attribute_constant() -> None:
+    """Garde-fou de non-régression sur le registre lui-même."""
+    from sdda_admin.sync_error_registry import collect
+
+    assert [c for c in collect() if c.startswith("A_")] == []
+
+
+# ---------------------------------------------------------------------------
 # sync_counters — la prose ne ment pas sur ses chiffres
 # ---------------------------------------------------------------------------
 def test_sync_counters_check_mode_runs_and_names_its_class() -> None:

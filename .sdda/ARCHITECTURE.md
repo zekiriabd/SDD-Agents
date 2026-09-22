@@ -409,9 +409,23 @@ est ce qu'il **sait faire**. Détail : `rules/ownership.md §2.2`.
 ## 8. Observabilité : artefact de première classe
 
 Tout run — de construction comme d'exécution du produit — émet une trace de spans
-dans `workspace/traces/runs/{run-id}.jsonl` : tour d'agent, appel d'outil (args
-redigés), requête de retrieval (+ documents retournés + scores), appel LLM
-(modèle, tokens in/out/cache, coût, latence), franchissement de gate.
+**OTel-GenAI** dans `workspace/traces/runs/{run-id}.jsonl`, une ligne par span :
+tour d'agent, appel d'outil (args redigés), requête de retrieval (+ documents
+retournés + scores), appel LLM (modèle, tokens in/out/cache, coût, latence),
+franchissement de gate.
+
+**Un seul format, et c'est le span.** Chaque ligne porte `run_id`, `trace_id`,
+`span_id` et `parent_span_id` : c'est ce dernier qui fait la valeur du format.
+La profondeur de délégation et l'agent responsable d'un appel d'outil se
+**lisent** dans l'arbre, là où une suite d'événements à plat obligeait à deviner
+« le dernier agent vu » — faux dès que deux agents travaillent en parallèle, et
+c'est précisément le moment où le périmètre d'outils compte.
+
+**Le coût est recalculé depuis les tokens**, jamais relu depuis l'attribut
+`sdda.cost.usd` que l'application déclare. Un chiffre qu'on relit sans le
+recalculer n'est pas une mesure, c'est une déclaration ; l'écart entre les deux
+est signalé, parce que c'est ce genre d'écart qui fait passer un run sous un
+plafond qu'il dépasse.
 
 Sans trace, un système non déterministe n'est pas débogable : il n'y a pas de
 stack trace à lire. Invariant `trace-emitted-per-run`.

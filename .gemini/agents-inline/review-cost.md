@@ -41,7 +41,8 @@ python .sdda/sdda.py cost-report --mission {n} --traces workspace/traces/runs --
 > les rapports L7 (`workspace/evals/reports/{n}-*.json`). Sans p95 par nœud ni
 > coût par CAP, ces lignes du rapport portent « non mesuré » — jamais un chiffre
 > estimé à la main, c'est le premier item de ton anti-dérive.
-Le rapport agrège les spans `llm_call`, `tool_call`, `retrieval`, `run_end` :
+Le rapport agrège les spans `chat`, `execute_tool`, `sdda.retrieve` et le span
+racine `sdda.run` (durée et coût du run entier) :
 coût et latence **par run, par CAP, par agent, par outil, par nœud**,
 distributions (mean, p50, p95, p99, max), distribution des hops, tokens
 in/out/cache, taux de hits de cache, top des outils en échec et en retry.

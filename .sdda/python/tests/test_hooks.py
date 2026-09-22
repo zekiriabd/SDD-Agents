@@ -256,14 +256,27 @@ def test_a_cost_written_on_a_phase_payload_is_counted(project: Path, monkeypatch
 # Traces
 # ---------------------------------------------------------------------------
 def emit_run(project: Path, run_id: str, *, complete: bool = True) -> None:
-    writer = tracing.TraceWriter(project, run_id)
-    writer.emit("run_start", "2026-09-21T10:00:00Z", missionId="1")
-    writer.emit("agent_turn", "2026-09-21T10:00:01Z", agentId="billing", tokensIn=900,
-                tokensOut=120, costUsd=0.012)
-    writer.emit("tool_call", "2026-09-21T10:00:02Z", tool="invoice_lookup",
-                sideEffectClass="read-only", ok=True)
-    if complete:
-        writer.emit("run_end", "2026-09-21T10:00:03Z", verdict="ok", latencyMs=3100)
+    """Une trace au format canonique : des spans OTel-GenAI, hiérarchisés.
+
+    `sdda.run` -> `invoke_agent` -> (`chat` | `execute_tool`). C'est la forme que
+    l'application générée écrit, donc la seule que les tests doivent produire.
+    """
+    w = tracing.TraceWriter(project, run_id)
+    w.emit("invoke_agent billing", span_id="s2", parent_span_id="s1",
+           start="2026-09-21T10:00:01Z", end="2026-09-21T10:00:03Z",
+           attributes={"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "billing"})
+    w.emit("chat claude-sonnet-5", span_id="s3", parent_span_id="s2",
+           start="2026-09-21T10:00:01Z", end="2026-09-21T10:00:02Z",
+           attributes={"gen_ai.operation.name": "chat", "gen_ai.request.model": "claude-sonnet-5",
+                       "gen_ai.usage.input_tokens": 900, "gen_ai.usage.output_tokens": 120})
+    w.emit("execute_tool invoice_lookup", span_id="s4", parent_span_id="s2",
+           start="2026-09-21T10:00:02Z", end="2026-09-21T10:00:03Z",
+           attributes={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "invoice_lookup",
+                       "sdda.tool.side_effect_class": "read-only"})
+    w.emit("sdda.run 1", span_id="s1", start="2026-09-21T10:00:00Z",
+           end="2026-09-21T10:00:03.100Z" if complete else None,
+           duration_ms=3100 if complete else None,
+           attributes={"sdda.run.id": run_id, "sdda.mission.id": "1"})
 
 
 def test_no_trace_at_all_is_allowed_before_the_first_run(project: Path) -> None:
@@ -280,8 +293,8 @@ def test_a_complete_trace_passes(project: Path) -> None:
     assert call(postflight_trace_present, project, runId="run-1")[0] == ALLOW
 
 
-def test_a_trace_without_run_end_is_refused(project: Path) -> None:
-    """Sans `run_end`, on ne peut ni mesurer la latence ni affirmer que le run a fini."""
+def test_a_trace_without_an_ended_root_is_refused(project: Path) -> None:
+    """Sans fin du span racine, on ne peut ni mesurer la latence ni affirmer que le run a fini."""
     emit_run(project, "run-2", complete=False)
     code, err = call(postflight_trace_present, project, runId="run-2")
     assert code == DENY and "TRACE_MALFORMED" in err
@@ -292,26 +305,49 @@ def test_the_trace_summary_measures_what_g6_needs(project: Path) -> None:
     summary = tracing.summarize(tracing.trace_path(project, "run-3"))
     assert summary.complete and summary.problems == []
     assert summary.tokens_in == 900 and summary.tokens_out == 120
-    assert summary.cost_usd == pytest.approx(0.012)
+    # Recalculé depuis les tokens : 900 x $2/MTok + 120 x $10/MTok (claude-sonnet-5).
+    assert summary.cost_usd == pytest.approx(900 * 2.0 / 1e6 + 120 * 10.0 / 1e6)
     assert summary.latency_ms == 3100
     assert summary.trajectory == ["billing", "tool:invoice_lookup"]
+    assert summary.hops == 1 and summary.max_depth == 1
+
+
+def test_the_summary_attributes_each_tool_call_to_its_agent(project: Path) -> None:
+    """C'est ce que l'audit de scope consomme : sans agent, pas de périmètre."""
+    emit_run(project, "run-3b")
+    (call_,) = tracing.summarize(tracing.trace_path(project, "run-3b")).tool_calls
+    assert call_.tool == "invoice_lookup" and call_.agent == "billing"
+    assert call_.side_effect_class == "read-only" and call_.ok is True
 
 
 def test_a_secret_never_lands_in_a_trace(project: Path) -> None:
     """Les traces sont partagées pour déboguer — c'est ce qui en fait un canal de fuite."""
     writer = tracing.TraceWriter(project, "run-4")
-    writer.emit("tool_call", "2026-09-21T10:00:00Z", tool="crm_lookup",
-                sideEffectClass="read-only", ok=True,
-                arguments={"api_key": "sk-live-4f8a2b91", "customer_id": "CUS-1"})
+    writer.emit("execute_tool crm_lookup", span_id="s1",
+                attributes={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "crm_lookup",
+                            "sdda.tool.args": {"api_key": "sk-live-4f8a2b91", "customer_id": "CUS-1"}})
     raw = tracing.trace_path(project, "run-4").read_text(encoding="utf-8")
     assert "sk-live-4f8a2b91" not in raw
     assert "[REDACTED]" in raw and "CUS-1" in raw
 
 
-def test_an_unknown_event_kind_is_refused_at_write_time(project: Path) -> None:
-    writer = tracing.TraceWriter(project, "run-5")
-    with pytest.raises(ValueError):
-        writer.emit("something_else", "2026-09-21T10:00:00Z")
+def test_a_span_without_its_required_fields_is_a_problem(project: Path) -> None:
+    path = tracing.trace_path(project, "run-5")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"run_id": "run-5", "name": "chat x"}) + "\n", encoding="utf-8")
+    summary = tracing.summarize(path)
+    assert any("champ(s) absent(s)" in p for p in summary.problems)
+
+
+def test_a_legacy_event_trace_is_named_not_half_read(project: Path) -> None:
+    """Lue à moitié, elle rendrait des chiffres partiels qu'on croirait complets."""
+    path = tracing.trace_path(project, "run-legacy")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"ts": "2026-09-21T10:00:00Z", "runId": "run-legacy",
+                                "kind": "agent_turn", "agentId": "billing"}) + "\n", encoding="utf-8")
+    summary = tracing.summarize(path)
+    assert any("ancien format" in p for p in summary.problems)
+    assert summary.agents == [] and summary.cost_usd == 0.0
 
 
 def test_a_truncated_trace_is_still_readable(project: Path) -> None:
@@ -320,5 +356,5 @@ def test_a_truncated_trace_is_still_readable(project: Path) -> None:
     path = tracing.trace_path(project, "run-6")
     path.write_text(path.read_text(encoding="utf-8")[:-40] + "\n{ligne tronq", encoding="utf-8")
     summary = tracing.summarize(path)
-    assert summary.events >= 3
+    assert summary.spans >= 3
     assert "billing" in summary.agents
