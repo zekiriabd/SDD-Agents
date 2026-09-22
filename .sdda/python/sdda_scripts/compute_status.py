@@ -164,7 +164,25 @@ class GateIndex:
         self._stale: dict[str, list[str]] = {}
 
     def _for(self, gate: str, artifact: str) -> list[dict[str, Any]]:
-        return [r for r in self.reports if r.get("gate") == gate and r.get("artifact") == artifact]
+        """Les rapports d'une gate pour un artefact — par son nom complet OU son numéro.
+
+        Les validateurs de gate écrivent `artifact` sous deux formes : le stem de
+        la MISSION (`1-SupportAssistant`) quand ils la chargent, le NUMÉRO seul
+        (`1`) quand ils ne reçoivent que `--mission {n}` — et les neuf appels des
+        commandes ne passent que le numéro. Six parts contributives (`calibration`,
+        `ownership`, `prompts`, `toolscope`, `pii`, `architecture`, `api`,
+        `packaging`) étaient donc écrites sous `G7-1.toolscope.json` et cherchées
+        sous `G7-1-SupportAssistant` : présentes sur disque, invisibles pour la
+        machine à états. `GATE_PARTS_ADVISORY` prétendait avoir fermé « écrit sur
+        disque et lu par personne » ; il l'avait fermé pour la seule G7, que
+        `validate_safety_gate` lit lui-même en acceptant les deux formes.
+
+        On accepte donc ici les deux, comme lui. Le numéro seul ne peut désigner
+        qu'une MISSION : les CAPs et les outils portent toujours un suffixe.
+        """
+        number = artifact.split("-", 1)[0] if "-" in artifact else artifact
+        aliases = {artifact, number} if number.isdigit() else {artifact}
+        return [r for r in self.reports if r.get("gate") == gate and str(r.get("artifact")) in aliases]
 
     def stale_of(self, report: dict[str, Any]) -> list[str]:
         key = str(report.get("_path"))

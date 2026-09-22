@@ -163,10 +163,31 @@ def test_a_write_from_the_main_thread_is_never_blocked(project: Path) -> None:
     assert code == ALLOW
 
 
-def test_an_agent_outside_the_matrix_is_not_the_hooks_call(project: Path) -> None:
+def test_an_unknown_subagent_writes_nothing_under_the_workspace(project: Path) -> None:
+    """Le contrat inverse de l'ancien test, et pour une raison mesurée.
+
+    « Agent hors matrice : ce n'est pas au hook de le trancher » autorisait la
+    fraude la plus simple de toute la couche : lancer un `general-purpose` en lui
+    disant « tu es dev-agent ». Aucune gate ne le voyait au spawn (hors liste =
+    hors périmètre), aucun hook ne le voyait à l'écriture (hors matrice = ALLOW).
+    Il écrivait le golden. Un sous-agent inconnu n'écrit désormais rien sous
+    `workspace/` ; hors du workspace, il reste libre.
+    """
+    code, err = call(preflight_ownership, project, subagent_type="un-agent-tiers",
+                     tool_input={"file_path": str(project / "workspace/proof/datasets/golden/x.jsonl")})
+    assert code == DENY and "OWNERSHIP_AGENT_UNKNOWN" in err
     code, _ = call(preflight_ownership, project, subagent_type="un-agent-tiers",
-                   tool_input={"file_path": str(project / "workspace/proof/datasets/golden/x.jsonl")})
+                   tool_input={"file_path": str(project / "notes-hors-workspace.md")})
     assert code == ALLOW
+
+
+def test_a_gate_report_is_never_written_by_an_editing_tool(project: Path) -> None:
+    """Du JSON en clair dont `gate_status` ne lit que `ok` : déposé par Write, un
+    `{"ok": true}` rendait verte une gate que rien n'avait mesurée."""
+    for author in ({}, {"subagent_type": "dev-agent"}, {"subagent_type": "un-agent-tiers"}):
+        code, err = call(preflight_ownership, project, **author,
+                         tool_input={"file_path": str(project / "workspace/.sys/.validation/G3-1.contracts.json")})
+        assert code == DENY and "GATE_REPORT_FORGERY" in err, author
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +220,9 @@ def test_a_fully_bounded_agent_passes(project: Path) -> None:
         "id": "billing", "onBoundExceeded": "fail-explicit",
         "bounds": {"maxIterations": 5, "maxToolCalls": 10, "maxDelegationDepth": 2,
                    "timeoutSec": 60, "budgetUsd": 0.1},
+        # Borné ET épinglé : c'est l'état qui autorise `dev-agent`. Sans
+        # `promptHash`, le hook refuse (`PROMPT_NOT_PINNED`, cf. test_second_audit).
+        "promptHash": "sha256:" + "0" * 64,
     }]}), encoding="utf-8")
     assert call(preflight_agent_bounds, project, mission="1")[0] == ALLOW
 

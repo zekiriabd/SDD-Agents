@@ -46,11 +46,11 @@ KIND_ORDER: tuple[str, ...] = ("roster", "labels", "adr", "findings")
 #: instables (P3) que `/sdda-full --force` assume nominativement.
 YELLOW_GATES: tuple[str, ...] = ("G5", "G6", "G8")
 
-#: Où vivent les ADR. `.sys/.context/adrs/` est la zone déclarée (ownership.md,
-#: loader.yml, smoke_check) ; `docs/adr/` est celle que citent le gabarit d'ADR
-#: et `validate_architecture`. Les deux sont lues : un ADR écrit au mauvais
-#: endroit reste un ADR écrit.
-ADR_DIRS: tuple[str, ...] = ("workspace/feats/decisions", "workspace/feats/decisions")
+#: Où vivent les ADR : UN endroit, `feats/decisions/`, celui que nomme
+#: `paths.decisions_dir`. Ils en avaient deux (`.sys/.context/adrs/` pour la
+#: matrice, `docs/adr/` pour le gabarit), et ce script lisait les deux — la
+#: question « cet ADR a-t-il été écrit ? » avait deux réponses possibles.
+ADR_DIRS: tuple[str, ...] = ("workspace/feats/decisions",)
 
 
 def task(kind: str, mission: int | None, title: str, why: str, how: str, *, blocking: bool, ref: str) -> dict[str, Any]:

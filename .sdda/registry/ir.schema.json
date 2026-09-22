@@ -33,7 +33,8 @@
         "stackHash",
         "contractHashes",
         "compiledAt",
-        "holdoutHash"
+        "holdoutHash",
+        "promptHashes"
       ],
       "additionalProperties": false,
       "properties": {
@@ -73,6 +74,13 @@
         "holdoutHash": {
           "type": "string",
           "description": "Empreinte du holdout de la mission, ou chaine vide tant qu'il n'existe pas. Suivre cette source fait redevenir l'IR perime des que le jeu de verdict apparait, donc declenche la recompilation qui emet la suite d'acceptation L9."
+        },
+        "promptHashes": {
+          "type": "object",
+          "description": "Empreinte de chaque prompt systeme present, par slug. Suivre cette source fait redevenir l'IR perime des que dev-prompt ecrit, donc declenche la recompilation qui epingle promptHash.",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
         }
       }
     },
@@ -446,7 +454,6 @@
         "id",
         "servesCaps",
         "promptRef",
-        "promptHash",
         "modelTier",
         "bounds",
         "onBoundExceeded",
@@ -473,7 +480,8 @@
           "pattern": "^workspace/src/prompts/.+\\.system\\.md$"
         },
         "promptHash": {
-          "$ref": "#/$defs/sha256"
+          "$ref": "#/$defs/sha256",
+          "description": "Empreinte du prompt systeme. ABSENTE tant que dev-prompt ne l'a pas ecrit (PHASE 4) : l'IR se compile en PHASE 2, et l'exiger ici rendait toute mission neuve incompilable. preflight_agent_bounds refuse de lancer dev-agent sur un agent sans promptHash."
         },
         "modelTier": {
           "$ref": "#/$defs/modelTier"

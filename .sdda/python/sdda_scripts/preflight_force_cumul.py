@@ -95,6 +95,12 @@ def audit_line(root: Path, record: dict) -> None:
     journal est en lecture seule transformerait un dispositif de traçabilité en
     point de panne. Il est dit sur stderr, et le run continue.
     """
+    # L'ÉCRIVAIN garantit le schéma que lisent ses lecteurs : `at` est la clé
+    # sur laquelle `sdda_state.bypasses_of` rattache une ligne à un run. La
+    # laisser à la charge de l'appelant a suffi pour qu'un appelant écrive `ts`
+    # et qu'aucun `--force` cumulé n'apparaisse jamais dans un récap.
+    record = {**record}
+    record.setdefault("at", now_iso())
     try:
         audit_dir = paths.audit_dir(root)
         audit_dir.mkdir(parents=True, exist_ok=True)
@@ -131,7 +137,13 @@ def main() -> int:
         (["--no-review"] if args.no_review else [])
 
     record = {
-        "ts": now_iso(),   # suffixe `Z` comme les autres journaux : bypasses_of les trie par chaîne
+        # `at` est LA clé que lisent `sdda_state.bypasses_of` et `compute_status`
+        # (cf. `gate_reports.append_bypass_audit`, l'autre écrivain du journal).
+        # Ce script écrivait `ts` : ses lignes n'étaient rattachées à aucun run,
+        # et un `--force` cumulé n'apparaissait dans aucun récap. `ts` reste, en
+        # doublon, pour les lecteurs externes qui l'auraient déjà adopté.
+        "at": now_iso(),
+        "ts": now_iso(),
         "operator": operator,
         "command": args.command,
         "mission": args.mission or None,

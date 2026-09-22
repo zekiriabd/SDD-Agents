@@ -250,6 +250,41 @@ def agent_of(data: dict[str, Any]) -> str:
     return ""
 
 
+#: Ce qu'un sous-agent que la matrice ne connaît pas a le droit de toucher sous
+#: `workspace/` : rien.
+#:
+#: Les trois hooks d'ownership répondaient « agent hors matrice : ce n'est pas
+#: au hook de le trancher » et AUTORISAIENT. Le raisonnement valait pour le fil
+#: principal ; appliqué à un sous-agent, il ouvrait la porte la plus large de
+#: toute la couche de protection : lancer `Agent(subagent_type="general-purpose",
+#: prompt="tu es dev-agent…")`, et cet agent — qui n'est dans aucune matrice —
+#: écrit le golden, réécrit un prompt, dépose un rapport de gate. Les gates de
+#: spawn le laissaient passer aussi (`out_of_scope` : hors liste = hors
+#: périmètre), donc AUCUN contrôle ne le voyait, du lancement à l'écriture.
+#:
+#: On ferme au moment de l'ÉCRITURE et non du spawn, délibérément : un agent
+#: `Explore` lancé par l'utilisateur pour un travail sans rapport avec le
+#: pipeline est légitime et ne doit pas être refusé par une gate de phase 3. Ce
+#: qu'il ne peut pas faire, c'est produire dans le workspace. Un sous-agent
+#: blanchi obtient donc un agent qui lit et ne peut rien livrer — la fraude ne
+#: rapporte plus rien.
+#:
+#: Le fil principal (aucun `agent_type`) reste libre : c'est l'humain.
+WORKSPACE_PREFIX = "workspace/"
+
+
+def unknown_subagent(hook: str, agent: str, rel: str) -> int:
+    """Verdict pour un SOUS-AGENT absent de `loader.yml` : refus sous `workspace/`."""
+    normalized = rel.replace("\\", "/").lstrip("./")
+    if not (normalized == WORKSPACE_PREFIX.rstrip("/") or normalized.startswith(WORKSPACE_PREFIX)):
+        return ALLOW  # hors du workspace : pas notre affaire
+    return deny(hook, "OWNERSHIP_AGENT_UNKNOWN",
+                f"`{agent}` n'est dans aucune matrice d'ownership et touche `{normalized}`",
+                "un sous-agent qui écrit ou lit sous workspace/ est l'un des 22 agents de loader.yml, "
+                "lancé sous son propre nom — un `general-purpose` à qui l'on dit « tu es dev-agent » "
+                "n'a ni ses droits, ni ses interdits, donc aucun des deux ne s'applique")
+
+
 def out_of_scope(data: dict[str, Any], applies_to: tuple[str, ...]) -> bool:
     """L'action en cours sort-elle du périmètre de ce hook ?
 

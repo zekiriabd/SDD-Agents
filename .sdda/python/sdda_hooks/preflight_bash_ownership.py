@@ -39,7 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import ALLOW, agent_of, deny, run  # noqa: E402
+from _hook import ALLOW, agent_of, deny, run, unknown_subagent  # noqa: E402
 
 HOOK = "preflight_bash_ownership"
 
@@ -84,7 +84,24 @@ def _split_commands(command: str) -> list[str]:
     return [c for c in SPLIT_RE.split(command) if c.strip()]
 
 
+#: Un chemin Windows dans la commande : `C:\Users\…` ou `\\serveur\…`.
+_WINDOWS_PATH_RE = re.compile(r"(?:^|[\s=\"'>])(?:[A-Za-z]:\\|\\\\)")
+
+
 def _tokens(fragment: str) -> list[str]:
+    """Découpe shell d'un fragment de commande.
+
+    `shlex` en mode POSIX traite `\\` comme un caractère d'échappement :
+    `echo x > C:\\Users\\me\\workspace\\proof\\datasets\\g.jsonl` sortait le jeton
+    `C:Usersmeworkspaceproofdatasetsg.jsonl` — plus un chemin, donc plus rien de
+    régi, donc ALLOW. Tout chemin absolu tapé à la façon de Windows échappait au
+    hook, alors que c'est la forme que le harnais lui-même emploie. On bascule
+    les séparateurs en `/` avant la découpe quand la commande en contient : la
+    normalisation en aval ne fait pas la différence, et le sens de la commande
+    est intact pour ce qui nous regarde, c'est-à-dire QUELS chemins elle nomme.
+    """
+    if _WINDOWS_PATH_RE.search(fragment):
+        fragment = fragment.replace("\\", "/")
     try:
         return shlex.split(fragment, posix=True)
     except ValueError:
@@ -219,7 +236,13 @@ def check(root: Path, data: dict) -> int:
 
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
-        return ALLOW  # agent hors matrice : ce n'est pas au hook de le trancher
+        # Sous-agent hors matrice : rien sous workspace/, ni en écriture ni en
+        # lecture. Voir `_hook.unknown_subagent` pour le pourquoi.
+        for path in [*writes, *(p for p, _scope in reads)]:
+            verdict = unknown_subagent(HOOK, agent, str(path))
+            if verdict != ALLOW:
+                return verdict
+        return ALLOW
 
     report = Report(name="BASH-HOOK", target=str(root))
     for path in writes:

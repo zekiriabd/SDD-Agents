@@ -96,8 +96,17 @@ class RunResult:
 
     @property
     def score(self) -> float:
-        scored = [i.score for i in self.items if i.error is None]
-        return sum(scored) / len(scored) if scored else 0.0
+        """La moyenne des items, un item en erreur comptant ZÉRO.
+
+        Il était exclu de la moyenne : neuf items sur dix qui plantent et un qui
+        passe donnaient 1,0 — vert. Le runner écrivait pourtant « comptés comme
+        échecs, jamais ignorés » dans son avertissement, et faisait l'inverse
+        dans son calcul. Un exécuteur qui lève est une mesure ratée, pas une
+        absence de mesure : l'exclure revient à ne noter que les copies rendues.
+        """
+        if not self.items:
+            return 0.0
+        return sum((0.0 if i.error is not None else i.score) for i in self.items) / len(self.items)
 
     @property
     def cost_usd(self) -> float:

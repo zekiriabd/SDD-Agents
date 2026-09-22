@@ -37,6 +37,7 @@ def check(root: Path, data: dict) -> int:
         return allow("aucun IR compilé — le contrôle bloquant est joué en G2")
 
     unbounded: list[str] = []
+    unpinned: list[str] = []
     for path in ir_files:
         try:
             ir = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -56,7 +57,23 @@ def check(root: Path, data: dict) -> int:
                 unbounded.append(f"{agent.get('id', '?')} : {missing}")
             if not agent.get("onBoundExceeded"):
                 unbounded.append(f"{agent.get('id', '?')} : onBoundExceeded absent")
+            # Le prompt épinglé : optionnel à la compilation (PHASE 2, les prompts
+            # n'existent pas encore), EXIGÉ ici — `dev-agent` implémente un prompt,
+            # et un prompt sans empreinte est un prompt que personne n'a écrit ou
+            # que n'importe qui peut réécrire sans que la baseline le voie (P10).
+            # C'est le pendant de « holdout absent -> G8 refuse » : l'exigence vit
+            # au moment où elle est actionnable.
+            if not agent.get("promptHash"):
+                unpinned.append(str(agent.get("id", "?")))
 
+    # Les bornes d'abord : une borne absente est une borne infinie, et c'est le
+    # nom de ce hook. Le prompt non épinglé vient ensuite.
+    if not unbounded and unpinned:
+        return deny(HOOK, "PROMPT_NOT_PINNED",
+                    f"{len(unpinned)} agent(s) sans `promptHash` dans l'IR — {unpinned[0]}",
+                    "dev-prompt écrit `workspace/src/prompts/{slug}.system.md`, puis recompiler l'IR "
+                    "(`python .sdda/sdda.py ir-compiler --mission {n}`) : l'empreinte s'épingle à la "
+                    "recompilation, jamais à la main")
     if not unbounded:
         return ALLOW
     return deny(HOOK, "AGENT_BOUNDS_MISSING",
