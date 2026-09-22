@@ -23,7 +23,17 @@ _EDGE_TOKEN_RE = re.compile(
     r"(?P<arrow>-->|---|-\.->|==>|--\s*\"(?P<lbl1>[^\"]*)\"\s*-->|--\s*(?P<lbl2>[^-|>\"]+?)\s*-->)"
     r"(?:\|(?P<lbl3>[^|]*)\|)?"
 )
-_SKIP_PREFIXES = ("flowchart", "graph", "%%", "subgraph", "end", "classDef", "class ", "style", "click", "linkStyle", "direction")
+#: Lignes de directive, ignorées. Frontière de MOT obligatoire : `endpoint -->
+#: finalize` commence par `end` et n'est pas un `end` de subgraph — avec un
+#: simple `startswith`, la ligne entière disparaissait du graphe, agent et arête
+#: compris, sans aucune erreur.
+_DIRECTIVE_RE = re.compile(
+    r"^(?:%%|(?:flowchart|graph|subgraph|classDef|class|style|click|linkStyle|direction)\b|end\s*$)"
+)
+
+
+def _is_directive(line: str) -> bool:
+    return bool(_DIRECTIVE_RE.match(line))
 
 
 @dataclass
@@ -77,7 +87,7 @@ def parse(text: str) -> MermaidGraph:
     g = MermaidGraph()
     for raw in text.replace("\r\n", "\n").split("\n"):
         line = raw.strip().rstrip(";")
-        if not line or line.startswith(_SKIP_PREFIXES):
+        if not line or _is_directive(line):
             continue
         # Découpe en segments nœud / flèche / nœud / flèche …
         pos = 0

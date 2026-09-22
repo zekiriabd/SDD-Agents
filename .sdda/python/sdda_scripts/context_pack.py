@@ -10,6 +10,8 @@ rend cette déclaration exécutable, **avant** le spawn :
     build     assemble `workspace/.sys/.context/packs/{agent}.md` depuis les
               `pack_sources` déclarées, avec un manifeste hashé ;
     check     le pack correspond-il encore à ses sources ? sinon [PACK_UNUSABLE].
+    prune     supprime les packs ORPHELINS — ceux dont le nom ne correspond à
+              aucun agent de `loader.yml` (agent renommé ou retiré).
 
 Pourquoi un plafond dur plutôt qu'un avertissement : un agent qui déborde son
 budget ne rend pas une sortie plus courte, il rend une sortie **tronquée et
@@ -30,6 +32,7 @@ Usage :
     python context_pack.py resolve --agent architect-topology --mission 1 --json
     python context_pack.py build   --agent architect-topology
     python context_pack.py check   --agent architect-rag --json
+    python context_pack.py prune   --dry-run
 """
 from __future__ import annotations
 
@@ -651,6 +654,69 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Packs orphelins
+# ---------------------------------------------------------------------------
+#: Suffixe du fichier temporaire de l'écriture atomique (`build_pack`). Un
+#: build interrompu peut le laisser sur le disque : c'est le seul compagnon
+#: qu'un pack ait — le manifeste vit DANS le pack, pas à côté.
+PACK_TMP_SUFFIX = ".tmp"
+
+
+def packs_dir(root: Path) -> Path:
+    return paths.workspace(root) / ".sys" / ".context" / "packs"
+
+
+def orphan_packs(root: Path, loader: dict[str, Any]) -> list[dict[str, Any]]:
+    """Les packs dont le nom ne désigne aucun agent de `loader.yml`.
+
+    Un agent renommé laisse son ancien pack sur le disque ; rien ne le relit,
+    mais rien ne le signale non plus — et un lecteur humain le prend pour un
+    pack vivant. La source de vérité est celle de tout le script : les agents
+    déclarés dans `loader.yml`. `.gitkeep` et tout fichier qui n'est pas un
+    `*.md` ne sont jamais considérés.
+    """
+    folder = packs_dir(root)
+    if not folder.is_dir():
+        return []
+    known = set(agent_names(loader))
+    out: list[dict[str, Any]] = []
+    for path in sorted(folder.glob("*.md")):
+        if not path.is_file() or path.stem in known:
+            continue
+        companions = [c for c in (path.with_name(path.name + PACK_TMP_SUFFIX),) if c.is_file()]
+        out.append({
+            "agent": path.stem,
+            "path": paths.rel(root, path),
+            "companions": [paths.rel(root, c) for c in companions],
+        })
+    return out
+
+
+def prune_packs(root: Path, loader: dict[str, Any], *, report: Report, dry_run: bool) -> list[dict[str, Any]]:
+    """Supprime les packs orphelins (et leur `.tmp` éventuel) ; liste seulement en `dry_run`.
+
+    Une suppression impossible est une erreur d'E/S, rapportée et non levée :
+    les autres orphelins sont quand même traités.
+    """
+    orphans = orphan_packs(root, loader)
+    for orphan in orphans:
+        orphan["removed"] = False
+        if dry_run:
+            continue
+        targets = [root / orphan["path"]] + [root / c for c in orphan["companions"]]
+        try:
+            for target in targets:
+                target.unlink()
+            orphan["removed"] = True
+        except OSError as exc:
+            report.error("PACK_UNUSABLE", f"pack orphelin `{orphan['path']}` : suppression impossible ({exc.strerror or exc})",
+                         "vérifier les droits sur le fichier, puis relancer `context_pack.py prune`", orphan["path"])
+    report.data.update({"dryRun": dry_run, "known": agent_names(loader), "orphans": orphans,
+                        "removed": sum(1 for o in orphans if o["removed"])})
+    return orphans
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
@@ -671,6 +737,10 @@ def build_parser() -> argparse.ArgumentParser:
     chk = sub.add_parser("check", help="le pack correspond-il encore à ses sources ?")
     chk.add_argument("--agent", default="all")
     add_common_args(chk)
+
+    prn = sub.add_parser("prune", help="supprimer les packs dont le nom ne désigne aucun agent de loader.yml")
+    prn.add_argument("--dry-run", action="store_true", help="lister les orphelins sans rien supprimer")
+    add_common_args(prn)
     return p
 
 
@@ -689,6 +759,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(res.render_line())
         return finish(report, args)
 
+    if args.cmd == "prune":
+        orphans = prune_packs(root, loader, report=report, dry_run=args.dry_run)
+        if not args.json:
+            for orphan in orphans:
+                extra = f" (+ {', '.join(orphan['companions'])})" if orphan["companions"] else ""
+                verb = "à supprimer (dry-run)" if args.dry_run else ("supprimé" if orphan["removed"] else "NON supprimé")
+                print(f"prune {orphan['agent']} — orphelin, {verb} -> {orphan['path']}{extra}")
+            if not orphans:
+                print("prune — aucun pack orphelin")
+        return finish(report, args)
+
     targets: Iterable[str]
     if args.agent == "all":
         targets = [a for a in agent_names(loader) if (loader[a] or {}).get("pack_sources")]
@@ -698,6 +779,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "build":
         for agent in targets:
             build_pack(root, loader, agent, report=report)
+        if args.agent == "all":
+            # Un pack orphelin n'est reconstruit par personne : il resterait sur
+            # le disque, l'air d'être vivant. Le dire ici, c'est le rendre visible
+            # sans attendre qu'on pense à lancer `prune`.
+            orphans = orphan_packs(root, loader)
+            if orphans:
+                report.warn("PACK_UNUSABLE", f"{len(orphans)} pack(s) orphelin(s) — aucun agent de loader.yml ne les lit : "
+                            + ", ".join(o["path"] for o in orphans),
+                            "python .sdda/python/sdda_scripts/context_pack.py prune")
+                report.data["orphans"] = orphans
         if not args.json:
             for entry in report.data.get("packs", []):
                 print(f"pack {entry['agent']} — {entry['bytes'] // 1024} Ko depuis {entry['sources']} source(s) -> {entry['path']}")

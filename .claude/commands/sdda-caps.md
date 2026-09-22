@@ -130,8 +130,7 @@ Couvrir chaque BR-i et AC-i de la MISSION dans ## Covers d'au moins une CAP.
 Contraintes que l'agent respecte (rappelées dans son prompt système) :
 - une CAP **n'est pas un agent** — l'allocation appartient à `architect-topology` ;
 - un AC du type « répond de manière utile » est **interdit** ; l'agent choisit
-  un grader de la liste close (`exact`, `regex`, `schema`, `numeric-tolerance`,
-  `semantic-similarity`, `llm-judge`, `trajectory`, `cost`, `latency`) ;
+  un grader de la liste close (`exact`, `regex`, `schema`, `numeric-tolerance`, `semantic-similarity`, `trajectory`, `cost`, `latency`, `llm-judge`) ;
 - `Confidence` ≤ celle de la MISSION (la confiance ne monte jamais — R4) ;
 - il **ne crée pas** les datasets (owner : `qa-evals`, PHASE 6) — il les
   **nomme** ;

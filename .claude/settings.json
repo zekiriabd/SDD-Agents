@@ -2,6 +2,24 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_bash_ownership.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .sdda/python/sdda_hooks/preflight_forbidden_reads.py"
+          }
+        ]
+      },
+      {
         "matcher": "Task",
         "hooks": [
           {
