@@ -171,6 +171,7 @@ architect-topology:
     - .sdda/digests/error-classification.architect-topology.md  # stable
     - workspace/.sys/.context/packs/architect-topology.md       # stable — LE PACK
     - workspace/stack/STACK.md                       # semi
+    - workspace/stack/topology/{n}-roster.yml        # semi — LE ROSTER déclaré par l'architecte (P7)
     - workspace/missions/{n}-*.md                    # volatile
     - workspace/caps/{n}-*-*.md                      # volatile — toutes les CAPs
   # Sources DONT le pack est construit. Bloc distinct par nécessité : `reads:`

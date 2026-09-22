@@ -24,6 +24,9 @@ sdda-validate-ir = "sdda_scripts.validate_ir:main"
 sdda-estimate-budget = "sdda_scripts.estimate_budget:main"
 sdda-validate-datasets = "sdda_scripts.validate_datasets:main"
 sdda-status = "sdda_scripts.compute_status:main"
+sdda-migrate = "sdda_scripts.migrate_workspace:main"
+sdda-roster = "sdda_scripts.roster:main"
+sdda-human-tasks = "sdda_scripts.human_tasks:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

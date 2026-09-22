@@ -43,6 +43,7 @@ Pour la créer : /sdda-mission {Name}   (ou /sdda-full {Name} pour enchaîner to
 ```bash
 python .sdda/python/sdda_scripts/compute_status.py [--mission {n}] --json
 python .sdda/python/sdda_scripts/sdda_state.py status [--mission {n}] --json
+python .sdda/python/sdda_scripts/human_tasks.py [--mission {n}] --json     # ce qui attend un humain
 ```
 
 Échec script → fallback : recommander `/sdda-status` et inviter à diagnostiquer.
@@ -56,12 +57,14 @@ python .sdda/python/sdda_scripts/sdda_state.py status [--mission {n}] --json
 | Condition détectée | Recommandation |
 |---|---|
 | `STACK.md` absent ou avec `{{` | `python bootstrap.py` (terminal) — ou `/sdda-bootstrap` pour la marche à suivre |
+| ≥ 1 tâche humaine **bloquante** (`human_tasks.py`) | son `how`, tel quel — un roster à compléter, un jaune G5/G6/G8 à assumer : aucune commande ne le fera à la place de l'humain |
 | 0 MISSION | `/sdda-mission {Name}` — éliciter la 1re MISSION (objectif chiffré, budget, vérité terrain, ~10 questions) |
 | ≥ 1 MISSION `Blocked` | `/sdda-status {n}` puis corriger `[{CLASS}]` — une gate rouge bloque tout ce qui est au-dessus (R3) |
 | ≥ 1 MISSION avec résultats `stale` | `/sdda-eval {n} --run-only` — un hash épinglé a bougé, les verts précédents ne valent plus rien (P10) |
 | ≥ 1 MISSION `Draft` (G0 🔴) | `/sdda-mission {n}` — compléter les `<à préciser>` |
 | ≥ 1 MISSION G0 ✅ sans CAP | `/sdda-caps {n}` — découper en capabilities **mesurables** (métrique + seuil + dataset) |
-| ≥ 1 MISSION `Specified` | `/sdda-topology {n}` — décider la topologie la plus simple qui tienne, et l'écrire |
+| ≥ 1 MISSION `Specified` sans roster | `/sdda-roster {n}` — l'architecte déclare les agents (gabarit pré-rempli, 0 token) ; le framework ne les invente pas (P7) |
+| ≥ 1 MISSION `Specified` | `/sdda-topology {n}` — matérialiser le roster déclaré : allocation, graphe, bornes, budget |
 | ≥ 1 MISSION `Architected` | `/sdda-full {n}` — datasets → socle → agents → orchestration → eval → revue → acceptation |
 | ≥ 1 MISSION `Implemented`/`Tested` | `/sdda-eval {n}` — suites L0→L7, verdict trois couleurs |
 | ≥ 1 MISSION `Evaluated` 🟢 sans G8 | `/sdda-eval {n} --acceptance` — objectif chiffré sur **holdout** |
@@ -74,6 +77,7 @@ python .sdda/python/sdda_scripts/sdda_state.py status [--mission {n}] --json
 |---|---|
 | `Draft`, G0 🔴 | `/sdda-mission {n}` (lire `{n}-G0-mission.json` : classes `[MISSION_*]`) |
 | G0 ✅, 0 CAP ou G1 🔴 | `/sdda-caps {n}` (lire `{n}-G1-cap.json` : `[AC_NOT_EVALUABLE]` = l'AC ne nomme pas métrique/seuil/dataset) |
+| G1 ✅, roster absent ou `[ARCH_ROSTER_*]` | `/sdda-roster {n}` puis remplir `workspace/stack/topology/{n}-roster.yml` — chaque `<à préciser>` est une décision de l'architecte, pas du framework |
 | G1 ✅, G2 absente ou 🔴 | `/sdda-topology {n}` — `[TOPOLOGY_UNJUSTIFIED]` : nommer une des 5 raisons de P7 ou supprimer l'agent ; `[UNBOUNDED_LOOP]` : borner le cycle |
 | G2 ✅, IR stale | `/sdda-topology {n} --recompile-only` |
 | G2 ✅, golden absent | `/sdda-eval {n} --datasets-only` — les datasets précèdent le code |
@@ -101,6 +105,8 @@ Matcher l'argument (minuscules) contre les mots-clés. Premier match → répons
 | `harness`, `build models`, `runtime models`, `quel modèle` | Trois notions distinctes (ARCHITECTURE §6) : où tourne la construction, qui paie les Developer Agents, qui fait tourner le produit. Les agents déclarent un **tier** (`fast/balanced/deep`), jamais un modèle ; la résolution est dans `.sdda/providers/*.yaml`. |
 | `mission`, `feat`, `spec`, `élicitation` | `/sdda-mission {Name}`. Une MISSION exige un objectif chiffré, un budget d'exécution (coût/latence/tokens), une vérité terrain et une failure policy. G0 refuse tout `<à préciser>` résiduel. Aucun bypass. |
 | `ac`, `critère`, `mesurable`, `evaluable`, `AC_NOT_EVALUABLE` | Un AC de CAP nomme **métrique + seuil + dataset + grader + k runs** (P2). « Répond de manière utile » est rejeté par G1. Graders : <!--sdda:graders-->`exact`, `regex`, `schema`, `numeric-tolerance`, `semantic-similarity`, `trajectory`, `cost`, `latency`, `llm-judge`<!--/sdda:graders--> (`llm-judge` calibré). |
+| `roster`, `déclarer les agents`, `manifeste`, `ARCH_ROSTER`, `qui décide` | Le roster est déclaré par l'**architecte** dans `workspace/stack/topology/{n}-roster.yml` (`/sdda-roster {n}` écrit le gabarit pré-rempli, `--validate` le vérifie, 0 token). Le framework dérive ce qui se dérive et laisse `<à préciser>` ce qui se décide ; `architect-topology` matérialise **ce** roster sans en changer une ligne (P7). |
+| `tâche humaine`, `human`, `bloqué sur quoi`, `qui doit faire` | `human_tasks.py [--mission n]` (repris par `/sdda-status`) liste ce qu'aucun agent n'a le droit de faire : roster à compléter, labels humains d'un juge, ADR exigé par `STACK.md`, jaune G5/G6/G8 à assumer. Listing, exit 0, aucun rapport. |
 | `topologie`, `agent en plus`, `multi-agent`, `TOPOLOGY_UNJUSTIFIED`, `séparation des responsabilités` | Défaut : **un agent, des outils** (P7). Un agent supplémentaire exige une des 5 raisons closes : isolation de scope d'outils, tier distinct, pression de contexte mesurée, fonction objectif différente, parallélisme requis. « Séparation des responsabilités » n'est pas recevable. |
 | `budget`, `coût`, `cost`, `BUDGET_EXCEEDED` | Deux budgets : **construction** (`MaxCostPerRun` $<!--sdda:config MaxCostPerRun-->50<!--/sdda:config-->, hook cost cap) et **exécution du produit** (`CostPerRunTargetUsd` / `HardCapUsd`, estimé en G2, mesuré en G6, bloquant aux deux — P6). Bypass estimation : `SDDA_BYPASS_BUDGET_ESTIMATE=1` + `SDDA_BYPASS_REASON`, audit-loggué. |
 | `boucle`, `loop`, `max_iterations`, `UNBOUNDED_LOOP` | Tout agent porte `max_iterations`, `max_tool_calls`, `max_delegation_depth`, `timeout_s`, `budget_usd` + comportement à l'atteinte (P12). Tout cycle du graphe est coupé par une borne ; sinon G2 rouge, sans bypass. |
@@ -116,7 +122,7 @@ Matcher l'argument (minuscules) contre les mots-clés. Premier match → répons
 | `scope`, `moindre privilège`, `TOOL_SCOPE_EXCESS` | Un agent ne reçoit que les outils que ses CAPs exigent. L'écart est un finding bloquant de `review-safety` et du contrôle 7 de `validate_ir.py`. Retirer l'outil de la topologie, recompiler. |
 | `status`, `état`, `STATUS_UNBACKED`, `Tested` | L'état est **dérivé** des rapports `workspace/.sys/.validation/{n}-G*.json` (R1), jamais de la ligne `Status:`. `/sdda-status {n}`. Un état sans rapport est écrasé. MISSION = min de ses CAPs (R3). |
 | `bypass`, `force`, `FORCE_CUMUL_REJECTED`, `SDDA_BYPASS` | `--force` assume les gates **jaunes** seulement. Les bypasses de gate sont des env vars `SDDA_BYPASS_{GATE}=1` + `SDDA_BYPASS_REASON`, écrites dans `.sys/.audit/bypasses.jsonl`. ≥ 2 sur un run → refusé sauf `SDDA_ALLOW_FORCE=1`. G0, G1, G5, G6, G8 : aucun bypass. |
-| `resume`, `reprendre`, `interrompu`, `crash` | `/sdda-full {n} --resume` reprend à la phase suivant la dernière `pass` du dernier run, en rejouant les gates (0 token). `--from-phase` force un départ mais ne peut pas sauter une gate non franchie (`[STATE_SKIP_FORBIDDEN]`). |
+| `resume`, `reprendre`, `interrompu`, `crash` | `/sdda-full {n} --resume` reprend à la phase suivant la dernière `pass` du dernier run, en rejouant les gates (0 token). Dans la couche reprise, `/sdda-build` ne repaie pas un `dev-agent` déjà vert **sur le même prompt et la même entrée IR** (`sdda_state.py should-skip-item`). `--from-phase` force un départ mais ne peut pas sauter une gate non franchie (`[STATE_SKIP_FORBIDDEN]`). |
 | `parallèle`, `MaxParallel`, `vague` | Le parallélisme est borné par `MaxParallel` (Project Config, défaut <!--sdda:config MaxParallel-->3<!--/sdda:config-->) et rendu sûr par la matrice d'ownership (chemins disjoints). Aucun agent ne spawne un autre agent : la commande orchestre en vagues. |
 | `ownership`, `OWNERSHIP_VIOLATION`, `qui écrit` | `.sdda/rules/ownership.md`. Règle propre à l'agentic : `dev-agent` n'écrit **jamais** sous `datasets/` ni `prompts/` — l'agent qui écrit le code ne modifie ni le jeu qui le juge ni le prompt qu'il implémente. |
 | `framework`, `langgraph`, `semantic kernel`, `changer de framework` | Les contrats et l'IR sont neutres framework (P11) ; les idiomes vivent dans `.sdda/stacks/framework/*.md`. Changer de framework = changer `STACK.md` et regénérer `src/` ; aucune spécification n'est invalidée. MVP : Python + LangChain/LangGraph (combo C1). |
