@@ -208,23 +208,52 @@ LocalComputeThroughputTokensPerSec: 0  # 0 = inconnu -> la latence estimée est
 DeliverableType: cli-exe              # backend-api | cli-exe | batch-job |
                                       # library | container | mcp-server
                                       #
-                                      # Le DÉFAUT DU FRAMEWORK est `cli-exe`, pas
-                                      # `backend-api`, parce qu'un défaut doit
-                                      # désigner ce que le framework sait livrer
-                                      # AUJOURD'HUI : la combo C1 de la ROADMAP
-                                      # est CLI-first, et la CLI est la surface
-                                      # que le runner d'eval invoque. Un défaut
-                                      # qui pointe une fiche non validée fait
-                                      # échouer chaque nouveau projet au premier
-                                      # preflight — et on apprend à couper le
+                                      # LE DÉFAUT EST `cli-exe`, DANS LES QUATRE
+                                      # LANGAGES. Un système agentic se livre
+                                      # d'abord comme un programme qu'on lance :
+                                      # une entrée, une sortie, un code de
+                                      # retour. C'est la forme la moins chère à
+                                      # câbler (pas de serveur, pas de session,
+                                      # pas d'authentification), et c'est celle
+                                      # que le runner d'eval invoque en L4-L7 —
+                                      # donc ce qu'on mesure est ce qu'on livre.
+                                      # Le défaut désigne aussi ce que le
+                                      # framework sait livrer AUJOURD'HUI : la
+                                      # combo C1 est CLI-first. Un défaut qui
+                                      # pointe une fiche non validée fait échouer
+                                      # chaque nouveau projet au premier
+                                      # preflight, et on apprend à couper le
                                       # preflight.
                                       #
-                                      # `backend-api` est le cas nominal d'une
-                                      # application agentique d'entreprise : c'est
-                                      # ce que STACK.md.template propose au
-                                      # bootstrap, donc le choix par défaut de
-                                      # l'UTILISATEUR, distinct du défaut du
-                                      # FRAMEWORK.
+                                      # `backend-api` N'EST PAS UNE VARIANTE DE
+                                      # PRÉSENTATION, c'est un changement de
+                                      # nature du livrable. Le moteur agentic
+                                      # cesse d'être un programme que quelqu'un
+                                      # lance et devient un SERVICE qu'une autre
+                                      # application appelle : elle lui envoie une
+                                      # requête, il exécute la MISSION, il rend
+                                      # la réponse et les événements. On le
+                                      # choisit quand l'appelant est un logiciel
+                                      # (un front, un back métier, un
+                                      # ordonnanceur), jamais pour « faire plus
+                                      # propre ».
+                                      #
+                                      # Ce que ce choix rend OBLIGATOIRE, et qui
+                                      # n'existe pas en `cli-exe` :
+                                      #   - `ApiFramework` != none, cohérent avec
+                                      #     le langage actif ;
+                                      #   - `ApiAuthMode` != none dès qu'on
+                                      #     touche des données : l'identité de
+                                      #     l'appelant entre par le transport, et
+                                      #     tout le filtrage à la source en
+                                      #     dépend ;
+                                      #   - un contrat PUBLIC : l'OpenAPI est
+                                      #     dérivé de l'IR et confronté à lui
+                                      #     (`ApiContractFirst`), parce qu'un
+                                      #     appelant qu'on ne contrôle pas ne se
+                                      #     corrige pas après coup.
+                                      # La CLI reste générée même alors : elle
+                                      # porte le smoke et les evals.
 
 ApiFramework: none                    # none (si DeliverableType != backend-api)
                                       # Python  : fastapi | django-ninja | flask

@@ -58,15 +58,27 @@ API_FRAMEWORK_LANG = {
     "nestjs": "typescript",
 }
 
+#: Les surfaces CONSOLE, une par langage. `cli-exe` est le défaut du framework
+#: dans les quatre langages (`config.base.yml`) : le nommer ici une seule fois
+#: évite qu'un langage ajouté plus tard rende ce défaut inatteignable sans que
+#: rien ne le dise. C'est ce qui était arrivé à `csharp` : la seule fiche console
+#: déclarait `Languages: python`, donc le défaut échouait au preflight.
+CONSOLE_SURFACES = {
+    "cli",          # [python]  serving/cli.md
+    "cli-dotnet",   # [csharp]  serving/cli-dotnet.md
+    # "cli-java",   # (fiche absente) — lang/java.md n'existe pas non plus
+    # "cli-node",   # (fiche absente) — lang/typescript.md n'existe pas non plus
+}
+
 #: Livrable -> surfaces d'exposition qui le servent. Un livrable ne dicte pas la
 #: surface (un `container` peut exposer du HTTP ou tourner en lot) : la table ne
 #: liste que les accords qui ont un sens, et l'absence d'accord est un refus.
 DELIVERABLE_SURFACES = {
     "backend-api": {"fastapi-sse", "aspnet-minimal", "mcp-server", "chainlit", "slack-bot"},
-    "cli-exe": {"cli"},
-    "batch-job": {"batch", "cli"},
-    "library": {"cli"},           # une bibliothèque n'expose rien ; la CLI sert son smoke
-    "container": set(),           # toute surface : le conteneur est l'emballage, pas l'entrée
+    "cli-exe": set(CONSOLE_SURFACES),
+    "batch-job": {"batch"} | CONSOLE_SURFACES,
+    "library": set(CONSOLE_SURFACES),   # une bibliothèque n'expose rien ; la console sert son smoke
+    "container": set(),                 # toute surface : le conteneur est l'emballage, pas l'entrée
     "mcp-server": {"mcp-server"},
 }
 
@@ -78,7 +90,10 @@ NETWORK_DELIVERABLES = ("backend-api", "mcp-server")
 def run(root: Path, report: Report) -> Report:
     config = load_config(root, report)
 
-    deliverable = str(config.get("DeliverableType", "backend-api"))
+    # Défaut aligné sur `config.base.yml` : `cli-exe`, dans les quatre langages.
+    # Un repli différent de la couche 1 du Project Config ferait deux vérités sur
+    # la même clé, et c'est celle qu'on ne lit pas qui gagnerait.
+    deliverable = str(config.get("DeliverableType", "cli-exe"))
     api_framework = str(config.get("ApiFramework", "none"))
     auth_mode = str(config.get("ApiAuthMode", "none"))
     contract_first = bool(config.get("ApiContractFirst", True))

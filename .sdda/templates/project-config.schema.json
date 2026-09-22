@@ -678,8 +678,8 @@
         "container",
         "mcp-server"
       ],
-      "default": "backend-api",
-      "description": "CE QU'ON LIVRE, distinct de la surface d'exposition (`## Active Serving Surface`, qui dit par où l'on entre). Les deux sont indépendants : un même RunService s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable. Sans cette clé, la question « on livre quoi ? » était arbitrée par l'agent, donc différemment à chaque run."
+      "default": "cli-exe",
+      "description": "CE QU'ON LIVRE, distinct de la surface d'exposition (`## Active Serving Surface`, qui dit par où l'on entre). Les deux sont indépendants : un même RunService s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable. Le défaut est `cli-exe` dans les quatre langages : un système agentic se livre d'abord comme un programme qu'on lance, et c'est la surface que le runner d'eval invoque. `backend-api` change la nature du livrable — le moteur devient un service qu'une autre application appelle — et exige alors `ApiFramework`, une identité d'appelant et un contrat dérivé de l'IR. Sans cette clé, la question « on livre quoi ? » était arbitrée par l'agent, donc différemment à chaque run."
     },
     "ApiFramework": {
       "enum": [
