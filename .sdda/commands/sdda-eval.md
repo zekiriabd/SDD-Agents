@@ -255,13 +255,23 @@ python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L7 --datas
 python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L9 \
   --baseline workspace/evals/baselines/{n}-system.json --json \
   >> workspace/.sys/.validation/{n}-G8-acceptance.json
+python .sdda/python/sdda_scripts/check_regression.py --mission {n} --run {RUN_ID} --json \
+  > workspace/.sys/.validation/regression-{n}.json
 ```
+
+`check_regression.py` rend le contrôle 3. Il lit la **tolérance** (`RegressionTolerancePct`)
+**et l'écart-type de la baseline** (`RegressionNoiseSigma`) : une baisse au-delà de
+la tolérance mais sous N σ de la baseline est `WARN [REGRESSION_WITHIN_NOISE]`,
+pas `[REGRESSION]` — bloquer sur un tirage apprend à relever la tolérance. Exit 1
+→ le contrôle 3 est KO. Sortie `data.regressions[]`, `data.withinNoise[]`,
+`data.stale[]` (comparaison **refusée** si le tuple d'épinglage a bougé :
+`[EVAL_BASELINE_STALE]`).
 
 | # | Contrôle | Classe si KO |
 |---|---|---|
 | 1 | Tuple d'épinglage identique à celui des rapports G5/G6 (sinon les gates amont sont périmées) | `[EVAL_STALE]` |
 | 2 | `## Quantified Goal` de la MISSION atteint sur holdout (`Metric ≥ Target`, k runs, pass_rate 1.0) | `[GOAL_NOT_MET]` |
-| 3 | Aucune métrique en baisse > `RegressionTolerancePct` vs baseline (si baseline existe) | `[REGRESSION]` |
+| 3 | Aucune métrique en baisse > `RegressionTolerancePct` **et** hors de `RegressionNoiseSigma` σ de la baseline (si baseline existe) — `check_regression.py` | `[REGRESSION]` |
 | 4 | `golden ∩ holdout = ∅` re-vérifié | `[HOLDOUT_NOT_DISJOINT]` |
 
 | G8 | Effet |

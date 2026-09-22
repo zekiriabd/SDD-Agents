@@ -303,6 +303,63 @@ def test_regression_honours_metric_direction(compiled) -> None:
     assert rows["acc"]["status"] == "regression" and rows["acc"]["deltaPct"] == pytest.approx(-10.0)
 
 
+def _pins_and_baseline(root: Path, ir, *, stddev: float) -> dict:
+    """Une baseline `acc` à 1.0 avec l'écart-type demandé, et un rapport à 0.95 (-5 %)."""
+    pins = {"promptHash": "sha256:" + "a" * 64, "modelId": "m", "indexHash": "", "toolSchemaHash": "", "datasetHash": "sha256:" + "b" * 64}
+    ir["evaluation"]["suites"] = [
+        {"id": "acc", "level": "L7", "dataset": "workspace/datasets/golden/billing-v1.jsonl", "grader": "exact", "threshold": ">= 0.9", "runs": 3},
+    ]
+    paths.ir_path(root, 1).write_bytes(ir_compiler.dump_ir(ir))
+    atomic_write_json(root / BASELINE, {"baselines": {
+        "acc": {"metric": "accuracy", "mean": 1.0, "stddev": stddev, "pass_rate": 1, "verdict": "green", "pins": pins},
+    }})
+    atomic_write_json(root / "workspace/evals/reports/1-NOISE.json", {"missionId": "1-SupportAssistant", "runId": "NOISE", "suites": [
+        {"suiteId": "acc", "metric": "accuracy", "mean": 0.95, "threshold": ">= 0.9", "pins": pins, "advisory": False},
+    ]})
+    return pins
+
+
+def test_a_drop_within_the_baseline_noise_band_is_not_a_regression(compiled) -> None:
+    """-5 % dépasse la tolérance (3 %), mais la baseline a σ = 0.04 : à 2 σ la bande vaut ±0.08 > 0.05."""
+    root, ir = compiled
+    _pins_and_baseline(root, ir, stddev=0.04)
+    code, out = run_main(check_regression.main, ["--root", str(root), "--mission", "1", "--run", "NOISE", "--json"])
+    assert code == 0, out
+    data = json.loads(out)
+    assert data["data"]["regressions"] == [] and data["data"]["withinNoise"] == ["acc"]
+    row = data["data"]["suites"][0]
+    assert row["status"] == "within-noise" and row["baselineStddev"] == pytest.approx(0.04) and row["noiseBand"] == pytest.approx(0.08)
+    assert {w["class"] for w in data["warnings"]} == {"REGRESSION_WITHIN_NOISE"}
+
+
+def test_a_drop_beyond_the_noise_band_stays_a_regression(compiled) -> None:
+    """Même -5 %, mais σ = 0.01 : la bande vaut ±0.02, la chute est réelle."""
+    root, ir = compiled
+    _pins_and_baseline(root, ir, stddev=0.01)
+    code, out = run_main(check_regression.main, ["--root", str(root), "--mission", "1", "--run", "NOISE", "--json"])
+    assert code == 1
+    data = json.loads(out)
+    assert data["data"]["regressions"] == ["acc"] and data["data"]["withinNoise"] == []
+    assert "hors de la bande de bruit" in data["errors"][0]["message"]
+
+
+def test_noise_sigma_zero_ignores_the_stddev(compiled) -> None:
+    """`--noise-sigma 0` (ou RegressionNoiseSigma: 0) : comportement strict d'avant."""
+    root, ir = compiled
+    _pins_and_baseline(root, ir, stddev=0.04)
+    code, out = run_main(check_regression.main, ["--root", str(root), "--mission", "1", "--run", "NOISE", "--noise-sigma", "0"])
+    assert code == 1 and "[REGRESSION]" in out and "WITHIN_NOISE" not in out
+
+
+def test_a_baseline_without_stddev_keeps_the_strict_behaviour(compiled) -> None:
+    """σ = 0 (k=1 ou baseline ancienne) : aucune bande, la tolérance seule décide — comme avant."""
+    root, ir = compiled
+    _pins_and_baseline(root, ir, stddev=0.0)
+    code, out = run_main(check_regression.main, ["--root", str(root), "--mission", "1", "--run", "NOISE", "--json"])
+    assert code == 1
+    assert json.loads(out)["data"]["suites"][0]["noiseBand"] == 0.0
+
+
 def test_regression_on_advisory_suite_informs_without_blocking(compiled) -> None:
     root, ir = compiled
     for s in ir["evaluation"]["suites"]:

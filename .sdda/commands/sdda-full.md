@@ -315,6 +315,12 @@ Garde `should-skip-step review`. Exécuter `/sdda-review {n}`.
 
 Garde `should-skip-step acceptance`. Exécuter `/sdda-eval {n} --acceptance`.
 
+La ligne `Non-régression` du récap final se lit dans
+`workspace/.sys/.validation/regression-{n}.json`, écrit par
+`check_regression.py` (tolérance **et** bande de bruit de la baseline :
+`regressions[]` bloque, `withinNoise[]` informe, `stale[]` = comparaison
+refusée). Ne jamais recalculer un delta à la main dans le récap.
+
 | G8 | Action |
 |---|---|
 | 🟢 | MISSION `Approved` ; proposer `promote_baseline.py` (action humaine tracée, jamais automatique) |
@@ -360,7 +366,7 @@ REVUE (phase 7)   {skipped (--no-review) |}
 
 ACCEPTATION (phase 8)   {non exécutée (G7 absente) |}
   Holdout          : {Metric} {mesuré} vs cible {Target} (k={k})                     G8 {🟢|🟡|🔴}
-  Non-régression   : {ok | -x.x% sur {metric} (tolérance {t}%)}
+  Non-régression   : {ok | -x.x% sur {metric} (tolérance {t}%, hors bande {s}σ) | bruit : -x.x% sous {s}σ de la baseline}
   Baseline         : {inchangée — promouvoir : python .sdda/python/sdda_scripts/promote_baseline.py --mission {n} --run {RUN_ID}}
 
 Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--force) · …}  → workspace/.sys/.audit/bypasses.jsonl
