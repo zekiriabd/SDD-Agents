@@ -55,6 +55,7 @@ from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.eval_stats import GLYPH, SEVERITY  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_json as _atomic_write_json, now_iso as _now_iso, run_id_now  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
 
@@ -427,17 +428,6 @@ def replay(
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
-def _now_iso() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
-
-
 def pinned_hashes(root: Path, coverages: list[AgentCoverage]) -> dict[str, str]:
     pins: dict[str, str] = {}
     for c in coverages:
@@ -499,7 +489,7 @@ def run(
     if report.errors:
         verdict = "red"
 
-    rid = run_id or _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    rid = run_id or run_id_now()
     payload: dict[str, Any] = {
         "missionId": mid,
         "runId": rid,

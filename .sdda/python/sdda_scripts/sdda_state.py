@@ -48,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import paths  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_json, now_iso, run_id_now  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, resolve_root  # noqa: E402
 
 #: Les phases canoniques du pipeline, DANS L'ORDRE. C'est cette liste que
@@ -95,15 +96,8 @@ def journal_path(root: Path) -> Path:
     return paths.state_dir(root) / "runs.jsonl"
 
 
-def now_iso() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_json(path, payload)
 
 
 def _append_journal(root: Path, entry: dict[str, Any]) -> None:
@@ -222,7 +216,7 @@ def make_run_id(mission: str, *, at: _dt.datetime | None = None, entropy: str | 
     L'horodatage seul collisionne dès que deux commandes démarrent la même
     seconde — ce que `/sdda-full` fait en enchaînant ses sous-commandes.
     """
-    stamp = (at or _dt.datetime.now(_dt.timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    stamp = run_id_now(at)
     suffix = entropy or secrets.token_hex(2)
     slug = str(mission or "x").replace("/", "-").replace("\\", "-")
     return f"{stamp}-m{slug}-{suffix}"

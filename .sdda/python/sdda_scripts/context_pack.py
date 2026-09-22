@@ -50,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import hashing, markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.layered_config import active_stacks  # noqa: E402
+from sdda_lib.runtime_io import now_iso as _now_iso  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 #: Clés de `loader.yml` qui ne sont pas des agents.
@@ -645,12 +646,6 @@ def build_pack(root: Path, loader: dict[str, Any], agent: str, *, report: Report
                      "trancher le pack par rôle (retraits déclarés au manifeste), réduire `pack_sources`, ou relever le budget en connaissance de cause", paths.rel(root, out))
     report.data.setdefault("packs", []).append({"agent": agent, "path": paths.rel(root, out), "bytes": size, "sources": len(entries)})
     return out
-
-
-def _now_iso() -> str:
-    import datetime as _dt
-
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 # ---------------------------------------------------------------------------

@@ -25,12 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-except Exception:  # console sans reconfigure (redirection, tests) : on garde le flux tel quel
-    pass
-
 from sdda_lib import markdown_io, paths  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
+
+ensure_utf8_stdout()
 from sdda_lib.errors import Report, SddaError  # noqa: E402
 from sdda_lib.graders import GRADERS, describe, get, graders_for_metric  # noqa: E402
 from sdda_scripts._common import add_common_args, finish, resolve_root  # noqa: E402

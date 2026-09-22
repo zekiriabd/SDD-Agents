@@ -27,8 +27,10 @@ from sdda_lib import calibration, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.layered_config import read_layered_config  # noqa: E402
 
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
+
 try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    ensure_utf8_stdout()
 except Exception:
     pass
 

@@ -41,11 +41,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import paths  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout, now_iso  # noqa: E402
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-except Exception:
-    pass
+ensure_utf8_stdout()
 
 #: Les bypasses reconnus, et la gate que chacun desserre. Liste **close** : une
 #: env var `SDDA_BYPASS_*` inconnue est refusée plutôt qu'ignorée — sinon une
@@ -133,7 +131,7 @@ def main() -> int:
         (["--no-review"] if args.no_review else [])
 
     record = {
-        "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "ts": now_iso(),   # suffixe `Z` comme les autres journaux : bypasses_of les trie par chaîne
         "operator": operator,
         "command": args.command,
         "mission": args.mission or None,

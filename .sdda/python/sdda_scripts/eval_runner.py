@@ -62,6 +62,7 @@ from sdda_lib.eval_stats import (  # noqa: E402
 )
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_json as _atomic_write_json, now_iso as _now_iso, run_id_now  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
 
@@ -521,12 +522,6 @@ def _metric_of(suite_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Orchestration complète
 # ---------------------------------------------------------------------------
-def run_id_now() -> str:
-    epoch = os.environ.get("SOURCE_DATE_EPOCH")
-    now = _dt.datetime.fromtimestamp(int(epoch), _dt.timezone.utc) if epoch and epoch.isdigit() else _dt.datetime.now(_dt.timezone.utc)
-    return now.strftime("%Y%m%dT%H%M%SZ")
-
-
 def reports_dir(root: Path) -> Path:
     return paths.evals_dir(root) / "reports"
 
@@ -721,16 +716,6 @@ def _cost_by_cap(executed: list[ExecutedSuite]) -> dict[str, float]:
         cap = str(ex.plan.suite.get("capRef") or ex.plan.suite.get("agentRef") or ex.plan.id)
         out[cap] = round(out.get(cap, 0.0) + ex.result.cost_usd, 6)
     return dict(sorted(out.items()))
-
-
-def _now_iso() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
 
 
 # ---------------------------------------------------------------------------
