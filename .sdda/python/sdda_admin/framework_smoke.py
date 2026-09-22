@@ -11,9 +11,9 @@ prouver qu'ils sont encore branchés.** Une règle écrite que plus rien
 n'applique est pire qu'une règle absente — elle rassure.
 
 Usage :
-    python .sdda/python/sdda_admin/framework_smoke.py
-    python .sdda/python/sdda_admin/framework_smoke.py --json
-    python .sdda/python/sdda_admin/framework_smoke.py --strict   # WARN => exit 1
+    python .sdda/sdda.py framework-smoke
+    python .sdda/sdda.py framework-smoke --json
+    python .sdda/sdda.py framework-smoke --strict   # WARN => exit 1
 
 Exit codes : 0 = OK · 1 = au moins un FAIL (ou un WARN en --strict)
 """
@@ -286,6 +286,20 @@ def check_counters() -> None:
 # ---------------------------------------------------------------------------
 # 4. Références de fichiers : ce que les docs promettent existe-t-il ?
 # ---------------------------------------------------------------------------
+_LAUNCHER_RE = re.compile(r"python \.sdda/sdda\.py\s+([a-z][a-z0-9-]*)(?![\w-])")
+
+
+def _resolve_subcommand(name: str) -> str | None:
+    """`sdda_cli.resolve`, tolérante : un CLI non chargeable ne fait pas échouer le smoke."""
+    try:
+        sys.path.insert(0, str(SDDA / "python"))
+        import sdda_cli
+
+        return sdda_cli.resolve(name)
+    except Exception:
+        return name          # non vérifiable : ne rien affirmer plutôt que crier
+
+
 def check_references() -> None:
     """Références internes.
 
@@ -324,6 +338,16 @@ def check_references() -> None:
             # promesse de documentation non tenue.
             is_planned = ref.endswith(".py") or ref.startswith("python/")
             (planned if is_planned else broken).add(entry)
+
+        # La forme courte `python .sdda/sdda.py {cmd}` ne laisse plus de chemin
+        # à vérifier : c'est `sdda_cli` qui dit si la sous-commande existe. Sans
+        # cette résolution, un prompt pourrait appeler un script jamais écrit
+        # sans que rien ne le voie — exactement ce que la migration vers la
+        # forme courte risquait de faire disparaître.
+        for name in set(_LAUNCHER_RE.findall(text)):
+            checked += 1
+            if _resolve_subcommand(name) is None:
+                planned.add(f"{path.relative_to(SDDA)} -> sdda {name}")
 
     if planned:
         warn("refs.planned", f"{len(planned)} script(s) référencé(s) mais pas encore écrit(s) — dette des lots à venir")

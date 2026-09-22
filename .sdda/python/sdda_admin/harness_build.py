@@ -20,10 +20,10 @@ au runtime serait exactement le doc-theater que `INVARIANTS.yml` existe pour
 empêcher — cf. `docs/MULTI-HARNESS.md` §3.
 
 Usage :
-    python .sdda/python/sdda_admin/harness_build.py                 # tous
-    python .sdda/python/sdda_admin/harness_build.py --harness claude-code
-    python .sdda/python/sdda_admin/harness_build.py --check         # CI : dérive ?
-    python .sdda/python/sdda_admin/harness_build.py --impact-only
+    python .sdda/sdda.py harness-build                 # tous
+    python .sdda/sdda.py harness-build --harness claude-code
+    python .sdda/sdda.py harness-build --check         # CI : dérive ?
+    python .sdda/sdda.py harness-build --impact-only
 
 Exit : 0 si tout est compilé (ou à jour en `--check`) · 1 sinon.
 """
@@ -635,7 +635,7 @@ def main() -> int:
         print()
         print("ERROR: harness_build — les façades ont dérivé de la source")
         print("CAUSE: [HARNESS_PARITY_DRIFT] une façade a été éditée à la main, ou la source a bougé")
-        print("FIX: python .sdda/python/sdda_admin/harness_build.py --prune")
+        print("FIX: python .sdda/sdda.py harness-build --prune")
         return 1
 
     print()

@@ -22,9 +22,9 @@ Ce qu'il refuse par construction :
     reste dans le rapport, seul son pouvoir de bloquer disparaît.
 
 Usage :
-    python eval_runner.py --mission 1 --executor workspace.src.evals:Executor
-    python eval_runner.py --mission 1 --level L4,L5 --cap 1-1-ClassifyIntent --json
-    python eval_runner.py --mission 1 --suite 1-1-routing_accuracy --runs 5 --no-report
+    python .sdda/sdda.py eval-runner --mission 1 --executor workspace.src.evals:Executor
+    python .sdda/sdda.py eval-runner --mission 1 --level L4,L5 --cap 1-1-ClassifyIntent --json
+    python .sdda/sdda.py eval-runner --mission 1 --suite 1-1-routing_accuracy --runs 5 --no-report
 
 `--executor module:attr` désigne un objet exécuteur ou une fabrique sans
 argument. `sdda_scripts.eval_runner:OracleExecutor` renvoie l'attendu de chaque
@@ -789,11 +789,11 @@ def main(argv: list[str] | None = None, *, executor: Any = None, graders: dict[s
     else:
         candidates = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
         if len(candidates) != 1:
-            report.error("IR_NOT_FOUND", f"{len(candidates)} IR compilé(s) dans workspace/.sys/.ir/ : préciser --mission", "python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+            report.error("IR_NOT_FOUND", f"{len(candidates)} IR compilé(s) dans workspace/.sys/.ir/ : préciser --mission", "python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
             return finish(report, args)
         ir_file = candidates[0]
     if not ir_file.is_file():
-        report.error("IR_NOT_FOUND", f"IR `{paths.rel(root, ir_file)}` introuvable", "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", paths.rel(root, ir_file))
+        report.error("IR_NOT_FOUND", f"IR `{paths.rel(root, ir_file)}` introuvable", "compiler : python .sdda/sdda.py ir-compiler --mission {n}", paths.rel(root, ir_file))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
 

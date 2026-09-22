@@ -30,9 +30,9 @@ La matrice des exigences est déclarative : `.sdda/registry/architecture-require
 Ajouter un pattern d'orchestration, c'est ajouter un bloc — pas modifier ce script.
 
 Usage :
-    python validate_architecture.py --mission 1
-    python validate_architecture.py --mission 1 --json
-    python validate_architecture.py --explain          # ce que la stack active exige
+    python .sdda/sdda.py validate-architecture --mission 1
+    python .sdda/sdda.py validate-architecture --mission 1 --json
+    python .sdda/sdda.py validate-architecture --explain          # ce que la stack active exige
 """
 from __future__ import annotations
 

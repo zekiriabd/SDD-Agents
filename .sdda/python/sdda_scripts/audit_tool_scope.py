@@ -25,9 +25,9 @@ que les deux gates ne puissent pas diverger. Deux implémentations d'une même
 règle divergent, et c'est celle qui ne bloque pas qui survit.
 
 Usage :
-    python audit_tool_scope.py --ir workspace/.sys/.ir/1-system.ir.json --json
-    python audit_tool_scope.py --mission 1
-    python audit_tool_scope.py --mission 1 --no-traces   # déclaration seule
+    python .sdda/sdda.py audit-tool-scope --ir workspace/.sys/.ir/1-system.ir.json --json
+    python .sdda/sdda.py audit-tool-scope --mission 1
+    python .sdda/sdda.py audit-tool-scope --mission 1 --no-traces   # déclaration seule
 
 Exit : 0 vert · 1 rouge.
 """

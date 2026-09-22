@@ -51,7 +51,7 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
 2. MISSION `{n}` unique (`[MISSION_NOT_FOUND]` / `[MISSION_AMBIGUOUS]`).
 3. **G1 franchie** :
    ```bash
-   python .sdda/python/sdda_scripts/compute_status.py --mission {n} --require-gate G1
+   python .sdda/sdda.py compute-status --mission {n} --require-gate G1
    ```
    Exit ≠ 0 → ERROR :
    ```
@@ -62,7 +62,7 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    3.bis **Roster déclaré** — si un manifeste existe, il doit être complet
    **avant** de payer l'architecte :
    ```bash
-   python .sdda/python/sdda_scripts/roster.py validate --mission {n} --if-present
+   python .sdda/sdda.py roster validate --mission {n} --if-present
    ```
    Exit 1 → STOP + ERROR (les findings du script, `fichier:$.chemin`) :
    ```
@@ -80,16 +80,16 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    `## Active RAG`, `## Active Data Access`, `## Active Memory`, `## Active Tools`.
 
 ```bash
-RUN_ID=${SDDA_RUN_ID:-$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-topology" --tags "$TAGS")}
 ```
 
 5. **Packs et budget de contexte** — avant tout spawn :
 
 ```bash
-python .sdda/python/sdda_scripts/context_pack.py check --agent all --json || \
-python .sdda/python/sdda_scripts/context_pack.py build --agent all
-python .sdda/python/sdda_scripts/spawn_brief.py --agent architect-topology --mission {n} --prompt-only
+python .sdda/sdda.py context-pack check --agent all --json || \
+python .sdda/sdda.py context-pack build --agent all
+python .sdda/sdda.py spawn-brief --agent architect-topology --mission {n} --prompt-only
 ```
 
 `[PACK_UNUSABLE]` (pack absent ou périmé) et `[CONTEXT_BUDGET_EXCEEDED]`
@@ -158,9 +158,9 @@ Post-check déterministe immédiat (avant de payer les 4 contrats), **dans cet
 ordre** — la complétude de la déclaration d'abord, sa cohérence ensuite :
 
 ```bash
-python .sdda/python/sdda_scripts/validate_packaging.py    --mission {n}   # qu'est-ce qu'on LIVRE ?
-python .sdda/python/sdda_scripts/validate_architecture.py --mission {n}   # P7 : l'architecte a-t-il décidé ?
-python .sdda/python/sdda_scripts/validate_topology.py     --mission {n} --pre
+python .sdda/sdda.py validate-packaging    --mission {n}   # qu'est-ce qu'on LIVRE ?
+python .sdda/sdda.py validate-architecture --mission {n}   # P7 : l'architecte a-t-il décidé ?
+python .sdda/sdda.py validate-topology     --mission {n} --pre
 ```
 
 `validate_packaging.py` passe **en premier** et c'est délibéré : il ne coûte
@@ -228,9 +228,9 @@ collecter, puis STOP si ≥ 1 ERROR avec la liste.
 Post-step déterministe :
 
 ```bash
-python .sdda/python/sdda_scripts/audit_ownership.py --mission {n} --phase 2
-python .sdda/python/sdda_scripts/validate_tool_contract.py --mission {n} --static
-python .sdda/python/sdda_scripts/validate_data_access.py --mission {n}
+python .sdda/sdda.py audit-ownership --mission {n} --phase 2
+python .sdda/sdda.py validate-tool-contract --mission {n} --static
+python .sdda/sdda.py validate-data-access --mission {n}
 ```
 
 `[OWNERSHIP_VIOLATION]`, `[SIDE_EFFECT_UNDECLARED]`, `[DB_ENVELOPE_MISSING]`
@@ -245,7 +245,7 @@ mais on ne compile pas un IR depuis des contrats qu'on sait invalides.
 ## STEP 6 — PHASE 2.9 : compilation de l'IR (script, 0 token)
 
 ```bash
-python .sdda/python/sdda_scripts/ir_compiler.py --mission {n} \
+python .sdda/sdda.py ir-compiler --mission {n} \
   --out workspace/.sys/.ir/{n}-system.ir.json
 ```
 
@@ -268,9 +268,9 @@ Sortie : `{n}-system.ir.json` conforme à `.sdda/registry/ir.schema.json`, avec
 ## STEP 7 — TOPOLOGY GATE (G2) — déterministe, 0 token, sur l'IR
 
 ```bash
-python .sdda/python/sdda_scripts/validate_ir.py --ir workspace/.sys/.ir/{n}-system.ir.json --json \
+python .sdda/sdda.py validate-ir --ir workspace/.sys/.ir/{n}-system.ir.json --json \
   > workspace/.sys/.validation/{n}-G2-topology.json
-python .sdda/python/sdda_scripts/estimate_budget.py --ir workspace/.sys/.ir/{n}-system.ir.json --json \
+python .sdda/sdda.py estimate-budget --ir workspace/.sys/.ir/{n}-system.ir.json --json \
   >> workspace/.sys/.validation/{n}-G2-topology.json
 ```
 
@@ -317,7 +317,7 @@ borné ou une référence fantôme ne se bypassent pas.
 ## STEP 8 — Recalcul d'état + récap
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n}
+python .sdda/sdda.py compute-status --mission {n}
 ```
 
 ```

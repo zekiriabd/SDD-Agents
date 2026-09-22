@@ -31,7 +31,7 @@ Root Pattern: <single-agent | router | sequential | parallel | supervisor | grap
 >
 > Ce qui est exigé dépend du pattern actif — voir
 > `.sdda/registry/architecture-requirements.yml`. Contrôle sans token :
-> `python .sdda/python/sdda_scripts/validate_architecture.py --mission {n}`
+> `python .sdda/sdda.py validate-architecture --mission {n}`
 
 ### 2.1 Orchestrateur
 

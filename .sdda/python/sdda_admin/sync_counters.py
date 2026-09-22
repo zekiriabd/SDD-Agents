@@ -35,9 +35,9 @@ Compteurs :
                 la prose dit « fonctions de test »)
 
 Usage :
-    python .sdda/python/sdda_admin/sync_counters.py            # état
-    python .sdda/python/sdda_admin/sync_counters.py --check    # CI : exit 1 si dérive
-    python .sdda/python/sdda_admin/sync_counters.py --write    # réécrit les marqueurs
+    python .sdda/sdda.py sync-counters            # état
+    python .sdda/sdda.py sync-counters --check    # CI : exit 1 si dérive
+    python .sdda/sdda.py sync-counters --write    # réécrit les marqueurs
 """
 from __future__ import annotations
 
@@ -276,7 +276,7 @@ def main() -> int:
         if args.check:
             print("ERROR: sync_counters — la prose a dérivé des sources")
             print(f"CAUSE: [COUNTER_DRIFT] {len(drifts)} écart(s) : " + " ; ".join(drifts[:4]))
-            print("FIX: python .sdda/python/sdda_admin/sync_counters.py --write")
+            print("FIX: python .sdda/sdda.py sync-counters --write")
             return 1
         print(f"  {len(drifts)} écart(s) — {summary}")
         for d in drifts:

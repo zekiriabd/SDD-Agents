@@ -18,7 +18,7 @@ Le scan lit des fichiers susceptibles de contenir des secrets. Il n'en recopie
 et la ligne. Un rapport de gate n'est pas gitignoré partout.
 
 Usage :
-    python scan_secrets.py --paths workspace/prompts workspace/traces workspace/datasets workspace/src --json
+    python .sdda/sdda.py scan-secrets --paths workspace/prompts workspace/traces workspace/datasets workspace/src --json
 """
 from __future__ import annotations
 

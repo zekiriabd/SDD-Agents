@@ -148,7 +148,7 @@ d'API de framework, un secret, une variable de template non résolue.
 ## STEP 5 — Lint déterministe, taille, hash
 
 ```bash
-python .sdda/python/sdda_scripts/lint_prompts.py --mission {n}
+python .sdda/sdda.py lint-prompts --mission {n}
 python .sdda/python/sdda_lib/hashing.py --file workspace/prompts/{agent-slug}.system.md
 ```
 

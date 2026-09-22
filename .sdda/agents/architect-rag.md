@@ -59,7 +59,7 @@ Aucun retriever dans la topologie et `Active RAG Pattern != none` → WARN
 
 Exécute l'inventaire déterministe (0 token) :
 ```bash
-python .sdda/python/sdda_scripts/corpus_profile.py --mission {n} --out workspace/.sys/.validation/corpus-{n}.json
+python .sdda/sdda.py corpus-profile --mission {n} --out workspace/.sys/.validation/corpus-{n}.json
 ```
 
 > ⏳ **Planifié** (ROADMAP Lot 4) — `corpus_profile.py` n'existe pas encore.
@@ -107,7 +107,7 @@ depuis la `Ground Truth` de la MISSION, écrit dans
 `qa-evals`, qui le reprendra ou le refera.
 
 ```bash
-python .sdda/python/sdda_scripts/chunking_bench.py --mission {n} \
+python .sdda/sdda.py chunking-bench --mission {n} \
   --golden workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl \
   --config recursive-structural:800/120 --config parent-child:400/60 \
   --config document-aware:section \

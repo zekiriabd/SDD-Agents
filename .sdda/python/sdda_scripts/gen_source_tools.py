@@ -28,10 +28,10 @@ générateur qui joint un serveur ne tourne pas en CI, et une gate qu'on ne peut
 pas jouer est une gate qu'on saute.
 
 Usage :
-    python gen_source_tools.py --check --json
-    python gen_source_tools.py --infer --source order_tracking
-    python gen_source_tools.py --infer --source crm_customer --from-sample sample.json
-    python gen_source_tools.py --write --mission 1
+    python .sdda/sdda.py gen-source-tools --check --json
+    python .sdda/sdda.py gen-source-tools --infer --source order_tracking
+    python .sdda/sdda.py gen-source-tools --infer --source crm_customer --from-sample sample.json
+    python .sdda/sdda.py gen-source-tools --write --mission 1
 """
 from __future__ import annotations
 

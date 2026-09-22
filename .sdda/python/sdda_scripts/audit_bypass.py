@@ -14,8 +14,8 @@ rien n'est écrit. Une commande qui pose un bypass sans raison doit STOP : c'est
 le même contrat que `preflight_force_cumul`.
 
 Usage :
-    python audit_bypass.py --command "/sdda-caps 1" --bypass CapGranularityHardCap --reason "..."
-    python audit_bypass.py --command "/sdda-topology 1" --bypass SDDA_BYPASS_BUDGET_ESTIMATE \\
+    python .sdda/sdda.py audit-bypass --command "/sdda-caps 1" --bypass CapGranularityHardCap --reason "..."
+    python .sdda/sdda.py audit-bypass --command "/sdda-topology 1" --bypass SDDA_BYPASS_BUDGET_ESTIMATE \\
         --gate G2 --reason "${SDDA_BYPASS_REASON}"
 """
 from __future__ import annotations

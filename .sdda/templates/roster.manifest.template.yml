@@ -17,7 +17,7 @@
 #
 # Ce qui est OBLIGATOIRE dépend du pattern actif de `## Active Orchestration
 # Pattern`. La liste exacte :
-#     python .sdda/python/sdda_scripts/validate_architecture.py --explain
+#     python .sdda/sdda.py validate-architecture --explain
 #
 # Spécification complète : .sdda/registry/architecture-requirements.yml
 

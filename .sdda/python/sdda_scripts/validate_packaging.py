@@ -27,8 +27,8 @@ première ligne de code :
    porter un ADR référencé plutôt que de se découvrir en production.
 
 Usage :
-    python validate_packaging.py --json
-    python validate_packaging.py --explain     # ce que chaque livrable exige
+    python .sdda/sdda.py validate-packaging --json
+    python .sdda/sdda.py validate-packaging --explain     # ce que chaque livrable exige
 """
 from __future__ import annotations
 

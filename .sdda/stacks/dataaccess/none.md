@@ -73,7 +73,7 @@ serait une incohérence rapportée par `validate_data_access.py`.
 ## 5. Commande de smoke
 
 ```bash
-python .sdda/python/sdda_scripts/validate_data_access.py --json
+python .sdda/sdda.py validate-data-access --json
 #   -> confirme : aucune stratégie active, aucune entrée dataAccess[] dans l'IR,
 #      aucune clé Db*/Json* effective. exit 0.
 ```

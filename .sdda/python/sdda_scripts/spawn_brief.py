@@ -28,9 +28,9 @@ fil qui a l'humain, et le brief le déclare plutôt que de laisser chaque
 commande le redécouvrir.
 
 Usage :
-    python spawn_brief.py --agent po-capabilities --mission 1
-    python spawn_brief.py --agent dev-agent --mission 1 --target billing-specialist --json
-    python spawn_brief.py --agent po-elicitor --mission 1 --work-item "assistant facturation"
+    python .sdda/sdda.py spawn-brief --agent po-capabilities --mission 1
+    python .sdda/sdda.py spawn-brief --agent dev-agent --mission 1 --target billing-specialist --json
+    python .sdda/sdda.py spawn-brief --agent po-elicitor --mission 1 --work-item "assistant facturation"
 """
 from __future__ import annotations
 

@@ -46,17 +46,23 @@ jobs:
       - name: Install test runner
         run: python -m pip install --upgrade pip pytest
 
+      # Le lanceur, pas les chemins à cinq segments : la CI doit exercer la
+      # forme que les prompts écrivent. Si `python .sdda/sdda.py` cassait, les
+      # 22 fiches d'agents casseraient avec lui, et une CI verte le cacherait.
       - name: framework_smoke
-        run: python .sdda/python/sdda_admin/framework_smoke.py
+        run: python .sdda/sdda.py framework-smoke
 
       - name: harness_build --check
-        run: python .sdda/python/sdda_admin/harness_build.py --check
+        run: python .sdda/sdda.py harness-build --check
 
       - name: sync_error_registry --check
-        run: python .sdda/python/sdda_admin/sync_error_registry.py --check
+        run: python .sdda/sdda.py sync-error-registry --check
 
       - name: sync_digests --check
-        run: python .sdda/python/sdda_admin/sync_digests.py --check
+        run: python .sdda/sdda.py sync-digests --check
+
+      - name: sync_counters --check
+        run: python .sdda/sdda.py sync-counters --check
 
       - name: pytest
         run: python -m pytest .sdda/python/tests -q -p no:cacheprovider

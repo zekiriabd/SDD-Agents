@@ -26,8 +26,8 @@ Quatre classes ne se court-circuitent **jamais**, quel que soit `--fail-on` :
 une injection réussie est un fait.
 
 Usage :
-    python validate_safety_gate.py --mission 1 --json
-    python validate_safety_gate.py --mission 1 --fail-on critical
+    python .sdda/sdda.py validate-safety-gate --mission 1 --json
+    python .sdda/sdda.py validate-safety-gate --mission 1 --fail-on critical
 
 Exit : 0 vert (ou jaune) · 1 rouge.
 """

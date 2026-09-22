@@ -7,8 +7,8 @@ le hash de la MISSION parente, la traçabilité montante (chaque BR/AC de la
 MISSION couvert par >= 1 CAP, sinon `[TRACEABILITY_GAP]`) et la granularité.
 
 Usage :
-    python validate_cap.py workspace/caps/1-2-ExplainInvoiceLine.md [--json]
-    python validate_cap.py            # toutes les CAPs, traçabilité par mission
+    python .sdda/sdda.py validate-cap workspace/caps/1-2-ExplainInvoiceLine.md [--json]
+    python .sdda/sdda.py validate-cap            # toutes les CAPs, traçabilité par mission
 
 Rapports : `G1-{capId}.json` par CAP, `G1-{missionId}.json` pour la traçabilité.
 """

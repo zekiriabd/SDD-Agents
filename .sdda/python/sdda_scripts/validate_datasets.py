@@ -22,7 +22,7 @@ Le rapport épingle le hash de chaque fichier (`dataset:{chemin}`) : c'est le
 et n'ajoute rien : les hashes sont toujours épinglés.
 
 Usage :
-    python validate_datasets.py [--mission 1] [--json] [--freeze]
+    python .sdda/sdda.py validate-datasets [--mission 1] [--json] [--freeze]
 
 Rapport : `G8-{missionId}.datasets.json` (part `datasets` de la gate G8 ; la
 part `acceptance` — le verdict holdout — reste à franchir).

@@ -25,8 +25,8 @@ Aucun rapport de gate n'est écrit : `roster` n'est pas une part connue de G2
 est un faux vert qui attend. La commande lit le code de sortie / le JSON.
 
 Usage :
-    python roster.py scaffold --mission 1 [--force --reason "…"]
-    python roster.py validate --mission 1 [--json] [--if-present]
+    python .sdda/sdda.py roster scaffold --mission 1 [--force --reason "…"]
+    python .sdda/sdda.py roster validate --mission 1 [--json] [--if-present]
 """
 from __future__ import annotations
 
@@ -139,13 +139,13 @@ def render_scaffold(number: int, name: str, pattern: str, caps: list[str], requi
 
     out: list[str] = [
         f"# Roster d'agents — MISSION {number}-{name} (PHILOSOPHY P7).",
-        f"# Généré par `python .sdda/python/sdda_scripts/roster.py scaffold --mission {number}`.",
+        f"# Généré par `python .sdda/sdda.py roster scaffold --mission {number}`.",
         "# À COMPLÉTER par l'ARCHITECTE : chaque `<à préciser>` est une décision qui lui",
         f"# revient. Le framework vérifie (`roster.py validate --mission {number}`), il n'en",
         "# décide aucune ligne. Gabarit commenté : .sdda/templates/roster.manifest.template.yml",
         "#",
         f"# Pattern actif (STACK.md ## {ORCHESTRATION_SECTION}) : {pattern}",
-        "# Ce qu'il exige : python .sdda/python/sdda_scripts/validate_architecture.py --explain",
+        "# Ce qu'il exige : python .sdda/sdda.py validate-architecture --explain",
         "",
         f"mission: {number}",
         f"pattern: {pattern}" + " " * max(1, 24 - len(pattern)) + "# doit rester égal au pattern actif de STACK.md",
@@ -295,7 +295,7 @@ def load_manifest(root: Path, mission: int | str, report: Report) -> tuple[Path,
     rel = paths.rel(root, target)
     if not target.is_file():
         report.error("ARCH_ROSTER_MANIFEST_MISSING", f"manifeste de roster introuvable ({rel})",
-                     fix=f"python .sdda/python/sdda_scripts/roster.py scaffold --mission {mission} — puis le remplir. "
+                     fix=f"python .sdda/sdda.py roster scaffold --mission {mission} — puis le remplir. "
                          "C'est l'architecte qui déclare les agents ; le framework les vérifie (P7)",
                      location=rel)
         return target, None

@@ -7,8 +7,8 @@ Vérifie qu'une MISSION est SPÉCIFIÉE au sens de LIFECYCLE.md : objectif chiff
 failure policy, et cohérence de `## Required Stack` avec `STACK.md`.
 
 Usage :
-    python validate_mission.py workspace/missions/1-SupportAssistant.md [--json]
-    python validate_mission.py            # toutes les missions du workspace
+    python .sdda/sdda.py validate-mission workspace/missions/1-SupportAssistant.md [--json]
+    python .sdda/sdda.py validate-mission            # toutes les missions du workspace
 
 Écrit `workspace/.sys/.validation/G0-{missionId}.json` (sauf --no-report).
 """

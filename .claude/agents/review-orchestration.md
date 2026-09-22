@@ -33,7 +33,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
 Exécute (0 token) :
 ```bash
-python .sdda/python/sdda_scripts/trajectory_report.py --mission {n} --traces workspace/traces/runs --ir workspace/.sys/.ir/{n}-system.ir.json --out workspace/.sys/.validation/trajectories-{n}.json
+python .sdda/sdda.py trajectory-report --mission {n} --traces workspace/traces/runs --ir workspace/.sys/.ir/{n}-system.ir.json --out workspace/.sys/.validation/trajectories-{n}.json
 ```
 
 > ⏳ **Planifié** (ROADMAP Lot 5) — `trajectory_report.py` n'existe pas encore.

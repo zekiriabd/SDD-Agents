@@ -93,7 +93,7 @@ Règles :
   le jeu : un système qui ne dit jamais « je ne sais pas » ment mieux.
 - **Disjonction par hash**, vérifiée :
   ```bash
-  python .sdda/python/sdda_scripts/validate_datasets.py --mission {n}
+  python .sdda/sdda.py validate-datasets --mission {n}
   ```
   Recouvrement → `[HOLDOUT_NOT_DISJOINT]`, bloquant. Le holdout rend le verdict de
   G8 ; personne n'itère contre lui — toi non plus.
@@ -110,7 +110,7 @@ sémantique) :
    label humain est un fait que tu ne fabriques pas.
 3. Fais noter les mêmes items par le juge, calcule l'accord :
    ```bash
-   python .sdda/python/sdda_scripts/calibrate_judge.py --grader {grader} --mission {n}
+   python .sdda/sdda.py calibrate-judge --grader {grader} --mission {n}
    ```
 4. κ ≥ `JudgeCalibrationMinKappa` (0.6) → le juge peut rendre un verdict
    bloquant. Rapport dans `workspace/evals/calibration/{grader}.json`, référencé
@@ -171,7 +171,7 @@ Tu ne les écris pas : `workspace/evals/baselines/**` est réservé au script
 déterministe. Tu déclares la commande qui les fige après la première exécution
 verte :
 ```bash
-python .sdda/python/sdda_scripts/promote_baseline.py --mission {n} --label "{raison}"
+python .sdda/sdda.py promote-baseline --mission {n} --label "{raison}"
 ```
 Une baseline se déplace par une action tracée, jamais par écrasement.
 

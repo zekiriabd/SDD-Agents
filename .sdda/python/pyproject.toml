@@ -16,6 +16,10 @@ dependencies = []
 dev = ["pytest>=8"]
 
 [project.scripts]
+# Le point d'entrée unique : `sdda {sous-commande}` couvre les 60 scripts, et
+# son registre est dérivé du disque (cf. sdda_cli.py). Les entrées nommées
+# ci-dessous restent pour les intégrations qui les ont déjà câblées.
+sdda = "sdda_cli:main"
 sdda-ir-compile = "sdda_scripts.ir_compiler:main"
 sdda-validate-mission = "sdda_scripts.validate_mission:main"
 sdda-validate-cap = "sdda_scripts.validate_cap:main"
@@ -28,9 +32,12 @@ sdda-migrate = "sdda_scripts.migrate_workspace:main"
 sdda-roster = "sdda_scripts.roster:main"
 sdda-human-tasks = "sdda_scripts.human_tasks:main"
 
+[tool.setuptools]
+py-modules = ["sdda_cli"]
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["sdda_lib*", "sdda_scripts*", "sdda_admin*"]
+include = ["sdda_lib*", "sdda_scripts*", "sdda_admin*", "sdda_hooks*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

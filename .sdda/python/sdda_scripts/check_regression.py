@@ -25,9 +25,9 @@ comparable, et le dire vaut mieux que rendre un vert vide. Une suite
 `advisory` informe sans bloquer.
 
 Usage :
-    python check_regression.py --mission 1                       # dernier rapport vs baseline
-    python check_regression.py --mission 1 --report workspace/evals/reports/1-x.json --json
-    python check_regression.py --mission 1 --tolerance 5 --noise-sigma 0   # strict : l'écart-type est ignoré
+    python .sdda/sdda.py check-regression --mission 1                       # dernier rapport vs baseline
+    python .sdda/sdda.py check-regression --mission 1 --report workspace/evals/reports/1-x.json --json
+    python .sdda/sdda.py check-regression --mission 1 --tolerance 5 --noise-sigma 0   # strict : l'écart-type est ignoré
 """
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(root, report)
     ir_file, why = find_ir_file(root, args.mission)
     if ir_file is None:
-        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
     number = mission_number(ir)

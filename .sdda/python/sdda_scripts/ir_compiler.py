@@ -33,9 +33,9 @@ Trois règles non négociables (AGENTIC-IR.md §1, §5) :
    détectée par validate_ir.py (`[FRAMEWORK_LEAK_IN_CONTRACT]`).
 
 Usage :
-    python ir_compiler.py --mission 1 [--out workspace/.sys/.ir/1-system.ir.json]
-    python ir_compiler.py                # toutes les missions du workspace
-    python ir_compiler.py --mission 1 --compiled-at 2026-09-20T10:00:00Z
+    python .sdda/sdda.py ir-compiler --mission 1 [--out workspace/.sys/.ir/1-system.ir.json]
+    python .sdda/sdda.py ir-compiler                # toutes les missions du workspace
+    python .sdda/sdda.py ir-compiler --mission 1 --compiled-at 2026-09-20T10:00:00Z
 
 Exit : 0 = IR écrit · 1 = au moins un [IR_COMPILE_FAILED] (rien n'est écrit).
 """

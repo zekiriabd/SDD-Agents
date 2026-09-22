@@ -22,9 +22,9 @@ verdict rouge de la baseline : celui-ci y est écrit tel quel.
 Les suites non promues conservent leur baseline précédente.
 
 Usage :
-    python promote_baseline.py --mission 1 --label "après correction du chunking"
-    python promote_baseline.py --mission 1 --run 20260920T101500Z --suite 1-1-routing_accuracy --label "…"
-    python promote_baseline.py --mission 1 --report workspace/evals/reports/1-x.json --label "…" --force
+    python .sdda/sdda.py promote-baseline --mission 1 --label "après correction du chunking"
+    python .sdda/sdda.py promote-baseline --mission 1 --run 20260920T101500Z --suite 1-1-routing_accuracy --label "…"
+    python .sdda/sdda.py promote-baseline --mission 1 --report workspace/evals/reports/1-x.json --label "…" --force
 """
 from __future__ import annotations
 
@@ -212,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(root, report)
     ir_file, why = find_ir_file(root, args.mission)
     if ir_file is None:
-        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+        report.error("IR_NOT_FOUND", why, "compiler : python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
     number = mission_number(ir)

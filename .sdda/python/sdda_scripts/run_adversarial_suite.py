@@ -32,9 +32,9 @@ et toute attaque réussie qu'il découvre devient un item permanent de ce set �
 c'est le mécanisme qui empêche la même faille de revenir.
 
 Usage :
-    python run_adversarial_suite.py --mission 1 --json              # couverture seule
-    python run_adversarial_suite.py --mission 1 --replay workspace/evals/runs/adv.jsonl --json
-    python run_adversarial_suite.py --mission 1 --executor workspace.src.evals:Executor --runs 5
+    python .sdda/sdda.py run-adversarial-suite --mission 1 --json              # couverture seule
+    python .sdda/sdda.py run-adversarial-suite --mission 1 --replay workspace/evals/runs/adv.jsonl --json
+    python .sdda/sdda.py run-adversarial-suite --mission 1 --executor workspace.src.evals:Executor --runs 5
 """
 from __future__ import annotations
 
@@ -588,12 +588,12 @@ def main(argv: list[str] | None = None, *, executor: Any = None) -> int:
         candidates = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
         if len(candidates) != 1:
             report.error("IR_NOT_FOUND", f"{len(candidates)} IR compilé(s) dans workspace/.sys/.ir/ : préciser --mission",
-                         "python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+                         "python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
             return finish(report, args)
         ir_file = candidates[0]
     if not ir_file.is_file():
         report.error("IR_NOT_FOUND", f"IR `{paths.rel(root, ir_file)}` introuvable",
-                     "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", paths.rel(root, ir_file))
+                     "compiler : python .sdda/sdda.py ir-compiler --mission {n}", paths.rel(root, ir_file))
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
 

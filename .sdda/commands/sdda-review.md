@@ -48,7 +48,7 @@ Invalide → ERROR `[INVALID_ARG]`. MISSION absente → `[MISSION_NOT_FOUND]`.
 1. `STACK.md` présent et rendu.
 2. **G6 franchie** (on ne revoit pas un système qui ne tourne pas) :
    ```bash
-   python .sdda/python/sdda_scripts/compute_status.py --mission {n} --require-gate G6
+   python .sdda/sdda.py compute-status --mission {n} --require-gate G6
    ```
    KO → ERROR `[ORCH_GATE_NOT_PASSED]` (FIX : `/sdda-build {n}`).
 3. **Eval PHASE 6 présente et fraîche** : `workspace/.sys/.validation/{n}-eval.json`
@@ -73,7 +73,7 @@ Invalide → ERROR `[INVALID_ARG]`. MISSION absente → `[MISSION_NOT_FOUND]`.
    | `MaxParallel` | 3 | borne étage B |
 
 ```bash
-RUN_ID=${SDDA_RUN_ID:-$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-review" --tags "$TAGS")}
 ```
 
@@ -221,12 +221,12 @@ Post-step : arrêt du système, traces conservées sous `workspace/traces/runs/`
 # ligne, G7 restait éternellement `absent` — et G8 l'exigeant, aucune MISSION ne
 # pouvait aboutir. L'échec ne ressemblait pas à un échec : le pipeline
 # s'arrêtait proprement sur un état qui refusait de monter.
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L8 --json   > workspace/.sys/.validation/{n}-G7-{MissionName}.suites.json
+python .sdda/sdda.py eval-runner --mission {n} --level L8 --json   > workspace/.sys/.validation/{n}-G7-{MissionName}.suites.json
 
-python .sdda/python/sdda_scripts/run_adversarial_suite.py --mission {n} --replay workspace/evals/runs/{n}-adversarial.jsonl --json   # couverture des familles + rejeu du set versionné, sans LLM attaquant
-python .sdda/python/sdda_scripts/scan_secrets.py --paths workspace/prompts workspace/traces workspace/datasets workspace/src --json
-python .sdda/python/sdda_scripts/scan_pii.py --mission {n} --target vectorstore --json
-python .sdda/python/sdda_scripts/audit_tool_scope.py --mission {n} --json
+python .sdda/sdda.py run-adversarial-suite --mission {n} --replay workspace/evals/runs/{n}-adversarial.jsonl --json   # couverture des familles + rejeu du set versionné, sans LLM attaquant
+python .sdda/sdda.py scan-secrets --paths workspace/prompts workspace/traces workspace/datasets workspace/src --json
+python .sdda/sdda.py scan-pii --mission {n} --target vectorstore --json
+python .sdda/sdda.py audit-tool-scope --mission {n} --json
 ```
 
 > `audit_tool_scope.py` lit l'IR **et les traces**. C'est le seul contrôle qui
@@ -243,7 +243,7 @@ python .sdda/python/sdda_scripts/audit_tool_scope.py --mission {n} --json
 Agrège étage B (`agent-safety`), étage C et les scans :
 
 ```bash
-python .sdda/python/sdda_scripts/validate_safety_gate.py --mission {n} --fail-on {AgentSafetyFailOn} --json
+python .sdda/sdda.py validate-safety-gate --mission {n} --fail-on {AgentSafetyFailOn} --json
 ```
 
 > **G7 est une gate composite** (`gate_reports.GATE_PARTS`) : la part `suites`
@@ -283,7 +283,7 @@ FIX: ajouter adv-17 au set permanent (qa-evals), durcir le prompt ({agent}.syste
 ## STEP 8 — Recalcul d'état + récap
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n}
+python .sdda/sdda.py compute-status --mission {n}
 ```
 
 ```

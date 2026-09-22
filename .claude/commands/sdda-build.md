@@ -59,8 +59,8 @@ FIX: lister les agents avec /sdda-status {n}, ou relancer /sdda-topology {n} si 
 1. `STACK.md` présent et rendu.
 2. **G2 franchie** et **IR frais** :
    ```bash
-   python .sdda/python/sdda_scripts/compute_status.py --mission {n} --require-gate G2
-   python .sdda/python/sdda_scripts/check_ir_freshness.py --mission {n}
+   python .sdda/sdda.py compute-status --mission {n} --require-gate G2
+   python .sdda/sdda.py check-ir-freshness --mission {n}
    ```
    G2 absente → ERROR `[TOPOLOGY_GATE_NOT_PASSED]` (FIX : `/sdda-topology {n}`).
    IR périmé (un hash de `compiledFrom` ne correspond plus au fichier source) →
@@ -77,7 +77,7 @@ FIX: lister les agents avec /sdda-status {n}, ou relancer /sdda-topology {n} si 
    stacks `.sdda/stacks/**/{x}.md` + `.libs.json` (versions épinglées).
 
 ```bash
-RUN_ID=${SDDA_RUN_ID:-$(python .sdda/python/sdda_scripts/sdda_state.py new-run \
+RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-build" --tags "$TAGS")}
 export SDDA_RUN_ID="$RUN_ID"
 ```
@@ -85,9 +85,9 @@ export SDDA_RUN_ID="$RUN_ID"
 Packs et budget de contexte, avant tout spawn :
 
 ```bash
-python .sdda/python/sdda_scripts/context_pack.py check --agent all --json ||
-python .sdda/python/sdda_scripts/context_pack.py build --agent all
-python .sdda/python/sdda_scripts/spawn_brief.py --agent {dev-x} --mission {n} --target {agent} --prompt-only
+python .sdda/sdda.py context-pack check --agent all --json ||
+python .sdda/sdda.py context-pack build --agent all
+python .sdda/sdda.py spawn-brief --agent {dev-x} --mission {n} --target {agent} --prompt-only
 ```
 
 `[PACK_UNUSABLE]` ou `[CONTEXT_BUDGET_EXCEEDED]` → l'agent ne part pas. Le
@@ -115,8 +115,8 @@ plus ici — sous le défaut `MaxParallel: 3`). Chemins disjoints par ownership.
 avant d'ajouter une couche au `BATCH` :
 
 ```bash
-H=$(python .sdda/python/sdda_scripts/sdda_state.py inputs-hash --mission {n} --phase build_socle --item {tools|retrieval|data})
-python .sdda/python/sdda_scripts/sdda_state.py should-skip-item --phase build_socle --item {couche} --inputs-hash "$H" \
+H=$(python .sdda/sdda.py state inputs-hash --mission {n} --phase build_socle --item {tools|retrieval|data})
+python .sdda/sdda.py state should-skip-item --phase build_socle --item {couche} --inputs-hash "$H" \
   && echo "⊘ {couche}: skipped (pass sur les mêmes entrées, run $SDDA_RUN_ID)"
 ```
 
@@ -138,7 +138,7 @@ Attendre la vague. Collecter les ERRORs ; un échec n'annule pas les autres.
 Pour chaque couche revenue, **avant** les gates :
 
 ```bash
-python .sdda/python/sdda_scripts/sdda_state.py set-item --phase build_socle --item {couche} \
+python .sdda/sdda.py state set-item --phase build_socle --item {couche} \
   --status {pass|fail} --inputs-hash "$H" --payload-json '{"agent":"dev-{x}"}'
 ```
 
@@ -154,11 +154,11 @@ c'est la clé que lit `compute_status`.
 
 ```bash
 # part `contracts` — statique, 0 exécution : tourne même avant que le code existe
-python .sdda/python/sdda_scripts/validate_tool_contract.py --mission {n} --json
-python .sdda/python/sdda_scripts/validate_tool_contract.py --mission {n} --require-code --json   # après génération
+python .sdda/sdda.py validate-tool-contract --mission {n} --json
+python .sdda/sdda.py validate-tool-contract --mission {n} --require-code --json   # après génération
 
 # part `suites` — les tests L2 réellement joués
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L2 --executor {module}:{Executor} --json
+python .sdda/sdda.py eval-runner --mission {n} --level L2 --executor {module}:{Executor} --json
 ```
 
 | # | Contrôle | Part | Classe si KO |
@@ -182,7 +182,7 @@ stratégie ne se câble pas, point.
 Pré-requis : golden set présent.
 
 ```bash
-python .sdda/python/sdda_scripts/validate_datasets.py --mission {n} --require golden --min-items 50
+python .sdda/sdda.py validate-datasets --mission {n} --require golden --min-items 50
 ```
 
 Absent → ERROR :
@@ -197,7 +197,7 @@ FIX: produire le golden set via qa-evals (/sdda-eval {n} --datasets-only) puis r
 > `/sdda-build` (cf. `/sdda-full` STEP 4.5).
 
 ```bash
-python .sdda/python/sdda_scripts/run_retrieval_eval.py --mission {n} --json \
+python .sdda/sdda.py run-retrieval-eval --mission {n} --json \
   --executor {module}:{Retriever}     # ou --replay workspace/evals/runs/{n}-retrieval.jsonl
 ```
 
@@ -261,7 +261,7 @@ Aucun secret, aucun nom de modèle, aucune API de framework.
 Post-step déterministe (L0) :
 
 ```bash
-python .sdda/python/sdda_scripts/lint_prompts.py --mission {n} --json
+python .sdda/sdda.py lint-prompts --mission {n} --json
 ```
 
 Contrôles : pas de secret, pas d'instruction contradictoire, taille sous
@@ -297,8 +297,8 @@ importe les autres).
 **Garde par agent** — avant de mettre une instance dans une vague :
 
 ```bash
-H_{agent}=$(python .sdda/python/sdda_scripts/sdda_state.py inputs-hash --mission {n} --phase build_agents --item {agent})
-python .sdda/python/sdda_scripts/sdda_state.py should-skip-item --phase build_agents --item {agent} --inputs-hash "$H_{agent}" \
+H_{agent}=$(python .sdda/sdda.py state inputs-hash --mission {n} --phase build_agents --item {agent})
+python .sdda/sdda.py state should-skip-item --phase build_agents --item {agent} --inputs-hash "$H_{agent}" \
   && echo "⊘ dev-agent {agent}: skipped (pass sur le même prompt et la même entrée IR)"
 ```
 
@@ -322,9 +322,9 @@ workspace/datasets/ et workspace/prompts/ ([OWNERSHIP_VIOLATION]).
 Post-step déterministe par vague :
 
 ```bash
-python .sdda/python/sdda_scripts/audit_ownership.py --mission {n} --phase 4
-python .sdda/python/sdda_hooks/postflight_no_inline_prompt.py --mission {n}
-python .sdda/python/sdda_hooks/preflight_agent_bounds.py --mission {n}
+python .sdda/sdda.py audit-ownership --mission {n} --phase 4
+python .sdda/sdda.py postflight-no-inline-prompt --mission {n}
+python .sdda/sdda.py preflight-agent-bounds --mission {n}
 ```
 
 `[OWNERSHIP_VIOLATION]` (un `dev-agent` a touché `datasets/` ou `prompts/`) →
@@ -336,7 +336,7 @@ prompt qu'il implémente.
 Puis, **par instance** de la vague :
 
 ```bash
-python .sdda/python/sdda_scripts/sdda_state.py set-item --phase build_agents --item {agent} \
+python .sdda/sdda.py state set-item --phase build_agents --item {agent} \
   --status {pass|fail} --inputs-hash "$H_{agent}"
 ```
 
@@ -351,8 +351,8 @@ rejoue.
 Pré-requis : datasets golden des CAPs présents + juges calibrés.
 
 ```bash
-python .sdda/python/sdda_scripts/validate_datasets.py --mission {n} --require golden,calibration
-python .sdda/python/sdda_hooks/preflight_judge_calibration.py --mission {n}
+python .sdda/sdda.py validate-datasets --mission {n} --require golden,calibration
+python .sdda/sdda.py preflight-judge-calibration --mission {n}
 ```
 
 Juge non calibré (`kappa < JudgeCalibrationMinKappa` ou rapport absent) → le
@@ -362,7 +362,7 @@ CAP sont advisory → la CAP ne peut pas être verte → 🟡 au mieux, WARN
 `[JUDGE_UNCALIBRATED]`.
 
 ```bash
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L4 --isolated --json \
+python .sdda/sdda.py eval-runner --mission {n} --level L4 --isolated --json \
   > workspace/.sys/.validation/{n}-G5-agent.json
 ```
 
@@ -421,7 +421,7 @@ Post-step : `audit_ownership.py --phase 5`, `preflight_agent_bounds.py`
 (bornes du graphe), vérification que le graphe codé est **isomorphe** à l'IR :
 
 ```bash
-python .sdda/python/sdda_scripts/diff_code_vs_ir.py --mission {n} --scope orchestration
+python .sdda/sdda.py diff-code-vs-ir --mission {n} --scope orchestration
 ```
 
 Divergence (nœud ou arête en plus / en moins) → ERROR `[ORCH_DIVERGES_FROM_IR]`.
@@ -441,7 +441,7 @@ dérivé rend la mesure qui suit inexploitable — on évaluerait un système qu
 l'appelant ne peut pas appeler.
 
 ```bash
-python .sdda/python/sdda_scripts/validate_api_contract.py --mission {n} --json
+python .sdda/sdda.py validate-api-contract --mission {n} --json
 ```
 
 | # | Contrôle | Classe si KO |
@@ -461,7 +461,7 @@ rien n'a évaluée, que la divergence de schémas soit assumée ou non.
 ### 5.4 — ORCH GATE (G6)
 
 ```bash
-python .sdda/python/sdda_scripts/eval_runner.py --mission {n} --level L5,L7 --json \
+python .sdda/sdda.py eval-runner --mission {n} --level L5,L7 --json \
   > workspace/.sys/.validation/{n}-G6-orch.json
 ```
 
@@ -496,7 +496,7 @@ FIX: lire la distribution des trajectoires dans le rapport ; si le graphe est en
 ## STEP 6 — Recalcul d'état + récap
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --mission {n}
+python .sdda/sdda.py compute-status --mission {n}
 ```
 
 ```

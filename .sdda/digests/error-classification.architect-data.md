@@ -1,6 +1,6 @@
 <!-- GÉNÉRÉ par sdda_admin/sync_digests.py — ne pas éditer à la main.
      Source : la fiche .sdda/agents/architect-data.md + rules/error-classification.md
-     Régénérer : python .sdda/python/sdda_admin/sync_digests.py -->
+     Régénérer : python .sdda/sdda.py sync-digests -->
 
 # Digest — classes d'erreur de `architect-data`
 

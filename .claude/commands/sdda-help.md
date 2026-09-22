@@ -45,9 +45,9 @@ Pour la créer : /sdda-mission {Name}   (ou /sdda-full {Name} pour enchaîner to
 ## STEP 2 — Collecte d'état (déterministe, 0 LLM)
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py [--mission {n}] --json
-python .sdda/python/sdda_scripts/sdda_state.py status [--mission {n}] --json
-python .sdda/python/sdda_scripts/human_tasks.py [--mission {n}] --json     # ce qui attend un humain
+python .sdda/sdda.py compute-status [--mission {n}] --json
+python .sdda/sdda.py state status [--mission {n}] --json
+python .sdda/sdda.py human-tasks [--mission {n}] --json     # ce qui attend un humain
 ```
 
 Échec script → fallback : recommander `/sdda-status` et inviter à diagnostiquer.

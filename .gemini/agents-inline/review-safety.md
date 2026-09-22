@@ -44,9 +44,9 @@ Read :
 
 Exécute (0 token) et lis les rapports :
 ```bash
-python .sdda/python/sdda_scripts/scan_secrets.py --paths workspace/prompts workspace/traces workspace/datasets workspace/src
-python .sdda/python/sdda_scripts/scan_pii.py --mission {n} --target vectorstore
-python .sdda/python/sdda_scripts/audit_tool_scope.py --ir workspace/.sys/.ir/{n}-system.ir.json --src workspace/src
+python .sdda/sdda.py scan-secrets --paths workspace/prompts workspace/traces workspace/datasets workspace/src
+python .sdda/sdda.py scan-pii --mission {n} --target vectorstore
+python .sdda/sdda.py audit-tool-scope --ir workspace/.sys/.ir/{n}-system.ir.json --src workspace/src
 ```
 
 Un scan non exécutable est un finding, pas une excuse : `[SAFETY_SCAN_UNAVAILABLE]`, serious.

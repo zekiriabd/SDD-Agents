@@ -12,8 +12,8 @@ contexte, et une classe qu'il émet sans l'avoir dans son digest est une classe
 qu'il aura inventée.
 
 Usage :
-    python .sdda/python/sdda_admin/sync_digests.py
-    python .sdda/python/sdda_admin/sync_digests.py --check   # CI
+    python .sdda/sdda.py sync-digests
+    python .sdda/sdda.py sync-digests --check   # CI
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ UNIVERSAL = ["INVALID_ARG", "PACK_UNUSABLE", "STACK_MISSING"]
 
 HEADER = """<!-- GÉNÉRÉ par sdda_admin/sync_digests.py — ne pas éditer à la main.
      Source : la fiche .sdda/agents/{agent}.md + rules/error-classification.md
-     Régénérer : python .sdda/python/sdda_admin/sync_digests.py -->
+     Régénérer : python .sdda/sdda.py sync-digests -->
 
 # Digest — classes d'erreur de `{agent}`
 
@@ -147,7 +147,7 @@ def main() -> int:
                 print(f"       périmés   : {', '.join(drift[:10])}")
             if orphans:
                 print(f"       orphelins : {', '.join(p.name for p in orphans[:10])}")
-            print("FIX: python .sdda/python/sdda_admin/sync_digests.py")
+            print("FIX: python .sdda/sdda.py sync-digests")
             return 1
         print(f"  ok — {len(known)} digests à jour")
         return 0

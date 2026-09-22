@@ -14,9 +14,9 @@ disque — MISSION, chaque CAP, la topologie (`.md` **et** `.mmd`), `STACK.md`, 
 schéma d'outil laisserait l'IR se déclarer frais tout en décrivant autre chose.
 
 Usage :
-    python check_ir_freshness.py --mission 1
-    python check_ir_freshness.py --mission 1 --json
-    python check_ir_freshness.py                 # toutes les MISSIONs compilées
+    python .sdda/sdda.py check-ir-freshness --mission 1
+    python .sdda/sdda.py check-ir-freshness --mission 1 --json
+    python .sdda/sdda.py check-ir-freshness                 # toutes les MISSIONs compilées
 
 Exit : 0 = frais · 1 = périmé (ou IR absent)
 """
@@ -80,7 +80,7 @@ def check(root: Path, numbers: list[int], report: Report) -> list[dict[str, Any]
         states.append(state)
         if state["missing"]:
             report.error("IR_NOT_FOUND", f"MISSION {number} : IR `{state['ir']}` absent",
-                         f"compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {number}", state["ir"])
+                         f"compiler : python .sdda/sdda.py ir-compiler --mission {number}", state["ir"])
             continue
         for dimension, details in sorted(state["moved"].items()):
             report.error("IR_STALE", f"MISSION {number} : `{dimension}` a bougé — {', '.join(details[:5])}",
@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
                          if p.stem.split("-", 1)[0].isdigit())
         if not numbers:
             report.error("IR_NOT_FOUND", "aucun IR compilé dans workspace/.sys/.ir/",
-                         "compiler : python .sdda/python/sdda_scripts/ir_compiler.py --mission {n}", str(paths.ir_dir(root)))
+                         "compiler : python .sdda/sdda.py ir-compiler --mission {n}", str(paths.ir_dir(root)))
             return finish(report, args)
 
     states = check(root, numbers, report)

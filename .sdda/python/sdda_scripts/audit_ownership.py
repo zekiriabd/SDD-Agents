@@ -25,9 +25,9 @@ la profondeur du chemin applicatif appartient à la fiche de langage, pas à cet
 matrice (cf. `rules/ownership.md`).
 
 Usage :
-    python audit_ownership.py --mission 1 --phase 4
-    python audit_ownership.py --declared-only --json   # cohérence de loader.yml seule
-    python audit_ownership.py --agent dev-agent --wrote workspace/prompts/x.system.md
+    python .sdda/sdda.py audit-ownership --mission 1 --phase 4
+    python .sdda/sdda.py audit-ownership --declared-only --json   # cohérence de loader.yml seule
+    python .sdda/sdda.py audit-ownership --agent dev-agent --wrote workspace/prompts/x.system.md
 """
 from __future__ import annotations
 

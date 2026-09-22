@@ -84,7 +84,7 @@ supprimer le RAG réduit la surface d'attaque, il ne l'annule pas.
 ## 5. Commande de smoke
 
 ```bash
-python .sdda/python/sdda_scripts/compute_status.py --json
+python .sdda/sdda.py compute-status --json
 #   -> G4 absente du plan de gates ; aucun retriever dans l'IR. exit 0.
 ```
 

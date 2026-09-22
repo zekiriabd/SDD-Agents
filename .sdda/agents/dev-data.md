@@ -98,7 +98,7 @@ déclaré. Une condition manquante est `[DATA_ACCESS_ENVELOPE_MISSING]`, bloquan
 ## STEP 6 — Vérification locale
 
 ```bash
-python .sdda/python/sdda_scripts/validate_envelope.py --mission {n} --src workspace/src/data
+python .sdda/sdda.py validate-envelope --mission {n} --src workspace/src/data
 ```
 (0 token : présence des six clés, AST parser branché, aucun `retry` sur
 écriture non idempotente, aucune chaîne de connexion en clair.)

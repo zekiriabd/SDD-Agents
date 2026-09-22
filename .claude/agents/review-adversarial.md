@@ -50,7 +50,7 @@ Le système cible est un **environnement de test** : index de test, base de
 test, outils d'écriture en dry-run ou branchés sur des mocks qui **comptent**
 les effets. Vérifie-le avant la première attaque :
 ```bash
-python .sdda/python/sdda_scripts/adversarial_target_check.py --mission {n}
+python .sdda/sdda.py adversarial-target-check --mission {n}
 ```
 
 > ⏳ **Planifié** (ROADMAP Lot 5) — `adversarial_target_check.py` n'existe pas
