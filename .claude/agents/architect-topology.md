@@ -20,9 +20,13 @@ au roster déclaré, dessiner le graphe, poser les bornes, estimer le budget, et
 produire les contrats.
 
 > **Tu ne choisis pas l'architecture** (PHILOSOPHY P7). Le nombre d'agents, leurs
-> rôles, leurs responsabilités, leurs outils et leurs modèles sont écrits dans
-> `## 2. Roster déclaré` par l'architecte, et le pattern d'orchestration est
-> choisi dans `STACK.md`. Ton travail commence **après** cette décision.
+> rôles, leurs responsabilités, leurs outils et leurs modèles sont écrits par
+> l'architecte — dans `workspace/stack/topology/{n}-roster.yml` (forme
+> recommandée, `/sdda-roster {n}`), ou à défaut dans `## 2. Roster déclaré` de
+> la topologie — et le pattern d'orchestration est choisi dans `STACK.md`. Ton
+> travail commence **après** cette décision. Si le manifeste existe, tu le
+> recopies dans `## 2. Roster déclaré` **tel quel** : une seule source, jamais
+> deux (`[ARCH_ROSTER_DUPLICATE_SOURCE]` sinon).
 
 Ce que tu apportes, et que personne d'autre n'apporte : **le chiffrage avant la
 construction.** Une topologie à $0.40 l'appel pour un produit qui en facture
@@ -55,7 +59,10 @@ Read **uniquement** :
 - `workspace/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
 - `workspace/stack/STACK.md` — sections `## Active Agent Framework`,
   `## Active Orchestration Pattern`, `## Active RAG Pattern`,
-  `## Active Data Access`, `## Runtime Models`, `## Project Config`.
+  `## Active Data Access`, `## Runtime Models`, `## Project Config`,
+  `## Active Agent Topology` (`RosterManifestRoot`, `RosterManifests`).
+- `workspace/stack/topology/{n}-roster.yml` — le roster déclaré, s'il existe.
+  Validé **avant** ton spawn par `roster.py validate` : tu le reçois complet.
 - `workspace/.sys/.context/packs/architect-topology.md` — ton pack de patterns,
   tranché depuis `.sdda/docs/ORCHESTRATION-PATTERNS.md` et
   `.sdda/registry/patterns.registry.json`.

@@ -53,9 +53,19 @@ python .sdda/python/sdda_scripts/compute_status.py [--mission {n}] --json
 # Fraîcheur des tuples d'épinglage (prompt, model, index, tool_schema, dataset)
 python .sdda/python/sdda_scripts/check_baseline_freshness.py [--mission {n}] --json
 
-# Dernier run et bypasses
+# Dernier run et bypasses (+ items par phase : agents payés / sautés)
 python .sdda/python/sdda_scripts/sdda_state.py status [--mission {n}] --json
+
+# File des tâches HUMAINES — ce qu'aucun agent n'a le droit de faire
+python .sdda/python/sdda_scripts/human_tasks.py [--mission {n}] --json
 ```
+
+`human_tasks.py` dérive du disque ce sur quoi le pipeline attend **une
+personne**, jamais un agent : le roster à déclarer ou compléter (P7), les
+labels humains d'un juge LLM (P9), l'ADR qu'une décision de `STACK.md` exige,
+et les gates G5/G6/G8 **jaunes** que quelqu'un doit assumer ou corriger. Un
+pipeline agentic se bloque rarement sur du code ; il se bloque sur une
+décision que personne n'a listée.
 
 Ce que `compute_status.py` applique :
 
@@ -92,7 +102,19 @@ MISSION 3-Onboarding                                              Draft
   gates       G0 🔴 [MISSION_INCOMPLETE] 2 <à préciser> résiduels
 
 Total : {M} MISSION(s) · {C} CAPs · {A} Approved · {B} Blocked · {S} résultat(s) périmé(s)
+
+Tâches humaines : 3 (2 bloquantes)
+  ⚠️ [roster  ] MISSION 2 — Compléter le manifeste de roster (4 `<à préciser>`)
+       → éditer workspace/stack/topology/2-roster.yml, puis roster.py validate --mission 2
+  ⚠️ [findings] MISSION 1 — Assumer ou corriger le jaune G5 sur `1-2-ExplainInvoiceLine`
+       → corriger puis relancer la gate G5 ; ou l'assumer nominativement par --force
+     [labels  ] MISSION 1 — Labelliser 12 item(s) pour le juge `groundedness`
+       → écrire des paires {id, human, judge} dans workspace/datasets/calibration/groundedness-v1.jsonl
 ```
+
+Le bloc `Tâches humaines` est la sortie texte de `human_tasks.py`, reprise
+telle quelle ; `aucune` quand la file est vide. Ordre stable : roster, labels,
+adr, findings — puis MISSION, puis référence.
 
 ### Mode mono (`/sdda-status {n}`)
 
@@ -115,7 +137,12 @@ MISSION 1-SupportAssistant                                        Evaluated  �
   datasets    golden 120 · holdout 40 · calibration 50 (2 juges : 1 calibré, 1 advisory) · adversarial 41
   traces      workspace/traces/runs/ — 187 runs · dernier 2026-09-19T14:02Z
   bypasses    G5 jaune assumé (--force, 2026-09-19, jdoe, « variance connue, dataset v2 en cours »)
+  dernier run 2026-09-19T14:02Z /sdda-build · build_agents items 3/4 pass (routing 🔴)
   rapports    .sys/.validation/1-G0..G7-*.json · evals/reports/1-{run}.md
+
+  Tâches humaines : 1 (0 bloquante)
+     [labels  ] Labelliser 12 item(s) pour le juge `groundedness`
+       → écrire des paires {id, human, judge} dans workspace/datasets/calibration/groundedness-v1.jsonl
 ```
 
 Cas à flagger explicitement (`⚠️`) :
@@ -129,6 +156,8 @@ Cas à flagger explicitement (`⚠️`) :
 | juge advisory | `⚠️ juge {g} advisory (κ {x} < {min}) — la CAP ne peut pas être 🟢` |
 | CAP `Blocked` | classe `[CLASS]` portée + item/rapport |
 | confiance escaladée | `⚠️ [CONFIDENCE_ESCALATION] CAP 1-3 high sous MISSION medium` |
+| roster absent ou à trous (G2 non verte) | `⚠️ [roster] MISSION 2 — Déclarer le roster d'agents → /sdda-roster 2` |
+| tâche humaine bloquante | la ligne `⚠️` de `human_tasks.py`, telle quelle |
 
 `--gates` ajoute, sous chaque gate, la liste des contrôles (✅/🔴, classe,
 fichier:section).
@@ -141,7 +170,9 @@ Déduite de l'état dérivé de la MISSION la plus avancée non `Approved` :
 
 | État | Ligne |
 |---|---|
+| une tâche humaine **bloquante** | `→ {son how}` — elle prime : aucune commande ne la fera à la place de l'humain |
 | `Draft` (G0 🔴) | `→ /sdda-mission {n} pour compléter la MISSION` |
+| `Specified` (G1 ✅), roster absent | `→ /sdda-roster {n} puis /sdda-topology {n}` |
 | `Specified` (G1 ✅) | `→ /sdda-topology {n}` |
 | `Architected` | `→ /sdda-build {n} (ou /sdda-full {n} --from-phase build)` |
 | `Implemented` / `Tested` | `→ /sdda-eval {n}` puis `/sdda-review {n}` |
@@ -157,7 +188,9 @@ Déduite de l'état dérivé de la MISSION la plus avancée non `Approved` :
 
 - **Lecture seule.** Aucun Write/Edit, aucun agent, aucune Q/R.
 - **Délégation pure** vers `compute_status.py`, `check_baseline_freshness.py`,
-  `sdda_state.py` (déterministes, 0 token).
+  `sdda_state.py`, `human_tasks.py` (déterministes, 0 token).
+- **Les tâches humaines sont listées, jamais faites** : la commande ne
+  scaffolde pas un roster, ne labellise rien, n'écrit aucun ADR.
 - **Jamais la ligne `Status:`** comme source : toujours les rapports de gate.
 - **Trois couleurs, jamais pass/fail** ; la variance est toujours affichée à
   côté du score (P3).

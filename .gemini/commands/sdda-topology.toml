@@ -56,6 +56,20 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    CAUSE: [CAP_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/{n}-G1-cap.json vert
    FIX: relancer /sdda-caps {n} (G1 doit être verte : on n'architecture pas des AC non mesurables)
    ```
+   3.bis **Roster déclaré** — si un manifeste existe, il doit être complet
+   **avant** de payer l'architecte :
+   ```bash
+   python .sdda/python/sdda_scripts/roster.py validate --mission {n} --if-present
+   ```
+   Exit 1 → STOP + ERROR (les findings du script, `fichier:$.chemin`) :
+   ```
+   ERROR: /sdda-topology {n} — roster incomplet
+   CAUSE: [ARCH_ROSTER_PLACEHOLDER] `$.subagents[0].tier` est encore `<à préciser>` — workspace/stack/topology/{n}-roster.yml
+   FIX: l'architecte tranche, puis /sdda-roster {n} --validate ; le framework ne comble aucun trou (P7)
+   ```
+   Manifeste absent → WARN `[ARCH_ROSTER_MANIFEST_MISSING]`, continuer : le
+   repli `## 2. Roster déclaré` reste accepté par G2 (et `/sdda-roster {n}`
+   est la forme recommandée).
 4. Lire `## Project Config` : `MaxParallel`, `MaxAgentsWarnAt`,
    `CostPerRunTargetUsd`, `CostPerRunHardCapUsd`, `LatencyP95TargetMs`,
    `TokenCeilingPerRun`, `MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`,
@@ -116,6 +130,8 @@ des contrats pour des composants qui n'existeront pas.
 Prompt d'invocation :
 ```
 Concevoir la topologie de la MISSION {n}-{MissionName} à partir de ses {C} CAPs.
+Roster DÉCLARÉ : {workspace/stack/topology/{n}-roster.yml (validé) | aucun manifeste — repli ## 2. Roster déclaré}.
+Le recopier tel quel ; ne renommer, n'ajouter ni ne retirer aucun agent (P7).
 Template : .sdda/templates/topology.template.md. Graphe : {n}-topology.mmd (Mermaid).
 Procédure imposée (AGENT-ROSTER.md §2) : partir de UN agent + des outils ; pour chaque
 CAP demander « un outil suffit-il ? » ; n'escalader qu'avec une des 5 raisons closes de P7 ;

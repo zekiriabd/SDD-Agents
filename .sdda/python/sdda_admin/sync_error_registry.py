@@ -66,8 +66,8 @@ NOT_A_CLASS = {
     "REDACTED",
     # préfixes de ligne de sortie chat
     "AGENT", "ANALYSIS", "BOOTSTRAP", "BUILD", "CAPS", "EVAL", "MEMORY",
-    "MISSION", "ORCHESTRATION", "PROMPT", "RETRIEVAL", "REVIEW", "SAFETY",
-    "STATUS", "TESTS", "TOOL", "TOOLS", "TOPOLOGY", "TRACE",
+    "MISSION", "ORCHESTRATION", "PROMPT", "RETRIEVAL", "REVIEW", "ROSTER",
+    "SAFETY", "STATUS", "TESTS", "TOOL", "TOOLS", "TOPOLOGY", "TRACE",
 }
 
 MARKER = "## 6. Registre canonique"

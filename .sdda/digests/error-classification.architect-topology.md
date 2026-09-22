@@ -17,6 +17,7 @@ FIX: <l'action précise qui débloque>
 
 ## Classes propres à cet agent
 
+- `[ARCH_ROSTER_DUPLICATE_SOURCE]`
 - `[ARCH_ROSTER_MUTATED]`
 - `[BUDGET_EXCEEDED_ESTIMATE]`
 - `[CAP_GAP]`
