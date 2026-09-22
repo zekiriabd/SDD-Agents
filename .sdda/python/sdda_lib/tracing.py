@@ -134,14 +134,27 @@ OPERATIONS: dict[str, str] = {
 }
 
 #: Spans propres au framework, reconnus par PRÉFIXE de nom : ils n'ont pas de
-#: `gen_ai.operation.name` parce que semconv n'en définit pas.
+#: `gen_ai.operation.name` parce que semconv n'en définit pas. Le plus long
+#: préfixe gagne (`sdda.build.agent` avant `sdda.run`), sans quoi l'ordre de
+#: cette table déciderait du rôle d'un span.
 SDDA_SPANS: tuple[tuple[str, str], ...] = (
     (RUN_SPAN, "run"),
+    ("sdda.build.agent", "build_agent"),
     ("sdda.retrieve", "retrieval"),
     ("sdda.data.query", "data_query"),
     ("sdda.guardrail", "guardrail"),
     ("sdda.gate", "gate"),
 )
+
+#: Attributs des spans de CONSTRUCTION (`sdda.build.agent`) : ce que coûte le
+#: framework lui-même, agent par agent.
+A_BUILD_AGENT = "sdda.build.agent"
+A_BUILD_PHASE = "sdda.build.phase"
+A_BUILD_ITEM = "sdda.build.item"
+A_BUILD_TIER = "sdda.build.tier"
+A_BUILD_ITERATIONS = "sdda.build.iterations"
+A_BUDGET_BYTES = "sdda.build.budget_bytes"
+A_BUDGET_BYTES_USED = "sdda.build.budget_bytes_used"
 
 #: Écart toléré entre le coût déclaré et le coût recalculé, avant de le signaler.
 #: Une part d'écart est légitime (arrondis, tarif de cache d'écriture propre au
@@ -367,10 +380,9 @@ def span_role(span: dict[str, Any]) -> str | None:
     if operation in OPERATIONS:
         return OPERATIONS[operation]
     name = str(span.get("name") or "")
-    for prefix, role in SDDA_SPANS:
-        if name == prefix or name.startswith(prefix + " "):
-            return role
-    return None
+    matches = [(prefix, role) for prefix, role in SDDA_SPANS
+               if name == prefix or name.startswith(prefix + " ")]
+    return max(matches, key=lambda m: len(m[0]))[1] if matches else None
 
 
 def _int(value: Any) -> int | None:
@@ -464,6 +476,15 @@ class TraceSummary:
     bounds_exceeded: list[str] = field(default_factory=list)
     complete: bool = False
     problems: list[str] = field(default_factory=list)
+    # --- Construction : ce que le framework coûte, agent par agent ------------
+    #: Le coût de construction est DÉCLARÉ par le harnais, jamais recalculé : nous
+    #: ne voyons pas les tokens d'un sous-agent. Il vit donc dans un champ à part
+    #: de `cost_usd`, qui lui vient des tokens du produit. Les additionner ferait
+    #: passer un chiffre invérifiable pour une mesure.
+    build_cost_usd: float = 0.0
+    build_agents: dict[str, int] = field(default_factory=dict)
+    build_iterations: int = 0
+    budget_bytes_used: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -478,6 +499,8 @@ class TraceSummary:
             "costDeclaredUsd": round(self.cost_declared_usd, 6),
             "latencyMs": self.latency_ms, "documents": self.documents,
             "boundsExceeded": self.bounds_exceeded,
+            "buildCostUsd": round(self.build_cost_usd, 6), "buildAgents": self.build_agents,
+            "buildIterations": self.build_iterations, "budgetBytesUsed": self.budget_bytes_used,
             "complete": self.complete, "problems": self.problems,
         }
 
@@ -602,6 +625,22 @@ def summarize(path: Path) -> TraceSummary:
         elif role == "retrieval":
             ids = attrs.get(A_RETRIEVAL_IDS)
             summary.documents += len(ids) if isinstance(ids, list) else 0
+        elif role == "build_agent":
+            agent = _attr_str(attrs, A_BUILD_AGENT) or str(span.get("name") or "").split(" ", 1)[-1]
+            summary.build_agents[agent] = summary.build_agents.get(agent, 0) + 1
+            declared = attrs.get(A_COST_DECLARED)
+            if isinstance(declared, (int, float)) and not isinstance(declared, bool):
+                summary.build_cost_usd += float(declared)
+            summary.build_iterations += _int(attrs.get(A_BUILD_ITERATIONS)) or 0
+            summary.budget_bytes_used = max(summary.budget_bytes_used,
+                                            _int(attrs.get(A_BUDGET_BYTES_USED)) or 0)
+            budget = _int(attrs.get(A_BUDGET_BYTES))
+            used = _int(attrs.get(A_BUDGET_BYTES_USED))
+            if budget and used and used > budget:
+                summary.problems.append(
+                    f"`{agent}` a consommé {used} octets de contexte pour un budget de {budget} "
+                    "(loader.yml) — au-delà, la sortie n'est pas plus courte, elle est tronquée "
+                    "et confiante")
 
     # Le coût déclaré n'est pas une mesure ; l'écart avec le coût recalculé en
     # est une. Au-delà du seuil, les tokens et le chiffre annoncé ne parlent plus

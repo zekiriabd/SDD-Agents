@@ -338,7 +338,21 @@ Puis, **par instance** de la vague :
 ```bash
 python .sdda/sdda.py state set-item --phase build_agents --item {agent} \
   --status {pass|fail} --inputs-hash "$H_{agent}"
+
+# Ce que cette instance a coûté — la facture de CONSTRUCTION, agent par agent
+python .sdda/sdda.py build-trace agent --agent dev-agent --item {agent} \
+  --phase build_agents --tier deep --status {OK|ERROR} \
+  --cost-usd {facturé} --duration-ms {mesuré} --iterations {tours de build_loop} \
+  --budget-bytes {loader.yml} --budget-bytes-used {context_pack check}
 ```
+
+Le span atterrit dans `workspace/traces/runs/$SDDA_RUN_ID.jsonl`, au même format
+que la trace du produit. C'est ce que `review-cost` lit pour dire où part
+l'argent de la construction, et c'est la seule façon de voir qu'un agent a
+bouclé trois fois pour un résultat que le premier tour donnait. Un
+`--budget-bytes-used` au-dessus du budget rend un WARN
+`[CONTEXT_BUDGET_EXCEEDED]` : au-delà, la sortie n'est pas plus courte, elle est
+tronquée et confiante.
 
 `fail` : ERROR de l'agent, ou l'un des trois post-steps rouge sur ses fichiers.
 `pass` : le code est là et propre — **pas** « l'agent est évalué » : G5 (4.3)
@@ -497,6 +511,14 @@ FIX: lire la distribution des trajectoires dans le rapport ; si le graphe est en
 
 ```bash
 python .sdda/sdda.py compute-status --mission {n}
+```
+
+Chaque gate franchie laisse aussi son span, pour que la trace du run porte le
+verdict à côté de ce qu'il a coûté :
+
+```bash
+python .sdda/sdda.py build-trace gate --gate {G3|G4|G5|G6} --verdict {green|yellow|red} \
+  [--error-class {CLASS}]
 ```
 
 ```

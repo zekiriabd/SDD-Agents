@@ -431,6 +431,20 @@ recalculer n'est pas une mesure, c'est une déclaration ; l'écart entre les deu
 est signalé, parce que c'est ce genre d'écart qui fait passer un run sous un
 plafond qu'il dépasse.
 
+**La construction laisse sa propre trace**, dans le même fichier et au même
+format : un span `sdda.build.agent {agent}` par invocation de Developer Agent
+(coût facturé, latence, tours de `build_loop`, contexte chargé vs le
+`budget_bytes` de `loader.yml`), un span `sdda.gate {gate}` par franchissement,
+et un span racine écrit par `sdda_state end-run`, seul à connaître le début, la
+fin et le cumul du run. C'est la facture que l'utilisateur voit en premier, et
+la seule que `MaxCostPerRun` prétend plafonner.
+
+Ce coût de construction est **déclaré par le harnais**, pas recalculé : nous ne
+voyons pas les tokens d'un sous-agent. Il reste donc dans un champ distinct de
+celui du produit. Les additionner ferait passer un chiffre invérifiable pour une
+mesure — et c'est exactement la confusion que §6 impose déjà d'éviter entre
+*build models* et *runtime models*.
+
 Sans trace, un système non déterministe n'est pas débogable : il n'y a pas de
 stack trace à lire. Invariant `trace-emitted-per-run`.
 

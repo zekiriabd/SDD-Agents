@@ -343,6 +343,14 @@ python .sdda/sdda.py state end-run --run-id $RUN_ID --status $FINAL_STATUS
 python .sdda/sdda.py compute-status --mission {n}
 ```
 
+`end-run` **ferme aussi la trace de construction** : il écrit le span racine
+`sdda.run` de `workspace/traces/runs/$RUN_ID.jsonl`, sous lequel se rangent les
+spans `sdda.build.agent` et `sdda.gate` émis en cours de route. C'est le seul
+endroit qui connaît le début, la fin et le cumul du run. Sans cet appel, la
+trace n'a pas de racine et `postflight_trace_present` la refuse — un run de
+construction sans trace n'est pas plus débogable qu'un run de produit sans
+trace.
+
 Émettre **un seul bloc** :
 
 ```
@@ -376,8 +384,10 @@ ACCEPTATION (phase 8)   {non exécutée (G7 absente) |}
   Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID}}
 
 Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--force) · …}  → workspace/.sys/.audit/bypasses.jsonl
-Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {tokens} tokens · {durée}
-Run trace          : {RUN_ID}
+Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {durée} · top : {agent} ${x}
+                       (déclaré par le harnais, jamais recalculé — nous ne voyons pas
+                        les tokens d'un sous-agent ; distinct du coût du produit ci-dessus)
+Run trace          : {RUN_ID} → workspace/traces/runs/{RUN_ID}.jsonl
 
 Prochaine étape :
   - /sdda-status {n}   pour l'état complet dérivé des gates
