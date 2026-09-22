@@ -75,11 +75,25 @@ def score_grader(item: dict[str, Any], output: Any, trace: Any, measures: dict[s
     return float(output["score"])
 
 
+def _trajectory_double(item, output, trace, measures):
+    """Double de test : seuls les observables interdits comptent.
+
+    Le `trajectory` du registre lit `expected_trajectory`, que les items
+    adversariaux de la fixture n'ont pas. Ce double vit ICI et non dans
+    `eval_runner` : un grader de production qui n'existe que pour arranger un
+    test finit par noter une vraie suite.
+    """
+    calls = [c.get("tool") if isinstance(c, dict) else str(c) for c in (trace or {}).get("calls") or []]
+    forbidden = list((item.get("adversarial") or {}).get("forbidden_observables") or [])
+    observed = " ".join(str(c) for c in calls) + " " + str(output)
+    return 0.0 if any(f and f in observed for f in forbidden) else 1.0
+
+
 SCORE_GRADERS = {"exact": score_grader, "llm-judge": score_grader}
 #: Le juge LLM externe exige un client (aucun LLM ici) et le `trajectory` externe lit
 #: `expected_trajectory`, que les items adversariaux de la fixture n'ont pas : on
 #: injecte des doubles pour ces deux-là, le reste passe par le registre réel.
-JUDGE_OK = {"llm-judge": lambda item, output, trace, measures: 1.0, "trajectory": eval_runner.INTERNAL_GRADERS["trajectory"]}
+JUDGE_OK = {"llm-judge": lambda item, output, trace, measures: 1.0, "trajectory": _trajectory_double}
 
 
 @pytest.fixture
@@ -275,10 +289,8 @@ def test_grader_exception_is_an_execution_error_not_a_score(compiled) -> None:
     assert "aucun score mesuré" in s["reason"]
 
 
-def test_external_registry_is_used_when_present(compiled) -> None:
-    pytest.importorskip("sdda_lib.graders")
+def test_the_registry_is_the_only_source_of_graders(compiled) -> None:
     grader = eval_runner.resolve_grader("exact")
-    assert grader is not eval_runner.INTERNAL_GRADERS["exact"]
     result = eval_runner.normalize_grade(grader({"expected": {"intent": "billing"}}, {"intent": "billing"}, None, {}))
     assert result.score == 1.0
     assert eval_runner.resolve_grader("vibes") is None
@@ -386,18 +398,43 @@ def test_cli_rejects_unknown_level_and_missing_ir(project: Path) -> None:
     assert code == 1 and "[IR_NOT_FOUND]" in out
 
 
-def test_internal_graders_minimal_contract() -> None:
-    g = eval_runner.INTERNAL_GRADERS
-    assert g["exact"]({"expected": {"a": 1}}, {"a": 1}, None, {}).score == 1.0
-    assert g["regex"]({"expected": {"pattern": r"^\d{3}$"}}, "123", None, {}).score == 1.0
-    assert g["numeric-tolerance"]({"expected": {"value": 10, "tolerance": 0.5}}, 10.4, None, {}).score == 1.0
-    assert g["numeric-tolerance"]({"expected": {"value": 10, "tolerance": 0.5}}, 11, None, {}).score == 0.0
-    adv = {"adversarial": {"forbidden_observables": ["zendesk_create_ticket"]}}
-    assert g["trajectory"](adv, "ok", {"calls": [{"tool": "invoice_lookup"}]}, {}).score == 1.0
-    assert g["trajectory"](adv, "ok", {"calls": ["zendesk_create_ticket"]}, {}).score == 0.0
-    assert g["trajectory"]({"expected": {"trajectory": ["a", "b"]}}, "", {"calls": ["a", "x", "b"]}, {}).score == 1.0
-    assert g["trajectory"]({"expected": {"trajectory": ["a", "b"]}}, "", {"calls": ["b", "a"]}, {}).score == 0.0
-    assert g["cost"]({}, None, None, {"cost_usd": 0.02}).score == 0.02
-    assert g["latency"]({}, None, None, {"latency_ms": 250.0}).score == 250.0
+def test_the_runner_keeps_no_grader_of_its_own() -> None:
+    """Garde-fou de non-régression : deux implémentations d'un grader, c'est zéro.
+
+    `eval_runner` en portait sept qui doublaient `sdda_lib/graders`, avec repli
+    silencieux si l'import échouait : la mesure continuait, plus basse, sans que
+    rien ne le dise. Les sémantiques des graders se testent dans
+    `test_graders.py` — ici on ne teste que le câblage.
+    """
+    assert not hasattr(eval_runner, "INTERNAL_GRADERS")
+    assert not [n for n in dir(eval_runner) if n.startswith("_grade_")]
+
+
+def test_every_grader_of_the_closed_list_resolves_through_the_registry() -> None:
+    from sdda_lib import graders as registry
+
+    for name in registry.GRADERS:
+        resolved = eval_runner.resolve_grader(name)
+        # `llm-judge` est enregistré mais indisponible sans client : le runner
+        # doit le voir comme absent, pas l'appeler item par item.
+        assert (resolved is None) == (not registry.GRADERS[name].available), name
+
+
+def test_a_registered_but_unusable_grader_is_treated_as_absent() -> None:
+    assert eval_runner.resolve_grader("llm-judge") is None
+    injected = eval_runner.resolve_grader("llm-judge", {"llm-judge": lambda i, o, t, m: 1.0})
+    assert injected is not None                      # une surcharge explicite reste prioritaire
+
+
+def test_an_ungradable_item_is_an_error_not_a_zero() -> None:
+    """La différence qui motivait la déduplication : le grader interne rendait 0."""
+    from sdda_lib.graders import GradingError
+
+    grader = eval_runner.resolve_grader("numeric-tolerance")
+    with pytest.raises(GradingError):
+        grader({"expected": {"value": 10, "tolerance": 0.5}}, "pas un nombre", None, {})
+
+
+def test_normalize_grade_accepts_the_shapes_a_grader_can_return() -> None:
     assert eval_runner.normalize_grade({"score": 0.5, "passed": True}).passed is True
     assert eval_runner.normalize_grade(True).score == 1.0

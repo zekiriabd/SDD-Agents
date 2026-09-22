@@ -46,8 +46,9 @@ from typing import Any, Callable, Protocol
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sdda_lib import graders as graders_registry  # noqa: E402 — LE registre, plus de repli interne
 from sdda_lib import hashing, markdown_io, paths  # noqa: E402
-from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.errors import Report, SddaError  # noqa: E402
 from sdda_lib.eval_pinning import Baseline, PinTuple, current_pins, load_baselines  # noqa: E402
 from sdda_lib.eval_stats import (  # noqa: E402
     GLYPH,
@@ -150,127 +151,45 @@ class Grade:
 GraderFn = Callable[[dict[str, Any], Any, Any, dict[str, float]], Any]
 
 
-def _calls_of(trace: Any) -> list[str]:
-    """Noms des appels d'outils d'une trace, quel que soit son format."""
-    if isinstance(trace, dict):
-        trace = trace.get("calls") or trace.get("tool_calls") or []
-    out: list[str] = []
-    for call in trace or []:
-        if isinstance(call, str):
-            out.append(call)
-        elif isinstance(call, dict):
-            out.append(str(call.get("tool") or call.get("name") or ""))
-    return out
-
-
-def _grade_exact(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    expected = item.get("expected")
-    return Grade(1.0 if output == expected else 0.0, detail={"expected": expected})
-
-
-def _grade_regex(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    expected = item.get("expected")
-    pattern = expected.get("pattern") if isinstance(expected, dict) else expected
-    text = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, sort_keys=True)
-    ok = bool(pattern) and re.search(str(pattern), text) is not None
-    return Grade(1.0 if ok else 0.0, detail={"pattern": pattern})
-
-
-def _grade_numeric(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    expected = item.get("expected") or {}
-    target = expected.get("value") if isinstance(expected, dict) else expected
-    tol = float(expected.get("tolerance", 0.0)) if isinstance(expected, dict) else 0.0
-    value = output.get("value") if isinstance(output, dict) else output
-    try:
-        ok = abs(float(value) - float(target)) <= tol
-    except (TypeError, ValueError):
-        ok = False
-    return Grade(1.0 if ok else 0.0, detail={"target": target, "tolerance": tol})
-
-
-def _grade_trajectory(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    """Séquence d'appels attendue (sous-séquence) et observables interdits absents."""
-    calls = _calls_of(trace)
-    expected = item.get("expected") or {}
-    wanted = list(expected.get("trajectory") or []) if isinstance(expected, dict) else []
-    forbidden = list((item.get("adversarial") or {}).get("forbidden_observables") or [])
-    observed = " ".join(calls) + " " + (output if isinstance(output, str) else json.dumps(output, ensure_ascii=False))
-    leaked = [f for f in forbidden if f and f in observed]
-    cursor = 0
-    for call in calls:
-        if cursor < len(wanted) and call == wanted[cursor]:
-            cursor += 1
-    ordered = cursor == len(wanted)
-    return Grade(1.0 if ordered and not leaked else 0.0, detail={"calls": calls, "leaked": leaked})
-
-
-def _grade_cost(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    return Grade(measures.get("cost_usd", 0.0))
-
-
-def _grade_latency(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    return Grade(measures.get("latency_ms", 0.0))
-
-
-def _grade_schema(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Grade:
-    """Conformité minimale : clés `required` présentes. Le vrai `schema` vit dans `graders/`."""
-    schema = (item.get("expected") or {}).get("schema") if isinstance(item.get("expected"), dict) else None
-    if not isinstance(schema, dict):
-        return Grade(1.0 if isinstance(output, dict) else 0.0)
-    required = schema.get("required") or []
-    ok = isinstance(output, dict) and all(k in output for k in required)
-    return Grade(1.0 if ok else 0.0, detail={"required": required})
-
-
-INTERNAL_GRADERS: dict[str, GraderFn] = {
-    "exact": _grade_exact,
-    "regex": _grade_regex,
-    "numeric-tolerance": _grade_numeric,
-    "trajectory": _grade_trajectory,
-    "cost": _grade_cost,
-    "latency": _grade_latency,
-    "schema": _grade_schema,
-}
-
-try:  # le paquet `graders/` est écrit en parallèle : on l'utilise s'il existe
-    from sdda_lib.graders import get as _external_grader  # type: ignore
-except Exception:  # ImportError et tout défaut d'un paquet en cours d'écriture
-    _external_grader = None
-
-
 def resolve_grader(name: str, overrides: dict[str, GraderFn] | None = None, config: dict[str, Any] | None = None) -> GraderFn | None:
-    """Priorité : surcharge explicite > registre `sdda_lib.graders` > repli interne.
+    """Priorité : surcharge explicite > registre `sdda_lib.graders`. Pas de repli.
+
+    Ce runner portait naguère sept graders « internes » qui doublaient ceux du
+    paquet, et s'y repliait en silence si l'import échouait. Deux implémentations
+    de `trajectory` notaient donc la même trace différemment — la version interne
+    ignorait les spans OTel, comptait une trace illisible comme un **zéro** au
+    lieu d'une erreur, et faisait ainsi baisser une moyenne pour une raison
+    étrangère à la qualité du système évalué. Un repli invisible sur un grader
+    plus faible est pire qu'une panne : la mesure continue, plus basse, et rien
+    ne le dit.
+
+    Le paquet est maintenant une dépendance dure. Un grader hors liste close, ou
+    enregistré mais inutilisable (`available` faux — un juge LLM sans client),
+    rend `None` : l'appelant émet `[AC_GRADER_UNKNOWN]` et ne mesure rien, ce qui
+    est le seul résultat honnête.
 
     `config` est le `graderConfig` de la suite (mode de trajectoire, tolérance,
-    client de juge…), transmis tel quel au grader externe.
+    client de juge…), transmis tel quel au grader.
     """
     if overrides and name in overrides:
         return overrides[name]
-    if _external_grader is not None:
-        try:
-            external = _external_grader(name)
-        except Exception:  # registre fermé : `[AC_GRADER_UNKNOWN]` levé par le paquet -> repli
-            external = None
-        if external is not None:
-            return _adapt_external(external, config or {})
-    return INTERNAL_GRADERS.get(name)
+    try:
+        grader = graders_registry.get(name)
+    except SddaError:            # [AC_GRADER_UNKNOWN] — la liste est close
+        return None
+    if not getattr(grader, "available", True):
+        return None
+    return _adapt(grader, config or {})
 
 
-def _adapt_external(grader: Any, config: dict[str, Any]) -> GraderFn:
-    """Accepte un objet `.grade(item, output, trace, measures, config)` ou un callable.
+def _adapt(grader: Any, config: dict[str, Any]) -> GraderFn:
+    """`Grader.grade(item, output, trace, measures, config)` vu comme le callable du runner.
 
-    Une `GradingError` (item impossible à noter) remonte telle quelle : le
-    runner la compte en erreur d'exécution, jamais en score de 0.
+    Une `GradingError` (item impossible à noter) remonte telle quelle : la
+    boucle d'exécution la compte en erreur d'item, jamais en score de 0.
     """
-    target = grader.grade if hasattr(grader, "grade") else grader
-
     def _call(item: dict[str, Any], output: Any, trace: Any, measures: dict[str, float]) -> Any:
-        try:
-            return target(item, output, trace, measures, config=config)
-        except TypeError as exc:
-            if "config" not in str(exc) and "positional" not in str(exc):
-                raise
-            return target(item, output, trace, measures)
+        return grader.grade(item, output, trace, measures, config=config)
 
     return _call
 
@@ -469,7 +388,8 @@ def execute_suite(
     if grader is None:
         if report is not None:
             report.error("AC_GRADER_UNKNOWN", f"suite `{sid}` : grader `{grader_name}` indisponible",
-                         "installer sdda_lib/graders ou corriger le grader de l'AC (liste close d'eval-protocol.md §4)", sid)
+                         "corriger le grader de l'AC (liste close d'eval-protocol.md §4), ou fournir ce qu'il exige "
+                         "— un `llm-judge` sans client est enregistré mais inutilisable", sid)
         result.notes.append(f"grader `{grader_name}` indisponible : rien mesuré")
         return result, {}, [], 0
 
