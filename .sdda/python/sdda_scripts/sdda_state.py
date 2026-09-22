@@ -29,6 +29,31 @@ Sous-commandes (les 9 appelants du pipeline) :
     end-run --run-id RID --status partial
     status [--mission 1] --json
 
+Reprise à la granularité de l'AGENT (items de phase) :
+
+    inputs-hash      --mission 1 --phase build_agents --item billing            # sha256:… sur stdout
+    set-item         --phase build_agents --item billing --status pass --inputs-hash sha256:…
+    should-skip-item --phase build_agents --item billing --inputs-hash sha256:…   # exit 0 = SKIP
+    done-items       --phase build_agents                                          # items `pass`, un par ligne
+
+Une phase `build_agents` regroupe N instances de `dev-agent`. Sans items, une
+reprise rejouait la phase entière : trois agents verts repayés parce que le
+quatrième avait échoué. Un item porte le hash de ses ENTRÉES (prompt, entrée IR
+de l'agent) : un item `pass` dont les entrées ont bougé n'est pas sauté — un
+succès sur d'autres entrées n'est pas un succès.
+
+`inputs-hash` calcule ce hash depuis l'IR compilé, pour que la commande n'ait
+pas à le composer à la main (elle se tromperait de champ, et le saut deviendrait
+un pari) :
+
+    build_agents/{agent}   entrée `agents[]` de l'IR + texte du prompt (`promptRef`)
+    build_socle/tools      `tools[]`        build_socle/retrieval  `retrievers[]`
+    build_socle/data       `dataAccess[]`
+    eval/{suite}           entrée `evaluation.suites[]`
+
+Toujours le hash canonique (`sdda_lib.hashing.sha256_struct`) : l'ordre des clés
+de l'IR ne compte pas, son contenu compte.
+
 Les sous-commandes qui rendent UNE valeur (`new-run`, `get-run`,
 `resume-target`) l'écrivent seule sur stdout : elles sont consommées par
 `RUN_ID=$(…)`. Toute diagnostic part sur stderr, jamais dans la valeur.
@@ -46,7 +71,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import paths  # noqa: E402
+from sdda_lib import hashing, paths  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_json, now_iso, run_id_now  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, resolve_root  # noqa: E402
@@ -273,6 +298,146 @@ def add_cost(root: Path, run_id: str, *, usd: float, label: str = "") -> dict[st
     return run
 
 
+# ---------------------------------------------------------------------------
+# Items de phase — la reprise à la granularité de l'agent
+# ---------------------------------------------------------------------------
+#: Phases dont le travail se découpe en items indépendants (une instance
+#: d'agent, une couche du socle). Une phase hors liste n'a pas d'items : la
+#: reprise y reste au niveau de la phase, et `set-item` la refuse.
+ITEMIZED_PHASES: tuple[str, ...] = ("build_socle", "build_agents", "eval")
+
+
+def set_item(root: Path, run_id: str, *, phase: str, item: str, status: str,
+             inputs_hash: str | None = None, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Enregistre le verdict d'UN item d'une phase (un agent, une couche).
+
+    Le hash d'entrées est ce qui rend le saut légitime : `should_skip_item`
+    ne saute un `pass` que si les entrées présentées sont celles qui ont
+    produit ce `pass`.
+    """
+    run = load_run(root, run_id)
+    if run is None:
+        raise KeyError(run_id)
+    if canonical_phase(phase) not in ITEMIZED_PHASES:
+        raise ValueError(phase)
+    event = {"phase": phase, "item": item, "status": status, "at": now_iso(),
+             "inputsHash": inputs_hash, "payload": payload or {}}
+    run.setdefault("items", []).append(event)
+    _write_json(run_path(root, run_id), run)
+    _append_journal(root, {"event": "set-item", "runId": run_id, **event})
+    return run
+
+
+def item_statuses(run: dict[str, Any], phase: str) -> dict[str, dict[str, Any]]:
+    """Dernier verdict connu par item d'une phase : {item: {status, inputsHash, at}}."""
+    canonical = canonical_phase(phase)
+    out: dict[str, dict[str, Any]] = {}
+    for event in run.get("items") or []:
+        if canonical_phase(str(event.get("phase") or "")) != canonical:
+            continue
+        item = str(event.get("item") or "")
+        if item:
+            out[item] = {"status": str(event.get("status") or ""),
+                         "inputsHash": event.get("inputsHash"), "at": event.get("at")}
+    return out
+
+
+def should_skip_item(run: dict[str, Any], phase: str, item: str, inputs_hash: str | None) -> tuple[bool, str]:
+    """(sauter ?, raison). Trois conditions, toutes nécessaires :
+
+    - un verdict `pass` est enregistré pour cet item ;
+    - si un hash d'entrées est présenté, celui enregistré existe et lui est égal
+      (un `pass` sans hash face à un hash présenté n'est pas prouvable : RUN) ;
+    - `warn` et `fail` se rejouent toujours — même règle que les phases.
+    """
+    known = item_statuses(run, phase).get(item)
+    if known is None:
+        return False, "aucun verdict enregistré"
+    if known["status"] != "pass":
+        return False, f"dernier verdict `{known['status']}`"
+    recorded = known.get("inputsHash")
+    if inputs_hash:
+        if not recorded:
+            return False, "pass enregistré sans hash d'entrées : non prouvable"
+        if str(recorded) != str(inputs_hash):
+            return False, f"entrées modifiées ({str(recorded)[:19]}… -> {str(inputs_hash)[:19]}…)"
+    return True, "pass sur les mêmes entrées"
+
+
+#: Items FIXES de `build_socle` : une couche du socle, pas un identifiant de l'IR.
+#: La clé de l'IR dont la couche dépend est ce qui entre dans le hash.
+SOCLE_ITEMS: dict[str, str] = {"tools": "tools", "retrieval": "retrievers", "data": "dataAccess"}
+
+#: Classes rendues par `item_inputs_hash` — nommées ici pour que le registre
+#: d'erreurs les voie (il lit les littéraux, pas les variables).
+CLS_PHASE_NOT_ITEMIZED = "STATE_PHASE_NOT_ITEMIZED"
+CLS_ITEM_UNKNOWN = "STATE_ITEM_UNKNOWN"
+CLS_IR_NOT_FOUND = "IR_NOT_FOUND"
+CLS_AGENT_NOT_IN_IR = "AGENT_NOT_IN_IR"
+
+
+def _agent_key(entry: dict[str, Any]) -> str:
+    return str(entry.get("id") or "")
+
+
+def _agent_matches(entry: dict[str, Any], item: str, mission: str) -> bool:
+    """`agents[].id` est préfixé du numéro de MISSION (`1-billing`) ; la commande
+    passe l'un ou l'autre — `--agent billing` est ce qu'un humain tape."""
+    aid = _agent_key(entry)
+    return aid == item or aid == f"{mission}-{item}"
+
+
+def item_inputs_hash(root: Path, mission: str, phase: str, item: str) -> tuple[str | None, str, str]:
+    """(hash | None, classe d'erreur, détail). Le hash des ENTRÉES d'un item, depuis l'IR.
+
+    Ce qui est haché est ce que l'agent de construction lit pour produire
+    l'item — jamais sa sortie : un hash de la sortie dirait « le code a changé »,
+    ce qui est vrai après chaque run et ne permettrait jamais de sauter.
+    """
+    canonical = canonical_phase(phase)
+    if canonical not in ITEMIZED_PHASES:
+        return None, CLS_PHASE_NOT_ITEMIZED, f"phase `{phase}` sans items"
+    ir_file = paths.ir_path(root, mission)
+    if not ir_file.is_file():
+        return None, CLS_IR_NOT_FOUND, f"{paths.rel(root, ir_file)} absent — le hash des entrées se lit dans l'IR compilé"
+    try:
+        ir = json.loads(ir_file.read_text(encoding="utf-8-sig"))
+    except ValueError as exc:
+        return None, CLS_IR_NOT_FOUND, f"{paths.rel(root, ir_file)} illisible : {exc}"
+
+    if canonical == "build_agents":
+        entries = [a for a in ir.get("agents") or [] if isinstance(a, dict) and _agent_matches(a, item, mission)]
+        if not entries:
+            known = [_agent_key(a) for a in ir.get("agents") or [] if isinstance(a, dict)]
+            return None, CLS_AGENT_NOT_IN_IR, f"`{item}` absent de agents[] ({', '.join(known) or 'aucun agent'})"
+        entry = entries[0]
+        prompt_ref = str(entry.get("promptRef") or "")
+        prompt_file = paths.resolve_rel(root, prompt_ref) if prompt_ref else None
+        prompt_hash = hashing.sha256_file(prompt_file) if prompt_file and prompt_file.is_file() else None
+        return hashing.sha256_struct({"agent": entry, "prompt": prompt_hash}), "", ""
+
+    if canonical == "build_socle":
+        key = SOCLE_ITEMS.get(item)
+        if key is None:
+            return None, CLS_ITEM_UNKNOWN, f"item `{item}` inconnu pour build_socle (attendu : {', '.join(SOCLE_ITEMS)})"
+        return hashing.sha256_struct({key: ir.get(key) or []}), "", ""
+
+    suites = [s for s in (ir.get("evaluation") or {}).get("suites") or [] if isinstance(s, dict) and str(s.get("id") or "") == item]
+    if not suites:
+        return None, CLS_ITEM_UNKNOWN, f"suite `{item}` absente de evaluation.suites[]"
+    return hashing.sha256_struct({"suite": suites[0]}), "", ""
+
+
+def items_summary(run: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """{phase: {item: status}} — ce que le récap et `/sdda-status` affichent."""
+    out: dict[str, dict[str, str]] = {}
+    for phase in ITEMIZED_PHASES:
+        statuses = item_statuses(run, phase)
+        if statuses:
+            out[phase] = {item: v["status"] for item, v in sorted(statuses.items())}
+    return out
+
+
 def end_run(root: Path, run_id: str, *, status: str | None = None) -> dict[str, Any]:
     run = load_run(root, run_id)
     if run is None:
@@ -326,6 +491,7 @@ def run_summary(root: Path, run: dict[str, Any]) -> dict[str, Any]:
             for e in run.get("phases") or [] if str(e.get("phase")) in SUB_PHASES
         },
         "resumeTarget": resume_target(run),
+        "items": items_summary(run),
         "bypasses": bypasses,
         "bypassCount": len(bypasses),
     }
@@ -335,8 +501,12 @@ def render_run_line(summary: dict[str, Any]) -> str:
     glyph = {"pass": "✅", "partial": "🟡", "fail": "🔴", "running": "…", "aborted": "⊘"}.get(str(summary.get("status")), "?")
     phases = " ".join(f"{p}:{s}" for p, s in (summary.get("phases") or {}).items()) or "aucune phase enregistrée"
     bypass = f" · bypasses : {summary['bypassCount']}" if summary.get("bypassCount") else ""
+    items = ""
+    for phase, statuses in (summary.get("items") or {}).items():
+        done = sum(1 for s in statuses.values() if s == "pass")
+        items += f" · {phase} items {done}/{len(statuses)} pass"
     return (f"{glyph} {summary['runId']} MISSION {summary['mission']} {summary['command']} "
-            f"({summary['status']}) — {phases} · reprise : {summary['resumeTarget']}{bypass}")
+            f"({summary['status']}) — {phases} · reprise : {summary['resumeTarget']}{items}{bypass}")
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +555,33 @@ def build_parser() -> argparse.ArgumentParser:
     end.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
     end.add_argument("--status", default=None, choices=[s for s in RUN_STATUSES if s != "running"], help="défaut : dérivé des phases")
     add_common_args(end)
+
+    ih = sub.add_parser("inputs-hash", help="écrire sur stdout le hash des entrées d'un item, lu dans l'IR compilé")
+    ih.add_argument("--mission", required=True)
+    ih.add_argument("--phase", required=True, help=f"phase à items : {', '.join(ITEMIZED_PHASES)}")
+    ih.add_argument("--item", required=True, help="agents[].id (avec ou sans préfixe {n}-), tools|retrieval|data, ou un id de suite")
+    add_common_args(ih)
+
+    seti = sub.add_parser("set-item", help="enregistrer le verdict d'un item de phase (un agent, une couche)")
+    seti.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
+    seti.add_argument("--phase", required=True, help=f"phase à items : {', '.join(ITEMIZED_PHASES)}")
+    seti.add_argument("--item", required=True, help="identifiant de l'item, ex. l'agents[].id de l'IR")
+    seti.add_argument("--status", required=True, choices=list(PHASE_STATUSES))
+    seti.add_argument("--inputs-hash", default=None, help="hash des entrées ayant produit ce verdict (promptHash, entrée IR…)")
+    seti.add_argument("--payload-json", default=None, help="objet JSON de mesures")
+    add_common_args(seti)
+
+    skipi = sub.add_parser("should-skip-item", help="exit 0 = SKIP (pass sur les mêmes entrées), exit 1 = RUN")
+    skipi.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
+    skipi.add_argument("--phase", required=True)
+    skipi.add_argument("--item", required=True)
+    skipi.add_argument("--inputs-hash", default=None, help="hash courant des entrées ; sans lui, un pass sans hash suffit")
+    add_common_args(skipi)
+
+    done = sub.add_parser("done-items", help="écrire les items `pass` d'une phase, un par ligne")
+    done.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
+    done.add_argument("--phase", required=True)
+    add_common_args(done)
 
     st = sub.add_parser("status", help="dernier run et bypasses")
     st.add_argument("--mission", default=None)
@@ -490,6 +687,70 @@ def main(argv: list[str] | None = None) -> int:
             return _fail(report, args)
         summary = run_summary(root, run)
         print(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True) if args.json else render_run_line(summary))
+        return 0
+
+    if args.cmd == "inputs-hash":
+        digest, cls, detail = item_inputs_hash(root, str(args.mission), args.phase, args.item)
+        if digest is None:
+            fixes = {
+                CLS_PHASE_NOT_ITEMIZED: f"phases à items : {', '.join(ITEMIZED_PHASES)}",
+                CLS_IR_NOT_FOUND: f"/sdda-topology {args.mission} --recompile-only",
+                CLS_AGENT_NOT_IN_IR: f"lister les agents avec /sdda-status {args.mission}, ou relancer /sdda-topology {args.mission} si l'IR est périmé",
+                CLS_ITEM_UNKNOWN: "passer un identifiant présent dans l'IR",
+            }
+            report.error(cls, detail, fixes.get(cls, ""), f"{args.phase}/{args.item}")
+            return _fail(report, args)
+        if args.json:
+            print(json.dumps({"mission": str(args.mission), "phase": args.phase, "item": args.item, "inputsHash": digest},
+                             ensure_ascii=False, sort_keys=True))
+        else:
+            print(digest)
+        return 0
+
+    if args.cmd in ("set-item", "should-skip-item", "done-items"):
+        rid = _resolve_run_id(args, root)
+        run = load_run(root, rid) if rid else None
+        if run is None:
+            report.error("STATE_RUN_NOT_FOUND", f"run `{rid or '(aucun)'}` introuvable : l'item ne serait rattaché à aucun run",
+                         "exporter SDDA_RUN_ID depuis `new-run`, ou passer --run-id", rid or "")
+            return _fail(report, args)
+        if canonical_phase(args.phase) not in ITEMIZED_PHASES:
+            report.error("STATE_PHASE_NOT_ITEMIZED", f"phase `{args.phase}` sans items : la reprise y reste au niveau de la phase",
+                         f"phases à items : {', '.join(ITEMIZED_PHASES)}", args.phase)
+            return _fail(report, args)
+
+        if args.cmd == "set-item":
+            payload: dict[str, Any] = {}
+            if args.payload_json:
+                try:
+                    parsed = json.loads(args.payload_json)
+                except ValueError as exc:
+                    report.error("INVALID_ARG", f"--payload-json illisible : {exc}", "passer un objet JSON", args.item)
+                    return _fail(report, args)
+                payload = parsed if isinstance(parsed, dict) else {"value": parsed}
+            run = set_item(root, str(rid), phase=args.phase, item=args.item, status=args.status,
+                           inputs_hash=args.inputs_hash, payload=payload)
+            summary = run_summary(root, run)
+            print(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True) if args.json else render_run_line(summary))
+            return 0
+
+        if args.cmd == "should-skip-item":
+            skip, why = should_skip_item(run, args.phase, args.item, args.inputs_hash)
+            if args.json:
+                print(json.dumps({"runId": run["runId"], "phase": args.phase, "item": args.item, "skip": skip, "reason": why},
+                                 ensure_ascii=False, sort_keys=True))
+            else:
+                sys.stderr.write(f"[state] {args.phase}/{args.item} : {'SKIP' if skip else 'RUN'} — {why}\n")
+            return 0 if skip else 1
+
+        statuses = item_statuses(run, args.phase)
+        passed = sorted(item for item, v in statuses.items() if v["status"] == "pass")
+        if args.json:
+            print(json.dumps({"runId": run["runId"], "phase": args.phase, "done": passed,
+                              "items": {k: v["status"] for k, v in sorted(statuses.items())}}, ensure_ascii=False, sort_keys=True))
+        else:
+            for item in passed:
+                print(item)
         return 0
 
     if args.cmd == "end-run":

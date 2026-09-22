@@ -50,7 +50,7 @@ quel que soit le flag.
 | Flag | Effet | Audit |
 |---|---|---|
 | `--force` | une gate 🟡 (G2 coût > cible sous cap, G5/G6 variance élevée, G7 findings serious sous seuil) **continue** au lieu de STOP. Ne change **rien** pour une gate 🔴. | 1 ligne `bypasses.jsonl` par gate jaune assumée |
-| `--resume` | lit `sdda_state.py resume-target` et saute les phases `pass` du dernier run ; les gates sont **rejouées** (0 token) pour vérifier qu'elles sont toujours vertes (un hash a pu bouger — R2) | — |
+| `--resume` | lit `sdda_state.py resume-target` et saute les phases `pass` du dernier run ; dans la phase reprise, `/sdda-build` saute aussi les **items** `pass` sur les mêmes entrées (couche du socle, instance de `dev-agent` — `should-skip-item`) ; les gates sont **rejouées** (0 token) pour vérifier qu'elles sont toujours vertes (un hash a pu bouger — R2) | — |
 | `--from-phase {mission\|caps\|topology\|build\|eval\|review\|acceptance}` | point de départ explicite. Refusé si une gate amont n'est pas verte : **aucun saut d'état** (LIFECYCLE §1) | — |
 | `--no-review` | saute PHASE 7 et donc G7 ; la MISSION s'arrête à `Tested` et PHASE 8 **n'est pas exécutée** (G8 exige G7). Refusé si `SDDA_ENV ∈ {production, ci}` ou `CI=true` | 1 ligne `bypasses.jsonl` |
 
@@ -264,6 +264,13 @@ Gardes `should-skip-step build_socle | build_agents | build_orch` (la
 sous-commande accepte `--layer` pour reprendre à la bonne couche).
 
 Exécuter `/sdda-build {n}` (ou `--layer {couche}` en reprise).
+
+À l'intérieur de la couche reprise, `/sdda-build` applique ses propres gardes
+**par item** (`should-skip-item`, STEP 3.1 et 4.2) : trois `dev-agent` verts
+ne sont pas repayés parce que le quatrième a échoué, et un agent dont le
+prompt a été réécrit depuis est rejoué même s'il était vert. `/sdda-full` n'a
+rien à faire pour cela : `SDDA_RUN_ID` propagé suffit, les items vivent dans
+le même run.
 
 | Gate | Verdict | `--force` | Action |
 |---|---|---|---|
