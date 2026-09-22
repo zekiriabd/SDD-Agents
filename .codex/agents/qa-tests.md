@@ -49,7 +49,7 @@ IR absent → `[IR_NOT_FOUND]`, STOP.
 Câble dans `workspace/src/tests/l0/` les vérifications déterministes, chacune
 un test qui appelle le script correspondant :
 
-- JSON Schema de chaque définition d'outil ↔ IR (`validate_tool_schemas.py`) ;
+- JSON Schema de chaque définition d'outil ↔ IR ↔ code (`validate_tool_contract.py --require-code`) ;
 - lint de prompts (`lint_prompts.py`) : secrets, contradictions, taille, outils
   inconnus, variables non résolues ;
 - validation de l'IR (`validate_ir.py`) ;

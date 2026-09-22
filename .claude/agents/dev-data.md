@@ -106,6 +106,12 @@ python .sdda/python/sdda_scripts/validate_envelope.py --mission {n} --src worksp
 (0 token : présence des six clés, AST parser branché, aucun `retry` sur
 écriture non idempotente, aucune chaîne de connexion en clair.)
 
+> ⏳ **Planifié** (ROADMAP Lot 4) — `validate_envelope.py` n'existe pas encore.
+> Tant qu'il est absent : lance `validate_data_access.py --mission {n}` (l'enveloppe
+> côté **contrat** existe, elle) et vérifie **à la main** les six clés dans le
+> code. Ce que tu ne peux pas prouver par un script, tu le dis dans ta sortie
+> chat : les tests exécutés de `qa-tests` restent la seule preuve.
+
 Puis le smoke de la stack sur une base de test. Les tests L1/L2 sont à
 `qa-tests`.
 

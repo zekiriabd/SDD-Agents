@@ -330,6 +330,86 @@ def test_build_on_an_agent_without_pack_sources_says_so(project: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Packs orphelins — un agent renommé laisse son ancien pack, l'air d'être vivant
+# ---------------------------------------------------------------------------
+def _plant_orphans(root: Path) -> tuple[Path, list[Path]]:
+    """Un pack valide, deux orphelins (dont un avec `.tmp` d'un build interrompu), un `.gitkeep`."""
+    context_pack.main(["build", "--agent", "demo-architect", "--root", str(root)])
+    folder = context_pack.packs_dir(root)
+    orphans = [folder / "topology-architect.md", folder / "dev-rag.md"]
+    for path in orphans:
+        path.write_text(f"# CONTEXT PACK — {path.stem}\n", encoding="utf-8")
+    (folder / "dev-rag.md.tmp").write_text("écriture interrompue\n", encoding="utf-8")
+    (folder / ".gitkeep").write_text("", encoding="utf-8")
+    return folder, orphans
+
+
+def test_orphan_detection_names_only_the_packs_of_unknown_agents(project: Path) -> None:
+    _plant_orphans(project)
+    orphans = context_pack.orphan_packs(project, context_pack.load_loader(project))
+    assert [o["agent"] for o in orphans] == ["dev-rag", "topology-architect"]
+    assert orphans[0]["companions"] == ["workspace/.sys/.context/packs/dev-rag.md.tmp"]
+    assert orphans[1]["companions"] == []
+
+
+def test_prune_dry_run_lists_and_deletes_nothing(project: Path) -> None:
+    folder, planted = _plant_orphans(project)
+    before = sorted(p.name for p in folder.iterdir())
+    code, out = run_main(context_pack.main, ["prune", "--dry-run", "--root", str(project)])
+    assert code == 0
+    assert sorted(p.name for p in folder.iterdir()) == before
+    assert "dev-rag" in out and "topology-architect" in out and "dry-run" in out
+    assert "demo-architect.md" not in out
+
+
+def test_prune_deletes_exactly_the_orphans_and_keeps_valid_packs_and_gitkeep(project: Path) -> None:
+    folder, planted = _plant_orphans(project)
+    code, out = run_main(context_pack.main, ["prune", "--root", str(project)])
+    assert code == 0
+    assert not any(p.exists() for p in planted)
+    assert not (folder / "dev-rag.md.tmp").exists()
+    assert context_pack.pack_path(project, "demo-architect").is_file()
+    assert (folder / ".gitkeep").is_file()
+    assert out.count("prune ") == 2 and "supprimé" in out
+
+    # Une seconde passe ne trouve plus rien : la commande est idempotente.
+    code, out = run_main(context_pack.main, ["prune", "--root", str(project)])
+    assert code == 0 and "aucun pack orphelin" in out
+
+
+def test_prune_json_shape(project: Path) -> None:
+    _plant_orphans(project)
+    code, payload = _json(project, ["prune", "--dry-run"])
+    data = payload["data"]
+    assert code == 0 and payload["ok"] is True and payload["errors"] == []
+    assert data["dryRun"] is True and data["removed"] == 0
+    assert "demo-architect" in data["known"]
+    assert [o["agent"] for o in data["orphans"]] == ["dev-rag", "topology-architect"]
+    assert all(set(o) == {"agent", "path", "companions", "removed"} and o["removed"] is False for o in data["orphans"])
+
+    code, payload = _json(project, ["prune"])
+    data = payload["data"]
+    assert code == 0 and data["dryRun"] is False and data["removed"] == 2
+    assert all(o["removed"] is True for o in data["orphans"])
+
+
+def test_prune_without_a_packs_dir_is_a_quiet_success(project: Path) -> None:
+    code, payload = _json(project, ["prune"])
+    assert code == 0 and payload["data"]["orphans"] == [] and payload["data"]["removed"] == 0
+
+
+def test_build_all_warns_about_orphans_without_failing(project: Path) -> None:
+    """Personne ne reconstruit un orphelin : `build --agent all` doit au moins le nommer."""
+    _plant_orphans(project)
+    code, payload = _json(project, ["build", "--agent", "all"])
+    assert code == 0
+    warns = [w for w in payload["warnings"] if w["class"] == "PACK_UNUSABLE" and "orphelin" in w["message"]]
+    assert len(warns) == 1 and "dev-rag.md" in warns[0]["message"] and "topology-architect.md" in warns[0]["message"]
+    assert [o["agent"] for o in payload["data"]["orphans"]] == ["dev-rag", "topology-architect"]
+    assert context_pack.packs_dir(project).joinpath("dev-rag.md").is_file()  # build n'a rien supprimé
+
+
+# ---------------------------------------------------------------------------
 # Le loader réel du framework
 # ---------------------------------------------------------------------------
 def test_the_shipped_loader_declares_a_budget_for_every_agent() -> None:

@@ -25,17 +25,26 @@ dit ce que l'agent fait, ses outils, ses bornes, ce qu'il refuse, ce qu'il
 traite comme hostile. Tu le compiles en instructions qu'un modèle suivra
 réellement, y compris quand un document récupéré lui dit de faire autrement.
 
-Tu es invoqué **une fois par agent** : argument `{n} {agent-slug}`.
+Tu es invoqué **une fois par MISSION**, en barrière avant les `dev-agent` :
+argument `{n}`, et tu écris **tous** les prompts des `agents[]` de l'IR dans
+cette invocation — la cohérence de ton, de format de sortie et de politique de
+refus **entre** agents est ta responsabilité, et elle ne s'obtient pas en
+écrivant chaque prompt dans une conversation différente. Un second argument
+`{agent-slug}` restreint le périmètre à cet agent seul : c'est le cas de
+`/sdda-build {n} --agent {agent}`, qui rejoue un prompt après un rapport de
+gate rouge. Sans slug, `{agent-slug}` désigne ci-dessous *chaque* agent, tour à
+tour.
 
 ---
 
 ## STEP 1 — Recevoir les arguments
 
-`{n}` entier et `{agent-slug}` existant. Sinon `[INVALID_ARG]`, STOP.
+`{n}` entier ; `{agent-slug}` optionnel, existant dans `agents[]` de l'IR s'il
+est donné. Sinon `[INVALID_ARG]`, STOP.
 
 ## STEP 2 — Charger le contexte
 
-Read **uniquement** :
+Read **uniquement**, pour chaque agent du périmètre :
 - `workspace/contracts/agents/{n}-{agent-slug}.agent.md` — ta spécification.
 - `workspace/contracts/tools/{n}-*.tool.md` des outils listés au §4 du contrat —
   pour connaître leurs `description` et erreurs ; tu ne les réécris pas.

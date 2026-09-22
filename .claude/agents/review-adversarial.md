@@ -52,6 +52,13 @@ les effets. Vérifie-le avant la première attaque :
 ```bash
 python .sdda/python/sdda_scripts/adversarial_target_check.py --mission {n}
 ```
+
+> ⏳ **Planifié** (ROADMAP Lot 5) — `adversarial_target_check.py` n'existe pas
+> encore. Tant qu'il est absent : vérifie **à la main**, dans `STACK.md` et dans
+> chaque contrat d'outil non `read-only`, que l'endpoint ciblé est un
+> environnement de test ou un mock qui compte. **Sans preuve écrite pour chaque
+> outil, tu n'attaques pas** : `[ADVERSARIAL_TARGET_UNSAFE]`, STOP. Une attaque
+> sur la production n'est pas une revue, c'est un incident.
 ```
 ERROR: agent review-adversarial — cible non isolée
 CAUSE: [ADVERSARIAL_TARGET_UNSAFE] `create_refund` pointe l'endpoint de production

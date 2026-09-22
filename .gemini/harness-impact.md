@@ -31,6 +31,7 @@ appliqués au moment de l'action mais **en différé (CI)** :
 - `prompts-are-files` — partiellement différé (un enforcer déterministe subsiste)
 - `llm-judge-calibrated` — partiellement différé (un enforcer déterministe subsiste)
 - `trace-emitted-per-run` — partiellement différé (un enforcer déterministe subsiste)
+- `ownership-matrix-enforced` — partiellement différé (un enforcer déterministe subsiste)
 
 > **À dire clairement** : entre deux exécutions du wrapper, rien n'empêche
 > une écriture hors scope. Le CI la rattrape — après que le travail a été

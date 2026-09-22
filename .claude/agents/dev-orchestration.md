@@ -126,6 +126,29 @@ Smoke avec agents **mockés** : le graphe démarre, atteint un terminal sur le
 chemin nominal, et atteint le repli quand on force `hops >= maxHops`. Tu ne
 lances pas l'ORCH GATE — elle exige le golden de mission de `qa-evals`.
 
+## STEP 7 — Le manifeste du graphe : ce que le code a VRAIMENT construit
+
+Le module d'orchestration expose `dump_graph()` qui **introspecte le graphe
+compilé** et écrit `workspace/src/**/orchestration/graph.manifest.json` :
+
+```json
+{
+  "generatedBy": "orchestration.dump_graph",
+  "entryNode": "router",
+  "terminalNodes": ["answer"],
+  "nodes": [{"id": "router", "kind": "router"}, {"id": "billing", "kind": "agent"}],
+  "edges": [{"from": "router", "to": "billing", "condition": "intent == 'billing'"}]
+}
+```
+
+C'est ce fichier que la commande confronte à l'IR (`diff_code_vs_ir.py
+--scope orchestration`, part `orchestration` de G6) : nœud ou arête en plus ou
+en moins, condition reformulée, entrée ou terminaux différents →
+`[ORCH_DIVERGES_FROM_IR]`, bloquant. **Tu ne le recopies jamais depuis l'IR** :
+un manifeste copié rend la comparaison tautologique, et `review-orchestration`
+verrait l'écart aux trajectoires observées — trop tard, après que tout l'aval a
+été payé. Le manifeste est émis par le code, depuis le graphe, à chaque build.
+
 ---
 
 ## STEP final — Anti-dérive
@@ -140,6 +163,7 @@ lances pas l'ORCH GATE — elle exige le golden de mission de `qa-evals`.
 - [ ] Routeur avec repli traité ; fusion fonction nommée ; handoffs validés au schéma
 - [ ] Ownership de l'état partagé appliqué à l'exécution
 - [ ] Aucun prompt inline (un superviseur a un prompt : il vit dans `prompts/`, écrit par `dev-prompt`)
+- [ ] `graph.manifest.json` émis par `dump_graph()` depuis le graphe compilé — jamais recopié de l'IR
 - [ ] **Rien écrit hors `workspace/src/orchestration/`**
 
 ---
