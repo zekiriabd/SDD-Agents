@@ -35,7 +35,7 @@ MISSION            spécification métier versionnée (objectif chiffré, budget
 L'IR est conçue multi-langage et le vérifie : `validate_ir.py` refuse tout nom
 d'API de framework dans un contrat, y compris `spring-ai`, `langchain4j` et
 `vercel-ai-sdk`. Mais **un générateur n'existe que là où les fiches de stack
-existent**, et le catalogue en couvre 30 sur les 96 lignes que `STACK.md`
+existent**, et le catalogue en couvre <!--sdda:count stacks-->31<!--/sdda:count--> sur les 99 lignes que `STACK.md`
 propose. L'écart est annoncé ligne par ligne — `(fiche absente)` — plutôt que
 sous-entendu.
 
@@ -56,6 +56,34 @@ Lot 7 de la [ROADMAP](.sdda/docs/ROADMAP.md).
 
 Rien ici n'est *validé* : `frameworkStatus: design-phase`, et tous les
 composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
+
+---
+
+## Où vit votre travail — le workspace
+
+Quatre entrées, quatre natures. L'arbre a porté douze répertoires au même
+niveau, sans que rien ne dise que `caps/` se relit en revue quand `traces/` se
+supprime sans perte.
+
+```
+workspace/
+├── stack/     ce qu'on CONFIGURE — STACK.md (gitignoré : secrets) + manifestes versionnés
+├── feats/     ce qu'on SPÉCIFIE  — missions · caps · topology · contracts · decisions (ADR) · briefs
+├── src/       ce qu'on PRODUIT   — l'application générée, prompts compris
+├── proof/     ce qui JUGE        — datasets · suites · baselines · calibration
+└── .sys/      état interne et sorties de run — IR, validation, rapports, traces (régénérable)
+```
+
+Vous écrivez dans `feats/` (la spécification en Markdown) et `stack/` (les choix
+techniques). Tout le reste est produit. **Aucun agent `dev-*` n'écrit jamais sous
+`proof/`** : l'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni
+à la référence contre laquelle sa régression est mesurée. C'est la seule
+frontière du framework sans exception, et elle est tenue au runtime par le hook
+d'ownership, pas par convention.
+
+Un workspace plus ancien passe à cet arbre par
+`python .sdda/sdda.py migrate-workspace`, qui déplace le contenu au lieu de
+créer le nouvel arbre à côté de l'ancien.
 
 ---
 
@@ -339,6 +367,56 @@ validateur ; le faire après le Lot 4 aurait coûté six générateurs déjà é
 contre un contrat qu'on savait faux. `memory.longTermStore` nomme lui aussi un
 composant et reste hors périmètre : sa propre scission n'est pas faite, et le
 contrôle le dit plutôt que de le taire.
+
+**Lot d'audit — le pipeline ne pouvait pas aboutir une seule fois, et cinq
+contrôles étaient inertes.** Un audit complet, source par source, puis chaque
+constat corrigé. Ce qu'il a trouvé :
+
+- `ir_compiler` exigeait le holdout que `qa-evals` ne produit que trois phases
+  plus loin : aucune mission neuve ne franchissait G2. L'exigence est déplacée
+  dans `validate_datasets` (G8), où elle est actionnable, et le holdout est
+  devenu une source compilée pour que son arrivée périme l'IR ;
+- **aucune suite L9 n'était jamais compilée** : la part `acceptance` de G8
+  n'avait aucune exécution capable de la rendre verte. Elle naît désormais de
+  la ligne `Grader:` du `## Quantified Goal` de la mission ;
+- neuf options CLI étaient citées par les prompts et n'existaient dans aucun
+  script (`--pre`, `--static`, `--isolated`, `--dataset`, `--require`,
+  `--min-items`, …). argparse répondait par un `usage:` au lieu d'un bloc
+  `ERROR/CAUSE/FIX`, et le modèle orchestrateur concluait que le contrôle
+  « n'avait rien dit ». Un scanner neuf, `command-flags`, résout chaque option
+  citée contre le parseur réel et tourne dans `framework-smoke` sous
+  `refs.flags` ;
+- cinq contrôles se déclaraient actifs et ne s'exécutaient pas : les hooks
+  d'ownership lisaient l'identité du sous-agent au mauvais endroit du payload
+  (toute écriture de sous-agent passait) ; les hooks de spawn ne matchaient que
+  `Task`, jamais `Agent` ; les façades portaient `model_tier` mais aucune clé
+  `model:` (les 22 agents héritaient du modèle parent) ; `MaxCostPerRun` n'avait
+  aucun appelant qui alimente le cumul ; les bornes du `build_loop` ne vivaient
+  que dans le prompt qu'elles devaient borner ;
+- les commandes de hook étaient relatives au répertoire courant : un `cd`
+  désarmait les quatorze. Elles sont ancrées sur `$CLAUDE_PROJECT_DIR`.
+
+Ce qu'il a livré :
+
+- **un squelette runtime Python** (`.sdda/templates/runtime/python/app/`,
+  18 fichiers) : point d'entrée, client LLM par tier, bornes en code, traçage
+  OTel-GenAI, boucle d'orchestration, surface console, et les deux exécuteurs
+  d'évaluation dont G5/G6/G8 avaient besoin.
+  `python .sdda/sdda.py gen-app-skeleton --write` le matérialise ; la console
+  générée démarre, résout ses tiers, rend un code de sortie par classe d'erreur
+  et émet une trace que le lecteur du framework parse ;
+- les items d'évaluation mesurés en parallèle (`EvalMaxParallel`, ordre
+  préservé) ; les paquets de contexte tranchés sur les fiches de stack
+  *actives* — l'agent le plus saturé passe de 93 % à 61 % de son budget sans
+  relever aucun plafond ;
+- le workspace à quatre entrées (`feats/ · stack/ · src/ · proof/ · .sys/`) et
+  une migration qui déplace le contenu existant.
+
+Maturité honnête après ce lot : la couche déterministe est en bêta ; la couche
+génération est un squelette plus six prompts d'agents qui **n'ont toujours
+jamais été exécutés de bout en bout**. Rien de ce qui précède ne change le
+tableau des langages : Python est le seul runtime doté d'un squelette, .NET n'a
+pas de chaîne de retrieval, TypeScript et Java n'ont aucune fiche.
 
 Reste à faire : les six agents générateurs et leurs stacks (Lot 4), puis la
 revue (Lot 5). Ordre et raisons : [ROADMAP.md](.sdda/docs/ROADMAP.md).
