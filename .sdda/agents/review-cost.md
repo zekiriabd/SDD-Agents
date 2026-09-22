@@ -35,6 +35,13 @@ Exécute (0 token) :
 ```bash
 python .sdda/python/sdda_scripts/cost_report.py --mission {n} --traces workspace/traces/runs --out workspace/.sys/.validation/cost-{n}.json
 ```
+
+> ⏳ **Planifié** (ROADMAP Lot 5) — `cost_report.py` n'existe pas encore. Tant
+> qu'il est absent : coût et latence **par run** se lisent dans
+> `tracing.summarize_all(root)` (`costUsd`, `latencyMs`, `tokensIn/Out`) et dans
+> les rapports L7 (`workspace/evals/reports/{n}-*.json`). Sans p95 par nœud ni
+> coût par CAP, ces lignes du rapport portent « non mesuré » — jamais un chiffre
+> estimé à la main, c'est le premier item de ton anti-dérive.
 Le rapport agrège les spans `llm_call`, `tool_call`, `retrieval`, `run_end` :
 coût et latence **par run, par CAP, par agent, par outil, par nœud**,
 distributions (mean, p50, p95, p99, max), distribution des hops, tokens

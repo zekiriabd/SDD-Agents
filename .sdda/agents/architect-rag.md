@@ -62,6 +62,12 @@ Exécute l'inventaire déterministe (0 token) :
 python .sdda/python/sdda_scripts/corpus_profile.py --mission {n} --out workspace/.sys/.validation/corpus-{n}.json
 ```
 
+> ⏳ **Planifié** (ROADMAP Lot 4) — `corpus_profile.py` n'existe pas encore.
+> Tant qu'il est absent : caractérise le corpus depuis les sources déclarées
+> (`workspace/stack/sources/*.yml`) — nombre de documents, longueurs, formats —
+> en le disant **à la main, donc hypothèse** : `Confidence` ≤ 0.6 dans le
+> contrat, et chaque chiffre porte la mention « non mesuré ».
+
 Tu en tires : nombre de documents, distribution des longueurs, structure
 (titres, articles, tableaux), langues, formats, fraîcheur, **niveaux d'accès
 mélangés ou non**. Ces chiffres sont des FAITS ; tes choix en aval sont des
@@ -107,6 +113,13 @@ python .sdda/python/sdda_scripts/chunking_bench.py --mission {n} \
   --config document-aware:section \
   --k {RetrievalK} --out workspace/.sys/.validation/chunking-bench-{n}.json
 ```
+
+> ⏳ **Planifié** (ROADMAP Lot 4) — `chunking_bench.py` n'existe pas encore.
+> Tant qu'il est absent : **n'invente aucun tableau comparatif**. Écris au §4
+> du contrat que le chunking est *non mesuré*, choisis la configuration par
+> défaut de la fiche RAG active, et laisse `[RETRIEVAL_CHUNKING_UNMEASURED]`
+> visible dans ta sortie : c'est `qa-evals` qui mesurera à la G4, et un
+> tableau inventé lui ferait croire que c'est déjà fait.
 
 Le tableau comparatif (`recall@k`, `nDCG@k`, `context_precision`, nombre de
 chunks, coût d'ingestion) va **dans le contrat**, avec la configuration retenue

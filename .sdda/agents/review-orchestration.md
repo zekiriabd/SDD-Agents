@@ -32,6 +32,13 @@ Exécute (0 token) :
 ```bash
 python .sdda/python/sdda_scripts/trajectory_report.py --mission {n} --traces workspace/traces/runs --ir workspace/.sys/.ir/{n}-system.ir.json --out workspace/.sys/.validation/trajectories-{n}.json
 ```
+
+> ⏳ **Planifié** (ROADMAP Lot 5) — `trajectory_report.py` n'existe pas encore.
+> Tant qu'il est absent : les trajectoires et les hops se lisent avec
+> `python -c "from sdda_lib import tracing; ..."` sur `tracing.summarize_all(root)`
+> (champs `trajectory`, `boundsExceeded`). Sans distribution par classe ni
+> arêtes jamais empruntées, **écris « non mesuré »** sur ces lignes du rapport
+> plutôt qu'une estimation.
 Le rapport donne : chemins distincts observés et leur fréquence, distribution
 des hops, arêtes de l'IR **jamais empruntées**, arêtes observées **absentes de
 l'IR**, nœuds terminaux atteints, occurrences de `bound_exceeded` par borne,

@@ -121,12 +121,19 @@ def load_gate_reports(root: Path) -> list[dict[str, Any]]:
     return out
 
 
-def append_bypass_audit(root: Path, gate: str, reason: str, operator: str | None = None) -> Path:
-    """Journalise un bypass (R5) : horodatage, opérateur, raison. Append-only."""
+def append_bypass_audit(root: Path, gate: str, reason: str, operator: str | None = None,
+                        *, extra: dict[str, Any] | None = None) -> Path:
+    """Journalise un bypass (R5) : horodatage, opérateur, raison. Append-only.
+
+    `extra` porte ce que l'appelant sait de plus — la commande, le nom du
+    bypass — sans jamais écraser les quatre champs que `sdda_state.bypasses_of`
+    et `compute_status` lisent.
+    """
     adir = paths.audit_dir(root)
     adir.mkdir(parents=True, exist_ok=True)
     path = adir / "bypasses.jsonl"
     entry = {
+        **{k: v for k, v in (extra or {}).items() if v is not None},
         "at": now_iso(),
         "gate": gate,
         "operator": operator or os.environ.get("USERNAME") or os.environ.get("USER") or "unknown",
