@@ -30,10 +30,10 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/topology/{n}-topology.md` — agents, pattern, handoffs, `blackboard` éventuel.
-- `workspace/missions/{n}-*.md` — `## Actors` (données personnelles ?), `## Business Rules`
+- `workspace/feats/topology/{n}-topology.md` — agents, pattern, handoffs, `blackboard` éventuel.
+- `workspace/feats/missions/{n}-*.md` — `## Actors` (données personnelles ?), `## Business Rules`
   (obligations de rétention ou d'effacement), `## Trust Boundaries`.
-- `workspace/caps/{n}-*-*.md` — quelles CAPs exigent de se souvenir de quelque chose.
+- `workspace/feats/caps/{n}-*-*.md` — quelles CAPs exigent de se souvenir de quelque chose.
 - `workspace/stack/STACK.md` — `## Active Memory Strategy` : `ShortTermPolicy`,
   `ShortTermMaxTurns`, `SummarizeTriggerTokens`, `LongTermEnabled`,
   `LongTermStore`, `LongTermWritePolicy`, `LongTermRetentionDays`,
@@ -124,7 +124,7 @@ matrice : un handoff qui suppose « le contexte suit » est `[HANDOFF_UNCONTRACT
 
 ## STEP 7 — Écrire
 
-`workspace/contracts/memory/{n}-memory.md`, depuis le template, `Status: Draft` :
+`workspace/feats/contracts/memory/{n}-memory.md`, depuis le template, `Status: Draft` :
 tiers par agent, paramètres, rétention, PII, matrice d'état partagé, et les
 `memory_scopes` (`read` / `write`) que `dev-agent` devra respecter par agent.
 

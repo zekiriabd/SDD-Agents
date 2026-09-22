@@ -98,7 +98,7 @@ Un grader LLM non calibré **ne rend pas de verdict bloquant**. Invariant
 2. Faire noter les mêmes items par le juge.
 3. Calculer l'accord : **kappa de Cohen** (binaire/ordinal) ou corrélation
    (continu). Seuil : `JudgeCalibrationMinKappa` (0.6).
-4. Versionner le rapport dans `workspace/evals/calibration/{grader}.json`.
+4. Versionner le rapport dans `workspace/proof/calibration/{grader}.json`.
 5. Sous le seuil : retravailler la grille, ou basculer le juge en
    **`advisory: true`** — il produit un score informatif et ne bloque plus.
 

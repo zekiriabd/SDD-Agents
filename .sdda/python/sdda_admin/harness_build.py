@@ -67,9 +67,18 @@ class Harness:
     mechanisms: dict[str, str]
     memory_file: str
     impact: str = ""
+    tier_models: dict[str, str] = field(default_factory=dict)
 
     def supports(self, mechanism: str) -> bool:
         return self.mechanisms.get(mechanism) == "native"
+
+    def model_for(self, tier: str) -> str:
+        """Le sélecteur de modèle du harnais pour un tier déclaré.
+
+        `""` quand le harnais n'en déclare aucun : on n'invente pas un modèle
+        à sa place, on laisse l'héritage jouer et le rapport d'impact le dira.
+        """
+        return self.tier_models.get(str(tier).strip(), "")
 
 
 def load_matrix() -> dict[str, Harness]:
@@ -83,6 +92,7 @@ def load_matrix() -> dict[str, Harness]:
             mechanisms={k: str(v) for k, v in (payload.get("mechanisms") or {}).items()},
             memory_file=str(payload.get("memory_file", "AGENTS.md")),
             impact=str(payload.get("impact", "") or ""),
+            tier_models={k: str(v) for k, v in (payload.get("tier_models") or {}).items()},
         )
     return out
 
@@ -266,6 +276,20 @@ class ClaudeAdapter(Adapter):
     def render_agent(self, src, meta, body) -> str:
         # Claude Code lit le frontmatter tel quel ; on le conserve verbatim et
         # on n'ajoute que la bannière, en commentaire HTML après le bloc.
+        #
+        # Une seule clé est AJOUTÉE : `model:`, résolue depuis le tier déclaré
+        # par l'agent et la table `tier_models` du harnais. La source ne la
+        # porte pas et ne doit pas la porter — un agent déclare un tier, jamais
+        # un modèle (ARCHITECTURE §6, P11) — mais la façade, elle, s'adresse au
+        # harnais, et le harnais ne lit que `model:`. Sans cette ligne les
+        # tiers, leurs planchers et leurs plafonds ne gouvernaient aucun appel :
+        # les 22 agents héritaient du modèle du fil parent, et la seule trace
+        # de l'écart était la facture.
+        meta = dict(meta)
+        if "model" not in meta:
+            selector = self.harness.model_for(meta.get("model_tier", meta.get("tier_default", "")))
+            if selector:
+                meta["model"] = selector
         front = "---\n" + "\n".join(
             f"{k}: {json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v}"
             for k, v in meta.items()
@@ -311,10 +335,31 @@ class ClaudeAdapter(Adapter):
         # Ordre stable : l'événement, puis le matcher, puis le nom du script.
         # Un `settings.json` dont l'ordre bouge à chaque build ferait échouer
         # `--check` sans qu'aucune source ait changé.
+        # Le chemin est ancré sur la RACINE DU PROJET, pas sur le répertoire
+        # courant.
+        #
+        # Un chemin de hook écrit en relatif se résout contre le cwd du
+        # harnais. Il suffit qu'une commande entre dans un sous-répertoire —
+        # une fixture, `workspace/src/`, n'importe quel `cd` — pour que le
+        # chemin ne désigne plus rien. Le hook ne s'exécute alors pas, et
+        # l'effet dépend du harnais : au mieux il laisse passer en silence,
+        # c'est-à-dire que les quatorze enforcers disparaissent sans un mot ;
+        # au pire il rend une erreur qui BLOQUE l'outil, et plus aucune
+        # commande ne passe tant que le cwd n'est pas revenu.
+        #
+        # Les deux comportements ont été observés. Le second est spectaculaire
+        # et se corrige tout seul ; le premier est celui qui coûte cher, parce
+        # qu'il ressemble exactement à un pipeline dont tous les contrôles sont
+        # verts.
+        #
+        # `$CLAUDE_PROJECT_DIR` est la variable que le harnais pose pour cet
+        # usage précis. Les guillemets sont obligatoires : un chemin de projet
+        # sous Windows contient des espaces bien plus souvent qu'ailleurs.
+        anchor = "$CLAUDE_PROJECT_DIR"
         for (event, matcher), scripts in sorted(by_slot.items()):
             hooks.setdefault(event, []).append({
                 "matcher": matcher,
-                "hooks": [{"type": "command", "command": f"python {s}"} for s in sorted(scripts)],
+                "hooks": [{"type": "command", "command": f'python "{anchor}/{s}"'} for s in sorted(scripts)],
             })
 
         if undeclared:

@@ -364,8 +364,46 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ir", type=Path, default=None, help="fichier IR explicite")
     p.add_argument("--tool", action="append", default=None, help="identifiant(s) d'outil, répétable ou séparés par des virgules")
     p.add_argument("--require-code", action="store_true", help="exiger que le code de l'outil existe (après génération du socle)")
+    p.add_argument("--static", action="store_true",
+                   help="valider les contrats Markdown SANS IR compilé : schémas, sûreté, effets de bord. "
+                        "C'est l'état de la PHASE 2, juste après les architectes et avant la compilation")
     add_common_args(p)
     return p
+
+
+def static_ir(root: Path, mission: int | None, report: Report) -> dict[str, Any] | None:
+    """Un IR partiel, compilé en mémoire depuis les seuls contrats d'outils.
+
+    `/sdda-topology` veut refuser un contrat d'outil fautif AVANT de compiler
+    l'IR — « on ne compile pas un IR depuis des contrats qu'on sait invalides ».
+    Mais ce script travaille sur l'IR, donc exigeait ce qui n'existe pas encore :
+    l'option que la commande passait depuis toujours n'était pas implémentée, et
+    le post-step rendait une erreur d'argument au lieu d'un verdict. Un contrôle
+    qui échoue sur sa propre ligne de commande ne protège rien, et il apprend à
+    l'agent qui le lit que cette sortie-là n'est pas grave.
+
+    On réutilise `ir_compiler.compile_tool` plutôt que de reparser : deux
+    lectures du même Markdown divergeraient, et c'est celle que personne ne
+    relit qui gouvernerait le verdict.
+    """
+    numbers = [mission] if mission is not None else sorted(
+        {int(m.group(1)) for p in paths.contracts_dir(root, "tools").glob("*.tool.md")
+         if (m := re.match(r"^(\d+)-", p.name))})
+    tools: list[dict[str, Any]] = []
+    compile_report = Report(name="G3.static", target=str(root))
+    for n in numbers:
+        ctx = ir_compiler.CompileContext(root=root, number=n, report=compile_report, config=None)
+        for path in sorted(paths.contracts_dir(root, "tools").glob(f"{n}-*.tool.md")):
+            try:
+                tools.append(ir_compiler.compile_tool(ctx, path))
+            except ir_compiler.CompileError:
+                pass
+    report.extend(compile_report)
+    if not tools and not compile_report.errors:
+        report.warn("TOOL_CONTRACT_MISSING", "aucun contrat d'outil à valider",
+                    "une MISSION sans outil est légitime ; sinon, architect-tools n'a rien écrit",
+                    paths.rel(root, paths.contracts_dir(root, "tools")))
+    return {"missionId": f"{numbers[0]}" if numbers else "", "tools": tools, "agents": [], "evaluation": {"suites": []}}
 
 
 def _split(raw: list[str] | None) -> set[str]:
@@ -381,6 +419,19 @@ def main(argv: list[str] | None = None) -> int:
     root = resolve_root(args)
     report = Report(name="G3", target=str(root))
     load_config(root, report)
+
+    if args.static:
+        ir = static_ir(root, args.mission, report)
+        # Aucun rapport de gate en mode statique : G3 se prononce sur l'IR, et
+        # un rapport écrit depuis des contrats non compilés ferait croire la
+        # gate franchie avant que le graphe n'ait été vérifié.
+        payload = run(root, ir or {}, report=report, only=_split(args.tool),
+                      require_code=False, write_report=False)
+        report.data["payload"] = payload
+        if not args.json:
+            for line in report.data.get("lines", []):
+                print(line)
+        return finish(report, args)
 
     if args.ir:
         ir_file = args.ir if args.ir.is_absolute() else root / args.ir

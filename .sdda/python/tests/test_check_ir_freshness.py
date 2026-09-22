@@ -39,41 +39,41 @@ def test_a_freshly_compiled_ir_is_fresh(compiled: Path) -> None:
 
 
 def test_editing_the_mission_makes_the_ir_stale(compiled: Path) -> None:
-    _touch(compiled / "workspace/missions/1-SupportAssistant.md")
+    _touch(compiled / "workspace/feats/missions/1-SupportAssistant.md")
     code, payload = _check(compiled, "--mission", "1")
     assert code == 1 and payload["errors"][0]["class"] == "IR_STALE"
     assert "missionHash" in payload["data"]["missions"][0]["moved"]
 
 
 def test_editing_a_cap_names_that_cap(compiled: Path) -> None:
-    _touch(compiled / "workspace/caps/1-2-ExplainInvoiceLine.md")
+    _touch(compiled / "workspace/feats/caps/1-2-ExplainInvoiceLine.md")
     _, payload = _check(compiled, "--mission", "1")
     assert payload["data"]["missions"][0]["moved"]["capHashes"] == ["1-2-ExplainInvoiceLine"]
 
 
 def test_editing_a_tool_contract_makes_the_ir_stale(compiled: Path) -> None:
     """Le trou historique : les contrats n'étaient pas dans `compiledFrom`."""
-    _touch(compiled / "workspace/contracts/tools/1-invoice-lookup.tool.md")
+    _touch(compiled / "workspace/feats/contracts/tools/1-invoice-lookup.tool.md")
     code, payload = _check(compiled, "--mission", "1")
     assert code == 1
-    assert payload["data"]["missions"][0]["moved"]["contractHashes"] == ["workspace/contracts/tools/1-invoice-lookup.tool.md"]
+    assert payload["data"]["missions"][0]["moved"]["contractHashes"] == ["workspace/feats/contracts/tools/1-invoice-lookup.tool.md"]
 
 
 def test_a_new_contract_also_counts_as_a_move(compiled: Path) -> None:
-    (compiled / "workspace/contracts/tools/1-nouveau.tool.md").write_text("# TOOL CONTRACT: 1-nouveau\n", encoding="utf-8")
+    (compiled / "workspace/feats/contracts/tools/1-nouveau.tool.md").write_text("# TOOL CONTRACT: 1-nouveau\n", encoding="utf-8")
     _, payload = _check(compiled, "--mission", "1")
-    assert payload["data"]["missions"][0]["moved"]["contractHashes"] == ["workspace/contracts/tools/1-nouveau.tool.md (nouveau)"]
+    assert payload["data"]["missions"][0]["moved"]["contractHashes"] == ["workspace/feats/contracts/tools/1-nouveau.tool.md (nouveau)"]
 
 
 def test_a_deleted_contract_is_named_too(compiled: Path) -> None:
-    (compiled / "workspace/contracts/tools/1-invoice-lookup.tool.md").unlink()
+    (compiled / "workspace/feats/contracts/tools/1-invoice-lookup.tool.md").unlink()
     _, payload = _check(compiled, "--mission", "1")
     assert "(disparu)" in payload["data"]["missions"][0]["moved"]["contractHashes"][0]
 
 
 def test_editing_the_topology_graph_counts(compiled: Path) -> None:
     """Le `.mmd` fait partie de la topologie : le graphe EST la topologie."""
-    _touch(compiled / "workspace/topology/1-topology.mmd", "\n%% édité\n")
+    _touch(compiled / "workspace/feats/topology/1-topology.mmd", "\n%% édité\n")
     _, payload = _check(compiled, "--mission", "1")
     assert "topologyHash" in payload["data"]["missions"][0]["moved"]
 
@@ -96,13 +96,13 @@ def test_no_compiled_ir_at_all_is_an_error(tmp_path: Path) -> None:
 
 
 def test_the_fix_points_at_recompilation(compiled: Path) -> None:
-    _touch(compiled / "workspace/contracts/tools/1-invoice-lookup.tool.md")
+    _touch(compiled / "workspace/feats/contracts/tools/1-invoice-lookup.tool.md")
     _, payload = _check(compiled, "--mission", "1")
     assert "--recompile-only" in payload["errors"][0]["fix"]
 
 
 def test_recompiling_makes_it_fresh_again(compiled: Path) -> None:
-    _touch(compiled / "workspace/contracts/tools/1-invoice-lookup.tool.md")
+    _touch(compiled / "workspace/feats/contracts/tools/1-invoice-lookup.tool.md")
     assert _check(compiled, "--mission", "1")[0] == 1
     ir_compiler.main(["--root", str(compiled), "--mission", "1", "--no-report"])
     assert _check(compiled, "--mission", "1")[0] == 0

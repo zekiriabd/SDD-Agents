@@ -393,11 +393,11 @@ def compute_status(root: Path, *, mission: int | None = None, write: bool = True
             reconcile_status(root, p, m.state, report, write=write)
         # R2 : hashes épinglés qui ont bougé.
         for key in sorted(set(m.stale) | {k for c in caps for k in c.stale}):
-            report.warn("STATUS_PINNED_HASH_MOVED", f"MISSION {m.id} : `{key}` a bougé depuis la validation — rapport périmé, gate non franchie (R2)", "relancer la gate concernée", f"workspace/missions/{m.id}.md")
+            report.warn("STATUS_PINNED_HASH_MOVED", f"MISSION {m.id} : `{key}` a bougé depuis la validation — rapport périmé, gate non franchie (R2)", "relancer la gate concernée", f"workspace/feats/missions/{m.id}.md")
         # R4 : confiance plafonnée par le parent.
         for c in caps:
             if c.confidence and m.confidence and CONFIDENCE_RANK.get(c.confidence, 0) > CONFIDENCE_RANK.get(m.confidence, 0):
-                report.warn("CONFIDENCE_ESCALATION", f"CAP {c.id} `Confidence: {c.confidence}` sous une MISSION `{m.confidence}` : plafonnée à `{m.confidence}` (R4)", "", f"workspace/caps/{c.id}.md")
+                report.warn("CONFIDENCE_ESCALATION", f"CAP {c.id} `Confidence: {c.confidence}` sous une MISSION `{m.confidence}` : plafonnée à `{m.confidence}` (R4)", "", f"workspace/feats/caps/{c.id}.md")
         missions_out.append({**m.to_dict(), "caps": [c.to_dict() for c in caps]})
     # R5 : bypasses audités.
     audit = paths.audit_dir(root) / "bypasses.jsonl"

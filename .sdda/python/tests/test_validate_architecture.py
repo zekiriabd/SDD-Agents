@@ -23,7 +23,7 @@ from conftest import make_project, run_main
 from sdda_scripts import validate_architecture as va
 from sdda_scripts import validate_topology as vt
 
-TOPOLOGY = "workspace/topology/1-topology.md"
+TOPOLOGY = "workspace/feats/topology/1-topology.md"
 STACK = "workspace/stack/STACK.md"
 
 
@@ -191,7 +191,7 @@ def test_multi_model_demands_a_binding_per_agent(project: Path) -> None:
 
 def test_mcp_server_without_allowlist_blocks(tmp_path: Path) -> None:
     project = make_project(tmp_path, "project_declared_sources")
-    (project / "workspace/topology/1-topology.md").write_text(
+    (project / "workspace/feats/topology/1-topology.md").write_text(
         (make_project(tmp_path / "ref") / TOPOLOGY).read_text(encoding="utf-8"), encoding="utf-8")
     patch(project, STACK, "    tools_allowlist: [crm_get_contract]\n", "")
     assert "ARCH_MCP_UNDECLARED" in errors(project)

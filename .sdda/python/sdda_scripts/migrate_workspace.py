@@ -79,6 +79,14 @@ class Context:
     report: Report
     dry_run: bool
     actions: list[dict[str, Any]] = field(default_factory=list)
+    #: Chemins qu'un `move` a vidés — réellement, ou qu'il aurait vidés en
+    #: simulation. Sans cette mémoire, un `--dry-run` accusait les répertoires
+    #: hérités d'être « non vides » alors que c'est LUI qui avait choisi de ne
+    #: rien déplacer : la simulation rendait rouge une migration qui passe au
+    #: vert dès qu'on l'exécute. Une simulation qui ment sur son propre
+    #: résultat ne sert à rien — on la lance précisément pour décider si on
+    #: ose.
+    emptied: set[str] = field(default_factory=set)
 
     @property
     def workspace(self) -> Path:
@@ -109,7 +117,12 @@ class Context:
         target = self.workspace / rel
         if not target.exists():
             return False
+        if self.dry_run and any(e == rel or e.startswith(rel + "/") for e in self.emptied):
+            self._log("rmdir", rel, "après déplacement (simulation)")
+            return True
         leftovers = sorted(p.name for p in target.iterdir() if p.name != ".gitkeep") if target.is_dir() else [target.name]
+        if self.dry_run:
+            leftovers = [n for n in leftovers if f"{rel}/{n}" not in self.emptied]
         if leftovers:
             self._log("keep", rel, f"{len(leftovers)} entrée(s) : {', '.join(leftovers[:5])}")
             self.report.error(cls, f"`workspace/{rel}` n'est plus dans l'arborescence mais contient "
@@ -118,8 +131,48 @@ class Context:
                               f"workspace/{rel}")
             return False
         self._log("rmdir", rel)
+        # Un parent doit savoir que son enfant a disparu. Sans cette ligne,
+        # `--dry-run` retirait `evals/suites` puis accusait `evals` de le
+        # contenir encore : la simulation se contredisait d'une ligne à l'autre.
+        self.emptied.add(rel)
         if not self.dry_run:
             shutil.rmtree(target)
+        return True
+
+    def move(self, old: str, new: str) -> bool:
+        """Déplace `workspace/{old}` vers `workspace/{new}`, contenu compris.
+
+        Les migrations ne savaient que créer et supprimer. Une réorganisation
+        d'arborescence a besoin de la troisième opération, et c'est la seule qui
+        ne soit pas idempotente par nature : sans elle, un projet existant
+        aurait vu le nouvel arbre apparaître à vide à côté de ses fichiers
+        restés en place, et le pipeline aurait cherché une MISSION là où il n'y
+        en a plus. Perdre le travail d'un utilisateur est le seul échec qu'une
+        migration ne peut pas se permettre.
+        """
+        src, dst = self.workspace / old, self.workspace / new
+        if not src.is_dir():
+            return False
+        entries = [e for e in src.iterdir() if e.name != ".gitkeep"]
+        if not entries:
+            self._log("skip", old, "vide : rien à déplacer")
+            return False
+        self._log("move", old, f"-> {new} ({len(entries)} entrée(s))")
+        self.emptied.add(old)
+        if self.dry_run:
+            return True
+        dst.mkdir(parents=True, exist_ok=True)
+        for item in entries:
+            target = dst / item.name
+            if target.exists():
+                self.report.warn("WORKSPACE_MIGRATION_COLLISION",
+                                 f"`workspace/{new}/{item.name}` existe déjà : l'original reste en place",
+                                 "fusionner à la main ; la migration ne tranche pas entre deux versions d'un fichier",
+                                 f"workspace/{old}/{item.name}")
+                continue
+            shutil.move(str(item), str(target))
+        if not [e for e in src.iterdir() if e.name != ".gitkeep"]:
+            shutil.rmtree(src)
         return True
 
     def write_version(self, version: int) -> None:
@@ -132,11 +185,89 @@ class Context:
 # ---------------------------------------------------------------------------
 # Les migrations — une fonction par version cible
 # ---------------------------------------------------------------------------
+#: L'arborescence telle qu'elle était EN v1, figée en dur.
+#:
+#: `migrate_to_v1` créait `WORKSPACE_TREE`, c'est-à-dire l'arbre COURANT. Tant
+#: qu'il n'y avait qu'une version, cela ne se voyait pas ; à la deuxième, la
+#: migration v1 se mettait à créer les répertoires de la v2, et la v2 déplaçait
+#: ensuite du contenu vers des répertoires que la v1 venait d'inventer. Une
+#: migration doit produire l'état de SON époque, sinon la chaîne ne décrit plus
+#: une histoire mais seulement son dernier chapitre — et un workspace bloqué en
+#: v1 par une erreur se retrouverait avec un arbre v2 à moitié créé.
+#:
+#: Seule la DERNIÈRE migration a le droit de référencer `WORKSPACE_TREE`.
+TREE_V1: tuple[str, ...] = (
+    "stack", "stack/sources",
+    "contracts/dataaccess/schemas",
+    "missions", "caps", "topology",
+    "contracts/agents", "contracts/tools", "contracts/retrieval", "contracts/memory",
+    "prompts",
+    "datasets/golden", "datasets/holdout", "datasets/calibration", "datasets/adversarial",
+    "evals/suites", "evals/baselines", "evals/reports", "evals/calibration",
+    "traces/runs",
+    "src", "docs",
+    ".sys/.ir", ".sys/.context/adrs", ".sys/.context/packs",
+    ".sys/.state", ".sys/.validation", ".sys/.audit",
+)
+
+
 def migrate_to_v1(ctx: Context) -> None:
     """v0 -> v1 : arborescence canonique complète, répertoires fantômes retirés."""
-    for rel in WORKSPACE_TREE:
+    for rel in TREE_V1:
         ctx.mkdir(rel)
     for rel in GHOST_DIRS_V1:
+        ctx.rmdir_if_empty(rel, "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+
+
+#: v1 -> v2 : les quatre entrées du workspace. L'arbre portait douze
+#: répertoires au même niveau qui mélangeaient quatre natures — spécification,
+#: configuration, code, preuve — sans que rien ne le dise.
+MOVES_V2: tuple[tuple[str, str], ...] = (
+    ("missions", "feats/missions"),
+    ("caps", "feats/caps"),
+    ("topology", "feats/topology"),
+    ("contracts", "feats/contracts"),
+    ("docs/adr", "feats/decisions"),
+    (".sys/.context/adrs", "feats/decisions"),
+    ("docs", "feats/briefs"),
+    ("prompts", "src/prompts"),
+    ("datasets", "proof/datasets"),
+    ("evals/suites", "proof/suites"),
+    ("evals/baselines", "proof/baselines"),
+    ("evals/calibration", "proof/calibration"),
+    ("evals/reports", ".sys/reports"),
+    ("traces", ".sys/traces"),
+)
+
+#: Répertoires vidés par `MOVES_V2` et qui n'existent plus dans l'arbre.
+#:
+#: **Du plus profond vers le plus haut**, et c'est une contrainte, pas un goût :
+#: un sous-répertoire resté vide (jamais peuplé, donc jamais déplacé) empêche
+#: son parent d'être retiré, et `rmdir_if_empty` signale alors un « contenu
+#: inconnu » qui n'est qu'une coquille. La migration échouait sur un workspace
+#: parfaitement sain dont l'utilisateur n'avait simplement pas encore écrit de
+#: suite d'eval.
+GHOST_DIRS_V2: tuple[str, ...] = (
+    "evals/suites", "evals/baselines", "evals/calibration", "evals/reports", "evals",
+    "docs/adr", "docs",
+    ".sys/.context/adrs",
+    "traces/runs", "traces",
+)
+
+
+def migrate_to_v2(ctx: Context) -> None:
+    """v1 -> v2 : feats / stack / src / proof / .sys.
+
+    L'ordre compte : on DÉPLACE d'abord le contenu, on crée ensuite ce qui
+    manque, on retire enfin les coquilles vides. Créer l'arbre avant de
+    déplacer ferait trouver une destination déjà peuplée d'un `.gitkeep`, et
+    `move` refuserait la collision sur chaque répertoire.
+    """
+    for old, new in MOVES_V2:
+        ctx.move(old, new)
+    for rel in WORKSPACE_TREE:
+        ctx.mkdir(rel)
+    for rel in GHOST_DIRS_V2:
         ctx.rmdir_if_empty(rel, "WORKSPACE_GHOST_DIR_NOT_EMPTY")
 
 
@@ -152,6 +283,7 @@ class Migration:
 #: ne touche jamais à `workspace.json` elle-même.
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "arborescence canonique + retrait de .sys/.routing, .sys/.cache, .sys/.reverse", migrate_to_v1),
+    Migration(2, "quatre entrées : feats/ (spec) · stack/ · src/ (prompts compris) · proof/ (jamais un dev-*) · .sys/", migrate_to_v2),
 )
 
 

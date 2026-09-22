@@ -227,4 +227,4 @@ def test_trace_writer_writes_a_redacted_line(tmp_path: Path) -> None:
     assert attrs["stderr"] == (f"connexion à {REDACTED}db.internal/prod refusée ; retry avec {REDACTED}")
 
     # Et le scan de G7, sur cette trace, ne trouve rien : les deux reconnaissent les mêmes formes.
-    assert not scan_secrets.run(tmp_path, targets=["workspace/traces"]).errors
+    assert not scan_secrets.run(tmp_path, targets=["workspace/.sys/traces"]).errors

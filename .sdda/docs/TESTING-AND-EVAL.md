@@ -132,7 +132,7 @@ Un grader LLM non validé ne rend pas de verdict bloquant (P9, invariant
 2. Le juge note les mêmes items.
 3. On calcule l'accord (kappa de Cohen pour du binaire/ordinal, corrélation pour
    du continu). Seuil par défaut : **κ ≥ 0.6**.
-4. Le rapport est versionné dans `workspace/evals/calibration/{grader}.json` et
+4. Le rapport est versionné dans `workspace/proof/calibration/{grader}.json` et
    référencé depuis l'IR.
 5. En dessous du seuil : la grille est retravaillée, ou le juge devient
    `advisory` — il produit un score informatif mais ne bloque plus.

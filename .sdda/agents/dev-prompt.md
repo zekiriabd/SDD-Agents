@@ -1,6 +1,6 @@
 ---
 name: dev-prompt
-description: Compile un agent-contract en prompt système. Lit workspace/contracts/agents/{n}-{agent}.agent.md, les contrats d'outils exposés et l'IR ; écrit workspace/prompts/{agent}.system.md, hashé et épinglé. Le prompt porte la refusal policy et la posture face au texte non maîtrisé. Refuse tout prompt inline, toute référence à un outil inexistant, toute taille au-dessus de PromptMaxTokens.
+description: Compile un agent-contract en prompt système. Lit workspace/feats/contracts/agents/{n}-{agent}.agent.md, les contrats d'outils exposés et l'IR ; écrit workspace/src/prompts/{agent}.system.md, hashé et épinglé. Le prompt porte la refusal policy et la posture face au texte non maîtrisé. Refuse tout prompt inline, toute référence à un outil inexistant, toute taille au-dessus de PromptMaxTokens.
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
@@ -42,13 +42,13 @@ est donné. Sinon `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement**, pour chaque agent du périmètre :
-- `workspace/contracts/agents/{n}-{agent-slug}.agent.md` — ta spécification.
-- `workspace/contracts/tools/{n}-*.tool.md` des outils listés au §4 du contrat —
+- `workspace/feats/contracts/agents/{n}-{agent-slug}.agent.md` — ta spécification.
+- `workspace/feats/contracts/tools/{n}-*.tool.md` des outils listés au §4 du contrat —
   pour connaître leurs `description` et erreurs ; tu ne les réécris pas.
-- `workspace/contracts/retrieval/{n}-*.retrieval.md` des retrievers du §7 — mode de citation.
+- `workspace/feats/contracts/retrieval/{n}-*.retrieval.md` des retrievers du §7 — mode de citation.
 - `workspace/.sys/.ir/{n}-system.ir.json` — l'entrée `agents[]` de cet agent :
   outils réellement câblés, `trustPosture`, `refusalPolicy`, `bounds`.
-- `workspace/missions/{n}-*.md` — `## Failure Policy`, `## Business Rules`.
+- `workspace/feats/missions/{n}-*.md` — `## Failure Policy`, `## Business Rules`.
 - `workspace/stack/STACK.md` — `## Runtime Models` (tier de l'agent),
   `## Project Config` `PromptMaxTokens`, `CitationMode`.
 - `.sdda/rules/prompt-authoring.md`, `.sdda/digests/error-classification.dev-prompt.md`.
@@ -150,7 +150,7 @@ d'API de framework, un secret, une variable de template non résolue.
 
 ```bash
 python .sdda/sdda.py lint-prompts --mission {n}
-python .sdda/python/sdda_lib/hashing.py --file workspace/prompts/{agent-slug}.system.md
+python .sdda/python/sdda_lib/hashing.py --file workspace/src/prompts/{agent-slug}.system.md
 ```
 
 Le lint vérifie : aucun secret, aucun outil référencé absent de `agents[].tools`
@@ -172,7 +172,7 @@ P10 : toute baseline d'eval qui ne le porte pas est périmée.
 
 ## STEP 6 — Écrire
 
-`workspace/prompts/{agent-slug}.system.md`, avec en tête un frontmatter minimal :
+`workspace/src/prompts/{agent-slug}.system.md`, avec en tête un frontmatter minimal :
 `agent`, `mission`, `contract_hash` (hash du contrat compilé), `generated_by:
 dev-prompt`. Le texte du prompt suit. Rien d'autre : pas de commentaire de
 conception dans le fichier — il est chargé tel quel au runtime.
@@ -181,7 +181,7 @@ conception dans le fichier — il est chargé tel quel au runtime.
 
 ## STEP final — Anti-dérive
 
-- [ ] Le prompt n'existe **que** dans `workspace/prompts/{agent-slug}.system.md`
+- [ ] Le prompt n'existe **que** dans `workspace/src/prompts/{agent-slug}.system.md`
 - [ ] Sept sections dans l'ordre ; aucune ajoutée hors contrat
 - [ ] Chaque entrée `untrusted` du contrat est nommée dans la posture P8
 - [ ] Chaque item de la refusal policy est une règle testable

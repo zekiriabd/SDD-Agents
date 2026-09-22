@@ -1671,7 +1671,7 @@
           "value": 0.6
         },
         "agreementMetric": "kappa de Cohen pour du binaire/ordinal, corrélation pour du continu",
-        "reportPath": "workspace/evals/calibration/{grader}.json",
+        "reportPath": "workspace/proof/calibration/{grader}.json",
         "belowThreshold": "la grille est retravaillée, ou le juge devient advisory — il produit un score informatif mais ne bloque plus",
         "mustDifferFromEvaluated": {
           "configKey": "JudgeMustDifferFromEvaluated",

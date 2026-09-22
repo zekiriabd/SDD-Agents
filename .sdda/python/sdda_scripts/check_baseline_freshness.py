@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fraîcheur des baselines — enforcer de `eval-baseline-hash-pinned` (P10).
 
-Pour chaque baseline de `workspace/evals/baselines/{n}-system.json`, recalcule
+Pour chaque baseline de `workspace/proof/baselines/{n}-system.json`, recalcule
 le tuple courant depuis le DISQUE :
 
     (prompt_hash, model_id, retrieval_index_hash, tool_schema_hash, dataset_hash)

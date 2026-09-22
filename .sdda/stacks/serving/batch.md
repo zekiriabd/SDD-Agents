@@ -249,7 +249,7 @@ Le premier lot réel appartient à la L7 (ORCH GATE) : le runner invoque
 8. **Le lot qui écrit dans `datasets/`.** Un lot qui enrichit un jeu de test
    modifie le jeu qui juge le système. Interdit par l'ownership
    (`[OWNERSHIP_VIOLATION]`) : la sortie d'un lot va dans `--output`, jamais
-   sous `workspace/datasets/` ni `workspace/evals/`.
+   sous `workspace/proof/datasets/` ni `workspace/proof/`.
 9. **Secrets dans le fichier d'entrée.** Un export client contient des jetons
    en clair, qui partent dans les traces et dans `results.ndjson`. Les mêmes
    règles de rédaction que les arguments d'outil s'appliquent à l'item

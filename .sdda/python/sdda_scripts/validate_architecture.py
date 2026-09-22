@@ -603,7 +603,7 @@ def run(root: Path, mission: int | str | None = None, explain: bool = False) -> 
                 report.warn(
                     "ARCH_ADR_REQUIRED",
                     f"`{axis}/{one}` exige un ADR nominatif en plus de la déclaration",
-                    fix="écrire l'ADR dans workspace/docs/adr/ et le citer dans `## 9. Décisions à ADR`",
+                    fix="écrire l'ADR dans workspace/feats/decisions/ et le citer dans `## 9. Décisions à ADR`",
                     location=loc,
                 )
 

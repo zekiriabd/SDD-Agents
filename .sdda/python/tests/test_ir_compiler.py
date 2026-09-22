@@ -157,15 +157,15 @@ def test_dotted_edge_is_a_free_edge(tmp_path: Path) -> None:
 def test_suites_are_derived_from_cap_acs_and_injection_suites(project: Path) -> None:
     ir, _ = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
     suites = {s["id"]: s for s in ir["evaluation"]["suites"]}
-    assert suites["1-2-groundedness"]["judgeCalibrationRef"] == "workspace/evals/calibration/groundedness.json"
+    assert suites["1-2-groundedness"]["judgeCalibrationRef"] == "workspace/proof/calibration/groundedness.json"
     assert suites["1-1-routing_accuracy"]["runs"] == 5 and suites["1-1-routing_accuracy"]["threshold"] == 0.95
     assert suites["1-billing-specialist-injection"]["level"] == "L8"
-    assert ir["evaluation"]["holdout"] == "workspace/datasets/holdout/mission-1-v1.jsonl"
+    assert ir["evaluation"]["holdout"] == "workspace/proof/datasets/holdout/mission-1-v1.jsonl"
     assert ir["traceability"]["1-2-ExplainInvoiceLine"]["implementedBy"]["tools"] == ["1-invoice-lookup", "1-zendesk-create-ticket"]
 
 
 def test_missing_bound_is_a_compile_error_not_a_default(project: Path) -> None:
-    contract = project / "workspace/contracts/agents/1-billing-specialist.agent.md"
+    contract = project / "workspace/feats/contracts/agents/1-billing-specialist.agent.md"
     text = contract.read_text(encoding="utf-8").replace("| `max_tool_calls` | 10 | fail-explicit |\n", "")
     contract.write_text(text, encoding="utf-8")
     with pytest.raises(ir_compiler.CompileError) as exc:
@@ -176,14 +176,14 @@ def test_missing_bound_is_a_compile_error_not_a_default(project: Path) -> None:
 
 
 def test_missing_prompt_and_no_pinned_hash_is_a_compile_error(project: Path) -> None:
-    (project / "workspace/prompts/billing-specialist.system.md").unlink()
+    (project / "workspace/src/prompts/billing-specialist.system.md").unlink()
     with pytest.raises(ir_compiler.CompileError) as exc:
         ir_compiler.compile_mission(project, 1)
     assert any("prompt" in f.message.lower() for f in exc.value.report.errors)
 
 
 def test_unknown_tool_in_agent_contract_is_a_compile_error(project: Path) -> None:
-    contract = project / "workspace/contracts/agents/1-billing-specialist.agent.md"
+    contract = project / "workspace/feats/contracts/agents/1-billing-specialist.agent.md"
     text = contract.read_text(encoding="utf-8").replace("| `1-invoice-lookup` |", "| `1-ghost-tool` |")
     contract.write_text(text, encoding="utf-8")
     code, out = run_main(ir_compiler.main, ["--root", str(project), "--mission", "1"])

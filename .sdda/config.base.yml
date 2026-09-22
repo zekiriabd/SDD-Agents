@@ -51,6 +51,14 @@ MaxParallel: 3
 EvalRuns: 3                           # k runs par item. 1 = dev local, REFUSÉ en CI
 EvalRunsCritical: 5                   # pour Criticality: critical
 EvalVarianceWarnPct: 15               # écart-type au-delà -> verdict JAUNE
+# Items mesurés simultanément DANS un run. C'est le poste qui domine la durée
+# murale d'un pipeline : k=3 sur 50 items, répété en G5, G6, PHASE 6 puis G8,
+# fait plus d'un millier d'appels au système évalué — des heures, quand les
+# agents de construction se comptent en dizaines de minutes.
+# L'ordre des résultats est reconstruit avant agrégation : la mesure ne dépend
+# pas de l'ordonnanceur (P10). `1` pour un exécuteur qui ne supporte pas les
+# appels concurrents.
+EvalMaxParallel: 4
 EvalSeedPolicy: vary                  # vary | fixed — `fixed` masque la variance,
                                       # réservé au débogage d'un cas précis
 

@@ -38,14 +38,14 @@ def project(tmp_path: Path) -> Path:
 def test_write_paths_arrive_resolved_not_templated(project: Path) -> None:
     code, brief = _json(project, ["--agent", "po-capabilities", "--mission", "1"])
     assert code == 0
-    assert "workspace/caps/1-{m}-*.md" in brief["data"]["ownership"]["writes"]  # {m} = index de CAP, pas une MISSION
+    assert "workspace/feats/caps/1-{m}-*.md" in brief["data"]["ownership"]["writes"]  # {m} = index de CAP, pas une MISSION
     assert "{n}" not in json.dumps(brief["data"]["ownership"])
 
 
 def test_the_other_placeholder_stays_literal_so_the_rule_keeps_its_meaning(project: Path) -> None:
     """`missions/{other}-*.md` élargi en `*` interdirait à l'agent sa propre MISSION."""
     code, brief = _json(project, ["--agent", "po-capabilities", "--mission", "1"])
-    assert code == 0 and "workspace/missions/{other}-*.md" in brief["data"]["ownership"]["forbiddenReads"]
+    assert code == 0 and "workspace/feats/missions/{other}-*.md" in brief["data"]["ownership"]["forbiddenReads"]
     assert "{m} et {other} désignent" in brief["data"]["prompt"]
 
 
@@ -140,5 +140,5 @@ def test_the_prompt_names_the_fiche_the_context_and_the_missing_inputs(project: 
                                             "--root", str(project), "--prompt-only"])
     assert code == 0
     assert "agents/po-capabilities.md" in out
-    assert "workspace/missions/1-SupportAssistant.md" in out
+    assert "workspace/feats/missions/1-SupportAssistant.md" in out
     assert "Contrat de sortie" in out and "Ne jamais spawner un autre agent" in out

@@ -52,34 +52,39 @@ MIGRATE_CMD = "python .sdda/sdda.py migrate-workspace"
 #: ce script vérifie qu'elle est là. Un répertoire retiré d'ici devient un
 #: fantôme : il se retire dans une migration, pas en silence.
 WORKSPACE_TREE: tuple[str, ...] = (
+    # stack/ — la CONFIGURATION
     "stack",
     "stack/sources",
-    "contracts/dataaccess/schemas",
-    "missions",
-    "caps",
-    "topology",
-    "contracts/agents",
-    "contracts/tools",
-    "contracts/retrieval",
-    "contracts/memory",
-    "prompts",
-    "datasets/golden",
-    "datasets/holdout",
-    "datasets/calibration",
-    "datasets/adversarial",
-    "evals/suites",
-    "evals/baselines",
-    "evals/reports",
-    "evals/calibration",
-    "traces/runs",
+    # feats/ — la SPÉCIFICATION : ce qu'on écrit et qu'on relit en revue
+    "feats/missions",
+    "feats/caps",
+    "feats/topology",
+    "feats/contracts/agents",
+    "feats/contracts/tools",
+    "feats/contracts/retrieval",
+    "feats/contracts/memory",
+    "feats/contracts/dataaccess/schemas",
+    "feats/decisions",
+    "feats/briefs",
+    # src/ — le CODE GÉNÉRÉ, prompts compris (un prompt est un actif runtime)
     "src",
-    "docs",
+    "src/prompts",
+    # proof/ — ce qui JUGE : aucun `dev-*` n'y écrit jamais
+    "proof/datasets/golden",
+    "proof/datasets/holdout",
+    "proof/datasets/calibration",
+    "proof/datasets/adversarial",
+    "proof/suites",
+    "proof/baselines",
+    "proof/calibration",
+    # .sys/ — l'ÉTAT INTERNE et les sorties de run : régénérable, effaçable
     ".sys/.ir",
-    ".sys/.context/adrs",
     ".sys/.context/packs",
     ".sys/.state",
     ".sys/.validation",
     ".sys/.audit",
+    ".sys/reports",
+    ".sys/traces/runs",
 )
 
 #: Sections dont l'absence rend une commande incapable de lire sa config.

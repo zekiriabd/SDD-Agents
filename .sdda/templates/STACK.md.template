@@ -341,7 +341,7 @@ IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
 #
 # Convention : `{n}-roster.yml` est chargé même sans être listé ci-dessous.
 # Repli accepté pour un projet mono-agent : la section `## 2. Roster déclaré`
-# de workspace/topology/{n}-topology.md. Jamais les deux — une seule source
+# de workspace/feats/topology/{n}-topology.md. Jamais les deux — une seule source
 # de vérité, sinon c'est celle que personne ne relit qui gouverne le code.
 #
 # Ce que le pattern actif EXIGE du roster :
@@ -467,7 +467,7 @@ SourceQueryLogging: full              # chaque lecture d'un agent est tracée
 
 ## Active Tools & Integrations
 # Chaque outil déclaré ici DOIT avoir un contrat dans
-# workspace/contracts/tools/ avant d'être câblé à un agent (TOOL GATE).
+# workspace/feats/contracts/tools/ avant d'être câblé à un agent (TOOL GATE).
 # Les outils d'accès aux données ne se déclarent PAS ici : ils sont générés
 # depuis `## Active Data Access` (une vue SQL ou une source déclarée produit
 # son outil et son contrat).
@@ -503,7 +503,7 @@ ExternalAPIs:
 #    side_effect_class: write-scoped   # read-only | write-scoped | write-destructive | external-side-effect
 #    rate_limit_rpm: 60
 #    idempotency: header               # header | natural-key | none
-#    contract: workspace/contracts/tools/1-zendesk-create-ticket.tool.md
+#    contract: workspace/feats/contracts/tools/1-zendesk-create-ticket.tool.md
 
 
 ## Active Memory Strategy
@@ -560,7 +560,7 @@ CostTrackingEnabled: true
 GoldenSetMinItems: 50
 HoldoutSetMinItems: 30
 AdversarialSetMinItems: 25
-BaselineStorage: workspace/evals/baselines/
+BaselineStorage: workspace/proof/baselines/
 
 
 ## Active Serving Surface

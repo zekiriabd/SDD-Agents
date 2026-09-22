@@ -372,7 +372,7 @@ Toute autre clé → `[DATA_SOURCE_UNKNOWN_KEY]` au preflight.
 
 ```bash
 uv run python -m sdda_scripts.gen_source_tools --infer --source order_tracking
-#   -> workspace/contracts/dataaccess/schemas/order_tracking.schema.json   (à relire, puis commité)
+#   -> workspace/feats/contracts/dataaccess/schemas/order_tracking.schema.json   (à relire, puis commité)
 
 # Source distante (http-api, mcp, ou store non local) : le générateur ne joint
 # jamais un hôte — sinon il ne tournerait pas en CI. Capturer une réponse :
@@ -564,10 +564,10 @@ workspace/src/{AppName}/src/{AppName}/data/
 └── tools/
     └── {source_id}_{lookup|search|count}.py   # GÉNÉRÉ — Input/Record/Output + fonction outil
 
-workspace/contracts/dataaccess/
+workspace/feats/contracts/dataaccess/
 └── schemas/{source_id}.schema.json            # SCHÉMA FIGÉ — inféré une fois, relu, versionné, fait foi
 
-workspace/contracts/tools/
+workspace/feats/contracts/tools/
 └── {n}-{source-id}-{lookup|search|count}.tool.md  # squelette GÉNÉRÉ UNE FOIS, complété à la main
 
 workspace/src/{AppName}/tests/data/
@@ -580,7 +580,7 @@ workspace/src/{AppName}/tests/data/
 
 Les données elles-mêmes ne sont **pas** dans `workspace/src/` : ce sont des
 données d'exploitation, pas du code. Elles sont gitignorées, et un échantillon
-anonymisé vit dans `workspace/datasets/` pour les tests. Les **manifestes**, eux,
+anonymisé vit dans `workspace/proof/datasets/` pour les tests. Les **manifestes**, eux,
 sont versionnés : c'est la seule trace revue de la surface de données.
 
 ---

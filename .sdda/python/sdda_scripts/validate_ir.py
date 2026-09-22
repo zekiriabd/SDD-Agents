@@ -289,7 +289,7 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
                 dangling(f"agent `{aid}` (retrievers)", str(r), "écrire le contrat de retrieval ou retirer la ligne")
         for c in a.get("servesCaps") or []:
             if c not in cap_ids:
-                dangling(f"agent `{aid}` (servesCaps)", str(c), "la CAP doit exister dans workspace/caps/")
+                dangling(f"agent `{aid}` (servesCaps)", str(c), "la CAP doit exister dans workspace/feats/caps/")
         for h in a.get("handoffs") or []:
             to = str(h.get("to", ""))
             if to and to not in nodes and to not in agents:
@@ -443,12 +443,12 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
                 )
 
     # 9. Posture de confiance (P8) ---------------------------------------------------
-    injection_agents = {str(s.get("agentRef")) for s in suites if str(s.get("dataset", "")).startswith("workspace/datasets/adversarial/") or s.get("level") == "L8"}
+    injection_agents = {str(s.get("agentRef")) for s in suites if str(s.get("dataset", "")).startswith("workspace/proof/datasets/adversarial/") or s.get("level") == "L8"}
     for aid, a in sorted(agents.items()):
         posture = a.get("trustPosture") or {}
         if posture.get("untrustedInputs") and aid not in injection_agents:
             report.error("INJECTION_SUITE_MISSING", f"agent `{aid}` consomme {posture['untrustedInputs']} sans suite d'injection dans evaluation.suites",
-                         "déclarer `- **Suite d'injection** : workspace/datasets/adversarial/{slug}.jsonl` dans le contrat (invariant injection-suite-mandatory)", loc)
+                         "déclarer `- **Suite d'injection** : workspace/proof/datasets/adversarial/{slug}.jsonl` dans le contrat (invariant injection-suite-mandatory)", loc)
         ref = posture.get("injectionSuiteRef")
         if root is not None and ref and not paths.resolve_rel(root, str(ref)).is_file():
             report.warn("EVAL_DATASET_MISSING", f"agent `{aid}` : suite d'injection `{ref}` absente sur disque (exigée avant G7)", "", loc)
@@ -471,9 +471,9 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
     for s in suites:
         sid = str(s.get("id"))
         ds = str(s.get("dataset", ""))
-        if not ds.startswith("workspace/datasets/"):
-            report.error("AC_NOT_EVALUABLE", f"suite `{sid}` : dataset `{ds}` hors de workspace/datasets/", "un dataset est un fichier versionné sous workspace/datasets/", loc)
-        elif ds.startswith("workspace/datasets/holdout/") and s.get("level") != "L9":
+        if not ds.startswith("workspace/proof/datasets/"):
+            report.error("AC_NOT_EVALUABLE", f"suite `{sid}` : dataset `{ds}` hors de workspace/proof/datasets/", "un dataset est un fichier versionné sous workspace/proof/datasets/", loc)
+        elif ds.startswith("workspace/proof/datasets/holdout/") and s.get("level") != "L9":
             report.error("AC_DATASET_IS_HOLDOUT", f"suite `{sid}` itère sur le holdout `{ds}`", "le holdout rend le verdict (G8) : on n'ajuste jamais contre lui", loc)
         if s.get("grader") not in GRADERS:
             report.error("AC_NOT_EVALUABLE", f"suite `{sid}` : grader `{s.get('grader')}` hors liste close", "", loc)
@@ -501,8 +501,29 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
                             report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : accord {kappa!r} < JudgeCalibrationMinKappa {min_kappa}", "retravailler la grille du juge ou le passer en advisory", loc)
                         if not isinstance(items, int) or items < min_items:
                             report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : {items!r} items de calibration < JudgeCalibrationMinItems {min_items}", "labelliser (humainement) au moins le minimum d'items", loc)
-        if root is not None and ds.startswith("workspace/datasets/") and not paths.resolve_rel(root, ds).is_file():
+        if root is not None and ds.startswith("workspace/proof/datasets/") and not paths.resolve_rel(root, ds).is_file():
             report.warn("EVAL_DATASET_MISSING", f"suite `{sid}` : dataset `{ds}` absent sur disque", "", loc)
+
+    # Le holdout sans la suite qui le mesure ---------------------------------------------
+    #
+    # `holdout` est optionnel dans l'IR parce que le jeu de verdict naît en
+    # PHASE 6a, après la compilation. Mais dès qu'il existe, il doit être MESURÉ
+    # par une suite L9 : c'est la seule que `eval_runner` mappe sur la part
+    # `acceptance` de G8. Un IR qui nomme le holdout sans porter la suite
+    # laisserait G8 sans rien à exécuter, et une gate qu'aucune exécution ne
+    # peut rendre verte bloque le pipeline sans jamais dire pourquoi.
+    #
+    # L'inverse — une suite L9 sans holdout — est déjà refusé par le contrôle de
+    # dataset ci-dessus, qui exige un chemin sous `workspace/proof/datasets/`.
+    holdout = str(ir.get("evaluation", {}).get("holdout") or "")
+    if holdout and not any(str(s.get("level")) == "L9" for s in suites):
+        report.error(
+            "ACCEPTANCE_SUITE_MISSING",
+            f"le holdout `{holdout}` est déclaré, aucune suite `L9` ne le mesure",
+            "déclarer `- Grader: <grader>` dans `## Quantified Goal` de la MISSION puis recompiler l'IR : "
+            "c'est de là que naît la suite d'acceptation. Sans elle, G8 n'a aucune exécution à rendre verte",
+            loc,
+        )
 
     # Routeur sans repli ; agents hors graphe --------------------------------------------
     for nid, node in sorted(nodes.items()):

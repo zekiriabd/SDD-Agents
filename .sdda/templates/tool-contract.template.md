@@ -92,7 +92,7 @@ Trust: <trusted | untrusted>          # la SORTIE de cet outil est-elle du texte
 
 ## 8. Tests de contrat (L2)
 
-Fichier : `workspace/evals/suites/tool-{n}-{tool-slug}.yaml`
+Fichier : `workspace/proof/suites/tool-{n}-{tool-slug}.yaml`
 
 - [ ] happy path
 - [ ] chaque erreur du §4

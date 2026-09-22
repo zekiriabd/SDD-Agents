@@ -564,4 +564,4 @@ def allowed_keys(source: dict[str, Any]) -> frozenset[str]:
 
 
 def schema_rel_path(source_id: str) -> str:
-    return f"workspace/contracts/dataaccess/schemas/{source_id}.schema.json"
+    return f"workspace/feats/contracts/dataaccess/schemas/{source_id}.schema.json"

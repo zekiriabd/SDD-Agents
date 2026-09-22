@@ -339,7 +339,7 @@ def scan_inline_prompts(root: Path, report: Report) -> int:
                 "PROMPT_INLINE_FORBIDDEN",
                 f"{paths.rel(root, path)}:{line} — littéral de {len(literal)} caractères à l'allure "
                 "d'instruction système",
-                fix="déplacer le texte dans `workspace/prompts/{slug}.system.md` et le charger au "
+                fix="déplacer le texte dans `workspace/src/prompts/{slug}.system.md` et le charger au "
                     "démarrage. Un prompt sans fichier n'a pas de hash, donc pas d'épinglage (P10), "
                     "donc aucune eval rejouable",
                 location=paths.rel(root, path),
@@ -367,7 +367,7 @@ def run(root: Path, mission: int | str | None = None, require_code: bool = False
                 report.error(
                     "PROMPT_MISSING",
                     f"agent `{slug}` de l'IR n'a pas de prompt sur disque",
-                    fix=f"écrire `workspace/prompts/{slug}.system.md` — un agent sans prompt de "
+                    fix=f"écrire `workspace/src/prompts/{slug}.system.md` — un agent sans prompt de "
                         "fichier est un agent dont le comportement n'est ni versionné ni hashé",
                     location=ir_loc or "workspace/.sys/.ir/",
                 )

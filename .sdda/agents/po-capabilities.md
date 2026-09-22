@@ -1,6 +1,6 @@
 ---
 name: po-capabilities
-description: Découpe une MISSION en capabilities dont chaque critère d'acceptation est mesurable. Lit workspace/missions/{n}-*.md, écrit workspace/caps/{n}-{m}-*.md. Refuse tout AC qui ne nomme pas métrique, seuil, dataset et grader.
+description: Découpe une MISSION en capabilities dont chaque critère d'acceptation est mesurable. Lit workspace/feats/missions/{n}-*.md, écrit workspace/feats/caps/{n}-{m}-*.md. Refuse tout AC qui ne nomme pas métrique, seuil, dataset et grader.
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -31,7 +31,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
 ## STEP 2 — Localiser la MISSION
 
-Glob `workspace/missions/{n}-*.md`.
+Glob `workspace/feats/missions/{n}-*.md`.
 0 fichier → `[MISSION_NOT_FOUND]` · >1 → `[MISSION_AMBIGUOUS]`.
 
 Vérifie que la MISSION a franchi G0 (`Status: Specified` **et** un rapport de
@@ -48,7 +48,7 @@ FIX: lancer /sdda-mission {n} et compléter Quantified Goal, Execution Budget,
 
 Read **uniquement** :
 - `.sdda/templates/capability.template.md`
-- `workspace/missions/{n}-*.md`
+- `workspace/feats/missions/{n}-*.md`
 - `workspace/.sys/.context/constitution.md` **si présent** (acteurs, glossaire déjà connus)
 - `.sdda/digests/error-classification.po-capabilities.md`
 
@@ -86,7 +86,7 @@ Pour **chaque** critère d'acceptation, produire les cinq champs. Sans exception
 - AC-1:
   - metric:    groundedness
   - threshold: ">= 0.85"
-  - dataset:   workspace/datasets/golden/billing-v1.jsonl
+  - dataset:   workspace/proof/datasets/golden/billing-v1.jsonl
   - grader:    llm-judge
   - runs:      3
   - notes:     ne couvre pas les factures antérieures à 2024 (hors périmètre)
@@ -106,7 +106,7 @@ Pour **chaque** critère d'acceptation, produire les cinq champs. Sans exception
 **Règles dures** :
 
 1. Un seuil est un **nombre**, jamais un adjectif.
-2. Le `dataset` pointe un chemin sous `workspace/datasets/`. Il n'existe pas
+2. Le `dataset` pointe un chemin sous `workspace/proof/datasets/`. Il n'existe pas
    encore — c'est normal, `qa-evals` le construira. Tu déclares le contrat.
 3. `runs` = `EvalRuns` (3), ou `EvalRunsCritical` (5) si `Criticality: critical`.
    Un run vert n'est pas une preuve (P3).
@@ -150,7 +150,7 @@ dans sa section `Failure Behavior` : que se passe-t-il quand *cette* compétence
 ## STEP 8 — Épingler le hash de la MISSION
 
 ```bash
-python .sdda/python/sdda_lib/hashing.py --file workspace/missions/{n}-*.md --short
+python .sdda/python/sdda_lib/hashing.py --file workspace/feats/missions/{n}-*.md --short
 ```
 Écrire `Parent MISSION hash: sha256:{8}` dans chaque CAP. Il détecte une MISSION
 modifiée sous les pieds des CAPs — descendant direct du `Parent FEAT hash` de
@@ -158,7 +158,7 @@ SDD_Pro.
 
 ## STEP 9 — Écrire
 
-Un fichier par CAP : `workspace/caps/{n}-{m}-{Name}.md`, depuis le template.
+Un fichier par CAP : `workspace/feats/caps/{n}-{m}-{Name}.md`, depuis le template.
 Numérotation `{m}` stable, jamais réordonnée : toute la traçabilité en dépend.
 Ajouter une CAP = un nouvel index en fin de liste.
 

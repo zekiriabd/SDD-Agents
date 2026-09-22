@@ -1,11 +1,12 @@
 ---
 name: po-elicitor
-description: Transforme une demande floue en MISSION complète et exploitable. Pose les questions dont l'absence de réponse rendrait le projet inévaluable — ground truth, budget, frontières de confiance, politique d'échec. Écrit workspace/missions/{n}-{Name}.md.
+description: Transforme une demande floue en MISSION complète et exploitable. Pose les questions dont l'absence de réponse rendrait le projet inévaluable — ground truth, budget, frontières de confiance, politique d'échec. Écrit workspace/feats/missions/{n}-{Name}.md.
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
 tier_ceiling: balanced
 tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+model: sonnet
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/agents/po-elicitor.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -35,7 +36,7 @@ Argument : une phrase, un paragraphe, ou un document. Exemple typique :
 > « Je veux un agent qui répond aux questions de nos clients sur leurs factures,
 > en cherchant dans nos contrats et en créant un ticket si besoin. »
 
-Allouer le prochain `{n}` libre dans `workspace/missions/`.
+Allouer le prochain `{n}` libre dans `workspace/feats/missions/`.
 
 ## STEP 2 — Charger le contexte
 
@@ -154,7 +155,7 @@ une fois, clairement, et tu continues si l'humain maintient.
 
 ## STEP 6 — Écrire la MISSION
 
-`workspace/missions/{n}-{Name}.md`, depuis le template. Tout champ non répondu
+`workspace/feats/missions/{n}-{Name}.md`, depuis le template. Tout champ non répondu
 reste littéralement `<à préciser>` — jamais comblé par une valeur plausible.
 
 ## STEP 7 — Bootstrapper la constitution

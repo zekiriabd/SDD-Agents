@@ -7,7 +7,7 @@ Vérifie qu'une MISSION est SPÉCIFIÉE au sens de LIFECYCLE.md : objectif chiff
 failure policy, et cohérence de `## Required Stack` avec `STACK.md`.
 
 Usage :
-    python .sdda/sdda.py validate-mission workspace/missions/1-SupportAssistant.md [--json]
+    python .sdda/sdda.py validate-mission workspace/feats/missions/1-SupportAssistant.md [--json]
     python .sdda/sdda.py validate-mission            # toutes les missions du workspace
 
 Écrit `workspace/.sys/.validation/G0-{missionId}.json` (sauf --no-report).
@@ -48,6 +48,11 @@ STACK_SECTIONS = {
 }
 _ITEM_RE = re.compile(r"^(BR|AC)-(\d+)\s*:\s*(.*)$")
 _NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
+#: Graders admis pour l'objectif de la MISSION — même liste close que les AC de
+#: CAP, et pour la même raison : un grader hors liste n'a pas d'implémentation,
+#: donc la suite qu'il produirait ne s'exécuterait jamais.
+GOAL_GRADERS = ("exact", "regex", "schema", "numeric-tolerance", "semantic-similarity",
+                "llm-judge", "trajectory", "cost", "latency")
 
 
 @dataclass
@@ -182,6 +187,23 @@ def validate_mission_text(text: str, *, path: Path | None, root: Path | None, co
         if deadline and not markdown_io.is_placeholder(deadline) and not re.search(r"\d{4}-(\d{2}-\d{2}|Q[1-4]|\d{2})", deadline):
             report.error("MISSION_GOAL_UNQUANTIFIED", f"Quantified Goal : `Deadline: {deadline}` n'est pas une date (AAAA-MM-JJ)",
                          "écrire une échéance ISO, ex. `2026-12-01`", loc)
+        # Le grader de l'objectif — averti ici, bloquant en G8.
+        #
+        # Une cible chiffrée dit COMBIEN, jamais COMMENT on le mesure. C'est de
+        # cette ligne que `ir_compiler` fait naître la suite d'acceptation L9,
+        # la seule que `eval_runner` mappe sur la part `acceptance` de G8.
+        # Absente, la MISSION reste parfaitement valide et G8 n'a rien à
+        # exécuter — un avertissement ici coûte une ligne, la même chose
+        # découverte en phase 8 coûte tout le pipeline.
+        grader = spec.goal.get("Grader")
+        if not grader or markdown_io.is_placeholder(grader):
+            report.warn("MISSION_GOAL_UNQUANTIFIED",
+                        "Quantified Goal : `Grader` absent — l'objectif est chiffré, sa mesure n'est pas déclarée",
+                        f"ajouter `- Grader: <{'|'.join(GOAL_GRADERS)}>` : sans lui, aucune suite L9 n'est compilée "
+                        "et la gate d'acceptation reste sans exécution", loc)
+        elif grader.strip().lower() not in GOAL_GRADERS:
+            report.error("MISSION_GOAL_UNQUANTIFIED", f"Quantified Goal : `Grader: {grader}` hors liste close",
+                         f"graders admis : {', '.join(GOAL_GRADERS)}", loc)
 
     # Execution Budget (P6) -----------------------------------------------------
     if "Execution Budget" not in spec.sections_missing:
@@ -279,7 +301,7 @@ def build_parser() -> argparse.ArgumentParser:
     # connaissent qu'un numéro, jamais un chemin. Le positionnel reste pour
     # l'usage manuel et pour les tests.
     p.add_argument("--mission", type=int, default=None, help="numéro de MISSION ; restreint aux fichiers de cette MISSION")
-    p.add_argument("files", nargs="*", type=Path, help="fichiers MISSION ; défaut : workspace/missions/*.md")
+    p.add_argument("files", nargs="*", type=Path, help="fichiers MISSION ; défaut : workspace/feats/missions/*.md")
     add_common_args(p)
     return p
 
@@ -296,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.missions_dir(root).glob("*.md"))
     if not files:
-        combined.error("MISSION_INCOMPLETE", "aucune MISSION trouvée", f"créer workspace/missions/{{n}}-{{Name}}.md depuis le template", str(paths.missions_dir(root)))
+        combined.error("MISSION_INCOMPLETE", "aucune MISSION trouvée", f"créer workspace/feats/missions/{{n}}-{{Name}}.md depuis le template", str(paths.missions_dir(root)))
     for f in files:
         combined.extend(validate_mission_file(f, root, config, write_report=not args.no_report))
     return finish(combined, args)

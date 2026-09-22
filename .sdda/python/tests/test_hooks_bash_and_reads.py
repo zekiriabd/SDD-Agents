@@ -69,21 +69,21 @@ def test_wiring_covers_bash_and_the_three_readers() -> None:
 # Bash : écritures
 # ---------------------------------------------------------------------------
 def test_a_redirection_into_the_dataset_is_a_dataset_violation(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "echo '{}' >> workspace/datasets/golden/billing-v1.jsonl")
+    code, err = bash(project, "dev-agent", "echo '{}' >> workspace/proof/datasets/golden/billing-v1.jsonl")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err and "FIX:" in err
 
 
 def test_rm_on_a_prompt_is_a_prompt_violation(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "rm -f workspace/prompts/billing-specialist.system.md")
+    code, err = bash(project, "dev-agent", "rm -f workspace/src/prompts/billing-specialist.system.md")
     assert code == DENY and "PROMPT_OWNERSHIP_VIOLATION" in err
 
 
 def test_tee_sed_in_place_and_mv_are_writes(project: Path) -> None:
     for command in (
-        "cat x | tee workspace/prompts/a.system.md",
-        "sed -i 's/a/b/' workspace/prompts/a.system.md",
-        "mv workspace/src/agents/x.py workspace/prompts/a.system.md",
-        "cp workspace/src/agents/x.py workspace/datasets/golden/y.jsonl",
+        "cat x | tee workspace/src/prompts/a.system.md",
+        "sed -i 's/a/b/' workspace/src/prompts/a.system.md",
+        "mv workspace/src/agents/x.py workspace/src/prompts/a.system.md",
+        "cp workspace/src/agents/x.py workspace/proof/datasets/golden/y.jsonl",
     ):
         code, err = bash(project, "dev-agent", command)
         assert code == DENY, command
@@ -91,9 +91,9 @@ def test_tee_sed_in_place_and_mv_are_writes(project: Path) -> None:
 
 
 def test_powershell_verbs_are_understood(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "Set-Content -Path workspace/datasets/golden/x.jsonl -Value '{}'")
+    code, err = bash(project, "dev-agent", "Set-Content -Path workspace/proof/datasets/golden/x.jsonl -Value '{}'")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
-    code, err = bash(project, "dev-agent", "Remove-Item workspace/prompts/a.system.md -Force")
+    code, err = bash(project, "dev-agent", "Remove-Item workspace/src/prompts/a.system.md -Force")
     assert code == DENY and "PROMPT_OWNERSHIP_VIOLATION" in err
 
 
@@ -109,18 +109,18 @@ def test_a_command_naming_no_governed_path_is_free(project: Path) -> None:
 
 
 def test_the_main_thread_and_unknown_agents_are_not_the_hooks_call(project: Path) -> None:
-    assert bash(project, None, "rm -rf workspace/datasets")[0] == ALLOW
-    assert bash(project, "un-agent-tiers", "rm -rf workspace/datasets")[0] == ALLOW
+    assert bash(project, None, "rm -rf workspace/proof/datasets")[0] == ALLOW
+    assert bash(project, "un-agent-tiers", "rm -rf workspace/proof/datasets")[0] == ALLOW
 
 
 def test_chained_commands_are_each_judged(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "cd workspace && ls && echo x > workspace/datasets/golden/z.jsonl")
+    code, err = bash(project, "dev-agent", "cd workspace && ls && echo x > workspace/proof/datasets/golden/z.jsonl")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
 
 
 def test_a_sed_without_in_place_is_a_read_not_a_write(project: Path) -> None:
     # dev-tools n'a pas de forbidden_reads : lire un dataset n'est pas une faute pour lui.
-    code, err = bash(project, "dev-tools", "sed 's/a/b/' workspace/datasets/golden/billing-v1.jsonl")
+    code, err = bash(project, "dev-tools", "sed 's/a/b/' workspace/proof/datasets/golden/billing-v1.jsonl")
     assert code == ALLOW, err
 
 
@@ -138,7 +138,7 @@ def test_grep_over_the_whole_workspace_leaks_forbidden_content(project: Path) ->
 
 
 def test_grep_inside_the_readable_zone_passes(project: Path) -> None:
-    code, err = bash(project, "po-elicitor", "grep -rn Objective workspace/missions/")
+    code, err = bash(project, "po-elicitor", "grep -rn Objective workspace/feats/missions/")
     assert code == ALLOW, err
 
 
@@ -151,7 +151,7 @@ def test_read_of_a_forbidden_file_is_refused(project: Path) -> None:
 
 
 def test_read_of_a_declared_source_passes(project: Path) -> None:
-    code, err = read_tool(project, "po-elicitor", "Read", file_path=str(project / "workspace/missions/1-SupportAssistant.md"))
+    code, err = read_tool(project, "po-elicitor", "Read", file_path=str(project / "workspace/feats/missions/1-SupportAssistant.md"))
     assert code == ALLOW, err
 
 
@@ -177,7 +177,7 @@ def test_grep_from_an_ancestor_of_a_forbidden_zone_is_refused(project: Path) -> 
 
 
 def test_grep_inside_the_readable_zone_passes_the_read_hook(project: Path) -> None:
-    code, err = read_tool(project, "po-elicitor", "Grep", pattern="Objective", path=str(project / "workspace/missions"))
+    code, err = read_tool(project, "po-elicitor", "Grep", pattern="Objective", path=str(project / "workspace/feats/missions"))
     assert code == ALLOW, err
 
 
@@ -195,22 +195,22 @@ def test_main_thread_and_unknown_agent_pass_the_read_hook(project: Path) -> None
 # La brique partagée : audit_ownership.read_violation
 # ---------------------------------------------------------------------------
 def test_read_violation_distinguishes_the_three_scopes() -> None:
-    loader = {"a": {"reads": ["workspace/missions/**"], "forbidden_reads": ["workspace/stack/STACK.md", "workspace/src/**"]}}
+    loader = {"a": {"reads": ["workspace/feats/missions/**"], "forbidden_reads": ["workspace/stack/STACK.md", "workspace/src/**"]}}
     assert ao.read_violation(loader, "a", "workspace/stack/STACK.md") == "workspace/stack/STACK.md"
     assert ao.read_violation(loader, "a", "workspace/stack/other.md") is None
     assert ao.read_violation(loader, "a", "workspace/src", scope="names") == "workspace/src/**"
     assert ao.read_violation(loader, "a", "workspace", scope="names") is None
     assert ao.read_violation(loader, "a", "workspace", scope="content") in {"workspace/stack/STACK.md", "workspace/src/**"}
     assert ao.read_violation(loader, "a", ".", scope="content") is not None
-    assert ao.read_violation(loader, "a", "workspace/missions", scope="content") is None
+    assert ao.read_violation(loader, "a", "workspace/feats/missions", scope="content") is None
 
 
 def test_classify_extracts_writes_and_reads(tmp_path: Path) -> None:
     writes, reads = preflight_bash_ownership.classify(
         tmp_path,
-        "cat workspace/a.md | tee workspace/b.md > workspace/c.md; grep x workspace/src; ls workspace/prompts; dd if=x of=workspace/d.bin",
+        "cat workspace/a.md | tee workspace/b.md > workspace/c.md; grep x workspace/src; ls workspace/src/prompts; dd if=x of=workspace/d.bin",
     )
     assert writes == ["workspace/c.md", "workspace/b.md", "workspace/d.bin"]
     assert ("workspace/a.md", "file") in reads
     assert ("workspace/src", "content") in reads
-    assert ("workspace/prompts", "names") in reads
+    assert ("workspace/src/prompts", "names") in reads

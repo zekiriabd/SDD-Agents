@@ -135,6 +135,13 @@
       "default": 15,
       "description": "Écart-type du score (en %) au-delà duquel le verdict est JAUNE."
     },
+    "EvalMaxParallel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 32,
+      "default": 4,
+      "description": "Items mesures simultanement DANS un run d'eval. C'est le poste qui domine la duree murale du pipeline. L'ordre des resultats est reconstruit avant agregation, donc la mesure ne depend pas de l'ordonnanceur (P10). Mettre 1 pour un executeur qui ne supporte pas les appels concurrents."
+    },
     "EvalSeedPolicy": {
       "enum": [
         "vary",

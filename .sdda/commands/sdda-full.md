@@ -13,7 +13,8 @@ PHASE 0    — ELICITATION       (po-elicitor,        via /sdda-mission)   [G0 M
 PHASE 1    — CAPABILITIES      (po-capabilities,    via /sdda-caps)      [G1 CAP]
 PHASE 2    — TOPOLOGIE + IR    (architect-topology + 4 architectes ∥, via /sdda-topology)  [G2 TOPOLOGY]
 PHASE 6a   — DATASETS          (qa-evals,           via /sdda-eval --datasets-only)
-PHASE 3→5  — BUILD             (dev-* ∥, dev-prompt, via /sdda-build)   [G3 TOOL] [G4 RETRIEVAL] [G5 AGENT] [G6 ORCH]
+PHASE 3→5  — BUILD             (socle dev-* ∥ → dev-prompt (barrière) → dev-agent ∥ → orchestration,
+                                via /sdda-build)                         [G3 TOOL] [G4 RETRIEVAL] [G5 AGENT] [G6 ORCH]
 PHASE 6    — EVAL + TESTS      (qa-evals ∥ qa-tests, via /sdda-eval)
 PHASE 7    — REVUE A→B→C       (6 reviewers,             via /sdda-review)    [G7 SAFETY]
 PHASE 8    — ACCEPTATION       (script, holdout,         via /sdda-eval --acceptance)  [G8 ACCEPTANCE]
@@ -147,7 +148,7 @@ que les gates amont sont vertes.
 
 Mode création → exécuter `/sdda-mission {Name}` (STEP 3.0), puis continuer.
 
-Mode existant → Glob `workspace/missions/{n}-*.md` :
+Mode existant → Glob `workspace/feats/missions/{n}-*.md` :
 `[MISSION_NOT_FOUND]` / `[MISSION_AMBIGUOUS]` → STOP.
 
 ```bash
@@ -203,6 +204,69 @@ Garde `should-skip-step caps`. Exécuter `/sdda-caps {n}`.
 |---|---|
 | G1 🟢 | continuer |
 | ERROR `[CAP_GATE_FAILED]` | propager + STOP (aucun bypass de G1) |
+
+---
+
+## STEP 3.bis — Le roster, avant de payer l'architecte (0 token)
+
+Garde `should-skip-step topology` (même phase : le roster en est le pré-requis).
+
+```bash
+python .sdda/sdda.py roster validate --mission {n} --if-present
+```
+
+| Exit | Cas | Action |
+|:-:|---|---|
+| `0` | manifeste présent et complet | → STEP 4 |
+| `0` | **aucun** manifeste | émettre le WARN ci-dessous, puis → STEP 4 |
+| `1` | manifeste présent, incomplet (`[ARCH_SPEC_INCOMPLETE]`, `<à préciser>` résiduels) | **STOP humain** |
+
+`--if-present` est délibéré : le repli mono-agent — déclarer le roster dans la
+section `## 2. Roster déclaré` de la topologie — reste légitime, et cette
+section n'existe pas encore à ce STEP. On refuse donc une déclaration
+**incomplète**, jamais une déclaration **différée**.
+
+Aucun manifeste → WARN, pas STOP :
+```
+⚠ MISSION {n} — aucun manifeste de roster
+
+architect-topology matérialise un roster DÉCLARÉ, il n'en invente pas (P7). Sans
+manifeste, la déclaration doit vivre dans `## 2. Roster déclaré` de la topologie.
+Si elle n'y est pas non plus, le post-check rendra [ARCH_ROSTER_MISSING] — après
+avoir payé l'agent le plus cher du pipeline.
+
+  /sdda-roster {n}   écrit un gabarit pré-rempli depuis la MISSION et les CAPs
+```
+
+Manifeste incomplet → STOP :
+```
+⏸ /sdda-full {n} — arrêt sur une décision qui vous appartient
+
+Le roster est la décision d'architecture agentic : combien d'agents, lesquels,
+qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
+vérifie, il ne la prend pas.
+
+  /sdda-roster {n} --validate   dit quels trous restent
+  /sdda-full {n} --resume       reprend ici une fois le manifeste complet
+```
+
+```
+⏸ /sdda-full {n} — arrêt sur une décision qui vous appartient
+
+Le roster est la décision d'architecture agentic : combien d'agents, lesquels,
+qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
+vérifie, il ne la prend pas.
+
+  /sdda-roster {n}            écrit un gabarit pré-rempli, puis le vérifie
+  /sdda-full {n} --resume     reprend ici une fois le manifeste complet
+```
+
+**Pourquoi ce STEP existe.** `architect-topology` matérialise un roster
+DÉCLARÉ ; il n'en invente pas. Sans ce contrôle, `/sdda-full` payait l'agent le
+plus cher du pipeline — tier `deep`, budget de contexte le plus large — pour
+qu'il échoue ensuite sur `[ARCH_ROSTER_MISSING]` au post-check, ou, pire, qu'il
+remplisse lui-même la section `## 2. Roster déclaré` et livre l'architecture que
+personne n'a décidée. Le contrôle coûte 0 token et se joue avant la dépense.
 
 ---
 
@@ -345,7 +409,7 @@ python .sdda/sdda.py compute-status --mission {n}
 ```
 
 `end-run` **ferme aussi la trace de construction** : il écrit le span racine
-`sdda.run` de `workspace/traces/runs/$RUN_ID.jsonl`, sous lequel se rangent les
+`sdda.run` de `workspace/.sys/traces/runs/$RUN_ID.jsonl`, sous lequel se rangent les
 spans `sdda.build.agent` et `sdda.gate` émis en cours de route. C'est le seul
 endroit qui connaît le début, la fin et le cumul du run. Sans cet appel, la
 trace n'a pas de racine et `postflight_trace_present` la refuse — un run de
@@ -388,7 +452,7 @@ Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--fo
 Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {durée} · top : {agent} ${x}
                        (déclaré par le harnais, jamais recalculé — nous ne voyons pas
                         les tokens d'un sous-agent ; distinct du coût du produit ci-dessus)
-Run trace          : {RUN_ID} → workspace/traces/runs/{RUN_ID}.jsonl
+Run trace          : {RUN_ID} → workspace/.sys/traces/runs/{RUN_ID}.jsonl
 
 Prochaine étape :
   - /sdda-status {n}   pour l'état complet dérivé des gates

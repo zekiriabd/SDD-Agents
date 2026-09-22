@@ -1,6 +1,6 @@
 ---
 name: architect-tools
-description: Conçoit les contrats d'outils du système généré — nom, description (qui est du prompt), schémas, classe d'effet de bord, stratégie de sûreté, erreurs déclarées, bornes. Lit workspace/topology/{n}-topology.md et les CAPs, écrit workspace/contracts/tools/{n}-{tool}.tool.md. Refuse tout outil non read-only sans stratégie de sûreté.
+description: Conçoit les contrats d'outils du système généré — nom, description (qui est du prompt), schémas, classe d'effet de bord, stratégie de sûreté, erreurs déclarées, bornes. Lit workspace/feats/topology/{n}-topology.md et les CAPs, écrit workspace/feats/contracts/tools/{n}-{tool}.tool.md. Refuse tout outil non read-only sans stratégie de sûreté.
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -34,8 +34,8 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/topology/{n}-topology.md` — section outils : liste, agent exposé, CAP exigeante.
-- `workspace/caps/{n}-*-*.md` — pour les `inputs`/`outputs` et les `failure_behavior`.
+- `workspace/feats/topology/{n}-topology.md` — section outils : liste, agent exposé, CAP exigeante.
+- `workspace/feats/caps/{n}-*-*.md` — pour les `inputs`/`outputs` et les `failure_behavior`.
 - `workspace/stack/STACK.md` — `## Active Tools & Integrations` (MCP servers,
   `trust`, `ExternalAPIs`, `idempotency`), `## Active Secrets` (**noms** seulement).
 - `.sdda/templates/tool-contract.template.md`.
@@ -45,7 +45,7 @@ Read **uniquement** :
 Topologie absente ou non `Architected` :
 ```
 ERROR: agent architect-tools — topologie absente
-CAUSE: [TOPOLOGY_GATE_NOT_PASSED] aucun workspace/topology/{n}-topology.md valide
+CAUSE: [TOPOLOGY_GATE_NOT_PASSED] aucun workspace/feats/topology/{n}-topology.md valide
 FIX: lancer /sdda-topology {n} ; le périmètre d'outils est fixé là, pas ici
 ```
 
@@ -156,9 +156,9 @@ FIX: passer retry_policy=none, ou introduire natural-key:{message_id}
 
 ## STEP 8 — Écrire
 
-Un fichier par outil : `workspace/contracts/tools/{n}-{tool-slug}.tool.md`,
+Un fichier par outil : `workspace/feats/contracts/tools/{n}-{tool-slug}.tool.md`,
 depuis le template, `Status: Draft`. Déclare le fichier de tests de contrat L2
-(`workspace/evals/suites/tool-{n}-{tool-slug}.yaml`) — `qa-tests` l'écrira.
+(`workspace/proof/suites/tool-{n}-{tool-slug}.yaml`) — `qa-tests` l'écrira.
 
 ---
 

@@ -470,10 +470,10 @@ def write_gitignore() -> None:
     gitignore = ROOT / ".gitignore"
     required = [
         "workspace/stack/STACK.md",
-        "workspace/traces/",
+        "workspace/.sys/traces/",
         "workspace/src/",
         "workspace/.sys/",
-        "workspace/evals/reports/",
+        "workspace/.sys/reports/",
         ".env",
         "__pycache__/",
         "*.pyc",

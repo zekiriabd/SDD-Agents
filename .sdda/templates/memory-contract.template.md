@@ -51,7 +51,7 @@ Memory Strategy: <buffer | summary | vector | entity | store>     # fiche .sdda/
 |---|---|---|
 | `LongTermEnabled` | <false \| true> | `true` exige les lignes suivantes **toutes** remplies |
 | `LongTermStore` | <none \| pgvector \| redis \| store-backed> | fiche `.sdda/stacks/memory/*.md` ; auth par variable d'environnement `{ENV_VAR}`, jamais la valeur |
-| `LongTermWritePolicy` | <explicit \| automatic> | `explicit` : l'agent décide via un **outil** (`remember_fact`, contrat dans `workspace/contracts/tools/`, classe `write-scoped`) — **recommandé**. `automatic` : tout est écrit — dire quoi, et pourquoi c'est acceptable |
+| `LongTermWritePolicy` | <explicit \| automatic> | `explicit` : l'agent décide via un **outil** (`remember_fact`, contrat dans `workspace/feats/contracts/tools/`, classe `write-scoped`) — **recommandé**. `automatic` : tout est écrit — dire quoi, et pourquoi c'est acceptable |
 | `LongTermRetentionDays` | <n> (défaut 90) | purge planifiée ; **qui** l'exécute et **comment** on vérifie qu'elle a eu lieu |
 | Schéma d'un souvenir | <JSON Schema : `{ subject, fact, source, written_at, expires_at, written_by_agent }`> | un souvenir sans `source` ni date est un fait invérifiable : refusé |
 | Clé de portée | <user_id \| tenant_id \| session_id> | filtrée **à la source** à la lecture, jamais par le modèle (même règle que le retrieval, RAG-PATTERNS.md §6) |
@@ -124,7 +124,7 @@ Memory Strategy: <buffer | summary | vector | entity | store>     # fiche .sdda/
 | Provenance obligatoire | chaque souvenir porte `source` (`user`, `tool:{name}`, `retriever:{index}`) et hérite du `trust` de sa source |
 | Relecture encadrée | un souvenir de provenance `untrusted` est servi au modèle **balisé comme donnée**, jamais dans la zone d'instructions du prompt |
 | Aucune consigne mémorisée | un souvenir qui ressemble à une instruction (« désormais, toujours… ») est refusé à l'écriture — filtre déterministe + cas adversarial |
-| Suite d'injection | famille « injection via mémoire empoisonnée » ajoutée à `workspace/datasets/adversarial/{agent}.jsonl` pour chaque agent qui lit la mémoire longue |
+| Suite d'injection | famille « injection via mémoire empoisonnée » ajoutée à `workspace/proof/datasets/adversarial/{agent}.jsonl` pour chaque agent qui lit la mémoire longue |
 
 ---
 

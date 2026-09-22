@@ -12,9 +12,9 @@ Décide l'architecture de la MISSION `{n}` en trois temps :
 
 ```
 2.1  architect-topology                         (SEUL — fixe le périmètre)
-       -> workspace/topology/{n}-topology.md + {n}-topology.mmd
+       -> workspace/feats/topology/{n}-topology.md + {n}-topology.mmd
 2.2  architect-tools ∥ architect-rag ∥ architect-data ∥ architect-memory
-       -> workspace/contracts/{tools,retrieval,memory}/**   (PARALLÈLE, borné MaxParallel)
+       -> workspace/feats/contracts/{tools,retrieval,memory}/**   (PARALLÈLE, borné MaxParallel)
 2.9  ir_compiler.py  (script déterministe, 0 token)
        -> workspace/.sys/.ir/{n}-system.ir.json
      [TOPOLOGY GATE]  validate_packaging.py (le livrable est-il réalisable ?)
@@ -100,13 +100,13 @@ Si `--recompile-only` → aller directement à STEP 6.
 
 ## STEP 3 — Idempotence
 
-Glob `workspace/topology/{n}-topology.md`. Si présent ET `MISSION hash` ==
+Glob `workspace/feats/topology/{n}-topology.md`. Si présent ET `MISSION hash` ==
 hash courant ET tous les `Parent MISSION hash` des CAPs sont à jour → proposer
 le court-circuit :
 
 ```
 ⊘ /sdda-topology {n}: topologie à jour (hash MISSION/CAPs inchangés).
-  Recompilation IR + G2 seulement. Pour forcer la re-conception : supprimer workspace/topology/{n}-*.
+  Recompilation IR + G2 seulement. Pour forcer la re-conception : supprimer workspace/feats/topology/{n}-*.
 ```
 
 → STEP 6. Sinon → STEP 4.
@@ -120,7 +120,7 @@ Agent : `architect-topology` (`.sdda/agents/architect-topology.md`). Tier
 d'`agent-bounds.yaml`, non surchargeables par le Project Config ; aucun agent
 n'a de plancher `deep`, sinon le mode `dynamic` serait une décoration). Owner
 exclusif de
-`workspace/topology/{n}-*`.
+`workspace/feats/topology/{n}-*`.
 
 Il s'exécute **seul et avant** les quatre architectes de contrats : c'est lui
 qui fixe le périmètre (quels agents, quels outils, quels retrievers, quelle
@@ -141,8 +141,8 @@ Bornes minimales par agent : MaxIterations={…} MaxToolCalls={…} MaxDelegatio
 AgentTimeoutSec={…} OnBoundExceeded={…}. Patterns autorisés : {## Active Orchestration}.
 MaxAgentsWarnAt={…}. Ne nommer AUCUNE API de framework. Choisir des TIERS, jamais des modèles.
 Remplir ## Allocated To de chaque CAP (agents / tools / retrievers) — seul droit d'écriture
-hors workspace/topology/, mode Edit-section exclusif.
-Écrire pour chaque agent du produit un contrat workspace/contracts/agents/{n}-{agent}.agent.md
+hors workspace/feats/topology/, mode Edit-section exclusif.
+Écrire pour chaque agent du produit un contrat workspace/feats/contracts/agents/{n}-{agent}.agent.md
 (template agent-contract.template.md) — SANS prompt (owner dev-prompt, PHASE 4).
 Reporter au §5 Skills les `skills:` déclarées par l'architecte au roster, telles quelles : une
 skill dit ce que l'agent SAIT FAIRE, un outil ce qu'il a LE DROIT D'APPELER — ne jamais convertir
@@ -176,7 +176,7 @@ phases plus loin — après avoir payé les contrats, les prompts et les agents.
 ```
 ERROR: /sdda-topology {n} — spécification incomplète pour l'architecture choisie
 CAUSE: [ARCH_SPEC_INCOMPLETE] `orchestration/supervisor` exige au moins 2 subagent(s) déclaré(s), 1 trouvé(s)
-FIX: compléter `## 2. Roster déclaré` dans workspace/topology/{n}-topology.md —
+FIX: compléter `## 2. Roster déclaré` dans workspace/feats/topology/{n}-topology.md —
      c'est l'ARCHITECTE qui déclare les agents, leurs rôles et leurs outils.
      Le framework ne les invente pas (PHILOSOPHY P7).
      Ce que le pattern actif exige : validate_architecture.py --explain
@@ -193,10 +193,10 @@ Construire le `BATCH` depuis la topologie et `STACK.md` :
 
 | Condition | Agent ajouté | Écrit dans | Tier |
 |---|---|---|:-:|
-| ≥ 1 outil alloué | `architect-tools` | `workspace/contracts/tools/{n}-{tool}.tool.md` | balanced |
-| `## Active RAG` ≠ `none` ET ≥ 1 retriever alloué | `architect-rag` | `workspace/contracts/retrieval/{n}-{index}.retrieval.md` | **deep** |
-| `## Active Data Access` ≠ `none` | `architect-data` | `workspace/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
-| `## Active Memory` ≠ `none` | `architect-memory` | `workspace/contracts/memory/{n}-memory.md` | balanced |
+| ≥ 1 outil alloué | `architect-tools` | `workspace/feats/contracts/tools/{n}-{tool}.tool.md` | balanced |
+| `## Active RAG` ≠ `none` ET ≥ 1 retriever alloué | `architect-rag` | `workspace/feats/contracts/retrieval/{n}-{index}.retrieval.md` | **deep** |
+| `## Active Data Access` ≠ `none` | `architect-data` | `workspace/feats/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
+| `## Active Memory` ≠ `none` | `architect-memory` | `workspace/feats/contracts/memory/{n}-memory.md` | balanced |
 
 Agents absents du `BATCH` → ligne `⊘ {agent}: skipped ({raison})`.
 
@@ -210,7 +210,7 @@ vérifiés par `audit_ownership.py` en post-step.
 
 Prompt commun (adapté par agent) :
 ```
-MISSION {n}-{MissionName}. Topologie : workspace/topology/{n}-topology.md (périmètre CLOS —
+MISSION {n}-{MissionName}. Topologie : workspace/feats/topology/{n}-topology.md (périmètre CLOS —
 ne créer aucun composant absent de l'allocation). Template : .sdda/templates/{x}-contract.template.md.
 Neutralité framework (P11). Tout outil déclare sideEffectClass ∈ {read-only, write-scoped,
 write-destructive, external-side-effect} et une safetyStrategy si non read-only (P8).
@@ -266,10 +266,17 @@ Sortie : `{n}-system.ir.json` conforme à `.sdda/registry/ir.schema.json`, avec
 
 ```bash
 python .sdda/sdda.py validate-ir --ir workspace/.sys/.ir/{n}-system.ir.json --json \
-  > workspace/.sys/.validation/{n}-G2-topology.json
+  > workspace/.sys/.validation/{n}-G2-ir.recap.json
 python .sdda/sdda.py estimate-budget --ir workspace/.sys/.ir/{n}-system.ir.json --json \
-  >> workspace/.sys/.validation/{n}-G2-topology.json
+  > workspace/.sys/.validation/{n}-G2-budget.recap.json
 ```
+
+> **Deux fichiers, jamais `>>`.** Concaténer deux documents JSON dans un même
+> fichier ne produit pas un JSON : produit ainsi, `{n}-G2-topology.json` n'était
+> relisible par personne. Ces deux-là ne servent qu'au récap — les rapports de
+> gate qui comptent sont écrits par les scripts eux-mêmes, sous les noms que
+> `gate_reports` sait relire. D'où le suffixe `.recap` : il dit que ces fichiers
+> ne sont pas des rapports de gate, et évite qu'on les prenne pour tels.
 
 Les 11 contrôles de `AGENTIC-IR.md §4` + budget :
 
@@ -298,7 +305,7 @@ Les 11 contrôles de `AGENTIC-IR.md §4` + budget :
 ```
 ERROR: /sdda-topology {n} — TOPOLOGY GATE rouge
 CAUSE: [TOPOLOGY_GATE_FAILED] [UNBOUNDED_LOOP] cycle supervisor→billing→supervisor sans borne ; [BUDGET_EXCEEDED_ESTIMATE] $0.41 estimé > cap $0.25 — rapport workspace/.sys/.validation/{n}-G2-topology.json
-FIX: corriger workspace/topology/{n}-topology.md et/ou les contrats, puis /sdda-topology {n} --recompile-only
+FIX: corriger workspace/feats/topology/{n}-topology.md et/ou les contrats, puis /sdda-topology {n} --recompile-only
 ```
 
 **Bypass** (INVARIANTS `budget-estimated-before-code`) : `SDDA_BYPASS_BUDGET_ESTIMATE=1`

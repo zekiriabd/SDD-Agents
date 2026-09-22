@@ -363,7 +363,7 @@ def test_every_operation_emits_a_span(runtime) -> None:
 # Schéma figé
 # ---------------------------------------------------------------------------
 def test_a_type_drift_refuses_the_startup(runtime) -> None:
-    schema_dir = runtime.project / "workspace/contracts/dataaccess/schemas"
+    schema_dir = runtime.project / "workspace/feats/contracts/dataaccess/schemas"
     schema = json.loads((schema_dir / "order_tracking.schema.json").read_text(encoding="utf-8"))
     schema["properties"]["carrier"]["type"] = "integer"
     (runtime.data / "schemas").mkdir(parents=True, exist_ok=True)
@@ -387,7 +387,7 @@ def test_a_type_drift_refuses_the_startup(runtime) -> None:
 
 def test_an_undeclared_field_is_reported_as_omitted(runtime) -> None:
     """Une colonne ajoutée par l'amont ne doit pas entrer dans le contexte."""
-    schema_dir = runtime.project / "workspace/contracts/dataaccess/schemas"
+    schema_dir = runtime.project / "workspace/feats/contracts/dataaccess/schemas"
     (runtime.data / "schemas").mkdir(parents=True, exist_ok=True)
     (runtime.data / "schemas" / "order_tracking.schema.json").write_text(
         (schema_dir / "order_tracking.schema.json").read_text(encoding="utf-8"), encoding="utf-8")

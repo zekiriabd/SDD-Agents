@@ -54,7 +54,7 @@ le même schéma d'événements (§3.2) ; seul le transport change.
 | `{AppName} resume` | reprend un run interrompu (`escalate-human`, `interrupt`) | `--thread-id ULID` (**obligatoire**) ; `--decision TEXT` \| `--decision-file PATH` ; `--json` | oui |
 | `{AppName} health` | vérifications déterministes : config chargée, prompts présents et hashés, outils enregistrés = contrats, IR compilé à jour, checkpointer joignable (`--live`), serveurs MCP joignables (`--live`) | `--live` (ajoute les tests `network`) ; `--json` | **non** |
 | `{AppName} inspect` | affiche l'IR résumé : agents, outils par agent, bornes, pattern, budget estimé ; `--graph` imprime le Mermaid généré | `--graph` ; `--json` | non |
-| `{AppName} trace` | relit `workspace/traces/runs/{run-id}.jsonl` : arbre des spans, coût total, hops, outils appelés, bornes atteintes | `--run-id` ; `--json` | non |
+| `{AppName} trace` | relit `workspace/.sys/traces/runs/{run-id}.jsonl` : arbre des spans, coût total, hops, outils appelés, bornes atteintes | `--run-id` ; `--json` | non |
 | `{AppName} version` | version de l'application, hash de l'IR, hash de la stack, `semconv_version` | | non |
 
 `ingest`, `eval` **ne sont pas** des commandes de la CLI applicative : l'ingestion
@@ -122,7 +122,7 @@ inconnue → `1`).
 | **Identité de l'appelant** | `--tenant` (ou variable d'environnement `SDDA_TENANT_ID` via `Settings`) ; posé dans `ToolContext`, **jamais visible du modèle** ; obligatoire si `DatabaseType != none` ou RAG multi-tenant |
 | **Bornes** | héritées de l'IR ; `--max-budget-usd` ne peut que **baisser** le plafond ; les autres bornes ne sont **pas** réglables en ligne de commande (elles sont dans les contrats) |
 | **onBoundExceeded** | `fail-explicit` → code 3 + `final` d'échec structuré ; `degrade` → code 7 ; `escalate-human` → code 10 + `interrupted` |
-| **TRACE** | `workspace/traces/runs/{run_id}.jsonl` toujours écrit ; chemin dans `run_finished.trace_path` et sur `stderr` |
+| **TRACE** | `workspace/.sys/traces/runs/{run_id}.jsonl` toujours écrit ; chemin dans `run_finished.trace_path` et sur `stderr` |
 | **Secrets** | jamais en argument (`ps` les voit) — `Settings`/`.env` uniquement ; une option `--api-key` est `[SEC_SECRET_IN_ARGV]` en L0 |
 
 ---

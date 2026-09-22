@@ -17,6 +17,13 @@ Confidence: high          # high | medium | low — ne monte jamais en montant l
 - Metric: <ex. taux de résolution sans escalade humaine>
 - Target: <ex. >= 0.75 sur le holdout>
 - Deadline: <ex. 2026-12-01>
+- Grader: <COMMENT on mesure la métrique sur le holdout : exact | regex | schema |
+  numeric-tolerance | semantic-similarity | llm-judge | trajectory | cost | latency.
+  C'est de cette ligne que naît la suite d'acceptation L9, la seule que G8 exécute.
+  Sans elle, l'objectif est chiffré mais personne ne sait le mesurer, et la gate
+  d'acceptation reste sans exécution à rendre verte.>
+- Calibration: <chemin du rapport de calibration — UNIQUEMENT si Grader: llm-judge.
+  Un juge non calibré ne rend pas de verdict bloquant (P9). Sinon, supprimer la ligne.>
 
 ## Execution Budget
 <Exigence FONCTIONNELLE, pas un sujet d'exploitation (P6). Estimé en G2,

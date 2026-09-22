@@ -62,7 +62,7 @@ HOOK = "preflight_stack_combo"
 #: Câblage — lu par `harness_build.py`. Tout spawn : une combinaison non
 #: chargeable fausse le travail du PREMIER agent qui lit une fiche de stack, et
 #: tous les suivants héritent de l'invention.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": ()}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": ()}
 
 #: Section de `STACK.md` -> catégorie de `componentLevels`. Titres SANS `## ` :
 #: `markdown_io.section_body` préfixe lui-même, et le lui donner deux fois rend

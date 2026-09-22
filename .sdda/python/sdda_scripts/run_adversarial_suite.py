@@ -33,7 +33,7 @@ c'est le mécanisme qui empêche la même faille de revenir.
 
 Usage :
     python .sdda/sdda.py run-adversarial-suite --mission 1 --json              # couverture seule
-    python .sdda/sdda.py run-adversarial-suite --mission 1 --replay workspace/evals/runs/adv.jsonl --json
+    python .sdda/sdda.py run-adversarial-suite --mission 1 --replay workspace/.sys/reports/runs/adv.jsonl --json
     python .sdda/sdda.py run-adversarial-suite --mission 1 --executor workspace.src.evals:Executor --runs 5
 """
 from __future__ import annotations
@@ -509,7 +509,7 @@ def run(
 
     written: dict[str, str] = {}
     if write_report and coverages:
-        out = paths.evals_dir(root) / "reports" / f"adversarial-{mid or 'system'}-{rid}.json"
+        out = paths.reports_dir(root) / f"adversarial-{mid or 'system'}-{rid}.json"
         _atomic_write_json(out, payload)
         written["report"] = paths.rel(root, out)
         if mid:

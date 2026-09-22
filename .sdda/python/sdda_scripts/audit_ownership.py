@@ -10,8 +10,8 @@ Il attrape deux fautes de nature différente :
 
     1. **Hors zone** — un agent a écrit là où `loader.yml writes:` ne l'autorise
        pas. Le cas qui coûte le plus cher n'est pas la collision (elle se voit) :
-       c'est le `dev-agent` qui retouche `workspace/datasets/` ou
-       `workspace/prompts/`, c'est-à-dire qui modifie le jeu qui le juge ou le
+       c'est le `dev-agent` qui retouche `workspace/proof/datasets/` ou
+       `workspace/src/prompts/`, c'est-à-dire qui modifie le jeu qui le juge ou le
        prompt qu'il implémente. `[DATASET_OWNERSHIP_VIOLATION]`,
        `[PROMPT_OWNERSHIP_VIOLATION]` — la note devient invérifiable.
 
@@ -27,7 +27,7 @@ matrice (cf. `rules/ownership.md`).
 Usage :
     python .sdda/sdda.py audit-ownership --mission 1 --phase 4
     python .sdda/sdda.py audit-ownership --declared-only --json   # cohérence de loader.yml seule
-    python .sdda/sdda.py audit-ownership --agent dev-agent --wrote workspace/prompts/x.system.md
+    python .sdda/sdda.py audit-ownership --agent dev-agent --wrote workspace/src/prompts/x.system.md
 """
 from __future__ import annotations
 
@@ -51,12 +51,12 @@ NON_AGENT_KEYS = frozenset({"version", "updated", "cross_agent_reads", "shared_w
 #: Ce ne sont pas des zones « sensibles » au sens vague : ce sont celles qui
 #: portent le juge et le sujet, et les confondre rend le verdict sans valeur.
 SACRED: dict[str, tuple[str, str]] = {
-    "workspace/datasets": ("DATASET_OWNERSHIP_VIOLATION",
+    "workspace/proof/datasets": ("DATASET_OWNERSHIP_VIOLATION",
                            "un `dev-*` qui modifie le jeu qui le juge produit une note invérifiable"),
-    "workspace/prompts": ("PROMPT_OWNERSHIP_VIOLATION",
+    "workspace/src/prompts": ("PROMPT_OWNERSHIP_VIOLATION",
                           "un `dev-*` qui réécrit le prompt qu'il implémente efface la spécification "
                           "qu'on voulait comparer au code"),
-    "workspace/evals/baselines": ("BASELINE_OWNERSHIP_VIOLATION",
+    "workspace/proof/baselines": ("BASELINE_OWNERSHIP_VIOLATION",
                                   "déplacer la baseline de référence rend toute non-régression tautologique"),
 }
 
@@ -120,8 +120,8 @@ def matches(pattern: str, path: str) -> bool:
     normalized = path.replace("\\", "/").lstrip("./")
     if _to_regex(pattern).match(normalized):
         return True
-    # Un motif de répertoire couvre ce qu'il contient : `workspace/datasets/**`
-    # et `workspace/datasets` désignent la même zone pour un humain.
+    # Un motif de répertoire couvre ce qu'il contient : `workspace/proof/datasets/**`
+    # et `workspace/proof/datasets` désignent la même zone pour un humain.
     return fnmatch.fnmatch(normalized, pattern.rstrip("/*") + "/*")
 
 

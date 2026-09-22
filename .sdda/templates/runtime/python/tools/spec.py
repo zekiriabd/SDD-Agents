@@ -14,7 +14,7 @@ tracer.
 **Le contrat Markdown n'est jamais lu au runtime.** `gen_source_tools.py` écrit
 un `tool_specs.json` résolu à côté du code. Trois raisons, la dernière étant la
 vraie : parser du Markdown au démarrage d'un service est une dépendance inutile ;
-`workspace/contracts/` n'est pas livré avec l'application ; et **ce qui est
+`workspace/feats/contracts/` n'est pas livré avec l'application ; et **ce qui est
 résolu est épinglable** — `tool_schema_hash` doit désigner ce que l'outil fait
 réellement, pas ce qu'un fichier disait au moment où on l'a relu.
 """

@@ -21,7 +21,7 @@ HOOK = "preflight_agent_bounds"
 #: Câblage — lu par `harness_build.py`. Le contrôle porte sur l'IR, pas sur le
 #: code : il est donc jouable AVANT que `dev-agent` écrive une ligne, ce qui
 #: est le seul moment où la correction ne coûte pas un second passage payant.
-WIRING = {"event": "PreToolUse", "matcher": "Task", "applies_to": AGENT_BUILDERS}
+WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": AGENT_BUILDERS}
 
 REQUIRED = ("maxIterations", "maxToolCalls", "maxDelegationDepth", "timeoutSec", "budgetUsd")
 

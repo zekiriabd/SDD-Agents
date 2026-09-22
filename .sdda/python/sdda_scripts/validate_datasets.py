@@ -113,8 +113,24 @@ def structural_problems(item: dict[str, Any]) -> list[str]:
     return out
 
 
-def validate_datasets(root: Path, *, mission: int | None = None, config: LayeredConfig | None = None, write_report: bool = True) -> Report:
+def validate_datasets(root: Path, *, mission: int | None = None, config: LayeredConfig | None = None,
+                      write_report: bool = True, require: tuple[str, ...] = (),
+                      min_items: int | None = None) -> Report:
+    """Valide les jeux. `require` restreint ce qui doit EXISTER, `min_items` le seuil.
+
+    `require` sert les pré-requis de phase : `/sdda-build` vérifie le golden de
+    retrieval avant la RETRIEVAL GATE, à un moment où le holdout et le jeu
+    adversarial n'existent pas encore et n'ont pas à exister. Sans ce filtre,
+    le seul contrôle possible était « tous les jeux, tout de suite », donc
+    aucun contrôle de phase — et la commande appelait une option que le script
+    n'avait pas, ce qui rendait une erreur argparse au lieu d'une mesure.
+    """
     report = Report(name="datasets", target=str(root))
+    required_kinds = tuple(k for k in require if k in KINDS)
+    unknown = sorted(set(require) - set(KINDS))
+    if unknown:
+        report.error("EVAL_DATASET_MISSING", f"`--require {','.join(unknown)}` : type de jeu inconnu",
+                     f"types admis : {', '.join(KINDS)}", str(paths.datasets_dir(root)))
     schema_path = golden_schema_path(root)
     validator = SchemaValidator(json.loads(markdown_io.read_text(schema_path))) if schema_path else None
     if validator is None:
@@ -127,7 +143,13 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
         for p in sorted(paths.datasets_dir(root, kind).glob("*.jsonl")):
             datasets[paths.rel(root, p)] = load_dataset(root, p, kind)
     if not datasets:
-        report.error("GOLDEN_SET_MISSING", "aucun dataset sous workspace/datasets/{golden,holdout,calibration,adversarial}/", "l'qa-evals produit les jeux avant toute eval", str(paths.datasets_dir(root)))
+        report.error("GOLDEN_SET_MISSING", "aucun dataset sous workspace/proof/datasets/{golden,holdout,calibration,adversarial}/", "l'qa-evals produit les jeux avant toute eval", str(paths.datasets_dir(root)))
+    for kind in required_kinds:
+        if not any(d.kind == kind for d in datasets.values()):
+            report.error("GOLDEN_SET_MISSING", f"aucun jeu `{kind}` sous workspace/proof/datasets/{kind}/",
+                         f"produire le jeu `{kind}` via qa-evals (`/sdda-eval {{n}} --datasets-only`) : "
+                         "il est exigé par la phase en cours, pas par principe",
+                         str(paths.datasets_dir(root, kind)))
 
     # Items -------------------------------------------------------------------------
     for rel, ds in sorted(datasets.items()):
@@ -154,6 +176,12 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
         minimum = config.get_int(key, default) if config else default
         if ds.kind == "calibration" and config and config.get("CalibrationSetMinItems") is None:
             minimum = config.get_int("JudgeCalibrationMinItems", default)
+        # `--min-items` ne s'applique qu'aux types explicitement exigés : relever
+        # le seuil du golden ne doit pas relever celui du jeu de calibration,
+        # qui répond à une autre contrainte (JudgeCalibrationMinItems).
+        if min_items is not None and (not required_kinds or ds.kind in required_kinds):
+            minimum = max(minimum, int(min_items))
+            key = "--min-items"
         if len(ds.items) < minimum:
             report.error("EVAL_DATASET_TOO_SMALL", f"{len(ds.items)} item(s) < {key}={minimum}", "compléter le jeu : un seuil mesuré sur 5 items n'est pas un seuil", rel)
 
@@ -176,6 +204,31 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
             else:
                 report.error("HOLDOUT_NOT_DISJOINT", msg, fix, h.rel)
 
+    # Le holdout de chaque mission -----------------------------------------------------
+    #
+    # Ce contrôle vivait dans `ir_compiler` et fermait la boucle du pipeline sur
+    # elle-même : l'IR se compile en PHASE 2, le holdout naît en PHASE 6a, et
+    # `qa-evals` lit l'IR pour savoir quoi produire. Aucune mission neuve ne
+    # franchissait G2, donc aucune n'atteignait la phase qui aurait produit le
+    # fichier réclamé. Il est ici parce qu'ici il est actionnable : ce script
+    # s'exécute APRÈS `qa-evals`, et il écrit la part `datasets` de G8 — la
+    # gate à laquelle le jeu de verdict sert réellement.
+    for n in ([mission] if mission is not None else mission_numbers(root)):
+        if required_kinds and "holdout" not in required_kinds:
+            break  # pré-requis de phase : on ne réclame que ce qui est demandé
+        candidates = sorted(paths.datasets_dir(root, "holdout").glob(f"mission-{n}-*.jsonl"))
+        if not candidates:
+            report.error("HOLDOUT_SET_MISSING",
+                         f"mission {n} : aucun holdout `workspace/proof/datasets/holdout/mission-{n}-*.jsonl`",
+                         "produire le jeu de verdict (qa-evals) : sans lui G8 n'a rien à mesurer, "
+                         "et un objectif qu'on ne mesure que sur le jeu d'ajustement n'est pas mesuré",
+                         "workspace/proof/datasets/holdout/")
+        elif len(candidates) > 1:
+            report.error("HOLDOUT_SET_MISSING",
+                         f"mission {n} : {len(candidates)} holdouts candidats ({[p.name for p in candidates]})",
+                         "un seul `mission-{n}-v*.jsonl` par mission — deux jeux de verdict, c'est choisir "
+                         "le verdict après coup", "workspace/proof/datasets/holdout/")
+
     # Références depuis les CAPs et les contrats d'agents ----------------------------------
     numbers = [mission] if mission is not None else mission_numbers(root)
     per_mission: dict[int, dict[str, str]] = {}
@@ -186,10 +239,10 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
                 ds_ref = ac.fields.get("dataset", "").strip()
                 if not ds_ref or markdown_io.is_placeholder(ds_ref):
                     continue
-                if ds_ref.startswith("workspace/datasets/holdout/"):
-                    report.error("AC_DATASET_IS_HOLDOUT", f"{cap.id} {ac.id} itère sur le holdout `{ds_ref}`", "pointer un jeu golden : le holdout rend le verdict (G8)", f"workspace/caps/{cap.id}.md")
+                if ds_ref.startswith("workspace/proof/datasets/holdout/"):
+                    report.error("AC_DATASET_IS_HOLDOUT", f"{cap.id} {ac.id} itère sur le holdout `{ds_ref}`", "pointer un jeu golden : le holdout rend le verdict (G8)", f"workspace/feats/caps/{cap.id}.md")
                 if ds_ref not in datasets:
-                    report.error("EVAL_DATASET_MISSING", f"{cap.id} {ac.id} : dataset `{ds_ref}` introuvable", "produire le jeu (qa-evals) ou corriger le chemin", f"workspace/caps/{cap.id}.md")
+                    report.error("EVAL_DATASET_MISSING", f"{cap.id} {ac.id} : dataset `{ds_ref}` introuvable", "produire le jeu (qa-evals) ou corriger le chemin", f"workspace/feats/caps/{cap.id}.md")
                 else:
                     pins[f"dataset:{ds_ref}"] = datasets[ds_ref].hash
         for p in sorted(paths.contracts_dir(root, "agents").glob(f"{n}-*.agent.md")):
@@ -226,6 +279,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Datasets : golden ∩ holdout = ∅ par hash, tailles minimales, schéma des items")
     p.add_argument("--mission", type=int, default=None, help="numéro de mission ; défaut : toutes")
     p.add_argument("--freeze", action="store_true", help="compatibilité /sdda-eval : les hashes sont toujours épinglés")
+    p.add_argument("--require", default=None,
+                   help=f"types de jeu qui DOIVENT exister, séparés par des virgules ({', '.join(KINDS)}). "
+                        "Défaut : tous, holdout compris. Restreint aux pré-requis d'une phase")
+    p.add_argument("--min-items", type=int, default=None,
+                   help="seuil minimal d'items pour les types exigés ; relève le seuil du Project Config, ne l'abaisse jamais")
     add_common_args(p)
     return p
 
@@ -235,7 +293,9 @@ def main(argv: list[str] | None = None) -> int:
     root = resolve_root(args)
     combined = Report(name="datasets", target=str(root))
     config = load_config(root, combined)
-    rep = validate_datasets(root, mission=args.mission, config=config, write_report=not args.no_report)
+    require = tuple(k.strip().lower() for k in (args.require or "").split(",") if k.strip())
+    rep = validate_datasets(root, mission=args.mission, config=config, write_report=not args.no_report,
+                            require=require, min_items=args.min_items)
     combined.extend(rep)
     combined.data = rep.data
     return finish(combined, args)

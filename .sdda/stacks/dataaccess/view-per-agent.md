@@ -199,7 +199,7 @@ workspace/src/{AppName}/
     └── tools/
         └── {agent_slug}_{purpose}.py      # GÉNÉRÉ — Input/Row/Output + fonction outil
 
-workspace/contracts/tools/
+workspace/feats/contracts/tools/
 └── {n}-{agent-slug}-{purpose}.tool.md     # squelette GÉNÉRÉ (description = commentaire), complété par architect-tools (§7 Exposé à, §4 erreurs)
 
 workspace/src/{AppName}/tests/data/

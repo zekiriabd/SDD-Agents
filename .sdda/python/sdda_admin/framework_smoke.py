@@ -391,6 +391,31 @@ def check_references() -> None:
 SECTION_HEADING_RE = re.compile(r"^##\s+(\d+)\.\s+\S", re.MULTILINE)
 
 
+def check_command_flags() -> None:
+    """Toute option citée par un prompt existe dans le script qu'elle invoque.
+
+    Le pendant de `refs.planned`, pour la porte voisine : le script existe, mais
+    la commande l'appelle avec une option qu'il n'a pas. `argparse` sort alors
+    un `usage:` sur stderr, pas le bloc `ERROR/CAUSE/FIX` avec `[CLASS]` que le
+    protocole promet — donc l'agent qui orchestre conclut que le contrôle n'a
+    rien dit, et poursuit. Cinq options ont vécu ainsi tout un lot, dont le
+    post-check censé refuser un contrat d'outil fautif avant la compilation.
+    """
+    try:
+        sys.path.insert(0, str(SDDA / "python"))
+        from sdda_admin import command_flags
+    except Exception as exc:  # noqa: BLE001
+        warn("refs.flags", f"command_flags non chargeable ({exc!r})")
+        return
+
+    findings = command_flags.scan(SDDA)
+    if not findings:
+        ok("refs.flags", "toutes les options citées existent dans les scripts appelés")
+        return
+    for f in findings[:12]:
+        fail("refs.flags", f"{f['file']}:{f['line']} — `{f['command']} {f['flag']}` absente de {f['script']}")
+
+
 def check_template_numbering() -> None:
     """Chaque template numérote-t-il ses sections sans trou ni doublon ?
 
@@ -977,6 +1002,7 @@ def main() -> int:
         check_digests,
         check_counters,
         check_references,
+        check_command_flags,
         check_template_numbering,
         check_section_refs,
         check_documented_classes,

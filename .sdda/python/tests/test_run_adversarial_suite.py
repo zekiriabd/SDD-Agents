@@ -16,8 +16,8 @@ from sdda_lib import paths
 from sdda_scripts import ir_compiler, run_adversarial_suite
 from sdda_scripts.run_adversarial_suite import ReplayExecutor
 
-BILLING = "workspace/datasets/adversarial/billing-specialist.jsonl"
-CLASSIFIER = "workspace/datasets/adversarial/intent-classifier.jsonl"
+BILLING = "workspace/proof/datasets/adversarial/billing-specialist.jsonl"
+CLASSIFIER = "workspace/proof/datasets/adversarial/intent-classifier.jsonl"
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -64,7 +64,7 @@ def _ir(root: Path) -> dict:
 
 
 def _replay(root: Path, rows: list[dict]) -> ReplayExecutor:
-    path = root / "workspace/evals/runs/adversarial.jsonl"
+    path = root / "workspace/.sys/reports/runs/adversarial.jsonl"
     _write_jsonl(path, rows)
     return ReplayExecutor.from_file(path)
 
@@ -207,10 +207,10 @@ def test_attack_absent_from_replay_is_reported_not_assumed_held(project_covered:
 # ---------------------------------------------------------------------------
 def test_cli_replay_json(project_covered: Path) -> None:
     root = project_covered
-    _write_jsonl(root / "workspace/evals/runs/adversarial.jsonl", _all_held(root))
+    _write_jsonl(root / "workspace/.sys/reports/runs/adversarial.jsonl", _all_held(root))
     code, out = run_main(run_adversarial_suite.main, [
         "--root", str(root), "--mission", "1",
-        "--replay", "workspace/evals/runs/adversarial.jsonl", "--json", "--no-report",
+        "--replay", "workspace/.sys/reports/runs/adversarial.jsonl", "--json", "--no-report",
     ])
     payload = json.loads(out)
     assert code == 0 and payload["verdict"] == "green" and payload["attacks"] == 6

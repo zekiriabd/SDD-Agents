@@ -703,7 +703,7 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
         "",
         "## 8. Tests de contrat (L2)",
         "",
-        f"Fichier : `workspace/evals/suites/tool-{contract_id}.yaml`",
+        f"Fichier : `workspace/proof/suites/tool-{contract_id}.yaml`",
         "",
     ])
     body.extend(f"- [ ] {item}" for item in _test_checklist(kind, src))
@@ -798,6 +798,14 @@ def load_frozen(ctx: Context, source_id: str, report: Report) -> dict[str, Any] 
 #: fois ; et `--check` attrape une retouche à la main. Ce qui varie vit dans
 #: `sources.json` (le registre résolu) et dans `tools/` (un wrapper par source).
 RUNTIME_ROOT = "templates/runtime"
+
+#: Les sous-arbres du runtime que CE générateur émet. Allowlist explicite, et
+#: non « tout ce qui traîne sous `templates/runtime/{lang}/` » : l'arbre porte
+#: aussi `app/`, le squelette applicatif, qui appartient à `gen_app_skeleton.py`
+#: et se déclenche sur une autre condition. Un projet en `declared-sources` doit
+#: recevoir ses outils de données, pas une application complète qu'il n'a pas
+#: demandée — et que `--check` lui réclamerait ensuite indéfiniment.
+RUNTIME_SUBTREES: tuple[str, ...] = ("data", "tools")
 
 
 def runtime_dir(root: Path, language: str) -> Path:
@@ -922,9 +930,17 @@ def emit_runtime(ctx: Context, report: Report, *, write: bool,
     drifted: list[str] = []
     targets: list[tuple[Path, str]] = []
 
-    for path in sorted(source_dir.rglob("*.py")):
-        relative = path.relative_to(source_dir)
-        targets.append((ctx.src_root / relative, markdown_io.read_text(path)))
+    # Seuls `data/` et `tools/` : ce générateur est celui de l'ACCÈS AUX
+    # SOURCES, et il ne se déclenche que sur `declared-sources`. Le squelette
+    # applicatif voisin (`templates/runtime/python/app/`) est émis par
+    # `gen_app_skeleton.py`, sur un autre déclencheur — un `rglob("*.py")` sur
+    # tout l'arbre livrerait une application entière à un projet qui n'a demandé
+    # que ses outils de données, et `--check` la réclamerait ensuite à chaque
+    # passage.
+    for subtree in RUNTIME_SUBTREES:
+        for path in sorted((source_dir / subtree).rglob("*.py")):
+            relative = path.relative_to(source_dir)
+            targets.append((ctx.src_root / relative, markdown_io.read_text(path)))
 
     registry_json = json.dumps(render_registry(ctx, report), ensure_ascii=False,
                                indent=2, sort_keys=True) + "\n"
@@ -1123,7 +1139,7 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
     if not ctx.mission:
         report.error(
             "MISSION_AMBIGUOUS",
-            "numéro de mission indécidable (zéro ou plusieurs missions dans workspace/missions/)",
+            "numéro de mission indécidable (zéro ou plusieurs missions dans workspace/feats/missions/)",
             fix="passer `--mission {n}` — il nomme les contrats générés",
         )
         return report

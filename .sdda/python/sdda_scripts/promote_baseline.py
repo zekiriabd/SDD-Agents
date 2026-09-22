@@ -18,13 +18,13 @@ Ce qu'il refuse :
 (R5) et signalé WARN [EVAL_PROMOTION_FORCED]. Il ne fait pas disparaître le
 verdict rouge de la baseline : celui-ci y est écrit tel quel.
 
-Écriture atomique (temporaire + rename) dans `workspace/evals/baselines/{n}-system.json`.
+Écriture atomique (temporaire + rename) dans `workspace/proof/baselines/{n}-system.json`.
 Les suites non promues conservent leur baseline précédente.
 
 Usage :
     python .sdda/sdda.py promote-baseline --mission 1 --label "après correction du chunking"
     python .sdda/sdda.py promote-baseline --mission 1 --run 20260920T101500Z --suite 1-1-routing_accuracy --label "…"
-    python .sdda/sdda.py promote-baseline --mission 1 --report workspace/evals/reports/1-x.json --label "…" --force
+    python .sdda/sdda.py promote-baseline --mission 1 --report workspace/.sys/reports/1-x.json --label "…" --force
 """
 from __future__ import annotations
 
@@ -60,9 +60,9 @@ def locate_report(root: Path, number: int, *, report_arg: Path | None, run_id: s
         return (p, "") if p.is_file() else (None, f"rapport `{paths.rel(root, p)}` introuvable")
     if run_id:
         p = report_by_run_id(root, number, run_id)
-        return (p, "") if p else (None, f"aucun rapport `{number}-{run_id}.json` dans workspace/evals/reports/")
+        return (p, "") if p else (None, f"aucun rapport `{number}-{run_id}.json` dans workspace/.sys/reports/")
     p = latest_report(root, number)
-    return (p, "") if p else (None, f"aucun rapport pour la mission {number} dans workspace/evals/reports/")
+    return (p, "") if p else (None, f"aucun rapport pour la mission {number} dans workspace/.sys/reports/")
 
 
 def promote(
@@ -89,7 +89,7 @@ def promote(
 
     data = load_json(report_path)
     if data is None:
-        report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` illisible ou absent", "eval_runner.py produit workspace/evals/reports/{n}-{RUN_ID}.json", rloc)
+        report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` illisible ou absent", "eval_runner.py produit workspace/.sys/reports/{n}-{RUN_ID}.json", rloc)
         return report
     if str(data.get("missionId", "")) not in ("", mid):
         report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` porte `{data.get('missionId')}`, pas `{mid}`", "choisir un rapport de la même mission", rloc)
@@ -194,7 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Promeut un rapport d'évaluation en baseline — action explicite, tracée, atomique")
     p.add_argument("--mission", type=int, default=None, help="numéro de mission ; défaut : l'unique IR compilé")
     p.add_argument("--report", type=Path, default=None, help="rapport à promouvoir (défaut : le plus récent de la mission)")
-    p.add_argument("--run", default=None, help="RUN_ID du rapport (workspace/evals/reports/{n}-{RUN_ID}.json)")
+    p.add_argument("--run", default=None, help="RUN_ID du rapport (workspace/.sys/reports/{n}-{RUN_ID}.json)")
     p.add_argument("--suite", action="append", default=None, help="ne promouvoir que ces suites")
     p.add_argument("--label", default=None, help="raison courte, obligatoire (ex. « après correction du chunking »)")
     p.add_argument("--force", action="store_true", help="promouvoir malgré un rouge ou un résultat périmé — audit-loggué")
@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     number = mission_number(ir)
     rpath, why = locate_report(root, number, report_arg=args.report, run_id=args.run)
     if rpath is None:
-        report.error("EVAL_REPORT_NOT_FOUND", why, "eval_runner.py produit le rapport à promouvoir", str(paths.evals_dir(root) / "reports"))
+        report.error("EVAL_REPORT_NOT_FOUND", why, "eval_runner.py produit le rapport à promouvoir", str(paths.reports_dir(root)))
         return finish(report, args)
     only = {t.strip() for chunk in (args.suite or []) for t in chunk.split(",") if t.strip()} or None
     bfile = args.baseline if args.baseline is None or args.baseline.is_absolute() else root / args.baseline

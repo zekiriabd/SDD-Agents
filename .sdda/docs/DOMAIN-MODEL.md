@@ -89,7 +89,7 @@ quel budget estimé, et **quelle alternative plus simple a été écartée et po
 |---|---|
 | `id`, `role` | identité |
 | `serves_caps` | les CAPs dont il porte la responsabilité |
-| `prompt_ref` | `workspace/prompts/{agent}.system.md` + son hash |
+| `prompt_ref` | `workspace/src/prompts/{agent}.system.md` + son hash |
 | `model_tier` | `fast` \| `balanced` \| `deep` — jamais un nom de modèle (P11) |
 | `tools` | références de TOOL — le minimum exigé par ses CAPs (P8) |
 | `retrievers` | références de RETRIEVER |

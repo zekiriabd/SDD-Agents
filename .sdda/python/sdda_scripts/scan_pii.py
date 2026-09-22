@@ -44,12 +44,12 @@ from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, re
 TARGETS = ("vectorstore", "datasets", "traces", "prompts")
 
 TARGET_PATHS: dict[str, tuple[str, ...]] = {
-    "datasets": ("workspace/datasets",),
-    "traces": ("workspace/traces",),
-    "prompts": ("workspace/prompts",),
+    "datasets": ("workspace/proof/datasets",),
+    "traces": ("workspace/.sys/traces",),
+    "prompts": ("workspace/src/prompts",),
     # Le corpus destiné à l'index : par convention `workspace/data/corpus`, et
     # ce que le contrat de retrieval désigne.
-    "vectorstore": ("workspace/data/corpus", "workspace/contracts/retrieval"),
+    "vectorstore": ("workspace/data/corpus", "workspace/feats/contracts/retrieval"),
 }
 
 #: Motifs à faible taux de faux positifs. Les PII « molles » (un nom propre, une

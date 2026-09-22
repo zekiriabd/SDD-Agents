@@ -17,7 +17,7 @@ ce script fait les deux choses qu'un humain n'a pas à faire lui-même :
 Emplacement : la convention de `STACK.md ## Active Agent Topology` —
 `RosterManifestRoot` (défaut `workspace/stack/topology`) + `{n}-roster.yml`. C'est
 le chemin que `validate_architecture.py` lit en G2 ; `workspace/stack/` est la zone
-de l'humain (ownership.md), là où `workspace/topology/` appartient à
+de l'humain (ownership.md), là où `workspace/feats/topology/` appartient à
 `architect-topology`.
 
 Aucun rapport de gate n'est écrit : `roster` n'est pas une part connue de G2
@@ -84,7 +84,7 @@ def find_mission(root: Path, mission: int | str, report: Report):
     """La MISSION `{n}-*.md`, parsée. None (et un finding) si absente ou ambiguë."""
     found = sorted(paths.missions_dir(root).glob(f"{mission}-*.md"))
     if not found:
-        report.error("MISSION_NOT_FOUND", f"aucune MISSION `{mission}-*.md` dans workspace/missions/",
+        report.error("MISSION_NOT_FOUND", f"aucune MISSION `{mission}-*.md` dans workspace/feats/missions/",
                      fix="créer la MISSION : /sdda-mission {Name}", location=paths.rel(root, paths.missions_dir(root)))
         return None
     if len(found) > 1:
@@ -177,7 +177,7 @@ def render_scaffold(number: int, name: str, pattern: str, caps: list[str], requi
             out.append(f"  - cap: {cap}")
             out.append(f"    agent: {PLACEHOLDER}")
     else:
-        out.append(f"  # aucune CAP `{number}-*.md` dans workspace/caps/ — lancer /sdda-caps {number} puis re-scaffold")
+        out.append(f"  # aucune CAP `{number}-*.md` dans workspace/feats/caps/ — lancer /sdda-caps {number} puis re-scaffold")
     out += [
         "",
         "# Les relations — qui appelle qui, à quelle condition. Une condition vide est refusée :",

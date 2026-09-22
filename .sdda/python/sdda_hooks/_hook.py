@@ -38,6 +38,13 @@ indiscernable d'une protection active.
 refuse le premier agent du pipeline, quand aucune gate ne peut encore être verte.
 Un hook qui paralyse se fait désactiver, et on perd alors tous les invariants —
 pas seulement le fautif.
+
+Le matcher de délégation s'écrit `Task|Agent`, et les deux noms comptent :
+l'outil de sous-agent s'est appelé `Task` dans Claude Code et s'appelle `Agent`
+dans l'Agent SDK. Un matcher qui ne nomme que l'un des deux ne se plaint pas —
+il ne se déclenche simplement jamais, et les neuf hooks de gate deviennent
+décoratifs sur le harnais qui emploie l'autre nom. Un enforcer muet coûte plus
+cher qu'un enforcer absent : `INVARIANTS.yml` continue de le déclarer câblé.
 """
 from __future__ import annotations
 
@@ -193,25 +200,47 @@ def degrade(hook: str, exc: BaseException) -> int:
 def agent_of(data: dict[str, Any]) -> str:
     """L'agent que l'action concerne, `""` si le payload n'en nomme aucun.
 
-    **Le harnais place `subagent_type` sous `tool_input`, pas à la racine.**
-    Lire uniquement la racine renvoyait toujours `""`, avec deux conséquences
-    opposées et toutes deux fausses :
+    **Deux situations différentes, deux emplacements différents dans le payload,
+    et les confondre désarme la moitié de la couche de protection.**
 
-    - un hook de gate (`applies_to` non vide) se croyait « dans le périmètre »
-      faute d'étiquette et refusait le PREMIER spawn du pipeline, quand aucune
-      gate ne peut encore être verte ;
-    - un hook d'ownership (`applies_to` vide) laissait tout passer, puisqu'il
-      autorise explicitement les écritures du fil principal.
+    1. *Le spawn* — le fil principal lance un sous-agent. L'action jugée est
+       l'appel de l'outil de délégation lui-même, et le nom de l'agent visé
+       arrive sous `tool_input` (`subagent_type`). C'est ce que voient les hooks
+       de gate, qui décident si ce spawn a le droit d'avoir lieu.
+    2. *L'action DANS le sous-agent* — un `Write`, un `Bash`, un `Read` émis par
+       l'agent déjà lancé. Ici `tool_input` ne décrit que le fichier ou la
+       commande : l'identité de l'auteur arrive **à la racine**, en `agent_type`.
+       C'est ce que voient les hooks d'ownership, et c'est exactement le cas
+       qu'ils existent pour juger.
 
-    On regarde donc les deux emplacements, plus les clés que pose la ligne de
-    commande (`--agent`). Une seule source aurait suffi si le format était
-    stable ; il ne l'est pas entre harnais, et se tromper ici désarme ou
-    paralyse toute la couche de protection.
+    Ne lire que `tool_input.subagent_type` rendait donc `""` pour tout le cas 2.
+    Un hook d'ownership interprète `""` comme « écriture du fil principal », donc
+    **autorise** : `preflight_ownership`, `preflight_bash_ownership` et
+    `preflight_forbidden_reads` laissaient passer toutes les écritures de tous
+    les sous-agents. La règle la plus citée de l'architecture — un `dev-agent`
+    ne touche ni `workspace/proof/datasets/` ni `workspace/src/prompts/` — n'était plus
+    appliquée qu'en CI par `audit_ownership`, alors que trois hooks prétendaient
+    la tenir au runtime. C'est la forme la plus coûteuse d'enforcer absent :
+    indiscernable d'une protection active.
+
+    On lit donc les deux emplacements, plus les clés que pose la ligne de
+    commande (`--agent`). Élargir la liste des candidats ne peut que faire
+    aboutir une identification qui échouait ; le repli `""` reste « fil
+    principal », comme avant.
+
+    `agent_id` n'est volontairement pas lu : c'est un identifiant opaque
+    d'instance, pas un nom d'agent, et la matrice d'ownership est indexée par
+    nom. L'accepter ferait chercher `a3f2c1…` dans `loader.yml`, donc rendrait
+    « agent hors matrice », donc autoriserait — une panne silencieuse de plus.
     """
-    tool_input = data.get("tool_input")
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
     candidates = [
-        (tool_input or {}).get("subagent_type") if isinstance(tool_input, dict) else None,
-        (tool_input or {}).get("agent") if isinstance(tool_input, dict) else None,
+        # Cas 1 — le spawn : la cible est nommée dans l'entrée de l'outil.
+        (tool_input or {}).get("subagent_type"),
+        (tool_input or {}).get("agent"),
+        # Cas 2 — l'action dans le sous-agent : l'auteur est nommé à la racine.
+        data.get("agent_type"),
+        data.get("agentType"),
         data.get("subagent_type"),
         data.get("agent"),
     ]

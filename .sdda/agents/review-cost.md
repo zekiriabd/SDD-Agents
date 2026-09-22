@@ -33,13 +33,13 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
 Exécute (0 token) :
 ```bash
-python .sdda/sdda.py cost-report --mission {n} --traces workspace/traces/runs --out workspace/.sys/.validation/cost-{n}.json
+python .sdda/sdda.py cost-report --mission {n} --traces workspace/.sys/traces/runs --out workspace/.sys/.validation/cost-{n}.json
 ```
 
 > ⏳ **Planifié** (ROADMAP Lot 5) — `cost_report.py` n'existe pas encore. Tant
 > qu'il est absent : coût et latence **par run** se lisent dans
 > `tracing.summarize_all(root)` (`costUsd`, `latencyMs`, `tokensIn/Out`) et dans
-> les rapports L7 (`workspace/evals/reports/{n}-*.json`). Sans p95 par nœud ni
+> les rapports L7 (`workspace/.sys/reports/{n}-*.json`). Sans p95 par nœud ni
 > coût par CAP, ces lignes du rapport portent « non mesuré » — jamais un chiffre
 > estimé à la main, c'est le premier item de ton anti-dérive.
 Deux factures, jamais additionnées. Le coût du **produit** vient des spans `chat`
@@ -61,9 +61,9 @@ Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `budget` (`costPerRunTargetUsd`,
   `costPerRunHardCapUsd`, `latencyP95TargetMs`, `tokenCeilingPerRun`),
   `orchestration.maxHops`, `agents[].bounds.budgetUsd`, `agents[].modelTier` ;
-- `workspace/topology/{n}-topology.md §4` — le budget **estimé** en G2 (nominal, pire cas) ;
-- `workspace/evals/reports/{n}/L7-*.json` — coût et latence mesurés par l'ORCH GATE ;
-- `workspace/caps/{n}-*-*.md` — `criticality` et, si présent, la valeur métier
+- `workspace/feats/topology/{n}-topology.md §4` — le budget **estimé** en G2 (nominal, pire cas) ;
+- `workspace/.sys/reports/{n}/L7-*.json` — coût et latence mesurés par l'ORCH GATE ;
+- `workspace/feats/caps/{n}-*-*.md` — `criticality` et, si présent, la valeur métier
   déclarée d'une CAP.
 
 Traces absentes ou insuffisantes (< 30 runs ou < `EvalRuns` × items du golden) :

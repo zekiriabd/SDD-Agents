@@ -163,7 +163,7 @@ def test_every_run_calls_the_executor_again_no_cache(compiled) -> None:
     root, ir, cfg = compiled
     ex = PerfectExecutor()
     _, payload = run_evals(root, ir, ex, config=cfg, filters=Filters(suites={sid_routing}), write_report=False, write_gates=False)
-    items = len(eval_runner.load_items(root / "workspace/datasets/golden/routing-v1.jsonl"))
+    items = len(eval_runner.load_items(root / "workspace/proof/datasets/golden/routing-v1.jsonl"))
     assert len(ex.calls) == 5 * items
     assert len({(i, r) for i, r, _ in ex.calls}) == 5 * items       # chaque (item, run) exactement une fois
     seeds = {seed for _, _, seed in ex.calls}
@@ -204,7 +204,7 @@ def test_single_run_is_warned_and_refused_in_ci(compiled, monkeypatch: pytest.Mo
 # ---------------------------------------------------------------------------
 def test_critical_class_below_threshold_is_red_even_if_global_mean_passes(compiled) -> None:
     root, ir, cfg = compiled
-    items = eval_runner.load_items(root / "workspace/datasets/golden/routing-v1.jsonl")
+    items = eval_runner.load_items(root / "workspace/proof/datasets/golden/routing-v1.jsonl")
     bad = eval_runner.item_class(items[0])
     n_bad = sum(1 for i in items if eval_runner.item_class(i) == bad)
     expected_mean = 1 - n_bad / len(items)
@@ -225,7 +225,7 @@ def test_normal_cap_class_failure_is_not_a_critical_class(compiled) -> None:
     for s in ir["evaluation"]["suites"]:
         if s["id"] == sid_citations:
             s["threshold"] = 0.5
-    items = eval_runner.load_items(root / "workspace/datasets/golden/billing-v1.jsonl")
+    items = eval_runner.load_items(root / "workspace/proof/datasets/golden/billing-v1.jsonl")
     bad = eval_runner.item_class(items[0])
 
     class Wrong(PerfectExecutor):
@@ -314,7 +314,7 @@ def test_report_and_gate_reports_are_written_with_pins(compiled) -> None:
     root, ir, cfg = compiled
     report, payload = run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(levels={"L4", "L8"}), graders=JUDGE_OK, run_id="RUN1")
     assert report.ok, report.render_text()
-    rep = root / "workspace/evals/reports/1-RUN1.json"
+    rep = root / "workspace/.sys/reports/1-RUN1.json"
     assert rep.is_file() and not rep.with_name(rep.name + ".tmp").exists()
     data = json.loads(rep.read_text(encoding="utf-8"))
     assert data["verdict"] == "green" and {s["suiteId"] for s in data["suites"]} == {sid_routing, sid_citations, sid_groundedness, "1-billing-specialist-injection", "1-intent-classifier-injection"}
@@ -329,7 +329,7 @@ def test_report_and_gate_reports_are_written_with_pins(compiled) -> None:
     g5 = json.loads((paths.validation_dir(root) / "G5-1-1-ClassifyIntent.json").read_text(encoding="utf-8"))
     g7 = json.loads((paths.validation_dir(root) / "G7-1-SupportAssistant.suites.json").read_text(encoding="utf-8"))
     assert g5["ok"] is True and g5["artifact"] == "1-1-ClassifyIntent"
-    assert "ir" in g5["pinnedHashes"] and "workspace/prompts/intent-classifier.system.md" in g5["pinnedHashes"]
+    assert "ir" in g5["pinnedHashes"] and "workspace/src/prompts/intent-classifier.system.md" in g5["pinnedHashes"]
     assert (paths.validation_dir(root) / "G5-1-2-ExplainInvoiceLine.json").is_file()
     assert g7["ok"] is True and payload["written"]["G5:1-1-ClassifyIntent"].endswith("G5-1-1-ClassifyIntent.json")
 
@@ -338,7 +338,7 @@ def test_second_report_same_run_id_does_not_overwrite(compiled) -> None:
     root, ir, cfg = compiled
     run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing}), run_id="R", write_gates=False)
     run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing}), run_id="R", write_gates=False)
-    names = sorted(p.name for p in (root / "workspace/evals/reports").glob("*.json"))
+    names = sorted(p.name for p in (root / "workspace/.sys/reports").glob("*.json"))
     assert names == ["1-R-2.json", "1-R.json"]
 
 
@@ -348,7 +348,7 @@ def test_edited_prompt_marks_result_stale_against_baseline(compiled) -> None:
     root, ir, cfg = compiled
     run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing, sid_citations}), run_id="BASE", write_gates=False)
     assert run_main(promote_baseline.main, ["--root", str(root), "--mission", "1", "--run", "BASE", "--label", "première baseline"])[0] == 0
-    prompt = root / "workspace/prompts/intent-classifier.system.md"
+    prompt = root / "workspace/src/prompts/intent-classifier.system.md"
     prompt.write_text(prompt.read_text(encoding="utf-8") + "\nRéponds toujours en majuscules.\n", encoding="utf-8")
     report, payload = run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing, sid_citations}), write_report=False, write_gates=False)
     routing, citations = _suite(payload, sid_routing), _suite(payload, sid_citations)
@@ -378,7 +378,7 @@ def test_cli_with_oracle_executor_and_filters(compiled) -> None:
     assert code == 0, out
     data = json.loads(out)
     assert data["ok"] is True and data["data"]["verdict"] == "green" and data["data"]["suites"] == 2
-    assert (root / "workspace/evals/reports/1-CLI.json").is_file()
+    assert (root / "workspace/.sys/reports/1-CLI.json").is_file()
     code, out = run_main(eval_runner.main, ["--root", str(root), "--mission", "1", "--executor", "sdda_scripts.eval_runner:OracleExecutor", "--suite", sid_routing, "--no-report"])
     assert code == 0 and "🟢" in out and sid_routing in out
 

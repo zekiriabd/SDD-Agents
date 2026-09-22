@@ -13,7 +13,7 @@ Owner: qa-evals                      # JAMAIS un dev-* (ARCHITECTURE §7)
 > dans `workspace/src/**/tests/`, pas ici.
 >
 > Fichier machine associé (lu par `eval_runner.py`) :
-> `workspace/evals/suites/{n}-{m}-{grader}.yaml` — le bloc §1 en est la source.
+> `workspace/proof/suites/{n}-{m}-{grader}.yaml` — le bloc §1 en est la source.
 
 ---
 
@@ -27,25 +27,25 @@ agentRef: {n}-{agent-slug}              # L4/L5 : l'agent évalué ISOLÉ
 metric: groundedness                    # groundedness | routing_accuracy | exact_match | recall@k
                                         # | ndcg@k | context_precision | schema_valid | trajectory_match
                                         # | cost_usd | latency_p95_ms | abstention_rate | injection_resisted | …
-dataset: workspace/datasets/golden/{name}-v1.jsonl
+dataset: workspace/proof/datasets/golden/{name}-v1.jsonl
 datasetHash: sha256:…                   # calculé — fait partie du tuple d'épinglage (P10)
 datasetMinItems: 50                     # GoldenSetMinItems ; 30 holdout ; 25 adversarial
 grader: llm-judge                       # exact | regex | schema | numeric-tolerance | semantic-similarity
                                         # | llm-judge | trajectory | cost | latency
 graderConfig: {}                        # ex. numeric-tolerance: { abs: 0.01 } ; semantic-similarity: { model: …, min: 0.85 }
-judgeCalibrationRef: workspace/evals/calibration/{grader}.json   # OBLIGATOIRE si grader = llm-judge et advisory = false
+judgeCalibrationRef: workspace/proof/calibration/{grader}.json   # OBLIGATOIRE si grader = llm-judge et advisory = false
 advisory: false                         # true : score informatif, ne bloque pas
 threshold: 0.85                         # comparé à score_mean
 perClassThreshold: {}                   # ex. routing : { refund: 1.0 } — 0 misroute sur la classe critique
 runs: 3                                 # EvalRuns ; 5 si Criticality: critical ; 1 REFUSÉ en CI
 seedPolicy: vary                        # vary | fixed — fixed masque la variance, débogage uniquement
 varianceWarnPct: 15                     # EvalVarianceWarnPct — au-delà : JAUNE
-baselineRef: workspace/evals/baselines/{n}-{m}-{grader}.json
+baselineRef: workspace/proof/baselines/{n}-{m}-{grader}.json
 regressionTolerancePct: 3               # RegressionTolerancePct (L9)
 fixtures:                               # L4 : outils MOCKÉS et retrieval FIGÉ — l'isolement est le point
   tools: mocked
-  retrieval: frozen:workspace/evals/fixtures/{index}-v1.json
-  memory: frozen:workspace/evals/fixtures/memory-{n}-v1.json
+  retrieval: frozen:workspace/proof/fixtures/{index}-v1.json
+  memory: frozen:workspace/proof/fixtures/memory-{n}-v1.json
 pinned:                                 # tuple P10 — si l'un bouge, le résultat est PÉRIMÉ
   promptHash: sha256:…
   modelId: <résolu par le provider depuis le tier — ex. claude-sonnet-5>
@@ -109,9 +109,9 @@ pinned:                                 # tuple P10 — si l'un bouge, le résul
 |---|---|
 | `JudgeModel` | <ex. claude-sonnet-5> — **≠ du modèle évalué** (`JudgeMustDifferFromEvaluated: true`) ; sinon on mesure la complaisance d'un modèle envers lui-même |
 | Grille | liste de **critères vérifiables**, pas « note de 1 à 10 la qualité » : <C1 … ; C2 … ; C3 …> |
-| Set de calibration | `workspace/datasets/calibration/{grader}-v1.jsonl` — ≥ 50 items du domaine réel, labellisés par un humain **selon la grille exacte du juge** |
+| Set de calibration | `workspace/proof/datasets/calibration/{grader}-v1.jsonl` — ≥ 50 items du domaine réel, labellisés par un humain **selon la grille exacte du juge** |
 | Accord mesuré | κ de Cohen (binaire / ordinal) ou corrélation (continu) : <valeur> — seuil `JudgeCalibrationMinKappa` 0.6 |
-| Rapport | `workspace/evals/calibration/{grader}.json` — versionné, référencé depuis l'IR (`judgeCalibrationRef`) |
+| Rapport | `workspace/proof/calibration/{grader}.json` — versionné, référencé depuis l'IR (`judgeCalibrationRef`) |
 | Sous le seuil | la grille est retravaillée, **ou** `advisory: true` : le juge informe, il ne bloque plus |
 
 ---

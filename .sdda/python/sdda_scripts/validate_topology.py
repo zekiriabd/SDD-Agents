@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G2 (côté Markdown) — TOPOLOGY GATE sur `workspace/topology/{n}-topology.md`.
+"""G2 (côté Markdown) — TOPOLOGY GATE sur `workspace/feats/topology/{n}-topology.md`.
 
 Le contrôle du GRAPHE (atteignabilité, bornes, références) se fait sur l'IR
 (`validate_ir.py`). La COMPLÉTUDE de la déclaration d'architecture — roster,
@@ -157,7 +157,7 @@ def load_mermaid(root: Path | None, spec: TopologySpec) -> str:
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------
-def validate_topology_text(text: str, *, path: Path | None, root: Path | None, config: LayeredConfig | None) -> tuple[Report, TopologySpec]:
+def validate_topology_text(text: str, *, path: Path | None, root: Path | None, config: LayeredConfig | None, pre: bool = False) -> tuple[Report, TopologySpec]:
     spec = parse_topology(text, path)
     loc = paths.rel(root, path) if (root and path) else (str(path) if path else "<texte>")
     report = Report(name="G2.topology", target=spec.mission_id or loc)
@@ -275,7 +275,15 @@ def validate_topology_text(text: str, *, path: Path | None, root: Path | None, c
         report.error("HANDOFF_UNCONTRACTED", f"{n_agents} agents et aucun handoff contracté dans `## 6. Handoffs`", "déclarer chaque passage de main : condition, état transmis, retour attendu", loc)
 
     # Contrats sur disque ------------------------------------------------------------------------
-    if root is not None:
+    #
+    # Sautés en mode `--pre`, et c'est tout l'intérêt du mode : `/sdda-topology`
+    # joue ce script juste après `architect-topology`, AVANT de payer les quatre
+    # architectes qui écrivent les contrats. À cet instant l'absence de contrat
+    # est l'état nominal, pas une faute — la signaler ferait échouer le
+    # post-check à chaque run et apprendrait à l'ignorer. Tout le reste (roster,
+    # bornes, handoffs, simplicité) est vérifié dans les deux modes, et la passe
+    # complète rejoue ces deux contrôles avant la compilation de l'IR.
+    if root is not None and not pre:
         for r in spec.contracts:
             f = markdown_io.strip_code(_col(r, "Fichier"))
             if markdown_io.is_placeholder(f) or "{" in f:
@@ -301,8 +309,8 @@ def _paragraph_after(body: str, marker: str) -> str:
     return " ".join(lines)
 
 
-def validate_topology_file(path: Path, root: Path, config: LayeredConfig | None, *, write_report: bool = True) -> Report:
-    report, spec = validate_topology_text(markdown_io.read_text(path), path=path, root=root, config=config)
+def validate_topology_file(path: Path, root: Path, config: LayeredConfig | None, *, write_report: bool = True, pre: bool = False) -> Report:
+    report, spec = validate_topology_text(markdown_io.read_text(path), path=path, root=root, config=config, pre=pre)
     if write_report and spec.mission_id:
         pinned = {"topology": spec.hash}
         mission = load_mission(root, spec.mission_id)
@@ -318,7 +326,10 @@ def build_parser() -> argparse.ArgumentParser:
     # connaissent qu'un numéro, jamais un chemin. Le positionnel reste pour
     # l'usage manuel et pour les tests.
     p.add_argument("--mission", type=int, default=None, help="numéro de MISSION ; restreint aux fichiers de cette MISSION")
-    p.add_argument("files", nargs="*", type=Path, help="fichiers topology ; défaut : workspace/topology/*-topology.md")
+    p.add_argument("files", nargs="*", type=Path, help="fichiers topology ; défaut : workspace/feats/topology/*-topology.md")
+    p.add_argument("--pre", action="store_true",
+                   help="passe PRÉ-CONTRATS : tout sauf l'existence des contrats sur disque. "
+                        "C'est l'état nominal juste après architect-topology, avant de payer les architectes")
     add_common_args(p)
     return p
 
@@ -335,9 +346,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.topology_dir(root).glob("*-topology.md"))
     if not files:
-        combined.error("TOPOLOGY_INCOMPLETE", "aucune topologie trouvée", "créer workspace/topology/{n}-topology.md", str(paths.topology_dir(root)))
+        combined.error("TOPOLOGY_INCOMPLETE", "aucune topologie trouvée", "créer workspace/feats/topology/{n}-topology.md", str(paths.topology_dir(root)))
     for f in files:
-        combined.extend(validate_topology_file(f, root, config, write_report=not args.no_report))
+        combined.extend(validate_topology_file(f, root, config, write_report=not args.no_report, pre=args.pre))
     return finish(combined, args)
 
 

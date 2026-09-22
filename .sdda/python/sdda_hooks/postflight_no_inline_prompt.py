@@ -33,7 +33,7 @@ def check(root: Path, data: dict) -> int:
         return ALLOW
     return deny(HOOK, "PROMPT_INLINE_FORBIDDEN",
                 f"{len(inline)} prompt(s) en dur dans le code — {inline[0].message}",
-                "déplacer le texte dans `workspace/prompts/{slug}.system.md` et le charger au "
+                "déplacer le texte dans `workspace/src/prompts/{slug}.system.md` et le charger au "
                 "démarrage : un prompt sans fichier n'a pas de hash, donc pas d'eval rejouable")
 
 

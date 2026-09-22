@@ -8,7 +8,7 @@
     "files": [
       "workspace/src/{AppName}/pyproject.toml",
       "workspace/src/{AppName}/uv.lock",
-      "workspace/evals/pytest.ini"
+      "workspace/proof/pytest.ini"
     ]
   },
   "versions": {

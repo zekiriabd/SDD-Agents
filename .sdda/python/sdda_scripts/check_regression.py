@@ -26,7 +26,7 @@ comparable, et le dire vaut mieux que rendre un vert vide. Une suite
 
 Usage :
     python .sdda/sdda.py check-regression --mission 1                       # dernier rapport vs baseline
-    python .sdda/sdda.py check-regression --mission 1 --report workspace/evals/reports/1-x.json --json
+    python .sdda/sdda.py check-regression --mission 1 --report workspace/.sys/reports/1-x.json --json
     python .sdda/sdda.py check-regression --mission 1 --tolerance 5 --noise-sigma 0   # strict : l'écart-type est ignoré
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ def compare(
     rloc = paths.rel(root, report_path)
     data = load_json(report_path)
     if data is None:
-        report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` illisible ou absent", "eval_runner.py produit workspace/evals/reports/{n}-{RUN_ID}.json", rloc)
+        report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` illisible ou absent", "eval_runner.py produit workspace/.sys/reports/{n}-{RUN_ID}.json", rloc)
         return report
 
     bpath = baseline_file or baseline_path(root, number, ir)
@@ -173,9 +173,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.report is not None:
         rpath = args.report if args.report.is_absolute() else root / args.report
     elif args.run:
-        rpath = report_by_run_id(root, number, args.run) or (paths.evals_dir(root) / "reports" / f"{number}-{args.run}.json")
+        rpath = report_by_run_id(root, number, args.run) or (paths.reports_dir(root) / f"{number}-{args.run}.json")
     else:
-        rpath = latest_report(root, number) or (paths.evals_dir(root) / "reports" / f"{number}-<aucun>.json")
+        rpath = latest_report(root, number) or (paths.reports_dir(root) / f"{number}-<aucun>.json")
     tolerance = args.tolerance if args.tolerance is not None else config.get_float("RegressionTolerancePct", 3.0)
     noise_sigma = args.noise_sigma if args.noise_sigma is not None else config.get_float("RegressionNoiseSigma", 2.0)
     bfile = args.baseline if args.baseline is None or args.baseline.is_absolute() else root / args.baseline
