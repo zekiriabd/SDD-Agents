@@ -20,6 +20,7 @@ import pytest
 from sdda_hooks import _hook
 from sdda_hooks import postflight_no_inline_prompt, postflight_trace_present
 from sdda_hooks import preflight_agent_bounds, preflight_agent_budget, preflight_cap_gate
+from sdda_hooks import preflight_bash_ownership, preflight_forbidden_reads
 from sdda_hooks import preflight_cost_cap, preflight_db_envelope, preflight_ownership
 from sdda_hooks import preflight_retrieval_gate, preflight_tool_gate
 from sdda_lib import tracing
@@ -32,6 +33,7 @@ HOOKS = (
     preflight_cap_gate, preflight_tool_gate, preflight_retrieval_gate,
     preflight_ownership, preflight_agent_budget, preflight_cost_cap,
     preflight_agent_bounds, preflight_db_envelope,
+    preflight_bash_ownership, preflight_forbidden_reads,
     postflight_no_inline_prompt, postflight_trace_present,
 )
 
