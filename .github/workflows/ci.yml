@@ -1,0 +1,62 @@
+# CI minimale de SDD_Agents — le dispositif anti-pourrissement, exécuté à chaque
+# push et pull request. Aucune étape n'appelle un LLM ni le réseau (PHILOSOPHY
+# P4) : stdlib + pytest, rien d'autre.
+#
+# Ce que chaque étape ferme :
+#   framework_smoke       parité agents/bornes, invariants/enforcers, classes
+#                         d'erreur citées vs émises, digests, références, catalogue
+#   harness_build --check les façades .claude/ .codex/ .gemini/ sont bien
+#                         compilées depuis .sdda/ — une édition à la main échoue
+#   sync_error_registry   le registre [CLASS] correspond aux émetteurs réels
+#   sync_digests          les tranches de taxonomie par agent sont à jour
+#   pytest                la couche déterministe
+#
+# Matrice : Linux sur la version minimale (3.11) et une récente, Windows sur la
+# récente — le framework se développe sous Windows et les fins de ligne
+# (hashing normalisé CRLF/BOM) doivent tenir sur les deux.
+
+name: ci
+
+on:
+  push:
+    branches: ["main", "next"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.os }} · py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.11" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.13" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+
+      - name: framework_smoke
+        run: python .sdda/python/sdda_admin/framework_smoke.py
+
+      - name: harness_build --check
+        run: python .sdda/python/sdda_admin/harness_build.py --check
+
+      - name: sync_error_registry --check
+        run: python .sdda/python/sdda_admin/sync_error_registry.py --check
+
+      - name: sync_digests --check
+        run: python .sdda/python/sdda_admin/sync_digests.py --check
+
+      - name: pytest
+        run: python -m pytest .sdda/python/tests -q -p no:cacheprovider
