@@ -39,42 +39,23 @@ MIN_PYTHON = (3, 11)
 
 
 # ---------------------------------------------------------------------------
-# Arborescence du workspace
+# Arborescence du workspace — UNE source : `sdda_scripts.smoke_check.WORKSPACE_TREE`
 # ---------------------------------------------------------------------------
-WORKSPACE_TREE = [
-    "stack",
-    # STACK.md est gitignoré ; les manifestes de sources, eux, sont versionnés :
-    # sans eux, la surface de données du projet ne serait relue nulle part.
-    "stack/sources",
-    "contracts/dataaccess/schemas",
-    "missions",
-    "caps",
-    "topology",
-    "contracts/agents",
-    "contracts/tools",
-    "contracts/retrieval",
-    "contracts/memory",
-    "prompts",
-    "datasets/golden",
-    "datasets/holdout",
-    "datasets/calibration",
-    "datasets/adversarial",
-    "evals/suites",
-    "evals/baselines",
-    "evals/reports",
-    "evals/calibration",
-    "traces/runs",
-    "src",
-    "docs",
-    ".sys/.ir",
-    ".sys/.context/adrs",
-    ".sys/.context/packs",
-    ".sys/.state",
-    ".sys/.validation",
-    ".sys/.audit",
-    ".sys/.routing",
-    ".sys/.cache",
-]
+# Le bootstrap CRÉE l'arborescence, `smoke_check` la VÉRIFIE, `migrate_workspace`
+# la COMPLÈTE : trois copies de la liste rendaient trois verdicts (ce script a
+# créé `.sys/.routing` et `.sys/.cache` pendant des mois alors que rien ne les
+# lisait). L'import est gardé : `python bootstrap.py` doit rester lançable
+# depuis un clone nu, et c'est `preflight()` qui dit proprement ce qui manque.
+if str(SDDA / "python") not in sys.path:
+    sys.path.insert(0, str(SDDA / "python"))
+try:
+    from sdda_lib.workspace import framework_version, write_workspace_version
+    from sdda_scripts.smoke_check import WORKSPACE_TREE
+except Exception as _exc:  # framework absent ou incomplet : tranché au preflight
+    _FRAMEWORK_IMPORT_ERROR: Exception | None = _exc
+    WORKSPACE_TREE = ()  # type: ignore[assignment]
+else:
+    _FRAMEWORK_IMPORT_ERROR = None
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +347,12 @@ def preflight() -> None:
             f"[BOOTSTRAP_TEMPLATE_MISSING] {TEMPLATE} absent",
             "vérifier l'intégrité du dépôt (git status)",
         )
+    if _FRAMEWORK_IMPORT_ERROR is not None:
+        fail(
+            "outillage du framework non chargeable",
+            f"[BOOTSTRAP_FRAMEWORK_UNLOADABLE] {type(_FRAMEWORK_IMPORT_ERROR).__name__}: {_FRAMEWORK_IMPORT_ERROR}",
+            "vérifier l'intégrité de .sdda/python/ (git status) — l'arborescence du workspace y est déclarée",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +432,11 @@ def create_workspace() -> None:
         keep = directory / ".gitkeep"
         if not any(directory.iterdir()):
             keep.touch()
+    # La version du workspace : sans elle, une montée de version du framework
+    # n'a pas de chemin de migration. Un fichier existant n'est pas réécrit —
+    # c'est `migrate_workspace.py` qui fait monter, et `smoke_check` qui le dit.
+    if not (WORKSPACE / ".sys" / "workspace.json").is_file():
+        write_workspace_version(ROOT, written_by=f"bootstrap {framework_version()}")
 
 
 def build_context_packs() -> None:
@@ -640,7 +632,7 @@ def main() -> int:
     say("  Génération")
 
     create_workspace()
-    step(f"workspace/ — {len(WORKSPACE_TREE)} répertoires")
+    step(f"workspace/ — {len(WORKSPACE_TREE)} répertoires, .sys/workspace.json")
 
     if stack_path.is_file():
         backup = stack_path.with_suffix(".md.bak")

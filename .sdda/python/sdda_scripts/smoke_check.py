@@ -19,6 +19,9 @@ Ce qu'il vérifie :
        serving, au moins une pour framework             [STACK_CARDINALITY_INVALID]
     4. chaque fiche activée existe sur disque            [STACK_COMBO_UNLOADABLE]
     5. l'arborescence du workspace est complète          [WORKSPACE_TREE_INCOMPLETE]
+    6. `workspace/.sys/workspace.json` porte la version courante
+       (`sdda_lib.workspace.WORKSPACE_VERSION`)          [WORKSPACE_VERSION_MISSING]
+                                                         [WORKSPACE_VERSION_OUTDATED]
 
 Une ligne activée pour une fiche absente ne charge rien (ARCHITECTURE §2) : la
 détecter ici, avant le premier spawn, coûte cinquante millisecondes ; la
@@ -39,10 +42,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.workspace import WORKSPACE_JSON_REL, WORKSPACE_VERSION, read_workspace_version  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
-#: Arborescence attendue sous `workspace/` — SSoT partagée avec `bootstrap.py`,
-#: qui l'importe pour la CRÉER ; ce script vérifie qu'elle est là.
+MIGRATE_CMD = "python .sdda/python/sdda_scripts/migrate_workspace.py"
+
+#: Arborescence attendue sous `workspace/` — SSoT partagée avec `bootstrap.py`
+#: (qui l'importe pour la CRÉER) et `migrate_workspace.py` (qui la COMPLÈTE) ;
+#: ce script vérifie qu'elle est là. Un répertoire retiré d'ici devient un
+#: fantôme : il se retire dans une migration, pas en silence.
 WORKSPACE_TREE: tuple[str, ...] = (
     "stack",
     "stack/sources",
@@ -166,10 +174,24 @@ def check_tree(root: Path, report: Report) -> list[str]:
     return missing
 
 
+def check_version(root: Path, report: Report) -> int | None:
+    version = read_workspace_version(root)
+    if version is None:
+        report.error("WORKSPACE_VERSION_MISSING",
+                     f"`{WORKSPACE_JSON_REL}` absent ou sans `workspaceVersion` (attendu {WORKSPACE_VERSION})",
+                     f"{MIGRATE_CMD} — date le workspace et applique les migrations manquantes", WORKSPACE_JSON_REL)
+    elif version < WORKSPACE_VERSION:
+        report.error("WORKSPACE_VERSION_OUTDATED",
+                     f"workspace en version {version}, le framework attend {WORKSPACE_VERSION}",
+                     f"{MIGRATE_CMD} (--dry-run pour voir les actions d'abord)", WORKSPACE_JSON_REL)
+    return version
+
+
 def run(root: Path) -> Report:
     report = Report(name="SMOKE", target=str(root))
     report.data["stack"] = check_stack(root, report)
     report.data["missingDirs"] = check_tree(root, report)
+    report.data["workspaceVersion"] = check_version(root, report)
     return report
 
 
@@ -191,7 +213,8 @@ def main(argv: list[str] | None = None) -> int:
     report = run(root)
     if report.ok and not args.json:
         stack = report.data["stack"]
-        print(f"  smoke ok — {stack.get('sheets', 0)} fiche(s) active(s), {len(WORKSPACE_TREE)} répertoires présents")
+        print(f"  smoke ok — {stack.get('sheets', 0)} fiche(s) active(s), {len(WORKSPACE_TREE)} répertoires présents, "
+              f"workspace v{report.data['workspaceVersion']}")
     return finish(report, args)
 
 

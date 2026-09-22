@@ -98,11 +98,14 @@ def bootstrapped(tmp_path_factory) -> Path:
         sys.path.insert(0, str(ROOT))
     import bootstrap as bs
 
+    from sdda_lib.workspace import write_workspace_version
+
     root = tmp_path_factory.mktemp("boot")
     for rel in bs.WORKSPACE_TREE:
         (root / "workspace" / rel).mkdir(parents=True, exist_ok=True)
     stack = root / "workspace" / "stack" / "STACK.md"
     stack.write_text(bs.build_stack_md("SmokeProbe", bs.COMBOS["c1"], {}), encoding="utf-8")
+    write_workspace_version(root)   # ce que create_workspace() écrit aussi
     return root
 
 

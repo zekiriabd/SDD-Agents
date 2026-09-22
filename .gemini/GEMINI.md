@@ -140,7 +140,9 @@ SDD-Agents/
     ├── docs/
     └── .sys/
         ├── .ir/         {n}-system.ir.json      # Agentic IR compilé depuis les contrats
-        ├── .context/ · .state/ · .validation/ · .audit/ · .routing/ · .cache/
+        ├── .context/ · .state/ · .validation/ · .audit/
+        └── workspace.json                       # workspaceVersion — écrit par bootstrap,
+                                                 #   monté par sdda_scripts/migrate_workspace.py
 ```
 
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
@@ -376,7 +378,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **359**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **369**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :
