@@ -297,6 +297,12 @@ def validate_topology_text(text: str, *, path: Path | None, root: Path | None, c
             f = markdown_io.strip_code(_col(r, "Fichier"))
             if markdown_io.is_placeholder(f) or "{" in f:
                 continue
+            if _norm(f).split(" ")[0] in ("aucun", "aucune", "none", "n/a", "-", "—"):
+                # « aucun » est une déclaration, pas un oubli : une MISSION sans
+                # retriever dit qu'elle n'en a pas, ligne par type, et le lecteur
+                # voit que l'architecte y a pensé. Tout autre texte sans fichier
+                # reste une faute : la colonne s'appelle `Fichier`.
+                continue
             if not paths.resolve_rel(root, f).is_file():
                 report.error("TOPOLOGY_CONTRACT_MISSING", f"contrat annoncé introuvable : `{f}`", "produire le contrat ou retirer la ligne", loc)
         for slug in spec.agents:
