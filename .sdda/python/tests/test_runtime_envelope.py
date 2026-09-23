@@ -187,6 +187,16 @@ def test_an_in_filter_matches_several_values(runtime) -> None:
     assert result.count == 2
 
 
+def test_a_filter_value_outside_its_enum_is_an_error_not_an_empty_result(runtime) -> None:
+    """`status: shipped` n'existe pas : rendre 0 ligne ferait dire « aucune commande »."""
+    env, ctx = runtime.envelope, runtime.ctx()
+    for bad in ({"carrier": "FEDEX"}, {"carrier": ["UPS", "FEDEX"]}, {"status": "shipped"}):
+        with pytest.raises(runtime.errors.InvalidFilter) as excinfo:
+            runtime.run(env.search_records(source="order_tracking", filters=bad, ctx=ctx))
+        assert "hors enum" in str(excinfo.value)
+    assert runtime.run(env.search_records(source="order_tracking", filters={"status": "delivered"}, ctx=ctx)).count >= 0
+
+
 def test_a_range_filter_bounds_the_result(runtime) -> None:
     result = runtime.run(runtime.envelope.search_records(
         source="order_tracking", filters={"last_scan_at_min": "2026-09-20T10:00:00+00:00"},
