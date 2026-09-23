@@ -358,7 +358,17 @@ def read_violation(loader: dict[str, Any], agent: str, path: str, *, scope: str 
       workspace cherche en réalité ce que `forbidden_reads` lui cache.
     """
     normalized = path.replace("\\", "/").lstrip("./").rstrip("/") or "."
+    allowed = reads_of(loader, agent)
     for pattern in forbidden_reads_of(loader, agent):
+        # `{other}` veut dire « tout AUTRE que le mien ». Le compilateur de motifs
+        # ne connaît pas le `{n}` courant — il traduit `{other}` comme `{n}`, en
+        # `[^/]+` — donc `missions/{other}-*.md` matchait aussi la MISSION que
+        # `reads:` autorise nommément, et l'interdit, testé en premier, gagnait :
+        # `po-capabilities` ne pouvait pas lire la MISSION qu'il découpe. « Le
+        # mien » est ce que `reads:` déclare : un chemin qu'un `reads:` couvre
+        # n'est pas « autre ». Sans `{other}`, l'interdit reste absolu.
+        if "{other}" in pattern and any(matches(r, normalized) for r in allowed):
+            continue
         if matches(pattern, normalized):
             return pattern
         if scope in ("names", "content") and matches(pattern, normalized + "/x"):
