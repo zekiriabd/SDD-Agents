@@ -1,0 +1,68 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "framework-spring-ai",
+  "category": "framework",
+  "schemaVersion": 1,
+  "buildSystem": "gradle",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/build.gradle.kts",
+      "workspace/src/{AppName}/gradle/libs.versions.toml"
+    ]
+  },
+  "versions": {
+    "jdk": "21",
+    "kotlin": "2.2.0",
+    "spring-ai": "1.0.0",
+    "spring-boot": "3.5.3",
+    "kotlinx-coroutines": "1.10.2",
+    "kotlin-logging": "7.0.7",
+    "resilience4j": "2.3.0",
+    "opentelemetry-spring-boot-starter": "2.16.0",
+    "clikt": "5.0.3",
+    "kotest": "6.0.0.M4"
+  },
+  "core": [
+    { "module": "org.springframework.ai:spring-ai-bom", "ref": "spring-ai", "rationale": "Plateforme : toutes les versions Spring AI viennent du BOM, jamais épinglées une à une." },
+    { "module": "org.springframework.ai:spring-ai-client-chat", "ref": "spring-ai", "rationale": "ChatClient, outils typés, sorties structurées (.entity)." },
+    { "module": "org.springframework.boot:spring-boot-starter", "ref": "spring-boot", "rationale": "Conteneur, configuration typée, cycle de vie — même sans HTTP (cli-exe)." },
+    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-core", "ref": "kotlinx-coroutines" },
+    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-reactor", "ref": "kotlinx-coroutines", "rationale": "Pont coroutines <-> Reactor pour le streaming Spring AI." },
+    { "module": "tools.jackson.module:jackson-module-kotlin", "ref": "spring-boot" },
+    { "module": "io.github.oshai:kotlin-logging-jvm", "ref": "kotlin-logging" },
+    { "module": "io.github.resilience4j:resilience4j-kotlin", "ref": "resilience4j", "rationale": "Retry avec backoff sur TransientAiException seulement ; jamais sur un outil non idempotent." },
+    { "module": "io.kotest:kotest-runner-junit5", "ref": "kotest" },
+    { "module": "io.kotest:kotest-assertions-core", "ref": "kotest" }
+  ],
+  "onDemand": [
+    { "module": "org.springframework.ai:spring-ai-starter-model-anthropic", "ref": "spring-ai", "capability": "provider-anthropic", "triggers": ["RuntimeProvider:\\s*anthropic", "claude-"] },
+    { "module": "org.springframework.ai:spring-ai-starter-model-openai", "ref": "spring-ai", "capability": "provider-openai", "triggers": ["RuntimeProvider:\\s*openai", "gpt-"] },
+    { "module": "org.springframework.ai:spring-ai-starter-model-azure-openai", "ref": "spring-ai", "capability": "provider-azure-openai", "triggers": ["RuntimeProvider:\\s*azure"] },
+    { "module": "org.springframework.ai:spring-ai-starter-model-vertex-ai-gemini", "ref": "spring-ai", "capability": "provider-google", "triggers": ["RuntimeProvider:\\s*google", "gemini-"] },
+    { "module": "org.springframework.ai:spring-ai-starter-mcp-client", "ref": "spring-ai", "capability": "mcp", "rationale": "Outils MCP dans le conteneur Spring ; allowlist et schéma épinglés par tools/mcp.md.", "triggers": ["MCPServers", "mcp"] },
+    { "module": "org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc", "ref": "spring-ai", "capability": "memory-shared", "rationale": "ChatMemory partagée dès qu'il y a plus d'un processus.", "triggers": ["replicas", "workers", "memory-shared"] },
+    { "module": "com.github.ajalt.clikt:clikt", "ref": "clikt", "capability": "serving-cli", "rationale": "Analyse des arguments de la CLI (serving/cli-kotlin.md).", "triggers": ["serving/cli-kotlin"] },
+    { "module": "io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter", "ref": "opentelemetry-spring-boot-starter", "capability": "otel", "rationale": "Observations gen_ai.* re-nommées au format observability/otel-genai.md ; coût recalculé depuis Usage.", "triggers": ["otel", "opentelemetry"] }
+  ],
+  "absentByDesign": [
+    { "module": "org.springframework.ai:spring-ai-advisors-vector-store", "reason": "Aucune fiche rag/ JVM mesurée : un VectorStore sans fiche est un retrieval que la RETRIEVAL GATE ne mesure pas." },
+    { "module": "dev.langchain4j:langchain4j", "reason": "Deux abstractions de fournisseur dans un même projet ; Spring AI retenu (ROADMAP)." }
+  ],
+  "runtimeRequirements": {
+    "jdk": ">=21",
+    "notes": "Spring AI n'a pas de graphe borné natif : les patterns à cycle exigent une boucle écrite dans orchestration/, bornée par Bounds et persistée (architecture-requirements.yml : loop_bound)."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-23",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "VERSIONS NON VÉRIFIÉES au 2026-09-23 : search.maven.org a confirmé spring-ai-bom 1.0.0, spring-ai-starter-model-anthropic 1.0.0 et spring-ai-starter-mcp-client 1.0.0 comme `latestVersion` indexée, mais l'index paraît en retard sur la ligne 1.x publiée ; spring-boot-dependencies 3.5.3, kotlin 2.2.0, kotlin-logging 7.0.7, resilience4j 2.3.0, clikt 5.0.3 confirmés ; opentelemetry-spring-boot-starter et kotlinx-coroutines-reactor NON confirmés. Résoudre contre Maven Central avant le premier bootstrap réel, puis dater verifiedAt.",
+      "Retenu à la place de Semantic Kernel Java (portage non poussé par Microsoft) et de LangChain4j (même absence de graphe, écosystème plus étroit) — ROADMAP, note Java."
+    ],
+    "changeLog": [
+      "2026-09-23 — Création ; pins provisoires."
+    ],
+    "versionsVerified": false
+  }
+}

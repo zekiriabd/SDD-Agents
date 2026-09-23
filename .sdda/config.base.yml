@@ -271,10 +271,13 @@ ApiFramework: none                    # none (si DeliverableType != backend-api)
                                       # DOIT être cohérent avec le langage
                                       # actif -> [PACKAGING_LANG_MISMATCH]
 
-ApiArchitecture: layered              # layered | hexagonal | vertical-slice
-                                      # Architecture interne du back-end livré.
-                                      # Sans ce choix, chaque `dev-*` impose la
-                                      # sienne et le projet en porte trois.
+                                      # L'architecture INTERNE de la coquille n'est
+                                      # pas une clé scalaire : c'est une FICHE,
+                                      # `## Active Architecture Pattern` de STACK.md
+                                      # (archi/mvc.md par défaut, ddd, microservice),
+                                      # lue par dev-backend et dev-api. Sans ce
+                                      # choix, chaque `dev-*` imposait la sienne et
+                                      # le projet en portait trois.
 
 ApiContractFirst: true                # l'OpenAPI est dérivé des schémas de l'IR
                                       # et vérifié contre eux (API GATE, G6.5).

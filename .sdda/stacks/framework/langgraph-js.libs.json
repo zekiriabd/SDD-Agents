@@ -1,0 +1,222 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "framework-langgraph-js",
+  "category": "framework",
+  "schemaVersion": 1,
+  "buildSystem": "pnpm",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/package.json",
+      "workspace/src/{AppName}/pnpm-lock.yaml"
+    ]
+  },
+  "versions": {
+    "node": "22",
+    "langchain-langgraph": "1.4.17",
+    "langchain-core": "1.2.12",
+    "langchain-anthropic": "1.5.11",
+    "langchain-openai": "1.5.13",
+    "langchain-google-genai": "2.3.2",
+    "langchain-langgraph-checkpoint-sqlite": "1.0.4",
+    "langchain-langgraph-checkpoint-postgres": "1.0.5",
+    "langchain-mcp-adapters": "1.1.4",
+    "langsmith": "0.10.5",
+    "zod": "4.6.5",
+    "pino": "10.3.1",
+    "commander": "15.0.0",
+    "opentelemetry-sdk-node": "0.222.0",
+    "opentelemetry-api": "1.9.1",
+    "opentelemetry-exporter-trace-otlp-http": "0.222.0",
+    "typescript": "6.0.3",
+    "tsx": "4.23.15",
+    "types-node": "26.6.2",
+    "eslint": "10.11.0",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.1"
+  },
+  "core": [
+    {
+      "module": "@langchain/langgraph",
+      "ref": "langchain-langgraph",
+      "rationale": "StateGraph, arêtes conditionnelles nommées, checkpointer, interrupt : le graphe de l'IR, compilé — cycles bornés par l'état (P12), pas par recursionLimit seul."
+    },
+    {
+      "module": "@langchain/core",
+      "ref": "langchain-core",
+      "rationale": "Messages, tool(), withStructuredOutput, BaseChatModel. Le méta-paquet `langchain` est ABSENT : createReactAgent cache un graphe non borné."
+    },
+    {
+      "module": "zod",
+      "ref": "zod",
+      "rationale": "Schémas d'outils et de sorties structurées GÉNÉRÉS depuis les contrats ; Bounds validées au chargement."
+    },
+    {
+      "module": "pino",
+      "ref": "pino",
+      "rationale": "Logs JSON sur stderr."
+    },
+    {
+      "module": "typescript",
+      "ref": "typescript",
+      "rationale": "Plafonné sous 7 (lang/typescript.md §7)."
+    },
+    {
+      "module": "tsx",
+      "ref": "tsx"
+    },
+    {
+      "module": "@types/node",
+      "ref": "types-node"
+    },
+    {
+      "module": "eslint",
+      "ref": "eslint"
+    },
+    {
+      "module": "typescript-eslint",
+      "ref": "typescript-eslint"
+    },
+    {
+      "module": "vitest",
+      "ref": "vitest"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "@langchain/anthropic",
+      "ref": "langchain-anthropic",
+      "capability": "provider-anthropic",
+      "triggers": [
+        "RuntimeProvider:\\s*anthropic",
+        "claude-"
+      ]
+    },
+    {
+      "module": "@langchain/openai",
+      "ref": "langchain-openai",
+      "capability": "provider-openai",
+      "triggers": [
+        "RuntimeProvider:\\s*(openai|azure)",
+        "gpt-",
+        "o[0-9]-mini"
+      ]
+    },
+    {
+      "module": "@langchain/google-genai",
+      "ref": "langchain-google-genai",
+      "capability": "provider-google",
+      "triggers": [
+        "RuntimeProvider:\\s*google",
+        "gemini-"
+      ]
+    },
+    {
+      "module": "@langchain/langgraph-checkpoint-sqlite",
+      "ref": "langchain-langgraph-checkpoint-sqlite",
+      "capability": "checkpoint-sqlite",
+      "rationale": "Reprise mono-processus. Insuffisant dès qu'il y a plus d'un processus.",
+      "triggers": [
+        "HumanInTheLoopEnabled:\\s*true",
+        "checkpoint",
+        "resume"
+      ]
+    },
+    {
+      "module": "@langchain/langgraph-checkpoint-postgres",
+      "ref": "langchain-langgraph-checkpoint-postgres",
+      "capability": "checkpoint-postgres",
+      "rationale": "Checkpointer PARTAGÉ : obligatoire avec plusieurs processus (fiche §3.4).",
+      "triggers": [
+        "replicas",
+        "workers",
+        "checkpoint-postgres"
+      ]
+    },
+    {
+      "module": "@langchain/mcp-adapters",
+      "ref": "langchain-mcp-adapters",
+      "capability": "mcp",
+      "rationale": "Outils MCP exposés comme tool() ; allowlist et schéma épinglés par tools/mcp.md.",
+      "triggers": [
+        "MCPServers",
+        "mcp"
+      ]
+    },
+    {
+      "module": "commander",
+      "ref": "commander",
+      "capability": "serving-cli",
+      "rationale": "Analyse des arguments de la CLI (serving/cli-node.md).",
+      "triggers": [
+        "serving/cli-node"
+      ]
+    },
+    {
+      "module": "@opentelemetry/sdk-node",
+      "ref": "opentelemetry-sdk-node",
+      "capability": "otel",
+      "rationale": "Spans sdda.agent.turn / sdda.tool.call / sdda.llm.call au format observability/otel-genai.md.",
+      "triggers": [
+        "otel",
+        "opentelemetry"
+      ]
+    },
+    {
+      "module": "@opentelemetry/api",
+      "ref": "opentelemetry-api",
+      "capability": "otel",
+      "triggers": [
+        "otel",
+        "opentelemetry"
+      ]
+    },
+    {
+      "module": "@opentelemetry/exporter-trace-otlp-http",
+      "ref": "opentelemetry-exporter-trace-otlp-http",
+      "capability": "otel",
+      "triggers": [
+        "otlp"
+      ]
+    },
+    {
+      "module": "langsmith",
+      "ref": "langsmith",
+      "capability": "tracing-langsmith",
+      "rationale": "Tracing managé, en COMPLÉMENT de la couche observabilité — jamais à sa place : le coût est recalculé par le framework, pas relu depuis un service tiers.",
+      "triggers": [
+        "langsmith",
+        "LANGSMITH_API_KEY"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "langchain",
+      "reason": "Le méta-paquet expose createReactAgent et des agents pré-câblés : un graphe implicite, non borné par la MISSION, que diff-code-vs-ir ne peut pas comparer à l'IR."
+    },
+    {
+      "module": "@langchain/community",
+      "reason": "Surface trop large, pins instables ; un connecteur s'ajoute par son propre paquet ou par MCP."
+    }
+  ],
+  "runtimeRequirements": {
+    "node": ">=22",
+    "notes": "MemorySaver en développement seulement ; un checkpointer partagé dès qu'il y a plus d'un processus. Aucune fiche rag/ TypeScript : un projet LangGraph.js est rag/none.md."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-23",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Cible TypeScript retenue par la ROADMAP à la place de LangChain.js seul : LCEL ne borne pas les boucles et ne persiste pas l'état.",
+      "Aucune combo de bootstrap ne l'active : eval/ et observability/ n'ont pas de fiche TypeScript, et gen_app_skeleton est Python.",
+      "Les clés de versions{} sont des ALIAS internes (`langchain-core` pour `@langchain/core`) : le méta-schéma refuse un nom qui commence par `@`. Le `module` porte l'identifiant npm exact."
+    ],
+    "changeLog": [
+      "2026-09-23 — Création ; résolution registry.npmjs.org via `npm view <pkg> version`."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-23",
+    "verifiedAgainst": "registry.npmjs.org via `npm view <pkg> version` (dernière stable ; typescript@6 plafonné)"
+  }
+}

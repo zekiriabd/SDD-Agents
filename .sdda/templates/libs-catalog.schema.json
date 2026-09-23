@@ -20,7 +20,7 @@
       "enum": [
         "lang", "framework", "orchestration", "rag", "vectorstore", "embedding", "rerank",
         "dataaccess", "memory", "tools", "eval", "observability", "guardrails",
-        "serving"
+        "serving", "archi", "backend"
       ],
       "description": "Doit être identique au nom du dossier parent."
     },

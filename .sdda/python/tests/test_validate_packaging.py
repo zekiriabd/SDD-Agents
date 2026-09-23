@@ -158,4 +158,105 @@ def test_every_api_framework_of_the_schema_declares_its_language() -> None:
 
 @pytest.mark.parametrize("framework,language", sorted(vp.API_FRAMEWORK_LANG.items()))
 def test_each_api_framework_targets_one_of_the_four_languages(framework: str, language: str) -> None:
-    assert language in {"python", "csharp", "java", "typescript"}, framework
+    # Un framework peut être porté par plusieurs langages (Spring Boot : Kotlin et Java) ;
+    # chacun doit être un langage que le catalogue connaît.
+    assert isinstance(language, tuple) and language, framework
+    assert set(language) <= {"python", "csharp", "java", "typescript", "kotlin"}, framework
+
+
+# ---------------------------------------------------------------------------
+# La coquille : `## Active Architecture Pattern` et `## Active Backend Stack`
+# (hérités de SDD_Pro le 2026-09-23)
+# ---------------------------------------------------------------------------
+def set_archi(project: Path, sheet: str | None) -> None:
+    """Remplace la fiche archi active ; `None` vide la section."""
+    path = project / STACK
+    text = path.read_text(encoding="utf-8")
+    line = " - .sdda/stacks/archi/mvc.md"
+    assert line in text
+    path.write_text(text.replace(line, f" - .sdda/stacks/archi/{sheet}.md" if sheet else "# (aucune)", 1), encoding="utf-8")
+
+
+def set_backend(project: Path, *sheets: str) -> None:
+    path = project / STACK
+    text = path.read_text(encoding="utf-8")
+    marker = "## Active Backend Stack\n"
+    assert marker in text
+    lines = "".join(f" - .sdda/stacks/backend/{s}.md\n" for s in sheets)
+    path.write_text(text.replace(marker, marker + lines, 1), encoding="utf-8")
+
+
+def test_every_backend_sheet_of_the_map_exists_and_speaks_its_language() -> None:
+    """La clé `ApiFramework` et la fiche `backend/` disent la même chose : la seconde doit exister."""
+    for framework, sheet in vp.API_FRAMEWORK_BACKEND_SHEET.items():
+        path = SDDA / "stacks" / "backend" / f"{sheet}.md"
+        assert path.is_file(), f"{framework} -> backend/{sheet}.md absent"
+        text = path.read_text(encoding="utf-8")
+        declared = re.search(r"^Languages:\s*(.+)$", text, re.M)
+        assert declared and declared.group(1).strip() in vp.API_FRAMEWORK_LANG[framework], sheet
+
+
+def test_every_console_surface_has_a_sheet_on_disk() -> None:
+    for surface in vp.CONSOLE_SURFACES:
+        assert (SDDA / "stacks" / "serving" / f"{surface}.md").is_file(), surface
+
+
+def test_backend_api_without_a_backend_sheet_is_refused(project: Path) -> None:
+    set_config(project, DeliverableType="backend-api", ApiFramework="fastapi", ApiAuthMode="oauth2")
+    set_surface(project, "fastapi-sse")
+    assert "PACKAGING_BACKEND_SHEET_MISSING" in classes(check(project))
+
+
+def test_backend_api_with_the_matching_sheet_is_green_on_that_axis(project: Path) -> None:
+    set_config(project, DeliverableType="backend-api", ApiFramework="fastapi", ApiAuthMode="oauth2")
+    set_surface(project, "fastapi-sse")
+    set_backend(project, "python-fastapi")
+    report = check(project)
+    assert not {c for c in classes(report) if c.startswith("PACKAGING_BACKEND_")}
+    assert report.data["backendStack"] == ["python-fastapi"]
+
+
+def test_a_backend_sheet_that_contradicts_the_key_is_refused(project: Path) -> None:
+    set_config(project, DeliverableType="backend-api", ApiFramework="fastapi", ApiAuthMode="oauth2")
+    set_surface(project, "fastapi-sse")
+    set_backend(project, "node-express")
+    assert "PACKAGING_BACKEND_SHEET_MISMATCH" in classes(check(project))
+
+
+def test_two_backend_sheets_are_refused(project: Path) -> None:
+    set_config(project, DeliverableType="backend-api", ApiFramework="fastapi", ApiAuthMode="oauth2")
+    set_surface(project, "fastapi-sse")
+    set_backend(project, "python-fastapi", "nestjs")
+    assert "PACKAGING_BACKEND_SHEET_MISMATCH" in classes(check(project))
+
+
+def test_a_backend_sheet_on_a_console_deliverable_is_a_warning(project: Path) -> None:
+    set_backend(project, "python-fastapi")
+    report = check(project)
+    assert "PACKAGING_BACKEND_SHEET_UNUSED" in {f.cls for f in report.warnings}
+    assert "PACKAGING_BACKEND_SHEET_UNUSED" not in classes(report)
+
+
+def test_the_shell_needs_exactly_one_architecture(project: Path) -> None:
+    assert "PACKAGING_ARCHI_UNDECLARED" not in classes(check(project))     # mvc par défaut dans la fixture
+    set_archi(project, None)
+    assert "PACKAGING_ARCHI_UNDECLARED" in classes(check(project))
+
+
+def test_microservice_needs_a_network_deliverable(project: Path) -> None:
+    set_archi(project, "microservice")
+    assert "PACKAGING_ARCHI_DELIVERABLE_MISMATCH" in classes(check(project))          # cli-exe par défaut
+    set_config(project, DeliverableType="backend-api", ApiFramework="fastapi", ApiAuthMode="oauth2")
+    set_surface(project, "fastapi-sse")
+    set_backend(project, "python-fastapi")
+    assert "PACKAGING_ARCHI_DELIVERABLE_MISMATCH" not in classes(check(project))
+
+
+def test_spring_boot_is_carried_by_kotlin(project: Path) -> None:
+    """Spring Boot se compile en Kotlin comme en Java ; la fiche livrée est Kotlin."""
+    path = project / STACK
+    text = path.read_text(encoding="utf-8").replace(" - .sdda/stacks/lang/python.md", " - .sdda/stacks/lang/kotlin.md", 1)
+    path.write_text(text, encoding="utf-8")
+    set_config(project, DeliverableType="backend-api", ApiFramework="spring-boot", ApiAuthMode="oauth2")
+    set_backend(project, "kotlin-spring-boot")
+    assert "PACKAGING_LANG_MISMATCH" not in classes(check(project))

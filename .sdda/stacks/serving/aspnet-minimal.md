@@ -39,7 +39,7 @@ Hors périmètre : hébergement, TLS, passerelle, dimensionnement.
 | **Langage** | C# / .NET 9 (`lang/csharp.md`) |
 | **Librairies** | `Microsoft.AspNetCore.App` (framework partagé) · `Microsoft.AspNetCore.OpenApi` 9.x · `System.Text.Json` (source-generated) · `Microsoft.Extensions.Diagnostics.HealthChecks` 9.x — capability `serving-aspnet-minimal` du `.libs.json` du framework actif |
 | **Point d'entrée** | `{AppName}.Serving.Http/Program.cs` → `dotnet run` ou binaire publié |
-| **Paramètres STACK.md** | `DeliverableType`, `ApiFramework: aspnet-minimal`, `ApiArchitecture`, `ApiContractFirst`, `ApiAuthMode`, `ServingLocalPort`, `StreamingEnabled`, `HumanInTheLoopEnabled` |
+| **Paramètres STACK.md** | `DeliverableType`, `ApiFramework: aspnet-minimal`, `## Active Architecture Pattern` (couches de la coquille), `## Active Backend Stack` → `backend/dotnet-minimalapi.md` (le projet, la DI, la config, le packaging autour de cette surface), `ApiContractFirst`, `ApiAuthMode`, `ServingLocalPort`, `StreamingEnabled`, `HumanInTheLoopEnabled` |
 | **Contrat machine** | OpenAPI 3.1 dérivé de l'IR + flux SSE dont chaque `data:` est un `RunEvent` |
 | **Livrables possibles** | `backend-api` (service), `container` (image), `cli-exe` (`PublishSingleFile`), `library` (`.dll` référençable) — §7 |
 
@@ -137,7 +137,7 @@ workspace/src/{AppName}/src/
 │   ├── Security/IdentityFactory.cs      # ClaimsPrincipal -> Identity ; JAMAIS depuis le corps
 │   ├── StatusMapping.cs                 # [CLASS] -> StatusCode, dérivé d'ExitCodes
 │   ├── Contracts/                       # RunRequest/RunResponse GÉNÉRÉS depuis l'IR (§6)
-│   └── appsettings.json                 # gitignored ; projeté depuis STACK.md
+│   └── appsettings.json                 # projeté depuis STACK.md ; les secrets viennent de .env, jamais du fichier
 └── {AppName}.Serving.Cli/               # si serving/cli.md est aussi actif — même Core
 
 workspace/src/{AppName}/tests/

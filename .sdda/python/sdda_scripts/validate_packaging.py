@@ -45,18 +45,37 @@ from sdda_scripts._common import (  # noqa: E402
     add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root,
 )
 
-#: Framework HTTP -> langage qui peut le porter. Le seul accord que personne ne
-#: peut rattraper plus tard : on ne compile pas du Spring Boot en Python.
-API_FRAMEWORK_LANG = {
-    "fastapi": "python",
-    "django-ninja": "python",
-    "flask": "python",
-    "aspnet-minimal": "csharp",
-    "aspnet-mvc": "csharp",
-    "spring-boot": "java",
-    "express": "typescript",
-    "nestjs": "typescript",
+#: Framework HTTP -> langages qui peuvent le porter. Le seul accord que personne
+#: ne peut rattraper plus tard : on ne compile pas du Spring Boot en Python.
+#: Spring Boot se porte en Java comme en Kotlin — la fiche livrée est Kotlin.
+API_FRAMEWORK_LANG: dict[str, tuple[str, ...]] = {
+    "fastapi": ("python",),
+    "django-ninja": ("python",),
+    "flask": ("python",),
+    "aspnet-minimal": ("csharp",),
+    "aspnet-mvc": ("csharp",),
+    "spring-boot": ("kotlin", "java"),
+    "express": ("typescript",),
+    "nestjs": ("typescript",),
 }
+
+#: Framework HTTP -> fiche `backend/` qui le porte. `## Active Backend Stack`
+#: et `ApiFramework` disent la même chose sous deux formes — la fiche que
+#: l'agent LIT, la clé que la politique d'équipe peut interdire — et doivent
+#: donc s'accorder. Un framework sans fiche (django-ninja, flask, aspnet-mvc)
+#: reste déclarable : la clé passe, la section reste vide, et c'est dit.
+API_FRAMEWORK_BACKEND_SHEET = {
+    "fastapi": "python-fastapi",
+    "express": "node-express",
+    "nestjs": "nestjs",
+    "spring-boot": "kotlin-spring-boot",
+    "aspnet-minimal": "dotnet-minimalapi",
+}
+
+#: Patterns d'architecture de la coquille qui supposent un SERVICE déployé :
+#: sans appelant réseau, `/readyz`, l'idempotence et l'identité au transport
+#: n'ont pas d'objet.
+NETWORK_ARCHI = {"microservice"}
 
 #: Les surfaces CONSOLE, une par langage. `cli-exe` est le défaut du framework
 #: dans les quatre langages (`config.base.yml`) : le nommer ici une seule fois
@@ -64,10 +83,11 @@ API_FRAMEWORK_LANG = {
 #: rien ne le dise. C'est ce qui était arrivé à `csharp` : la seule fiche console
 #: déclarait `Languages: python`, donc le défaut échouait au preflight.
 CONSOLE_SURFACES = {
-    "cli",          # [python]  serving/cli.md
-    "cli-dotnet",   # [csharp]  serving/cli-dotnet.md
+    "cli",          # [python]     serving/cli.md
+    "cli-dotnet",   # [csharp]     serving/cli-dotnet.md
+    "cli-node",     # [typescript] serving/cli-node.md
+    "cli-kotlin",   # [kotlin]     serving/cli-kotlin.md
     # "cli-java",   # (fiche absente) — lang/java.md n'existe pas non plus
-    # "cli-node",   # (fiche absente) — lang/typescript.md n'existe pas non plus
 }
 
 #: Livrable -> surfaces d'exposition qui le servent. Un livrable ne dicte pas la
@@ -101,12 +121,15 @@ def run(root: Path, report: Report) -> Report:
     languages = active_stacks(root, "Active Language & Runtime")
     surfaces = active_stacks(root, "Active Serving Surface")
     data_access = active_stacks(root, "Active Data Access")
+    archis = active_stacks(root, "Active Architecture Pattern")
+    backends = active_stacks(root, "Active Backend Stack")
     loc = "workspace/stack/STACK.md ## Project Config"
 
     report.data.update({
         "deliverableType": deliverable, "apiFramework": api_framework,
         "apiAuthMode": auth_mode, "apiContractFirst": contract_first,
         "language": languages[0] if languages else None, "servingSurfaces": surfaces,
+        "archiPattern": archis[0] if len(archis) == 1 else None, "backendStack": backends,
     })
 
     if deliverable not in DELIVERABLE_SURFACES:
@@ -128,13 +151,57 @@ def run(root: Path, report: Report) -> Report:
                     "poser `ApiFramework: none` — une clé qui ne sert à rien finit par être "
                     "lue comme si elle servait", loc)
 
+    # -- 1bis. La fiche backend dit la même chose que la clé ------------------
+    sheet_loc = "workspace/stack/STACK.md ## Active Backend Stack"
+    if deliverable == "backend-api":
+        expected_sheet = API_FRAMEWORK_BACKEND_SHEET.get(api_framework)
+        if not backends:
+            if expected_sheet:
+                report.error("PACKAGING_BACKEND_SHEET_MISSING",
+                             f"`DeliverableType: backend-api` sans fiche `backend/` active",
+                             f"activer `.sdda/stacks/backend/{expected_sheet}.md` : c'est la fiche que "
+                             "dev-backend lit pour le projet, la DI, la config et le packaging — sans "
+                             "elle, il les invente", sheet_loc)
+            elif api_framework != "none":
+                report.warn("PACKAGING_BACKEND_SHEET_MISSING",
+                            f"`ApiFramework: {api_framework}` n'a aucune fiche `backend/` au catalogue",
+                            "le framework est déclarable, mais dev-backend travaillera sans fiche : "
+                            "l'écrire, ou choisir un framework qui en a une", sheet_loc)
+        elif len(backends) > 1:
+            report.error("PACKAGING_BACKEND_SHEET_MISMATCH",
+                         f"{len(backends)} fiches `backend/` actives : {', '.join(backends)}",
+                         "une seule maison HTTP — en activer exactement une", sheet_loc)
+        elif expected_sheet and backends[0] != expected_sheet:
+            report.error("PACKAGING_BACKEND_SHEET_MISMATCH",
+                         f"`ApiFramework: {api_framework}` mais la fiche active est `backend/{backends[0]}`",
+                         f"activer `backend/{expected_sheet}.md`, ou aligner `ApiFramework` — la clé et la "
+                         "fiche disent la même chose sous deux formes et doivent s'accorder", sheet_loc)
+    elif backends:
+        report.warn("PACKAGING_BACKEND_SHEET_UNUSED",
+                    f"fiche `backend/{backends[0]}` active alors que le livrable est `{deliverable}`",
+                    "la retirer : une fiche lue pour rien finit par être suivie", sheet_loc)
+
+    # -- 1ter. L'architecture de la coquille : une, et compatible avec le livrable
+    archi_loc = "workspace/stack/STACK.md ## Active Architecture Pattern"
+    if len(archis) != 1:
+        report.error("PACKAGING_ARCHI_UNDECLARED",
+                     f"`## Active Architecture Pattern` active {len(archis)} fiche(s) : {archis or 'aucune'}",
+                     "activer exactement une fiche `.sdda/stacks/archi/*.md` (mvc par défaut) : sans elle, "
+                     "chaque dev-* impose son découpage et le projet en porte trois", archi_loc)
+    elif archis[0] in NETWORK_ARCHI and deliverable not in ("backend-api", "container"):
+        report.error("PACKAGING_ARCHI_DELIVERABLE_MISMATCH",
+                     f"`archi/{archis[0]}` avec `DeliverableType: {deliverable}`",
+                     "un microservice est un service déployé seul, appelé par d'autres : il exige "
+                     "`backend-api` ou `container`. Un exécutable lancé à la main n'a ni /readyz ni "
+                     "appelant à authentifier — choisir archi/mvc ou archi/ddd", archi_loc)
+
     # -- 2. Le framework doit tenir dans le langage actif --------------------
     expected = API_FRAMEWORK_LANG.get(api_framework)
-    if expected and languages and expected not in languages:
+    if expected and languages and not (set(expected) & set(languages)):
         report.error("PACKAGING_LANG_MISMATCH",
-                     f"`ApiFramework: {api_framework}` exige `lang/{expected}`, "
+                     f"`ApiFramework: {api_framework}` exige `lang/{'|'.join(expected)}`, "
                      f"la stack active est `lang/{languages[0]}`",
-                     f"activer `.sdda/stacks/lang/{expected}.md`, ou choisir un framework de "
+                     f"activer `.sdda/stacks/lang/{expected[0]}.md`, ou choisir un framework de "
                      f"`{languages[0]}`. Cet écart n'échoue pas ici mais à la compilation, "
                      "trois phases plus loin, après avoir payé contrats, prompts et agents", loc)
 
