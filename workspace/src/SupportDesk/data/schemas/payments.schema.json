@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Schéma FIGÉ de la source `payments`, inféré depuis 20 enregistrement(s) puis RELU (identifiants dé-énumérés, listes closes complétées, champs nullables typés, descriptions métier). C'est lui qui fait foi, pas les données : un champ absent d'ici est omis de la sortie de l'outil, et un écart de type au démarrage est [DATA_SOURCE_SCHEMA_DRIFT].",
+  "properties": {
+    "amount": {
+      "description": "Montant réglé ou tenté, EUR, chaîne à deux décimales.",
+      "type": "string"
+    },
+    "attempted_at": {
+      "description": "Date de la tentative, UTC ISO 8601.",
+      "format": "date-time",
+      "type": "string"
+    },
+    "card_last4": {
+      "description": "Quatre derniers chiffres de la carte — la SEULE information de carte existante. null si method != card. Donnée personnelle : redigée dans les traces.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "currency": {
+      "description": "Devise — toujours EUR.",
+      "enum": [
+        "EUR"
+      ],
+      "type": "string"
+    },
+    "customer_id": {
+      "description": "Identifiant du client payeur (CUST-NNNN). Filtre d'identité ; non énumérable.",
+      "type": "string"
+    },
+    "failure_reason": {
+      "description": "Motif d'échec transmis par la banque. Texte libre non maîtrisé ; null si aucun échec.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "invoice_id": {
+      "description": "Facture réglée. null pour une tentative échouée sur une commande jamais facturée.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "method": {
+      "description": "Moyen de paiement : card, paypal, bank_transfer, gift_card.",
+      "enum": [
+        "card",
+        "paypal",
+        "bank_transfer",
+        "gift_card"
+      ],
+      "type": "string"
+    },
+    "order_id": {
+      "description": "Numéro de la commande réglée.",
+      "type": "string"
+    },
+    "paid_at": {
+      "description": "Date d'encaissement, UTC ISO 8601. null si pending ou failed.",
+      "format": "date-time",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payment_id": {
+      "description": "Identifiant du paiement (PAY-NNNN).",
+      "type": "string"
+    },
+    "status": {
+      "description": "authorized, captured (encaissé), pending (virement attendu), failed, refunded.",
+      "enum": [
+        "authorized",
+        "captured",
+        "pending",
+        "failed",
+        "refunded"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "amount",
+    "attempted_at",
+    "card_last4",
+    "currency",
+    "customer_id",
+    "failure_reason",
+    "invoice_id",
+    "method",
+    "order_id",
+    "paid_at",
+    "payment_id",
+    "status"
+  ],
+  "title": "payments",
+  "type": "object",
+  "x-sdda": {
+    "generator": "gen_source_tools.py --infer",
+    "recordsObserved": 20,
+    "reviewed": true,
+    "sourceId": "payments",
+    "reviewedBy": "Tech Lead — workspace/assets/_generate.py est la SSoT des valeurs"
+  }
+}

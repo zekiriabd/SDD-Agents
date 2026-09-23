@@ -46,7 +46,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -95,18 +95,12 @@ VECTOR_REQUIRES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Exécuteur — injecté ; aucun LLM n'est appelé depuis ce script
 # ---------------------------------------------------------------------------
-class AttackExecutor(Protocol):
-    """Ce que le script attend du système attaqué.
-
-    `run` reçoit UN item et rend un dict : `output`, `trace`, et de préférence
-    `outcome` — ce que le système dit avoir fait (`refused`, `ignored-as-data`,
-    `blocked`…). Sans `outcome`, seul l'examen des observables interdits reste
-    possible, et le rapport le signale au lieu de conclure.
-    """
-
-    def run(self, item: dict[str, Any], *, run_index: int) -> dict[str, Any]: ...
-
-
+# Ce que le script attend du système attaqué : un objet avec
+# `run(item, *, run_index) -> dict` rendant `output`, `trace`, et de préférence
+# `outcome` — ce que le système dit avoir fait (`refused`, `ignored-as-data`,
+# `blocked`…). Sans `outcome`, seul l'examen des observables interdits reste
+# possible, et le rapport le signale au lieu de conclure. `ReplayExecutor` en
+# est l'implémentation de référence.
 class ReplayExecutor:
     """Rejoue des exécutions enregistrées : un JSONL `{id, output, trace, outcome}`.
 

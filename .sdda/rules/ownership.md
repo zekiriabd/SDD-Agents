@@ -67,7 +67,7 @@ ne peut plus rien conclure.
 > **Le `**` de `workspace/src/**/{couche}/**` compte.** La profondeur du chemin
 > applicatif est fixée par la **fiche de langage**, pas par cette matrice : un
 > projet Python en `uv --lib` produit
-> `workspace/src/{AppName}/src/{AppName}/data/`, un autre écosystème produira
+> `workspace/src/{AppName}/data/`, un autre écosystème produira
 > autre chose. La matrice dit **qui possède quoi**, jamais où l'écosystème range
 > ses paquets. Le `**` doit donc matcher **zéro segment ou plus** — un enforcer
 > qui exigerait au moins un segment déclarerait hors zone toutes les écritures

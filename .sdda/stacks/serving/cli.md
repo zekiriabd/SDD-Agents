@@ -130,7 +130,7 @@ inconnue → `1`).
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/serving/
+workspace/src/{AppName}/serving/
 ├── __init__.py
 ├── cli.py                # app = typer.Typer(no_args_is_help=True) ; commandes run/resume/health/inspect/trace/version ; aucun métier
 ├── run_service.py        # RunService.run(input, ctx) / .resume(thread_id, decision, ctx) -> AsyncIterator[RunEvent] — PARTAGÉ par toutes les surfaces

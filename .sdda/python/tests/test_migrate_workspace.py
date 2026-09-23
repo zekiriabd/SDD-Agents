@@ -293,7 +293,7 @@ SOURCES_V2 = """\
 Stores:
   - id: exports_local
     kind: local
-    root: workspace/data/exports
+    root: workspace/assets/exports
     read_only: true
     auth: { mode: none }
 
@@ -438,8 +438,40 @@ def test_v3_graph_is_inlined_in_the_topology(v2_with_content: Path) -> None:
 def test_v3_frozen_schemas_travel_with_the_code(v2_with_content: Path) -> None:
     root = v2_with_content
     _migrate(root)
-    moved = root / "workspace/src/Projet/src/Projet/data/schemas/order_tracking.schema.json"
+    # Layout plat (v4) : le paquet est `workspace/src/{App}/`, sans `src/{App}/` intermédiaire.
+    moved = root / "workspace/src/Projet/data/schemas/order_tracking.schema.json"
     assert moved.is_file() and not (root / "workspace/feats/contracts/dataaccess").exists()
+    assert not (root / "workspace/src/Projet/src").exists()
+
+
+def test_v4_flattens_a_src_layout_application(v2_with_content: Path) -> None:
+    """Un workspace v3 réel : `src/{App}/data/…` remonte d'un cran, la coquille disparaît.
+
+    Le src layout doublait le nom du projet et cachait l'application deux
+    répertoires plus bas — le premier lecteur du premier workspace réel n'a pas
+    trouvé le code. Le projet (pyproject, .env) reste à la racine ; les fichiers
+    déjà présents à destination ne sont jamais écrasés.
+    """
+    root = v2_with_content
+    _migrate(root)                                            # -> v4, schémas déjà à plat
+    ws.write_workspace_version(root, version=3, written_by="test")   # on rejoue depuis un état v3 « src layout »
+    pkg = root / "workspace/src/Projet/src/Projet"
+    (pkg / "data" / "tools").mkdir(parents=True)
+    (pkg / "data" / "tools" / "orders_lookup.py").write_text("# outil\n", encoding="utf-8")
+    (pkg / "config.py").write_text("# config\n", encoding="utf-8")
+    (pkg / "app_config.json").write_text('{\n  "workspaceRoot": "../../../.."\n}\n', encoding="utf-8")
+    (root / "workspace/src/Projet/pyproject.toml").write_text('packages = ["src/Projet"]\n', encoding="utf-8")
+    (root / "workspace/src/Projet/.env").write_text("LLM_API_KEY=\n", encoding="utf-8")
+    report = _migrate(root)
+    app = root / "workspace/src/Projet"
+    assert (app / "data/tools/orders_lookup.py").is_file() and (app / "config.py").is_file()
+    assert (app / "data/schemas/order_tracking.schema.json").is_file()      # celui de la v3, intact
+    assert '"workspaceRoot": "../.."' in (app / "app_config.json").read_text(encoding="utf-8")
+    assert (app / ".env").is_file() and (app / "pyproject.toml").is_file()
+    assert not (app / "src").exists()
+    assert ws.read_workspace_version(root) == ws.WORKSPACE_VERSION
+    assert any("pyproject" in str(f.get("message", "")) for f in report.get("findings", []) if f.get("cls") == "WORKSPACE_MIGRATION_COLLISION") or \
+        "src layout" in json.dumps(report, ensure_ascii=False)
 
 
 def test_v3_source_manifests_are_inlined_in_stack_md(v2_with_content: Path) -> None:

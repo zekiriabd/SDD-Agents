@@ -27,8 +27,8 @@ from sdda_scripts import ir_compiler
 #: La déclaration des sources vit INLINE dans STACK.md (v3 du workspace) ; les
 #: schémas figés partent avec le code, à côté des wrappers qu'ils gardent.
 MANIFEST = "workspace/stack/STACK.md"
-SCHEMAS = "workspace/src/SupportAssistant/src/SupportAssistant/data/schemas"
-TOOLS = "workspace/src/SupportAssistant/src/SupportAssistant/data/tools"
+SCHEMAS = "workspace/src/SupportAssistant/data/schemas"
+TOOLS = "workspace/src/SupportAssistant/data/tools"
 CONTRACTS = "workspace/feats/contracts/tools"
 META = Path(__file__).resolve().parents[2] / "templates" / "tool-schema.schema.json"
 
@@ -351,7 +351,7 @@ def test_booleans_are_not_integers() -> None:
 # Lecture des formats
 # ---------------------------------------------------------------------------
 def test_csv_source_is_read_and_inferred(sources_project: Path) -> None:
-    exports = sources_project / "workspace/data/exports/catalog"
+    exports = sources_project / "workspace/assets/exports/catalog"
     exports.mkdir(parents=True)
     (exports / "2026-09.csv").write_text(
         "sku;label;price_eur;stock\n"
@@ -386,7 +386,7 @@ def test_csv_source_is_read_and_inferred(sources_project: Path) -> None:
 
 
 def test_json_array_with_records_path(sources_project: Path) -> None:
-    exports = sources_project / "workspace/data/exports/stock"
+    exports = sources_project / "workspace/assets/exports/stock"
     exports.mkdir(parents=True)
     (exports / "snapshot.json").write_text(
         json.dumps({"meta": {"v": 1}, "rows": [{"sku": "A1", "qty": 3}, {"sku": "A2", "qty": 0}]}),
@@ -415,14 +415,14 @@ def test_json_array_with_records_path(sources_project: Path) -> None:
 
 
 def test_empty_glob_refuses_to_infer(sources_project: Path) -> None:
-    (sources_project / "workspace/data/exports/tracking/2026-09-20.jsonl").unlink()
+    (sources_project / "workspace/assets/exports/tracking/2026-09-20.jsonl").unlink()
     (sources_project / SCHEMAS / "order_tracking.schema.json").unlink()
     assert "DATA_SOURCE_EMPTY" in classes(gst.run(sources_project, mode="infer", source="order_tracking"))
 
 
 def test_bad_encoding_is_an_error_not_a_silent_replacement(sources_project: Path) -> None:
     """`errors=strict` est délibéré : un remplacement produit des données fausses."""
-    (sources_project / "workspace/data/exports/tracking/2026-09-21.jsonl").write_bytes(
+    (sources_project / "workspace/assets/exports/tracking/2026-09-21.jsonl").write_bytes(
         b'{"order_id":"ORD-9","carrier_message":"caf\xe9"}\n')
     (sources_project / SCHEMAS / "order_tracking.schema.json").unlink()
     assert "DATA_SOURCE_UNREADABLE" in classes(gst.run(sources_project, mode="infer", source="order_tracking"))

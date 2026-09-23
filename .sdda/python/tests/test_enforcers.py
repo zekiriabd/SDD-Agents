@@ -230,7 +230,7 @@ def test_pii_in_a_dataset_is_reported(project: Path) -> None:
 
 
 def test_pii_in_the_corpus_blocks_before_indexing(project: Path) -> None:
-    write(project, "workspace/data/corpus/contrat.md", "Titulaire : IBAN FR7630006000011234567890189\n")
+    write(project, "workspace/assets/corpus/contrat.md", "Titulaire : IBAN FR7630006000011234567890189\n")
     assert "PII_IN_INDEX" in errors(scan_pii.run(project, targets=["vectorstore"]))
 
 
@@ -304,7 +304,7 @@ def test_a_write_inside_the_declared_zone_passes(project: Path) -> None:
 def test_the_nested_package_layout_is_inside_the_zone(project: Path) -> None:
     """`**` matche zéro segment ou plus : la profondeur appartient au langage."""
     report = ao.run(project, agent="dev-data",
-                    wrote=["workspace/src/SupportAssistant/src/SupportAssistant/data/tools/x.py"])
+                    wrote=["workspace/src/SupportAssistant/data/tools/x.py"])
     assert report.ok, report.render_text()
 
 

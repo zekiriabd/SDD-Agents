@@ -60,6 +60,10 @@ WORKSPACE_TREE: tuple[str, ...] = (
     # stack/ — la CONFIGURATION : STACK.md, seul. Versionné ; les valeurs des
     # secrets vivent dans `src/{App}/.env`, avec l'application qui les consomme.
     "stack",
+    # assets/ — les FICHIERS STATIQUES que l'humain dépose (exports JSON/CSV,
+    # documents d'un corpus) : le `assets/` de SDD_Pro. C'est la racine des
+    # stores `kind: local` de `## Active Data Sources`. Aucun agent n'y écrit.
+    "assets",
     # feats/ — la SPÉCIFICATION : ce qu'on écrit et qu'on relit en revue.
     # Du MARKDOWN, et rien d'autre (`check_feats_markdown_only`).
     "feats/briefs",

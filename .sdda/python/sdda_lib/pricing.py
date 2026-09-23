@@ -143,10 +143,6 @@ def base_model_id(model_id: str | None) -> str:
     return (model_id or "").split("[", 1)[0].strip()
 
 
-def has_known_pricing(model_id: str | None) -> bool:
-    return base_model_id(model_id) in PRICING
-
-
 def pricing_meta(model_id: str | None) -> dict[str, str]:
     """Provenance d'un tarif (`reviewed`, `source`) ; `UnknownModelPricing` si inconnu."""
     base = base_model_id(model_id)

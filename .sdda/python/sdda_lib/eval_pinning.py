@@ -91,9 +91,6 @@ class PinTuple:
             moved[key] = (pinned, current)
         return moved
 
-    def is_stale_against(self, current: "PinTuple") -> bool:
-        return bool(self.diff(current))
-
 
 # ---------------------------------------------------------------------------
 # Construction du tuple courant depuis le disque

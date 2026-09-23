@@ -143,8 +143,9 @@ class Context:
                 "StreamingEnabled", "false")).strip().lower() in ("true", "yes", "1"),
         )
         ctx.mission = _detect_mission(root)
-        ctx.project_dir = paths.workspace(root) / "src" / (ctx.app or "App")
-        ctx.src_root = src_root or (ctx.project_dir / "src" / (ctx.app or "App"))
+        # Layout plat (SDD_Pro) : le projet EST le paquet — cf. paths.app_src_root.
+        ctx.project_dir = paths.app_dir(root, ctx.app or "App")
+        ctx.src_root = src_root or paths.app_src_root(root, ctx.app or "App")
         return ctx
 
 

@@ -575,7 +575,7 @@ def allowed_keys(source: dict[str, Any]) -> frozenset[str]:
 
 
 def schema_rel_path(source_id: str, app_name: str) -> str:
-    """Le schéma figé d'une source : `workspace/src/{App}/src/{App}/data/schemas/{id}.schema.json`.
+    """Le schéma figé d'une source : `workspace/src/{App}/data/schemas/{id}.schema.json`.
 
     Il vivait sous `feats/contracts/dataaccess/schemas/`. Or ce n'est ni une
     spécification ni du Markdown : c'est le fichier contre lequel l'application
@@ -585,4 +585,4 @@ def schema_rel_path(source_id: str, app_name: str) -> str:
     dans le dépôt. Même raison que pour les prompts. Il est écrit par
     `gen_source_tools --infer`, relu par l'humain, jamais par un `dev-*`.
     """
-    return f"workspace/src/{app_name}/src/{app_name}/data/schemas/{source_id}.schema.json"
+    return f"workspace/src/{app_name}/data/schemas/{source_id}.schema.json"   # layout plat (paths.app_src_root)

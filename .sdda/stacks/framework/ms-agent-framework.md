@@ -259,7 +259,7 @@ lié au timeout : un token ignoré fait du timeout un compteur (cf.
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/
+workspace/src/{AppName}/
 ├── Models.cs                      # Resolve(tier) -> IChatClient
 ├── Agents/
 │   ├── BoundedAgentRunner.cs      # bornes + politique de dépassement — PARTAGÉ

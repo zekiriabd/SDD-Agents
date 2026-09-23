@@ -238,14 +238,25 @@ def env_path(root: Path, app_name: str) -> Path:
 
 
 def app_src_root(root: Path, app_name: str) -> Path:
-    """La racine du paquet applicatif généré : `workspace/src/{App}/src/{App}`.
+    """La racine du paquet applicatif généré : `workspace/src/{App}` — la même que le projet.
 
-    Convention de la fiche `lang/python.md` (`uv --lib`). Elle vivait en dur
-    dans `gen_source_tools` ; la partager ici évite que le générateur de
-    schémas, celui d'outils et le validateur de sources se disputent l'endroit
-    où l'application cherche ses fichiers au démarrage.
+    Layout PLAT, celui de SDD_Pro (`workspace/src/{Backend}/main.py`,
+    `endpoints/`, `services/`) : le répertoire de l'application EST le paquet
+    Python. `pyproject.toml`, `.env`, `README.md` à sa racine ; `agents/`,
+    `tools/`, `prompts/`, `data/`, `orchestration/`, `serving/`, `app/` en
+    dessous, un seul niveau. Le « src layout » de uv (`{App}/src/{App}/`)
+    doublait le nom du projet et cachait l'application deux répertoires plus
+    bas — le premier lecteur du premier workspace réel n'a pas trouvé le code.
+    Le paquet reste installable : `pyproject.toml` (hatchling) réécrit la racine
+    en `{App}/` dans la roue, et `tests/` en est exclu.
+
+    Une seule fonction pour cet endroit : le générateur de schémas, celui
+    d'outils, le squelette, le validateur de sources et la migration la lisent
+    tous ici. Trois conventions coexistaient (fiches à plat sous `src/`,
+    ownership à profondeur libre, générateurs en src layout) : c'est ce qui a
+    produit l'arbre doublé.
     """
-    return workspace(root) / "src" / app_name / "src" / app_name
+    return app_dir(root, app_name)
 
 
 def base_config_path(root: Path) -> Path:

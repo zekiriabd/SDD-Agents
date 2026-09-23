@@ -58,7 +58,7 @@ SourceManifests:
 Stores:
   - id: exports_local
     kind: local
-    root: workspace/data/exports
+    root: workspace/assets/exports
     read_only: true
     auth: { mode: none }
     description: Exports deposes chaque nuit par l'ERP.

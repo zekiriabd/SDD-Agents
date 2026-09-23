@@ -167,7 +167,7 @@ version SQL est vérifiée **contre elle** en L6 sur un jeu de données fixe.
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/retrieval/{index_slug}/
+workspace/src/{AppName}/retrieval/{index_slug}/
 ├── __init__.py                 # retrieve(query, *, top_k, tenant) -> list[RetrievedChunk]
 ├── retriever.py                # orchestre : embed(query) ∥ lexical → fuse → [rerank] → top_k ; span retrieve
 ├── fusion.py                   # rrf_fuse — pure, L1

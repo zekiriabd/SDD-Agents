@@ -160,10 +160,17 @@ SDD-Agents/
     │
     ├── src/                           # ── CE QU'ON PRODUIT ───────────────────
     │   ├── prompts/     {agent}.system.md   # hashés — actif d'EXÉCUTION
-    │   └── {AppName}/                       # l'application agentic générée
+    │   └── {AppName}/                       # l'application agentic générée — layout PLAT (SDD_Pro) :
+    │       │                                #   ce répertoire EST le paquet, un seul niveau
+    │       ├── pyproject.toml · README.md   # le projet (dev-backend)
     │       ├── .env                         # les VALEURS des secrets du RUNTIME — gitignoré,
     │       │                                #   avec l'application qui les consomme (comme SDD_Pro)
-    │       └── src/{AppName}/data/schemas/  # schémas figés des sources — actif d'EXÉCUTION
+    │       ├── app/                         # composition, config, Domaine (dev-backend)
+    │       ├── agents/{agent}/              # un agent du produit (dev-agent)
+    │       ├── tools/ · data/ · retrieval/  # le socle (dev-tools, dev-data, dev-retrieval)
+    │       ├── orchestration/ · serving/    # graphe et surface (dev-orchestration, dev-api)
+    │       ├── data/schemas/                # schémas figés des sources — actif d'EXÉCUTION
+    │       └── tests/                       # L0→L2 (qa-tests)
     │
     ├── proof/                         # ── CE QUI JUGE ────────────────────────
     │   ├── seed/        la vérité terrain de l'HUMAIN (scénarios annotés, labels)

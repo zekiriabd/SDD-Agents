@@ -46,7 +46,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -76,18 +76,11 @@ THRESHOLDS: tuple[tuple[str, str, str, float, str], ...] = (
 # ---------------------------------------------------------------------------
 # Exécuteur — injecté, jamais un appel réseau depuis ce script
 # ---------------------------------------------------------------------------
-class RetrievalExecutor(Protocol):
-    """Ce que le script attend du retriever évalué.
-
-    `retrieve` reçoit UNE requête et rend un dict : `docIds` (identifiants de
-    DOCUMENT ramenés, dans l'ordre du classement), et facultativement
-    `servedIds` (ce qui est réellement entré dans le contexte), `answer`,
-    `latencyMs`, `groundedness`.
-    """
-
-    def retrieve(self, query: str, *, retriever: dict[str, Any], k: int, item: dict[str, Any]) -> dict[str, Any]: ...
-
-
+# Ce que le script attend du retriever évalué : un objet avec
+# `retrieve(query, *, retriever, k, item) -> dict` rendant `docIds` (identifiants
+# de DOCUMENT ramenés, dans l'ordre du classement), et facultativement
+# `servedIds` (ce qui est réellement entré dans le contexte), `answer`,
+# `latencyMs`, `groundedness`. `ReplayExecutor` en est l'implémentation de référence.
 class ReplayExecutor:
     """Rejoue des runs enregistrés : un JSONL `{id, docIds, servedIds, answer, …}`.
 

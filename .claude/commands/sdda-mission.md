@@ -140,7 +140,7 @@ Sur ERROR de l'agent → `set-phase --phase mission --status fail` + STOP.
 
 ```bash
 python .sdda/sdda.py validate-mission --mission {n} --json \
-  > workspace/.sys/.validation/{n}-G0-mission.json
+  > workspace/.sys/.validation/G0-{n}-{Name}.json
 ```
 
 Contrôles (INVARIANTS `mission-budget-declared`, G0) :
@@ -166,7 +166,7 @@ Contrôles (INVARIANTS `mission-budget-declared`, G0) :
 Format ERROR (exit 1) :
 ```
 ERROR: /sdda-mission {n} — MISSION GATE rouge
-CAUSE: [MISSION_GATE_FAILED] {k} contrôle(s) KO : [MISSION_INCOMPLETE] ×{a}, [MISSION_BUDGET_MISSING] ×{b} — rapport workspace/.sys/.validation/{n}-G0-mission.json
+CAUSE: [MISSION_GATE_FAILED] {k} contrôle(s) KO : [MISSION_INCOMPLETE] ×{a}, [MISSION_BUDGET_MISSING] ×{b} — rapport workspace/.sys/.validation/G0-{n}-{Name}.json
 FIX: compléter les sections listées dans le rapport (ou répondre aux <à préciser>) puis relancer /sdda-mission {n}
 ```
 

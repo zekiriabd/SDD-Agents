@@ -75,7 +75,7 @@ python .sdda/sdda.py compute-status --mission {n} --require-gate G0
 Exit ≠ 0 → ERROR :
 ```
 ERROR: /sdda-caps {n} — MISSION non spécifiée
-CAUSE: [MISSION_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/{n}-G0-mission.json vert
+CAUSE: [MISSION_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/G0-{n}-{Name}.json vert
 FIX: relancer /sdda-mission {n} (G0 doit être verte avant toute découpe)
 ```
 

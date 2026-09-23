@@ -94,10 +94,6 @@ LEVEL_GATE: dict[str, tuple[str, str | None]] = {
 #: `Tested` serait inatteignable sans que rien ne le signale.
 GATE_ARTIFACT: dict[str, str] = {"G3": "tool", "G5": "cap"}
 
-#: Graders dont le score est une MESURE du run, pas un jugement sur la sortie.
-MEASURE_GRADERS = ("cost", "latency")
-
-
 # ---------------------------------------------------------------------------
 # Exécuteur — injecté, jamais un LLM appelé ici
 # ---------------------------------------------------------------------------

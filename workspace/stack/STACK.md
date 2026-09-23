@@ -30,7 +30,7 @@
 # Python + LangChain seul (pas de graphe), pattern ROUTER : un classifieur
 # d'intention `fast` route vers trois spécialistes (suivi de commande,
 # facturation, réclamations/remboursements). Données = 7 fichiers JSON déclarés
-# (workspace/data/), lecture seule, cloisonnées par client à la source. Pas de
+# (workspace/assets/), lecture seule, cloisonnées par client à la source. Pas de
 # RAG : les données sont structurées, une requête paramétrée y répond mieux
 # qu'un index vectoriel. Livrable : console (`cli-exe`) — la bascule en
 # `backend-api` (FastAPI + SSE, pour le futur chatbot React) est documentée en
@@ -94,7 +94,7 @@ SystemName: SupportDesk
 # avec 1 à 4 lectures de fichiers JSON. Cible 3 ¢, plafond 15 ¢.
 CostPerRunTargetUsd: 0.03           # coût cible d'une exécution bout-en-bout
 CostPerRunHardCapUsd: 0.15          # au-delà -> [BUDGET_EXCEEDED_MEASURED], bloquant
-LatencyP95TargetMs: 6000
+LatencyP95TargetMs: 12000               # 6000 était irréaliste : routeur fast + spécialiste balanced en 2 tours = ~10 s nominal (estimate-budget, 2026-09-23)
 TokenCeilingPerRun: 30000
 
 # --- Bornes de boucle imposées à TOUT agent généré (cf. P12) ---
@@ -309,7 +309,7 @@ IndexRefreshPolicy: on-source-change
 # que d'architecture.
 #
 # DECLARED-SOURCES : pas de base, sept fichiers JSON déclarés (store local
-# `support_data` -> workspace/data/). Chaque source produit ses outils
+# `support_data` -> workspace/assets/). Chaque source produit ses outils
 # `{id}_lookup` / `{id}_search` / `{id}_count` en lecture seule, avec le filtre
 # d'identité `customer_id` imposé par le runtime (`required_filter`). L'agent ne
 # voit ni chemin, ni fichier : seulement des outils nommés d'après les sources.
@@ -353,7 +353,7 @@ SourceSecretsFile: .env
 # Toute la surface est déclarée INLINE ci-dessous : STACK.md est versionné et ne
 # porte que des noms. Sept sources, un store local, tout en lecture seule.
 #
-# Le jeu est SYNTHÉTIQUE et STATIQUE (workspace/data/_generate.py). Deux
+# Le jeu est SYNTHÉTIQUE et STATIQUE (workspace/assets/_generate.py). Deux
 # conséquences déclarées ici plutôt que découvertes en production :
 #   - `max_staleness_hours` est volontairement très large : un fichier généré
 #     il y a trois semaines n'est pas périmé, c'est le jeu de test. En
@@ -369,12 +369,12 @@ SourceSecretsFile: .env
 Stores:
   - id: support_data
     kind: local
-    root: workspace/data
+    root: workspace/assets
     read_only: true
     auth: { mode: none }
     description: >
       Jeu de données de test du support client, sept fichiers JSON générés par
-      workspace/data/_generate.py. Local, sans authentification, lecture seule.
+      workspace/assets/_generate.py. Local, sans authentification, lecture seule.
 Sources:
   # ---------------------------------------------------------------------------
   - id: orders

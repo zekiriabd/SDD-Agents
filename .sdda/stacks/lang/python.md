@@ -53,13 +53,20 @@ store vectoriel, la surface d'exposition. Ces choix sont déclarés dans
 ### 2.1 Init (idempotent)
 
 ```bash
-# Skip si pyproject.toml existe déjà
-if [ ! -f "workspace/src/{AppName}/pyproject.toml" ]; then
-  mkdir -p workspace/src/{AppName}
-  cd workspace/src/{AppName}
-  uv init --lib --python 3.12 --name {AppName}
-fi
+# Le projet et son pyproject.toml sont GÉNÉRÉS — jamais `uv init` à la main :
+# le squelette porte la convention de layout (voir §4) et le point d'entrée console.
+python .sdda/sdda.py gen-app-skeleton --write        # idempotent : ne réécrit que ce qui a dérivé
+cd workspace/src/{AppName} && uv sync                 # résout et verrouille les dépendances des stacks actives
 ```
+
+**Layout PLAT, celui de SDD_Pro** : `workspace/src/{AppName}/` EST le paquet Python.
+`pyproject.toml`, `.env`, `README.md` à sa racine ; `agents/`, `tools/`, `data/`,
+`orchestration/`, `serving/`, `app/` en dessous, un seul niveau. Le « src layout »
+de uv (`{AppName}/src/{AppName}/`) doublait le nom du projet et cachait le code
+deux répertoires plus bas. `pyproject.toml` (hatchling, `sources = {"" = "{AppName}"}`)
+réécrit la racine en `{AppName}/` dans la roue, `tests/` en est exclu — le paquet
+reste installable et `uv run {AppName}` fonctionne. Une seule fonction dit où est
+ce répertoire : `sdda_lib.paths.app_src_root`.
 
 Bloc à ajouter dans `pyproject.toml` (si absent) :
 
@@ -190,33 +197,32 @@ agent construit sans `Bounds` ne compile pas (argument obligatoire de `build`).
 workspace/src/{AppName}/
 ├── pyproject.toml
 ├── uv.lock
-├── src/{AppName}/
+├── __init__.py
+├── config.py               # Settings pydantic-settings : tiers, secrets (SecretStr), bornes par défaut
+├── models.py               # resolve(tier) -> ChatModel — seul point de contact avec le provider
+├── prompts.py              # load_system_prompt + hash normalisé
+├── bounds.py               # Bounds, BoundExceeded*, OnBoundExceeded
+├── trust.py                # Untrusted, wrap_untrusted(text, source)
+├── agents/
+│   └── {agent_slug}/
+│       ├── __init__.py
+│       ├── agent.py        # build(deps, bounds) -> Runnable ; lit le prompt, câble outils + bornes
+│       ├── schemas.py      # Input / Output pydantic (contrat §6)
+│       └── deps.py         # AgentDeps : outils, retrievers, model, tracer — injection explicite
+├── tools/
 │   ├── __init__.py
-│   ├── config.py               # Settings pydantic-settings : tiers, secrets (SecretStr), bornes par défaut
-│   ├── models.py               # resolve(tier) -> ChatModel — seul point de contact avec le provider
-│   ├── prompts.py              # load_system_prompt + hash normalisé
-│   ├── bounds.py               # Bounds, BoundExceeded*, OnBoundExceeded
-│   ├── trust.py                # Untrusted, wrap_untrusted(text, source)
-│   ├── agents/
-│   │   └── {agent_slug}/
-│   │       ├── __init__.py
-│   │       ├── agent.py        # build(deps, bounds) -> Runnable ; lit le prompt, câble outils + bornes
-│   │       ├── schemas.py      # Input / Output pydantic (contrat §6)
-│   │       └── deps.py         # AgentDeps : outils, retrievers, model, tracer — injection explicite
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── spec.py             # ToolSpec, SideEffectClass, Trust, RetryPolicy
-│   │   ├── registry.py         # register(spec, fn) ; get_for_agent(agent_id) — moindre privilège
-│   │   ├── {tool_slug}.py
-│   │   └── mcp/                # cf. tools/mcp.md
-│   ├── retrieval/
-│   │   └── {index_slug}/       # cf. rag/*.md, vectorstore/*.md
-│   ├── data/                   # cf. dataaccess/*.md
-│   │   └── views/*.sql
-│   ├── guardrails/
-│   ├── orchestration/          # cf. framework/*.md — SEUL endroit nommant le framework
-│   ├── tracing/                # cf. observability/*.md
-│   └── serving/                # cf. serving/*.md
+│   ├── spec.py             # ToolSpec, SideEffectClass, Trust, RetryPolicy
+│   ├── registry.py         # register(spec, fn) ; get_for_agent(agent_id) — moindre privilège
+│   ├── {tool_slug}.py
+│   └── mcp/                # cf. tools/mcp.md
+├── retrieval/
+│   └── {index_slug}/       # cf. rag/*.md, vectorstore/*.md
+├── data/                   # cf. dataaccess/*.md
+│   └── views/*.sql
+├── guardrails/
+├── orchestration/          # cf. framework/*.md — SEUL endroit nommant le framework
+├── tracing/                # cf. observability/*.md
+├── serving/                # cf. serving/*.md
 └── tests/                      # L1 (unit) + L2 (contrats d'outils) — LLM mocké
     ├── conftest.py
     ├── test_bounds.py

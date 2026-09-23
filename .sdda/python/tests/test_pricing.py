@@ -139,7 +139,6 @@ def test_strict_get_pricing_raises_for_unknown_model() -> None:
 def test_non_strict_get_pricing_falls_back_to_sonnet_4_6() -> None:
     assert pricing.get_pricing(UNKNOWN, strict=False) is pricing.FALLBACK_PRICING
     assert pricing.estimate_cost_usd(UNKNOWN, 1_000_000, 0, strict=False) == pytest.approx(3.0)
-    assert not pricing.has_known_pricing(UNKNOWN)
 
 
 # ---------------------------------------------------------------------------

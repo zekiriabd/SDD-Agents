@@ -140,7 +140,8 @@ def test_read_only_tools_are_not_asked_for_a_safety_strategy(compiled: Path) -> 
 # ---------------------------------------------------------------------------
 def test_code_declaring_another_side_effect_class_is_refused(compiled: Path) -> None:
     """Le contrat dit `read-only`, le code écrit : c'est cet écart qui rend une revue décorative."""
-    src = compiled / "workspace/src/tools"
+    # Layout plat : le code des outils vit dans le paquet de l'application, `workspace/src/{App}/tools/`.
+    src = compiled / "workspace/src/SupportAssistant/tools"
     src.mkdir(parents=True, exist_ok=True)
     (src / "invoice_lookup.py").write_text(
         'def invoice_lookup(invoice_id: str):\n    side_effect_class = "write-destructive"\n    return {}\n', encoding="utf-8")
@@ -149,7 +150,7 @@ def test_code_declaring_another_side_effect_class_is_refused(compiled: Path) -> 
 
 
 def test_code_agreeing_with_the_contract_passes(compiled: Path) -> None:
-    src = compiled / "workspace/src/tools"
+    src = compiled / "workspace/src/SupportAssistant/tools"   # layout plat : le code des outils vit dans le paquet
     src.mkdir(parents=True, exist_ok=True)
     (src / "invoice_lookup.py").write_text(
         'side_effect_class = "read-only"\n\n\ndef invoice_lookup(invoice_id: str):\n    return {}\n', encoding="utf-8")
