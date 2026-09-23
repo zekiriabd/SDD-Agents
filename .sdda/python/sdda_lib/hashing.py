@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,39 @@ def sha256_file(path: Path) -> str:
     except UnicodeDecodeError:
         return sha256_bytes(raw)
     return sha256_text(text)
+
+
+_STATUS_HEADER_RE = re.compile(r"^Status:[ \t]*[^\n]*\n?", re.M)
+
+
+def spec_text(text: str) -> str:
+    """Le texte d'un fichier de SPÉCIFICATION tel qu'on le hashe : sans sa ligne `Status:`.
+
+    `Status:` n'est pas une spécification, c'est un ÉTAT DÉRIVÉ des rapports de
+    gate (LIFECYCLE R1) — `compute_status.py` l'écrit et le réécrit. Le laisser
+    dans le hash faisait qu'une gate verte périmait elle-même : G0 épinglait la
+    MISSION avec `Status: Blocked` (écrit sur l'échec précédent), le statut
+    calculé repassait à `Draft`, le script réécrivait l'en-tête, et le rapport
+    G0 devenait `stale` sans qu'une ligne de la spécification ait changé. Même
+    boucle pour le `Parent MISSION hash` des CAPs et les `compiledFrom` de l'IR.
+
+    Seule la ligne `Status:` de l'EN-TÊTE est retirée (avant le premier titre
+    `## `) : un `Status:` dans le corps est du contenu.
+    """
+    normalized = normalize_text(text)
+    cut = re.search(r"^## ", normalized, re.M)
+    head, body = (normalized[:cut.start()], normalized[cut.start():]) if cut else (normalized, "")
+    return _STATUS_HEADER_RE.sub("", head, count=1) + body
+
+
+def sha256_spec_text(text: str) -> str:
+    """Hash d'une spécification (MISSION, CAP, topologie) — `Status:` exclu, cf. `spec_text`."""
+    return sha256_text(spec_text(text), normalize=False)
+
+
+def sha256_spec_file(path: Path) -> str:
+    """Hash d'un fichier de spécification — `Status:` exclu, cf. `spec_text`."""
+    return sha256_spec_text(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def canonical_json(obj: Any) -> str:

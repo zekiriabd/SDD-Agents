@@ -180,12 +180,13 @@ def source_pins(root: Path, ir: dict[str, Any]) -> dict[str, str]:
     md = paths.topology_dir(root) / f"{n}-topology.md"
     stack = paths.stack_md_path(root)
     missions = sorted(paths.missions_dir(root).glob(f"{n}-*.md"))
+    # Spécifications : hashées sans `Status:` (hashing.spec_text), comme compute_status les relit.
     if missions:
-        pins["mission"] = hashing.sha256_file(missions[0])
+        pins["mission"] = hashing.sha256_spec_file(missions[0])
     for cap in sorted(paths.caps_dir(root).glob(f"{n}-*.md")):
-        pins[f"cap:{cap.stem}"] = hashing.sha256_file(cap)
+        pins[f"cap:{cap.stem}"] = hashing.sha256_spec_file(cap)
     if md.is_file():
-        pins["topology"] = hashing.sha256_file(md)   # le graphe est dedans (bloc ```mermaid)
+        pins["topology"] = hashing.sha256_spec_file(md)   # le graphe est dedans (bloc ```mermaid)
     if stack.is_file():
         pins["stack"] = hashing.sha256_file(stack)
     return pins

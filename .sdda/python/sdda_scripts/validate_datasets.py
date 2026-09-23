@@ -258,7 +258,7 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
                 pins[f"dataset:{h.rel}"] = h.hash
         missions = sorted(paths.missions_dir(root).glob(f"{n}-*.md"))
         if missions:
-            pins["mission"] = hashing.sha256_file(missions[0])
+            pins["mission"] = hashing.sha256_spec_file(missions[0])   # `Status:` exclu (hashing.spec_text)
         per_mission[n] = pins
 
     report.data = {

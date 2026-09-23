@@ -106,7 +106,7 @@ def parse_cap(text: str, path: Path | None = None) -> CapSpec:
         criticality=header.get("Criticality", "normal").strip().lower(),
         statement=statement_lines[0] if statement_lines else "",
         acs=acs, covers=sorted(set(covers), key=_item_key), allocated=allocated,
-        hash=hashing.sha256_text(text), path=path, text=text,
+        hash=hashing.sha256_spec_text(text), path=path, text=text,   # `Status:` exclu (hashing.spec_text)
         sections_missing=[s for s in REQUIRED_SECTIONS if sec(s) is None],
     )
 

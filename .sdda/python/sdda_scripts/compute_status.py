@@ -105,18 +105,20 @@ def _mission_number(artifact: str) -> int:
 def current_hash(root: Path, key: str, artifact: str) -> str | None:
     """Hash courant de la source désignée par une clé épinglée ; None si non résolvable."""
     n = _mission_number(artifact)
+    # MISSION, CAP, topologie : des SPÉCIFICATIONS, hashées sans leur `Status:`
+    # — c'est ce script qui l'écrit, il ne peut pas périmer les gates en le faisant.
     if key == "mission":
         files = sorted(paths.missions_dir(root).glob(f"{n}-*.md"))
-        return hashing.sha256_file(files[0]) if files else ""
+        return hashing.sha256_spec_file(files[0]) if files else ""
     if key == "cap":
         p = paths.caps_dir(root) / f"{artifact}.md"
-        return hashing.sha256_file(p) if p.is_file() else ""
+        return hashing.sha256_spec_file(p) if p.is_file() else ""
     if key.startswith("cap:"):
         p = paths.caps_dir(root) / f"{key[4:]}.md"
-        return hashing.sha256_file(p) if p.is_file() else ""
+        return hashing.sha256_spec_file(p) if p.is_file() else ""
     if key == "topology":
         p = paths.topology_dir(root) / f"{n}-topology.md"
-        return hashing.sha256_file(p) if p.is_file() else ""
+        return hashing.sha256_spec_file(p) if p.is_file() else ""
     if key == "topology-mmd":
         # Clé d'un rapport compilé avant la v3 : le graphe vit désormais dans
         # `{n}-topology.md`. Un rapport qui l'épingle encore est périmé, et le

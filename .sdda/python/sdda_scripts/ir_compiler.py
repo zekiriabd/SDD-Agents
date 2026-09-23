@@ -984,7 +984,7 @@ def topology_source_hash(root: Path, number: int) -> str:
     la forme du hash ferait passer pour périmé tout IR compilé avant.
     """
     md = paths.topology_dir(root) / f"{number}-topology.md"
-    return hashing.sha256_struct({"md": hashing.sha256_file(md) if md.is_file() else ""})
+    return hashing.sha256_struct({"md": hashing.sha256_spec_file(md) if md.is_file() else ""})
 
 
 def contract_source_hashes(root: Path, number: int) -> dict[str, str]:
@@ -1012,8 +1012,10 @@ def source_hashes(root: Path, number: int) -> dict[str, Any]:
     stack = paths.stack_md_path(root)
     holdouts = sorted(paths.datasets_dir(root, "holdout").glob(f"mission-{number}-*.jsonl"))
     return {
-        "missionHash": hashing.sha256_file(missions[0]) if missions else "",
-        "capHashes": {p.stem: hashing.sha256_file(p) for p in caps},
+        # Spécifications : `Status:` exclu du hash (hashing.spec_text) — l'état
+        # dérivé que compute_status réécrit ne doit pas périmer l'IR.
+        "missionHash": hashing.sha256_spec_file(missions[0]) if missions else "",
+        "capHashes": {p.stem: hashing.sha256_spec_file(p) for p in caps},
         "topologyHash": topology_source_hash(root, number),
         "stackHash": hashing.sha256_file(stack) if stack.is_file() else "",
         "contractHashes": contract_source_hashes(root, number),

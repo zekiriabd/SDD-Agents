@@ -125,7 +125,7 @@ def parse_mission(text: str, path: Path | None = None) -> MissionSpec:
         acceptance_criteria=_parse_items(sec("Acceptance Criteria")),
         failure_policy=markdown_io.parse_kv_list(sec("Failure Policy") or ""),
         required_stack={k.lower(): v.strip() for k, v in stack_raw.items()},
-        hash=hashing.sha256_text(text),
+        hash=hashing.sha256_spec_text(text),      # `Status:` exclu : un état dérivé ne périme pas sa propre gate
         path=path, text=text,
         sections_missing=[s for s in REQUIRED_SECTIONS if sec(s) is None],
     )
