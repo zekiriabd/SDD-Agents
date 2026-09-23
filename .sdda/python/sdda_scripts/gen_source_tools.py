@@ -56,10 +56,6 @@ from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, re
 DECLARED = "declared-sources"
 BANNER = "GÉNÉRÉ par gen_source_tools.py — NE PAS ÉDITER."
 
-#: Les trois outils qu'une source peut produire. `count` n'est pas un luxe :
-#: sans lui, « combien de commandes en exception ? » se répond en tronquant
-#: 1 800 enregistrements à 200 et en laissant le modèle compter. Il comptera
-#: faux, avec aplomb, et la réponse aura l'air d'un fait.
 #: JSON Schema -> annotation Python du modèle généré.
 PY_TYPES = {
     "string": "str", "integer": "int", "number": "float", "boolean": "bool",
@@ -632,8 +628,8 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
         "",
         "> SQUELETTE généré par `gen_source_tools.py` : §1, §2, §4, §5 et §6 viennent de la",
         "> déclaration de la source. Ce fichier, lui, SE COMPLÈTE — `architect-tools` remplit",
-        "> §7, `dev-prompt` revoit la description de §1, `qa-tests` écrit la suite",
-        "> de §8. La régénération ne l'écrase jamais. En revanche, la description de §1 doit",
+        "> §7, `dev-prompt` revoit la description de §1, `qa-evals` déclare la suite",
+        "> de §8 (`qa-tests` en écrit les tests). La régénération ne l'écrase jamais. En revanche, la description de §1 doit",
         "> rester celle de la source : un seul artefact porte l'intention métier, et",
         "> `--check` signale la divergence.",
         "",

@@ -157,7 +157,7 @@ FIX: passer retry_policy=none, ou introduire natural-key:{message_id}
 
 Un fichier par outil : `workspace/feats/contracts/tools/{n}-{tool-slug}.tool.md`,
 depuis le template, `Status: Draft`. Déclare le fichier de tests de contrat L2
-(`workspace/proof/suites/tool-{n}-{tool-slug}.yaml`) — `qa-tests` l'écrira.
+(`workspace/proof/suites/tool-{n}-{tool-slug}.yaml`) — `qa-evals` l'écrit (`proof/suites/` est sa zone) ; `qa-tests` écrit les tests L2 qu'elle déclare, sous `src/{App}/tests/`.
 
 ---
 
