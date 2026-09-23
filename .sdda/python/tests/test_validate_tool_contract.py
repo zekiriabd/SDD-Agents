@@ -206,6 +206,17 @@ def test_the_bypass_downgrades_what_it_is_allowed_to(compiled: Path, monkeypatch
     assert any(f.cls == "TOOL_CONTRACT_FAILED" for f in report.warnings)
 
 
+def test_static_mode_requires_the_suite_declared_not_present(compiled: Path) -> None:
+    """PHASE 2 : la suite L2 appartient à qa-evals/qa-tests (PHASE 6) — déclarée, pas encore sur disque."""
+    (compiled / "workspace/proof/suites/tool-1-invoice-lookup.yaml").unlink()
+    code, out = run_main(validate_tool_contract.main, ["--root", str(compiled), "--mission", "1", "--static"])
+    assert code == 0, out
+    assert "absente du disque" not in out
+    # Sans --static (G3 sur l'IR), l'absence reste bloquante.
+    code, out = run_main(validate_tool_contract.main, ["--root", str(compiled), "--mission", "1", "--no-report"])
+    assert code == 1 and "TOOL_CONTRACT_FAILED" in out
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
