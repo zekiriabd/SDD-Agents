@@ -19,9 +19,15 @@ import re
 from dataclasses import dataclass, field
 
 _NODE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*(\(\[.*?\]\)|\(\(.*?\)\)|\[.*?\]|\{.*?\}|>.*?\])?\s*$")
+#: Libellé `|…|` : une forme ENTRE GUILLEMETS d'abord — `|"a || b"|` est du
+#: Mermaid valide et la seule façon d'écrire une condition avec un `||`. Sans
+#: cette alternative, `[^|]*` s'arrêtait au premier `|` interne, la ligne ne
+#: parsait plus, et l'arête de repli d'un routeur disparaissait du graphe sans
+#: erreur — G2 rendait ensuite « routeur sans arête isFallback » et « nœud
+#: terminal non déclaré » sur une topologie correcte.
 _EDGE_TOKEN_RE = re.compile(
     r"(?P<arrow>-->|---|-\.->|==>|--\s*\"(?P<lbl1>[^\"]*)\"\s*-->|--\s*(?P<lbl2>[^-|>\"]+?)\s*-->)"
-    r"(?:\|(?P<lbl3>[^|]*)\|)?"
+    r"(?:\|(?P<lbl3>\s*\"[^\"]*\"\s*|[^|]*)\|)?"
 )
 #: Lignes de directive, ignorées. Frontière de MOT obligatoire : `endpoint -->
 #: finalize` commence par `end` et n'est pas un `end` de subgraph — avec un
@@ -95,8 +101,10 @@ def parse(text: str) -> MermaidGraph:
         arrows: list[tuple[str, bool]] = []
         for m in _EDGE_TOKEN_RE.finditer(line):
             segments.append(line[pos:m.start()])
-            label = m.group("lbl3") or m.group("lbl1") or m.group("lbl2") or ""
-            arrows.append((label.strip(), m.group("arrow").startswith("-.")))
+            label = (m.group("lbl3") or m.group("lbl1") or m.group("lbl2") or "").strip()
+            if len(label) >= 2 and label[0] == label[-1] == '"':
+                label = label[1:-1].strip()   # les guillemets délimitent, ils ne sont pas la condition
+            arrows.append((label, m.group("arrow").startswith("-.")))
             pos = m.end()
         segments.append(line[pos:])
         parsed: list[str | None] = []

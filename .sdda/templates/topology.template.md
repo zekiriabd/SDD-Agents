@@ -129,13 +129,18 @@ flowchart TD
   clarify --> finalize
 ```
 
-- **Nœud d'entrée** : `…`
+- **Nœud d'entrée** : `…`      <l'id du nœud PAR LEQUEL ON ENTRE dans le graphe
+  (`entry` ci-dessus), pas le premier agent : tout nœud doit être atteignable
+  depuis lui, `entry` compris>
 - **Nœuds terminaux** : `…`
 - **maxHops** : `…`
 - **Cycles** : <lister chaque cycle et la borne qui le coupe. Un cycle non borné
   est une erreur bloquante, pas un avertissement (P12)>
-- **Chemin de repli** : <le cas « aucune branche ne correspond » — obligatoire
-  pour tout routeur, sinon `[ROUTER_NO_FALLBACK]`>
+- **Chemin de repli** : `…` -> `…` <`libellé de l'arête` -> `id du nœud cible`,
+  ex. `aucune classe` -> `clarify` : c'est ainsi que le compilateur marque
+  l'arête `isFallback`. Le cas « aucune branche ne correspond » est obligatoire
+  pour tout routeur, sinon `[ROUTER_NO_FALLBACK]` ; une phrase à sa place laisse
+  l'arête sans marque et G2 rend `routeur sans arête isFallback`>
 
 ---
 

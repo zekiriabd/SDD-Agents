@@ -524,8 +524,25 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
         )
 
     # Routeur sans repli ; agents hors graphe --------------------------------------------
+    # Le routeur d'un pattern `router` n'est pas forcément le nœud d'entrée : le
+    # gabarit dessine `entry([entrée]) --> router{…}`, et c'est `entry` qui est
+    # déclaré nœud d'entrée (tout doit être atteignable depuis lui). On suit donc
+    # les passages obligés — un nœud non-agent avec une seule arête sortante
+    # inconditionnelle — jusqu'au premier nœud qui BRANCHE : c'est lui qui doit
+    # porter le repli. Exiger `isFallback` sur `entry` rendait rouge une
+    # topologie correcte (premier run réel).
+    router_node = entry
+    seen: set[str] = set()
+    while router_node and router_node not in seen:
+        seen.add(router_node)
+        out = [e for e in edges if str(e.get("from")) == router_node]
+        node = nodes.get(router_node) or {}
+        if len(out) == 1 and node.get("kind") != "agent" and str(out[0].get("condition", "always")).strip().lower() in ("", "always"):
+            router_node = str(out[0].get("to"))
+            continue
+        break
     for nid, node in sorted(nodes.items()):
-        is_router = node.get("kind") == "router" or (orch.get("rootPattern") == "router" and nid == entry)
+        is_router = node.get("kind") == "router" or (orch.get("rootPattern") == "router" and nid == router_node)
         if is_router and not any(e.get("isFallback") for e in edges if str(e.get("from")) == nid):
             report.error("ROUTER_NO_FALLBACK", f"routeur `{nid}` sans arête `isFallback`", "déclarer `- **Chemin de repli** : `label` -> `cible`` dans la topologie : le cas « aucune branche » doit être pensé", loc)
     in_graph = {str(n.get("ref")) for n in nodes.values() if n.get("kind") == "agent"}

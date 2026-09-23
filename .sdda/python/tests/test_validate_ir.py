@@ -261,6 +261,27 @@ def test_router_without_fallback_is_rejected(ok_ir) -> None:
     assert "ROUTER_NO_FALLBACK" in _classes(_validate(root, ir))
 
 
+def test_the_router_is_the_node_that_branches_not_the_entry_passthrough(ok_ir) -> None:
+    """`entry([entrée]) --> router{…}` : le repli est exigé du routeur, pas de `entry`.
+
+    Le gabarit déclare `entry` comme nœud d'entrée (tout doit être atteignable
+    depuis lui) ; exiger `isFallback` sur ce passage obligé rendait rouge une
+    topologie correcte au premier run réel.
+    """
+    root, ir = ok_ir
+    orch = ir["orchestration"]
+    old_entry = orch["entryNode"]
+    orch["nodes"].append({"id": "entry", "kind": "function", "ref": "entrée : message client"})
+    orch["edges"].insert(0, {"from": "entry", "to": old_entry, "condition": "always"})
+    orch["entryNode"] = "entry"
+    classes = _classes(_validate(root, ir))
+    assert "ROUTER_NO_FALLBACK" not in classes and "GRAPH_UNREACHABLE" not in classes
+    # Et le routeur réel reste tenu de porter son repli.
+    for e in orch["edges"]:
+        e.pop("isFallback", None)
+    assert "ROUTER_NO_FALLBACK" in _classes(_validate(root, ir))
+
+
 # -- 10.bis neutralite d'INFRASTRUCTURE : rien hors de `binding` ---------------------
 # La neutralite framework ne cherchait que des noms d'API (`StateGraph`) :
 # `store: pgvector` passait, alors qu'il couple exactement pareil. Trouve en

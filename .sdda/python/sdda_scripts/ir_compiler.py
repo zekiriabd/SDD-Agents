@@ -186,10 +186,18 @@ def _lookup(kv: dict[str, str], *aliases: str) -> str | None:
     return None
 
 
-def _to_int(value: str | None) -> int | None:
-    if value is None:
+def _to_int(value: Any) -> int | None:
+    """`" 12 "`, `12`, `"12 jours"` -> 12 ; `None` ou sans chiffre -> None.
+
+    Les sections de STACK.md arrivent déjà typées par le lecteur YAML : un
+    `LongTermRetentionDays: 0` est un `int`, pas une chaîne, et `.replace`
+    plantait le compilateur entier.
+    """
+    if value is None or isinstance(value, bool):
         return None
-    m = re.search(r"-?\d+", value.replace(" ", ""))
+    if isinstance(value, int):
+        return value
+    m = re.search(r"-?\d+", str(value).replace(" ", ""))
     return int(m.group(0)) if m else None
 
 
@@ -317,7 +325,13 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
     # pas ce qu'il a le droit d'appeler. Elles n'ont donc ni schéma ni gate propre
     # — mais elles doivent survivre à la compilation, sinon `dev-prompt` ne
     # les voit jamais et la déclaration de l'architecte s'évapore en silence.
-    skills = [ctx.qualified(r.get("Skill", "")) for r in markdown_io.parse_table(sec("Skills") or "") if not markdown_io.is_placeholder(markdown_io.strip_code(r.get("Skill", "")))]
+    # Le roster les nomme comme le modèle les lit (`classify_intent`, snake_case) ;
+    # l'IR les porte en `slugId` kebab (`1-classify-intent`) — même passage
+    # `_` -> `-` que `gen_source_tools` pour les outils. `lint_prompts` compare
+    # les deux formes après normalisation ; le schéma, lui, n'en accepte qu'une.
+    skills = [ctx.qualified(markdown_io.strip_code(r.get("Skill", "")).replace("_", "-"))
+              for r in markdown_io.parse_table(sec("Skills") or "")
+              if not markdown_io.is_placeholder(markdown_io.strip_code(r.get("Skill", "")))]
     if skills:
         agent["skills"] = sorted(set(skills))
 
@@ -327,7 +341,7 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
     # vérifiées par symétrie dans `lint_prompts.py`. Les traiter autrement
     # (répertoire dédié, fichier par règle) produirait des fichiers que rien ne
     # charge : une règle qui n'entre pas dans le prompt n'existe pas.
-    rules = [ctx.qualified(r.get("Règle", "") or r.get("Regle", "") or r.get("Rule", ""))
+    rules = [ctx.qualified(markdown_io.strip_code(r.get("Règle", "") or r.get("Regle", "") or r.get("Rule", "")).replace("_", "-"))
              for r in markdown_io.parse_table(sec("Règles") or "")
              if not markdown_io.is_placeholder(markdown_io.strip_code(
                  r.get("Règle", "") or r.get("Regle", "") or r.get("Rule", "")))]
@@ -805,9 +819,12 @@ def compile_orchestration(ctx: CompileContext, topo: TopologySpec, mmd_text: str
         nodes.append({"id": nid, "kind": kind, "ref": ref})
     orch["nodes"] = nodes
 
-    # Arête de repli : `- **Chemin de repli** : `label` -> `cible`, …`
+    # Arête de repli : `- **Chemin de repli** : `label` -> `cible`, …` — ou
+    # `source -> cible`, ou avec la flèche typographique `→` qu'un architecte
+    # écrit spontanément : la cible suffit à marquer l'arête, le libellé n'est
+    # qu'un second critère.
     fb_label, fb_target = "", ""
-    fb = topo.graph_meta.get("chemin de repli", "")
+    fb = topo.graph_meta.get("chemin de repli", "").replace("→", "->")
     m = re.match(r"^\s*`?([^`>]+?)`?\s*->\s*`?([A-Za-z_][A-Za-z0-9_-]*)", fb)
     if m:
         fb_label, fb_target = m.group(1).strip().lower(), m.group(2).strip()
@@ -982,6 +999,14 @@ def compile_memory(root: Path) -> dict[str, Any] | None:
                "LongTermEnabled": "longTermEnabled", "LongTermStore": "longTermStore", "LongTermWritePolicy": "longTermWritePolicy",
                "LongTermRetentionDays": "longTermRetentionDays", "MemoryPIIPolicy": "piiPolicy", "CrossAgentSharedState": "crossAgentSharedState"}
     out = {ir: kv[k] for k, ir in mapping.items() if kv.get(k) is not None}
+    # Sans mémoire longue, la rétention n'a pas d'objet : STACK.md écrit
+    # `LongTermRetentionDays: 0` (le gabarit le propose), et le schéma exige
+    # `>= 1` pour une rétention qui EXISTE. Porter 0 dans l'IR faisait échouer
+    # G2 sur la MISSION la plus simple — celle sans mémoire longue. On omet la
+    # clé ; `longTermEnabled: false` dit déjà tout.
+    enabled = str(out.get("longTermEnabled", "")).strip().lower()
+    if enabled in ("false", "no", "0", "non", "") and _to_int(out.get("longTermRetentionDays")) in (None, 0):
+        out.pop("longTermRetentionDays", None)
     return out or None
 
 
