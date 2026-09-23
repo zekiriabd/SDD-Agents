@@ -406,7 +406,7 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
     else:
         untrusted = sorted(set(markdown_io.split_code_list(untrusted_raw)))
     posture: dict[str, Any] = {"untrustedInputs": untrusted}
-    suite_ref = markdown_io.strip_code(trust_kv.get("Suite d'injection", ""))
+    suite_ref = markdown_io.first_code_span(trust_kv.get("Suite d'injection", ""))
     if suite_ref and not markdown_io.is_placeholder(suite_ref):
         posture["injectionSuiteRef"] = suite_ref
     elif untrusted:
@@ -866,7 +866,9 @@ def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, ru
     chemin exact à corriger.
     """
     goal = dict(getattr(mission, "goal", {}) or {})
-    grader = str(goal.get("Grader", "")).strip().lower()
+    # La valeur est le PREMIER mot : une puce peut continuer sur les lignes
+    # suivantes avec son explication (« regex (motifs déterministes…) »).
+    grader = (str(goal.get("Grader", "")).strip().lower().split() or [""])[0].strip("`*,;:.")
     mloc = f"workspace/feats/missions/{getattr(mission, 'id', ctx.number)}.md"
     if not grader or markdown_io.is_placeholder(grader):
         return None

@@ -196,6 +196,7 @@ def validate_mission_text(text: str, *, path: Path | None, root: Path | None, co
         # exécuter — un avertissement ici coûte une ligne, la même chose
         # découverte en phase 8 coûte tout le pipeline.
         grader = spec.goal.get("Grader")
+        grader = ((grader or "").split() or [""])[0].strip("`*,;:.") or grader   # premier mot : la suite de la puce est de la prose
         if not grader or markdown_io.is_placeholder(grader):
             report.warn("MISSION_GOAL_UNQUANTIFIED",
                         "Quantified Goal : `Grader` absent — l'objectif est chiffré, sa mesure n'est pas déclarée",

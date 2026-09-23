@@ -161,10 +161,22 @@ def section_is_empty(body: str | None) -> bool:
 def parse_bullets(body: str, *, top_level_only: bool = True) -> list[str]:
     """Éléments `- texte` (niveau 0 par défaut)."""
     items: list[str] = []
+    continuing = False
     for line in body.split("\n"):
         m = _BULLET_RE.match(line)
-        if m and (not top_level_only or len(m.group(1)) <= 1):
-            items.append(m.group(2))
+        if m:
+            continuing = not top_level_only or len(m.group(1)) <= 1
+            if continuing:
+                items.append(m.group(2))
+            continue
+        # Ligne de CONTINUATION d'une puce (indentée, non vide, pas une puce) :
+        # elle appartient à la puce précédente. L'ignorer tronquait toute valeur
+        # écrite sur plusieurs lignes — `Entrées non maîtrisées` perdait trois
+        # champs sur cinq, et les suites d'injection ne les couvraient plus.
+        if continuing and items and line[:1] in (" ", "\t") and line.strip():
+            items[-1] = items[-1].rstrip() + " " + line.strip()
+        elif not line.strip() or not line[:1] in (" ", "\t"):
+            continuing = False
     return items
 
 
@@ -306,6 +318,17 @@ def strip_code(value: str) -> str:
     v = value.strip()
     v = re.sub(r"^\*\*(.*)\*\*$", r"\1", v)
     return v.strip("`").strip()
+
+
+def first_code_span(value: str) -> str:
+    """La valeur d'un champ à valeur UNIQUE : son premier span de code s'il y en a un.
+
+    « `chemin` *(obligatoire — …)* », souvent continué sur la ligne suivante
+    d'une puce : la suite est un commentaire, pas une partie du chemin. À ne
+    pas appliquer aux champs qui portent une expression (`a` -> `b`).
+    """
+    m = re.search(r"`([^`]+)`", value or "")
+    return m.group(1).strip() if m else strip_code(value or "")
 
 
 def split_code_list(value: str) -> list[str]:
