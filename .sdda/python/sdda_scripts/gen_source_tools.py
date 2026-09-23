@@ -483,6 +483,10 @@ def render_wrapper(ctx: Context, source_id: str, src: dict[str, Any], schema: di
         f"from {ctx.app}.data.envelope import {entrypoint}",
         f"from {ctx.app}.tools.spec import ToolContext, ToolSpec",
         "",
+        "#: Classe d'effet de bord de CE code — confrontée au contrat par la TOOL GATE.",
+        "#: Une source déclarée est en lecture seule par construction (declared-sources).",
+        'SIDE_EFFECT_CLASS = "read-only"',
+        "",
     ])
     return "\n".join(header + lines) + "\n"
 
