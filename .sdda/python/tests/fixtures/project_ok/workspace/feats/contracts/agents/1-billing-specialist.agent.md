@@ -19,7 +19,7 @@ récupérés. Ne rembourse jamais : il ouvre un ticket.
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/billing-specialist.system.md`
+- Fichier : `workspace/src/SupportAssistant/prompts/billing-specialist.system.md`
 - Hash : `sha256:…`
 - Rédigé par : `dev-prompt` depuis ce contrat
 

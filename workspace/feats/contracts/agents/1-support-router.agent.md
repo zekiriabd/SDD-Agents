@@ -28,7 +28,7 @@ formule **aucun** engagement.
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/support-router.system.md`
+- Fichier : `workspace/src/SupportDesk/prompts/support-router.system.md`
 - Hash : `sha256:…`  *(calculé, épinglé aux baselines d'eval — P10)*
 - Rédigé par : `dev-prompt` depuis ce contrat (PHASE 4)
 

@@ -41,7 +41,10 @@ from sdda_lib import __version__ as _LIB_VERSION
 #:       `app/` à un seul niveau, `pyproject.toml` et `.env` à sa racine). Le
 #:       « src layout » `{App}/src/{App}/` doublait le nom du projet et cachait
 #:       l'application deux répertoires plus bas.
-WORKSPACE_VERSION: int = 4
+#:   5 — les prompts vivent DANS l'application (`src/{App}/prompts/`), avec
+#:       `skills/`, `rules/` et `memory/` : une application agentic se lit dans
+#:       son arbre. `src/prompts/` à côté de l'application ne partait pas avec elle.
+WORKSPACE_VERSION: int = 5
 
 WORKSPACE_JSON_REL = "workspace/.sys/workspace.json"
 

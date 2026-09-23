@@ -65,7 +65,7 @@ fi
 
 ### 3.1 Chargement et hash des prompts
 
-`PromptLoader.load(agent)` lit `workspace/src/prompts/{agent}.system.md` (ou la
+`PromptLoader.load(agent)` lit `workspace/src/{App}/prompts/{agent}.system.md` (ou la
 ressource embarquée dans le jar), calcule son SHA-256 et le compare au hash
 épinglé dans le contrat. Un prompt en chaîne littérale est interdit (P1) ;
 `detekt` signale toute chaîne de plus de 200 caractères dans un constructeur de

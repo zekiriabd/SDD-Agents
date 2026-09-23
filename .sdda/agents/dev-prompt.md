@@ -1,6 +1,6 @@
 ---
 name: dev-prompt
-description: Compile un agent-contract en prompt système. Lit workspace/feats/contracts/agents/{n}-{agent}.agent.md, les contrats d'outils exposés et l'IR ; écrit workspace/src/prompts/{agent}.system.md, hashé et épinglé. Le prompt porte la refusal policy et la posture face au texte non maîtrisé. Refuse tout prompt inline, toute référence à un outil inexistant, toute taille au-dessus de PromptMaxTokens.
+description: Compile un agent-contract en prompt système. Lit workspace/feats/contracts/agents/{n}-{agent}.agent.md, les contrats d'outils exposés et l'IR ; écrit workspace/src/{App}/prompts/{agent}.system.md, hashé et épinglé. Le prompt porte la refusal policy et la posture face au texte non maîtrisé. Refuse tout prompt inline, toute référence à un outil inexistant, toute taille au-dessus de PromptMaxTokens.
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
@@ -150,7 +150,7 @@ d'API de framework, un secret, une variable de template non résolue.
 
 ```bash
 python .sdda/sdda.py lint-prompts --mission {n}
-python .sdda/python/sdda_lib/hashing.py --file workspace/src/prompts/{agent-slug}.system.md
+python .sdda/python/sdda_lib/hashing.py --file workspace/src/{App}/prompts/{agent-slug}.system.md
 ```
 
 Le lint vérifie : aucun secret, aucun outil référencé absent de `agents[].tools`
@@ -172,16 +172,32 @@ P10 : toute baseline d'eval qui ne le porte pas est périmée.
 
 ## STEP 6 — Écrire
 
-`workspace/src/prompts/{agent-slug}.system.md`, avec en tête un frontmatter minimal :
+`workspace/src/{App}/prompts/{agent-slug}.system.md`, avec en tête un frontmatter minimal :
 `agent`, `mission`, `contract_hash` (hash du contrat compilé), `generated_by:
 dev-prompt`. Le texte du prompt suit. Rien d'autre : pas de commentaire de
-conception dans le fichier — il est chargé tel quel au runtime.
+conception dans le fichier — il est chargé tel quel au runtime. Le répertoire
+est DANS l'application : le prompt part avec elle, en roue comme en conteneur.
+
+Puis **un fragment par skill et par rule** que le contrat §5 / §6 déclare :
+
+- `workspace/src/{App}/skills/{skill}.md` — quand la compétence s'applique, ce
+  qu'elle produit, ce qui prouve qu'elle a joué (l'observable qu'une AC mesure) ;
+- `workspace/src/{App}/rules/{rule}.md` — la contrainte, la `BR-x` de la MISSION
+  qu'elle porte, l'observable qui prouve qu'elle est tenue.
+
+Le prompt cite chaque slug, entre backticks, sous `## Compétences` et
+`## Règles` ; le fragment est la MATIÈRE que tu as compilée dans ces sections,
+relue par la revue à côté du prompt. Un slug cité sans fragment est
+`[SKILL_FILE_MISSING]` / `[RULE_FILE_MISSING]` (lint, avertissement) ; un
+fragment sans slug au contrat est une invention (`[SKILL_UNDECLARED]`). Le
+fragment n'est PAS chargé au runtime : l'exécutable reste le seul
+`{agent-slug}.system.md`, et c'est lui qui est hashé.
 
 ---
 
 ## STEP final — Anti-dérive
 
-- [ ] Le prompt n'existe **que** dans `workspace/src/prompts/{agent-slug}.system.md`
+- [ ] Le prompt n'existe **que** dans `workspace/src/{App}/prompts/{agent-slug}.system.md`
 - [ ] Sept sections dans l'ordre ; aucune ajoutée hors contrat
 - [ ] Chaque entrée `untrusted` du contrat est nommée dans la posture P8
 - [ ] Chaque item de la refusal policy est une règle testable

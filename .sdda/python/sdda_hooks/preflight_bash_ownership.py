@@ -2,7 +2,7 @@
 """Le trou `Bash` de la matrice d'ownership — fermé sur les canaux ordinaires.
 
 `preflight_ownership` s'exécute sur `Write` et `Edit`. Un agent qui écrit
-`echo … > workspace/proof/datasets/golden/x.jsonl` ou `rm workspace/src/prompts/a.system.md`
+`echo … > workspace/proof/datasets/golden/x.jsonl` ou `rm workspace/src/{App}/prompts/a.system.md`
 ne passe par aucun des deux : la matrice était contournable par le shell, et
 c'est par là qu'un `dev-agent` peut retoucher le jeu qui le juge sans qu'aucun
 hook ne le voie.

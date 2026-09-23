@@ -72,7 +72,7 @@ Règles de dépendance, vérifiables par un analyseur d'imports en L0 :
 
 ## 3. Le modèle de domaine, en agentic
 
-| Composant | Rôle ici | Exemple SupportDesk |
+| Composant | Rôle ici | Exemple (support après-vente) |
 |---|---|---|
 | **Objet-valeur** | immuable, égalité par valeur, validé à la construction | `OrderId`, `CustomerId`, `Money(eur)`, `Delay(days)` |
 | **Décision** | résultat nommé d'une règle, avec **la règle citée** | `RefundEligibility(eligible, rule="BR-8", reason)` |

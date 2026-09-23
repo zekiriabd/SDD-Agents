@@ -144,7 +144,7 @@ def test_an_agent_hash_follows_its_prompt_and_its_ir_entry(project: Path) -> Non
     # Un autre agent, un autre hash.
     assert _hash(project, "build_agents", "intent-classifier")[1] != before
 
-    prompt = project / "workspace/src/prompts/billing-specialist.system.md"
+    prompt = project / "workspace/src/SupportAssistant/prompts/billing-specialist.system.md"
     prompt.write_text(prompt.read_text(encoding="utf-8") + "\nNouvelle consigne.\n", encoding="utf-8")
     assert _hash(project, "build_agents", "billing-specialist")[1] != before   # le prompt est une entrée
 

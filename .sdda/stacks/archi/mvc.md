@@ -75,7 +75,7 @@ matrice d'ownership matche `**`, donc zéro segment ou plus.
 | Modèle | `…/app/models.*` (généré) · `…/data/schemas/` (schémas figés) |
 | Config | `…/app/config.*` · `…/app/app_config.json` (généré) |
 | Composition | `…/app/composition.*` — importé par la surface, par personne d'autre |
-| Prompts | `workspace/src/prompts/` — chargés par hash, jamais inline |
+| Prompts | `workspace/src/{App}/prompts/` — chargés par hash, jamais inline |
 | Tests transverses | `workspace/src/{AppName}/tests/` |
 
 Chaque fiche `backend/*.md` **surcharge** ce mapping dans son §3 quand la

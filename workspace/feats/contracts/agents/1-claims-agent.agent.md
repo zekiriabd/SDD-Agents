@@ -29,7 +29,7 @@ questions de politique générale depuis BR-8 sans outil.
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/claims-agent.system.md`
+- Fichier : `workspace/src/SupportDesk/prompts/claims-agent.system.md`
 - Hash : `sha256:…`  *(calculé, épinglé aux baselines d'eval — P10)*
 - Rédigé par : `dev-prompt` depuis ce contrat (PHASE 4)
 

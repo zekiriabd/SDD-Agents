@@ -156,7 +156,7 @@ sont écrits par `qa-tests` et exécutés par la commande.
 
 ### Ce que tu ne fais jamais
 
-- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/prompts/`,
+- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/{App}/prompts/`,
   ni dans `workspace/feats/contracts/`.** Si le contrat est faux, tu le dis
   (`[TOOL_CONTRACT_INCONSISTENT]`), tu ne l'adaptes pas.
 - **Tu n'ajoutes aucun paramètre, aucun mode, aucune option « pratique »** qui

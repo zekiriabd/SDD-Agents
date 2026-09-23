@@ -74,7 +74,7 @@ Les paquets s'ajoutent depuis le `.libs.json` actif, versions épinglées, jamai
 
 ### 3.1 Chargement et hash des prompts
 
-Un prompt est un fichier `workspace/src/prompts/{agent}.system.md`, chargé par
+Un prompt est un fichier `workspace/src/{App}/prompts/{agent}.system.md`, chargé par
 `loadPrompt(agent)` qui calcule son SHA-256 et le compare au hash épinglé dans
 le contrat d'agent. Un littéral de prompt dans le code est interdit (P1) et
 détectable au lint : toute chaîne de plus de 200 caractères passée à un

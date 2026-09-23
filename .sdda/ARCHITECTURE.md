@@ -155,7 +155,6 @@ SDD-Agents/
     │   └── decisions/  ADR-{ts}-{slug}.md   # UN seul endroit (cf. §2.ter)
     │
     ├── src/                           # ── CE QU'ON PRODUIT ───────────────────
-    │   ├── prompts/     {agent}.system.md   # hashés — actif d'EXÉCUTION
     │   └── {AppName}/                       # l'application agentic générée — layout PLAT (SDD_Pro) :
     │       │                                #   ce répertoire EST le paquet, un seul niveau
     │       ├── pyproject.toml · README.md   # le projet (dev-backend)
@@ -163,7 +162,10 @@ SDD-Agents/
     │       │                                #   avec l'application qui les consomme (comme SDD_Pro)
     │       ├── app/                         # composition, config, Domaine (dev-backend)
     │       ├── agents/{agent}/              # un agent du produit (dev-agent)
+    │       ├── prompts/{agent}.system.md    # l'exécutable hashé de chaque agent (dev-prompt)
+    │       ├── skills/ · rules/             # ce que l'agent SAIT FAIRE / DOIT FAIRE, un fragment par slug (dev-prompt)
     │       ├── tools/ · data/ · retrieval/  # le socle (dev-tools, dev-data, dev-retrieval)
+    │       ├── memory/                      # l'implémentation du contrat de mémoire (dev-orchestration)
     │       ├── orchestration/ · serving/    # graphe et surface (dev-orchestration, dev-api)
     │       ├── data/schemas/                # schémas figés des sources — actif d'EXÉCUTION
     │       └── tests/                       # L0→L2 (qa-tests)
@@ -225,10 +227,16 @@ exception dans un glob d'ownership est une exception qu'on oublie.
 
 Deux conséquences se lisent directement dans l'arbre :
 
-- **Les prompts sont sous `src/`** parce qu'un prompt système est un actif
-  d'exécution. Rangé au même rang que les specs, il ne part pas avec le code :
-  l'application livrée en exécutable ou en conteneur cherchait ses prompts dans
-  un répertoire resté dans le dépôt.
+- **Les prompts sont DANS l'application**, `src/{App}/prompts/`, parce qu'un
+  prompt système est un actif d'exécution. Rangé au même rang que les specs, il
+  ne part pas avec le code ; rangé sous `src/` mais à côté de l'application, il
+  n'en part pas davantage — l'exécutable ou le conteneur bâti depuis `src/{App}/`
+  cherchait ses prompts dans un répertoire resté dans le dépôt. Même logique pour
+  `skills/` (ce que l'agent sait faire, un fragment par compétence), `rules/` (ce
+  qu'il doit ou ne doit jamais faire) et `memory/` (l'implémentation du contrat
+  de mémoire) : une application agentic se lit dans son arbre — agents, prompts,
+  skills, rules, tools, memory, orchestration — pas dans le framework qui l'a
+  produite.
 - **Les ADR ont UN emplacement**, `feats/decisions/`. Ils en avaient deux —
   `docs/adr/` que citait le gabarit, `.sys/.context/adrs/` que déclarait la
   matrice d'ownership — et le script des tâches humaines cherchait dans les
@@ -475,7 +483,7 @@ artefacts agentic. Extrait :
 | `workspace/feats/topology/{n}-*.md` | `architect-topology` | Create exclusif |
 | `workspace/feats/contracts/tools/*` | `architect-tools` | Create exclusif |
 | `workspace/feats/contracts/retrieval/*` | `architect-rag` | Create exclusif |
-| `workspace/src/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif |
+| `workspace/src/{App}/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif |
 | `workspace/src/**/agents/{agent}/**` | `dev-agent` (1 instance par agent) | Edit-augment exclusif |
 | `workspace/src/**/tools/**` | `dev-tools` | Edit-augment exclusif |
 | `workspace/src/**/retrieval/**` | `dev-retrieval` | Edit-augment exclusif |
@@ -486,7 +494,7 @@ artefacts agentic. Extrait :
 | `workspace/proof/baselines/**` | script déterministe uniquement | Write atomique |
 
 > **Règle critique, propre à l'agentic** : `dev-agent` n'a **aucun** droit
-> d'écriture sur `workspace/proof/datasets/` ni sur `workspace/src/prompts/`. L'agent qui
+> d'écriture sur `workspace/proof/datasets/` ni sur `workspace/src/{App}/prompts/`. L'agent qui
 > écrit le code ne peut ni modifier le jeu qui le juge, ni réécrire le prompt qu'il
 > est censé implémenter. Sans cette séparation, l'auto-confirmation est garantie —
 > c'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de SDD_Pro.
@@ -552,7 +560,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->391<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->393<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

@@ -58,7 +58,7 @@ def _promote(root: Path, *extra: str) -> tuple[int, str]:
 
 
 def _edit_prompt(root: Path, slug: str = "intent-classifier") -> None:
-    p = root / f"workspace/src/prompts/{slug}.system.md"
+    p = root / f"workspace/src/SupportAssistant/prompts/{slug}.system.md"
     p.write_text(p.read_text(encoding="utf-8") + "\nUne ligne de plus.\n", encoding="utf-8")
 
 

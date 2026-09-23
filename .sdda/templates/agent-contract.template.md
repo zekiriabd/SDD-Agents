@@ -25,7 +25,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/{agent-slug}.system.md`
+- Fichier : `workspace/src/{App}/prompts/{agent-slug}.system.md`
 - Hash : `sha256:…`  *(calculé, épinglé aux baselines d'eval — P10)*
 - Rédigé par : `dev-prompt` depuis ce contrat
 
@@ -56,7 +56,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 | `{n}-…` | <une phrase, observable> | {n}-{m}-… AC-{i} |
 
 > Chaque skill déclarée ici **doit** être listée dans la section `## Compétences`
-> de `workspace/src/prompts/{slug}.system.md` — sinon `[SKILL_NOT_IMPLEMENTED]`,
+> de `workspace/src/{App}/prompts/{slug}.system.md` — sinon `[SKILL_NOT_IMPLEMENTED]`,
 > bloquant. L'inverse aussi : une compétence listée dans le prompt et absente
 > d'ici est `[SKILL_UNDECLARED]`. Les deux sont vérifiés par `lint_prompts.py`.
 >
@@ -86,7 +86,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 | `{n}-…` | <une phrase, observable dans une trajectoire> | <refus \| dégradation \| escalade> |
 
 > Chaque règle déclarée ici **doit** être listée dans la section `## Règles` de
-> `workspace/src/prompts/{slug}.system.md` — sinon `[RULE_NOT_IMPLEMENTED]`,
+> `workspace/src/{App}/prompts/{slug}.system.md` — sinon `[RULE_NOT_IMPLEMENTED]`,
 > bloquant. L'inverse aussi : une règle listée dans le prompt et absente d'ici
 > est `[RULE_UNDECLARED]`. Les deux sont vérifiés par `lint_prompts.py`.
 >

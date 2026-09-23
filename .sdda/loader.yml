@@ -206,7 +206,7 @@ architect-topology:
     - workspace/feats/decisions/ADR-*.md
   forbidden_reads:
     - workspace/src/**
-    - workspace/src/prompts/**
+    - workspace/src/*/prompts/**
     - workspace/proof/datasets/**
 
 architect-tools:
@@ -283,7 +283,7 @@ architect-data:
 
 architect-memory:
   model_tier: balanced
-  budget_bytes: 100000      # 80000 refusait le premier run réel (SupportDesk : STACK.md 35 Ko
+  budget_bytes: 100000      # 80000 refusait le premier run réel (STACK.md 35 Ko
                             # + topologie à 4 agents 18 Ko + gabarit 9 Ko = 89 Ko) — relevé
                             # explicitement, comme le hook l'exige, pas en retirant une lecture
                             # dont le contrat a besoin
@@ -307,11 +307,19 @@ dev-prompt:
     - workspace/feats/contracts/agents/{n}-*.agent.md      # volatile — 1 par invocation
     - workspace/feats/caps/{n}-*-*.md                      # volatile — les CAPs servies
     - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile — descriptions d'outils
+    - workspace/src/*/prompts/{agent}.system.md            # volatile — SON prompt, pour l'éditer (Edit exige un Read)
+    - workspace/src/*/skills/*.md                          # volatile — les fragments de compétences
+    - workspace/src/*/rules/*.md                           # volatile — les fragments de règles
   writes:
-    - workspace/src/prompts/{agent}.system.md
+    - workspace/src/*/prompts/{agent}.system.md            # l'EXÉCUTABLE hashé
+    - workspace/src/*/skills/*.md                          # un fragment par skill déclarée au roster
+    - workspace/src/*/rules/*.md                           # un fragment par rule déclarée au roster
     - workspace/feats/contracts/agents/{n}-*.agent.md      # Edit narrow : §Prompt (ref + hash)
   forbidden_reads:
-    - workspace/src/**          # il écrit la spec, il ne s'aligne pas sur le code
+    # Tout le reste de l'application : il écrit la spec, il ne s'aligne pas sur
+    # le code. `{other}` = tout répertoire de `src/{App}/` qu'un `reads:` ne
+    # couvre pas (prompts/, skills/, rules/ restent lisibles — ce sont les siens).
+    - workspace/src/*/{other}/**
     - workspace/proof/datasets/**     # un prompt écrit en regardant le jeu de test triche
 
 # ---------------------------------------------------------------------------
@@ -336,7 +344,7 @@ dev-tools:
     - workspace/src/**/tools/**
   forbidden_writes:
     - workspace/proof/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
-    - workspace/src/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION]
+    - workspace/src/*/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION]
     - workspace/proof/baselines/**
 
 dev-retrieval:
@@ -360,7 +368,7 @@ dev-retrieval:
     - workspace/src/**/retrieval/**
   forbidden_writes:
     - workspace/proof/datasets/**
-    - workspace/src/prompts/**
+    - workspace/src/*/prompts/**
     - workspace/proof/baselines/**
 
 dev-data:
@@ -381,7 +389,7 @@ dev-data:
     - workspace/src/**/data/**
   forbidden_writes:
     - workspace/proof/datasets/**
-    - workspace/src/prompts/**
+    - workspace/src/*/prompts/**
 
 dev-agent:
   model_tier: deep
@@ -391,7 +399,7 @@ dev-agent:
     - workspace/stack/STACK.md                       # semi
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/feats/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
-    - workspace/src/prompts/{agent}.system.md            # volatile — lecture seule
+    - workspace/src/*/prompts/{agent}.system.md            # volatile — lecture seule
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -404,7 +412,7 @@ dev-agent:
     - workspace/src/**/agents/{agent}/**                # répertoire DISJOINT par agent
   forbidden_writes:
     - workspace/proof/datasets/**     # [DATASET_OWNERSHIP_VIOLATION] — sans bypass
-    - workspace/src/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
+    - workspace/src/*/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
     - workspace/proof/**
     # PAS de `workspace/src/**/agents/{other}/**` ici. Le motif se compilait en
     # `[^/]+`, donc EXACTEMENT comme `{agent}` de `writes:` — et les interdits
@@ -438,10 +446,11 @@ dev-orchestration:
     - .sdda/stacks/orchestration/{orchestration}.md
   writes:
     - workspace/src/**/orchestration/**
+    - workspace/src/**/memory/**                        # l'implémentation du contrat de mémoire : une mémoire est un état qui survit au tour
     - workspace/src/**/shared/**                        # pré-passe : types partagés, puis gelés
   forbidden_writes:
     - workspace/proof/datasets/**
-    - workspace/src/prompts/**
+    - workspace/src/*/prompts/**
 
 dev-api:
   model_tier: balanced
@@ -493,7 +502,7 @@ dev-backend:
     - workspace/src/*/src/*/*                        # racine du paquet (py.typed, __init__, index)
     - workspace/src/**/app/**
   forbidden_writes:
-    - workspace/src/prompts/**        # [PROMPT_OWNERSHIP_VIOLATION]
+    - workspace/src/*/prompts/**        # [PROMPT_OWNERSHIP_VIOLATION]
     - workspace/proof/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
     - workspace/proof/baselines/**
     - workspace/src/**/agents/**      # dev-agent
@@ -504,7 +513,7 @@ dev-backend:
     - workspace/src/**/serving/**     # dev-api
   forbidden_reads:
     - workspace/proof/datasets/**
-    - workspace/src/prompts/**        # il charge un prompt par HASH, il ne le lit pas
+    - workspace/src/*/prompts/**        # il charge un prompt par HASH, il ne le lit pas
 
 # ---------------------------------------------------------------------------
 # Phase 6 — evaluation et tests
@@ -527,7 +536,7 @@ qa-evals:
   forbidden_writes:
     - workspace/proof/baselines/**   # script déterministe uniquement
     - workspace/src/**
-    - workspace/src/prompts/**
+    - workspace/src/*/prompts/**
   forbidden_reads:
     - workspace/src/**/agents/**   # construire le jeu en lisant le code produit
                                 # un jeu qui teste ce que le code fait déjà
@@ -572,7 +581,7 @@ review-safety:
   reads:
     - .sdda/rules/agent-safety.md                    # stable
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — scopes et postures
-    - workspace/src/prompts/**                           # volatile
+    - workspace/src/*/prompts/**                           # volatile
     - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile
     - workspace/.sys/reports/adversarial-*.json     # volatile
   writes:

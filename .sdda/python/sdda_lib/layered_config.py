@@ -91,6 +91,16 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     return yaml_mini.parse_mapping(markdown_io.read_text(path))
 
 
+def app_name(root: Path) -> str:
+    """`AppName` de `## Project Config`, ou `App` — le nom du paquet sous `workspace/src/`.
+
+    Tout ce qui vit DANS l'application (prompts, skills, rules, schémas figés,
+    outils générés) se résout par lui ; un seul endroit pour le lire évite que
+    deux scripts se disputent le nom du répertoire.
+    """
+    return str(read_project_section(root).get("AppName") or "App").strip() or "App"
+
+
 def read_project_section(root: Path) -> dict[str, Any]:
     """`## Project Config` de STACK.md, parsé comme du YAML plat."""
     p = paths.stack_md_path(root)

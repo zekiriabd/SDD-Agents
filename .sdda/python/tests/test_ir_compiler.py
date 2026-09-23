@@ -184,7 +184,7 @@ def test_missing_prompt_and_no_pinned_hash_leaves_the_agent_unpinned_not_uncompi
     et c'est `preflight_agent_bounds` qui refuse de lancer `dev-agent` tant qu'il
     en est ainsi — l'exigence vit là où elle est actionnable (P10 intact).
     """
-    (project / "workspace/src/prompts/billing-specialist.system.md").unlink()
+    (project / "workspace/src/SupportAssistant/prompts/billing-specialist.system.md").unlink()
     ir, report = ir_compiler.compile_mission(project, 1)
     assert report.ok
     by_id = {a["id"]: a for a in ir["agents"]}

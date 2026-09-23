@@ -6,7 +6,7 @@ paths:
   - "workspace/feats/caps/**"
   - "workspace/feats/topology/**"
   - "workspace/feats/contracts/**"
-  - "workspace/src/prompts/**"
+  - "workspace/src/{App}/prompts/**"
   - "workspace/proof/datasets/**"
   - "workspace/proof/**"
   - "workspace/src/**"
@@ -46,7 +46,10 @@ ne peut plus rien conclure.
 | `workspace/feats/contracts/retrieval/*` | `architect-rag` | Create exclusif | 2 |
 | `workspace/feats/contracts/memory/*` | `architect-memory` | Create exclusif | 2 |
 | `workspace/.sys/.ir/*.ir.json` | **script `ir_compiler.py` uniquement** | régénéré, jamais édité | 2.9 |
-| `workspace/src/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif | 4 |
+| `workspace/src/{App}/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif — l'EXÉCUTABLE hashé, dans l'application | 4 |
+| `workspace/src/{App}/skills/{skill}.md` | `dev-prompt` | Create + Edit exclusif — un fragment par compétence déclarée au roster ; la matière du prompt, cité sous `## Compétences` | 4 |
+| `workspace/src/{App}/rules/{rule}.md` | `dev-prompt` | Create + Edit exclusif — un fragment par règle déclarée au roster ; cité sous `## Règles` | 4 |
+| `workspace/src/{App}/memory/**` | `dev-orchestration` | Create + Edit exclusif — l'implémentation du contrat de `architect-memory` ; une mémoire est un état qui survit au tour | 5 |
 | `workspace/src/**/tools/**` | `dev-tools` | Edit-augment exclusif | 3 |
 | `workspace/src/**/retrieval/**` | `dev-retrieval` | Edit-augment exclusif | 3 |
 | `workspace/src/**/data/**` | `dev-data` | Edit-augment exclusif | 3 |
@@ -106,7 +109,7 @@ Le détour coûte une étape et préserve un invariant sans trou : « seul
 `qa-evals` écrit dans `datasets/` » se vérifie mécaniquement, alors qu'une
 règle avec une exception se vérifie au cas par cas — c'est-à-dire mal.
 
-### 2.2 Aucun `dev-*` n'écrit dans `workspace/src/prompts/`
+### 2.2 Aucun `dev-*` n'écrit dans `workspace/src/{App}/prompts/`
 
 **L'agent qui implémente ne réécrit pas la spécification qu'il implémente.**
 

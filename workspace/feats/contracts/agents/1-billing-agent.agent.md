@@ -26,7 +26,7 @@ de facture est une réclamation : il le dit et invite à la formuler.
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/billing-agent.system.md`
+- Fichier : `workspace/src/SupportDesk/prompts/billing-agent.system.md`
 - Hash : `sha256:…`  *(calculé, épinglé aux baselines d'eval — P10)*
 - Rédigé par : `dev-prompt` depuis ce contrat (PHASE 4)
 

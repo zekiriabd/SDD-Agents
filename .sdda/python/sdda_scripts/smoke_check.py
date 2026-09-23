@@ -75,9 +75,9 @@ WORKSPACE_TREE: tuple[str, ...] = (
     "feats/contracts/retrieval",
     "feats/contracts/memory",
     "feats/decisions",
-    # src/ — le CODE GÉNÉRÉ, prompts et schémas figés compris : des actifs runtime
+    # src/ — le CODE GÉNÉRÉ : `src/{App}/` est l'application, layout plat, prompts,
+    # skills, rules et schémas figés DEDANS (créés par gen-app-skeleton, pas ici).
     "src",
-    "src/prompts",
     # proof/ — ce qui JUGE : aucun `dev-*` n'y écrit jamais.
     # `seed/` est la vérité terrain de l'HUMAIN ; `datasets/` sa dérivation par qa-evals.
     "proof/seed",

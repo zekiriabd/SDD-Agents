@@ -46,7 +46,7 @@ TARGETS = ("vectorstore", "datasets", "traces", "prompts")
 TARGET_PATHS: dict[str, tuple[str, ...]] = {
     "datasets": ("workspace/proof/datasets",),
     "traces": ("workspace/.sys/traces",),
-    "prompts": ("workspace/src/prompts",),
+    "prompts": ("workspace/src/*/prompts",),
     # Le corpus destiné à l'index : par convention `workspace/assets/corpus`, et
     # ce que le contrat de retrieval désigne.
     "vectorstore": ("workspace/assets/corpus", "workspace/feats/contracts/retrieval"),
