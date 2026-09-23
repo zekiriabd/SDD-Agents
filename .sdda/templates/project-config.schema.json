@@ -703,15 +703,6 @@
       "default": "none",
       "description": "Framework HTTP du back-end livré. Obligatoirement != none quand DeliverableType = backend-api, et cohérent avec `## Active Language & Runtime` -> [PACKAGING_LANG_MISMATCH]."
     },
-    "ApiArchitecture": {
-      "enum": [
-        "layered",
-        "hexagonal",
-        "vertical-slice"
-      ],
-      "default": "layered",
-      "description": "Architecture interne du back-end livré. Déclarée une fois, sinon chaque dev-* impose la sienne et le projet en porte trois."
-    },
     "ApiContractFirst": {
       "type": "boolean",
       "default": true,

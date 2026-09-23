@@ -86,6 +86,8 @@ SECTIONS = {
     "Active Observability": "observability",
     "Active Guardrails": "guardrails",
     "Active Serving Surface": "serving",
+    "Active Architecture Pattern": "archi",
+    "Active Backend Stack": "backend",
 }
 
 

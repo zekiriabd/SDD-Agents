@@ -1,0 +1,81 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "backend-kotlin-spring-boot",
+  "category": "backend",
+  "schemaVersion": 1,
+  "buildSystem": "gradle",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/build.gradle.kts",
+      "workspace/src/{AppName}/settings.gradle.kts",
+      "workspace/src/{AppName}/gradle/libs.versions.toml"
+    ]
+  },
+  "versions": {
+    "jdk": "21",
+    "kotlin": "2.2.0",
+    "spring-boot": "3.5.3",
+    "spring-dependency-management": "1.1.7",
+    "springdoc": "2.8.6",
+    "kotlin-logging": "7.0.7",
+    "logstash-logback-encoder": "8.0",
+    "kotlinx-coroutines": "1.10.2",
+    "resilience4j": "2.3.0",
+    "micrometer-prometheus": "1.15.0",
+    "opentelemetry-spring-boot-starter": "2.16.0",
+    "kotest": "6.0.0.M4",
+    "kotest-extensions-spring": "1.3.0",
+    "ktlint-plugin": "12.1.1",
+    "detekt": "1.23.8"
+  },
+  "core": [
+    { "module": "org.springframework.boot:spring-boot-starter-web", "ref": "spring-boot", "rationale": "Routage, MVC ; -webflux à la place si l'application est en coroutines de bout en bout." },
+    { "module": "org.springframework.boot:spring-boot-starter-actuator", "ref": "spring-boot", "rationale": "Sondes liveness/readiness mappées sur /healthz et /readyz, métriques Micrometer." },
+    { "module": "org.springframework.boot:spring-boot-starter-validation", "ref": "spring-boot", "rationale": "Bean Validation sur les data classes GÉNÉRÉES depuis l'IR." },
+    { "module": "org.springframework.boot:spring-boot-starter-security", "ref": "spring-boot", "rationale": "L'identité de l'appelant est établie au transport avant le code applicatif." },
+    { "module": "org.springframework.boot:spring-boot-starter-oauth2-resource-server", "ref": "spring-boot", "rationale": "ApiAuthMode: oauth2 | azure-ad — validation des jetons." },
+    { "module": "tools.jackson.module:jackson-module-kotlin", "ref": "spring-boot", "rationale": "Data classes Kotlin en JSON ; version du BOM Spring Boot." },
+    { "module": "org.jetbrains.kotlin:kotlin-reflect", "ref": "kotlin" },
+    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-core", "ref": "kotlinx-coroutines", "rationale": "I/O asynchrone ; runBlocking réservé aux tests." },
+    { "module": "io.github.oshai:kotlin-logging-jvm", "ref": "kotlin-logging", "rationale": "Logs structurés sur SLF4J ; jamais println." },
+    { "module": "net.logstash.logback:logstash-logback-encoder", "ref": "logstash-logback-encoder", "rationale": "Encodeur JSON pour Logback : run_id, trace_id, tenant haché en MDC." },
+    { "module": "org.springdoc:springdoc-openapi-starter-webmvc-ui", "ref": "springdoc", "rationale": "PUBLIE le document OpenAPI ; le contrat de référence est celui de l'IR (validate-api-contract). >= 2.7 requis avec Spring Security." },
+    { "module": "io.github.resilience4j:resilience4j-spring-boot3", "ref": "resilience4j", "rationale": "Timeout, backoff, disjoncteur sur le fournisseur de modèles et les serveurs MCP — jamais sur un outil non idempotent." },
+    { "module": "org.springframework.boot:spring-boot-starter-test", "ref": "spring-boot" },
+    { "module": "io.kotest:kotest-runner-junit5", "ref": "kotest" },
+    { "module": "io.kotest:kotest-assertions-core", "ref": "kotest" },
+    { "module": "io.kotest.extensions:kotest-extensions-spring", "ref": "kotest-extensions-spring" }
+  ],
+  "dev": [
+    { "module": "org.jlleitschuh.gradle.ktlint", "ref": "ktlint-plugin", "rationale": "Format L0 (plugin Gradle)." },
+    { "module": "io.gitlab.arturbosch.detekt", "ref": "detekt", "rationale": "Analyse statique L0 : `!!`, prompts littéraux, println." }
+  ],
+  "onDemand": [
+    { "module": "io.micrometer:micrometer-registry-prometheus", "ref": "micrometer-prometheus", "capability": "metrics", "rationale": "Exposition /metrics : tokens, coût, bornes atteintes (archi/microservice.md).", "triggers": ["prometheus", "/metrics", "microservice"] },
+    { "module": "io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter", "ref": "opentelemetry-spring-boot-starter", "capability": "otel-http", "rationale": "Propagation du traceparent W3C ; export OTLP vers la stack d'observabilité.", "triggers": ["otel", "opentelemetry", "traceparent"] }
+  ],
+  "absentByDesign": [
+    { "module": "org.springframework.boot:spring-boot-starter-data-jpa", "reason": "Aucune base possédée : l'accès aux données appartient à dev-data derrière l'enveloppe de ## Active Data Access. Une entité JPA dans la coquille est une règle métier hors du chemin que les evals parcourent." },
+    { "module": "org.flywaydb:flyway-core", "reason": "Pas de schéma possédé, donc pas de migration." },
+    { "module": "org.projectlombok:lombok", "reason": "Kotlin a déjà data class, val, lateinit ; Lombok sur Kotlin est une source d'erreurs de compilation." },
+    { "module": "org.mapstruct:mapstruct", "reason": "Les contrats HTTP sont GÉNÉRÉS depuis l'IR : rien à mapper à la main." }
+  ],
+  "runtimeRequirements": {
+    "jdk": ">=21",
+    "notes": "Temps de démarrage JVM : /readyz attend un HealthIndicator qui vérifie le RunService (prompts chargés, schémas figés, checkpointer partagé). Spring Boot 4 et Spring Security 7 sont publiés : la montée est une tâche dédiée."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-23",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Hérité de SDD_Pro .sdd/stacks/backend/kotlin-spring-boot.libs.json (audit du 2026-09-02), RÉÉCRIT pour l'agentic : JPA, Flyway, pilotes JDBC, Lombok, MapStruct retirés ; Resilience4j, kotlin-logging, logstash-logback-encoder, OpenTelemetry ajoutés.",
+      "VERSIONS NON VÉRIFIÉES au 2026-09-23 : search.maven.org ne répondait que partiellement (spring-boot-dependencies 3.5.3, kotlin-stdlib 2.2.0, springdoc 2.8.6, kotlin-logging 7.0.7, resilience4j 2.3.0, kotest 6.0.0.M4 confirmés ; logstash-logback-encoder, micrometer, opentelemetry-spring-boot-starter et les plugins Gradle NON confirmés). Résoudre contre Maven Central avant le premier bootstrap réel, puis dater verifiedAt. Le smoke du framework le dit en WARN (libs.unverified) tant que ce n'est pas fait.",
+      "kotest 6.0.0.M4 est une préversion : la seule stable confirmée est la ligne 5.9 (SDD_Pro épingle 5.9.1). À trancher à la vérification."
+    ],
+    "changeLog": [
+      "2026-09-23 — Création depuis SDD_Pro ; pins provisoires."
+    ],
+    "versionsVerified": false
+  }
+}

@@ -1,16 +1,19 @@
 # Agentic Stack
 #
-# Généré par bootstrap.py — éditer les valeurs ci-dessous.
+# Généré par bootstrap.py — éditer les choix ci-dessous.
 # Lu par TOUS les agents SDD_Agents à CHAQUE invocation.
-# `workspace/stack/STACK.md` est gitignored (secrets en clair) ; ce fichier
-# `.template` est le squelette versionné.
+# `workspace/stack/STACK.md` est VERSIONNÉ : c'est l'un des trois fichiers
+# que l'utilisateur écrit (avec ses specs Markdown sous feats/ et sa vérité
+# terrain sous proof/seed/). Ce `.template` en est le squelette.
 #
 # ============================================================================
 # CONTRAT DE PROPAGATION DES SECRETS
 # ============================================================================
-# Ce fichier contient des valeurs REELLES en clair (clés API, mots de passe
-# base, tokens MCP). Il est gitignored — jamais commité.
-#   1. Le Tech Lead écrit les valeurs dans les sections `## Active *` ci-dessous.
+# Ce fichier ne contient AUCUNE valeur de secret — seulement des NOMS de
+# variables, sous la forme `${LLM_API_KEY}`. Les valeurs vivent dans `.env`
+# à la racine du projet, gitignoré (même mécanisme que SDD_Pro). Une valeur
+# en clair ici est refusée au smoke : [STACK_SECRET_IN_CLEAR].
+#   1. Le Tech Lead déclare les noms ici et écrit les valeurs dans `.env`.
 #   2. `dev-api` les projette dans la config native de la stack cible
 #      (.env chargé par pydantic-settings, appsettings.json, application.yml) :
 #      c'est lui qui possède `workspace/src/serving/`, donc la couche Settings.
@@ -22,7 +25,7 @@
 
 
 ## Active Harness
-# Où tourne l'orchestration de CONSTRUCTION (les 22 Developer Agents).
+# Où tourne l'orchestration de CONSTRUCTION (les Developer Agents de .sdda/agents/).
 # Options : claude-code | codex | gemini-cli | antigravity | cursor
 # SSoT machine : .sdda/capability-matrix.yml
 Harness: claude-code
@@ -153,9 +156,10 @@ ApiFramework: {{ApiFramework}}        # none si DeliverableType != backend-api
                                     # Node   : express | nestjs
                                     # Incohérent avec le langage actif ->
                                     # [PACKAGING_LANG_MISMATCH], bloquant.
-ApiArchitecture: layered            # layered | hexagonal | vertical-slice
-                                    # Déclarée une fois, sinon chaque dev-*
-                                    # impose la sienne et le projet en porte trois.
+                                    # L'architecture INTERNE de la coquille (couches,
+                                    # composition, domaine) se choisit par une FICHE :
+                                    # `## Active Architecture Pattern` (mvc | ddd |
+                                    # microservice), pas par une clé scalaire.
 ApiContractFirst: true              # l'OpenAPI est DÉRIVÉ des inputSchema /
                                     # outputSchema de l'IR et vérifié contre eux
                                     # (API GATE, G6.5). `false` autorise l'API à
@@ -178,8 +182,9 @@ MaxAgentsWarnAt: 4                  # au-delà, justification renforcée exigée
 # Exactement 1 actif.
  - .sdda/stacks/lang/{{Language}}.md
 # - .sdda/stacks/lang/python.md          # [python] 3.12+
-# - .sdda/stacks/lang/typescript.md               # (fiche absente) Node 22+
+# - .sdda/stacks/lang/typescript.md      # [typescript] Node 22 LTS — fiche présente, aucune combo bootstrap (eval/observability encore [python])
 # - .sdda/stacks/lang/csharp.md          # [csharp] .NET 9+
+# - .sdda/stacks/lang/kotlin.md          # [kotlin] JDK 21 — fiche présente, même réserve que typescript
 # - .sdda/stacks/lang/java.md                     # (fiche absente) 21+
 
 
@@ -201,14 +206,14 @@ MaxAgentsWarnAt: 4                  # au-delà, justification renforcée exigée
 # - .sdda/stacks/framework/raw-sdk.md             # (fiche absente) SDK provider brut — aucun framework
 # --- TypeScript ---
 # - .sdda/stacks/framework/langchain-js.md        # (fiche absente)
-# - .sdda/stacks/framework/langgraph-js.md        # (fiche absente)
+# - .sdda/stacks/framework/langgraph-js.md        # [typescript] graphe d'état, cycles bornés, checkpointing
 # - .sdda/stacks/framework/mastra.md              # (fiche absente)
 # - .sdda/stacks/framework/vercel-ai-sdk.md       # (fiche absente)
 # --- .NET ---
 # - .sdda/stacks/framework/semantic-kernel.md     # (fiche absente)
 # - .sdda/stacks/framework/ms-agent-framework.md  # [csharp]
-# --- Java ---
-# - .sdda/stacks/framework/spring-ai.md           # (fiche absente)
+# --- JVM ---
+# - .sdda/stacks/framework/spring-ai.md           # [kotlin] ChatClient, outils, MCP client — sans graphe borné natif
 # - .sdda/stacks/framework/langchain4j.md         # (fiche absente)
 #
 # ATTENTION : toute combinaison langage x framework x pattern n'est pas
@@ -335,20 +340,20 @@ IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
 # sont : nombre d'agents, rôle et responsabilités de chacun, outils et skills,
 # modèle, orchestrateur, relations, bornes.
 #
-# Le manifeste est VERSIONNÉ, contrairement à ce fichier (gitignoré, il porte
-# les secrets) : une décision d'architecture doit être relisible en revue.
-# Gabarit : .sdda/templates/roster.manifest.template.yml
+# Le roster est une SPÉCIFICATION, pas une configuration : il vit dans
+# `workspace/feats/topology/{n}-roster.md` — un Markdown dont le premier bloc
+# ```yaml est la déclaration, relu en revue à côté de la topologie qu'il
+# commande. Écrit par l'HUMAIN ; `architect-topology` le lit, ne l'écrit jamais.
+#   python .sdda/sdda.py roster scaffold --mission {n}    # le pré-remplit
+#   python .sdda/sdda.py roster validate --mission {n}    # le vérifie (0 token)
+# Gabarit : .sdda/templates/roster.template.md
 #
-# Convention : `{n}-roster.yml` est chargé même sans être listé ci-dessous.
 # Repli accepté pour un projet mono-agent : la section `## 2. Roster déclaré`
 # de workspace/feats/topology/{n}-topology.md. Jamais les deux — une seule source
 # de vérité, sinon c'est celle que personne ne relit qui gouverne le code.
 #
 # Ce que le pattern actif EXIGE du roster :
-#   python .sdda/python/sdda_scripts/validate_architecture.py --explain
-RosterManifestRoot: workspace/stack/topology
-RosterManifests:
-#  - path: 1-roster.yml
+#   python .sdda/sdda.py validate-architecture --explain
 
 
 ## Active Data Access
@@ -365,12 +370,14 @@ RosterManifests:
 # - .sdda/stacks/dataaccess/graphql.md            # (fiche absente)
 
 DatabaseType: {{DatabaseType}}        # none | PostgreSql | SqlServer | MySql | Oracle | Sqlite | MongoDb
-# Valeurs réelles en clair (STACK.md gitignored) :
- - DB_HOST: {{DbHost}}
- - DB_PORT: {{DbPort}}
- - DB_NAME: {{DbName}}
- - DB_USER: {{DbUser}}
- - DB_PASSWORD: {{DbPassword}}
+# La DÉCLARATION est ici, les VALEURS sont dans `.env` (racine du projet,
+# gitignoré) — même mécanisme que SDD_Pro. STACK.md est versionné : une valeur
+# en clair ici partirait en commit ([STACK_SECRET_IN_CLEAR] au smoke).
+ - DB_HOST: ${DB_HOST}
+ - DB_PORT: ${DB_PORT}
+ - DB_NAME: ${DB_NAME}
+ - DB_USER: ${DB_USER}
+ - DB_PASSWORD: ${DB_PASSWORD}
 
 # Enveloppe de sûreté — OBLIGATOIRE dès que DatabaseType != none :
 DbAgentRole: readonly                 # readonly | scoped-write | full   (`full` exige un ADR)
@@ -391,18 +398,19 @@ DbQueryLogging: full                  # toute requête émise par un agent est t
 # Spécification : .sdda/stacks/dataaccess/declared-sources.md §3
 
 # Secrets : les déclarations ne portent que des NOMS de variables (clés `*_env`).
-# Les valeurs vivent ici, et ce fichier est gitignoré. Jamais de secret en clair
-# dans STACK.md ni dans un manifeste.
+# Les valeurs vivent dans `.env` (racine du projet, gitignoré). Jamais de secret
+# en clair dans STACK.md.
 SourceSecretsFile: .env
 
-# La déclaration peut être éclatée en manifestes VERSIONNÉS (STACK.md, lui, est
-# gitignoré : sans manifestes, la surface de données du projet n'est nulle part).
-# Extensions : .yml / .yaml / .json / .md (1er bloc ```yaml du fichier).
-# `kind: mcp-config` importe un fichier MCP standard ({"mcpServers": {...}}).
-SourceManifestRoot: workspace/stack/sources
-SourceManifests:
-#  - path: files.sources.yml
-#  - path: apis.sources.json
+# La déclaration est INLINE, ici : STACK.md est versionné, il ne porte que des
+# noms, il n'y a plus de raison d'éclater la surface de données dans des
+# manifestes à côté. Une seule porte optionnelle reste : importer une
+# configuration MCP au format standard ({"mcpServers": {...}}, celui que lisent
+# Claude, Cursor ou VS Code) sans la retranscrire — un `mcp.json` à côté de ce
+# fichier, déclaré ci-dessous. Tout autre fichier sous workspace/stack/ est
+# refusé par le smoke ([STACK_DIR_UNEXPECTED_FILE]).
+# SourceManifestRoot: workspace/stack
+# SourceManifests:
 #  - { path: mcp.json, kind: mcp-config }
 
 # OÙ est la donnée, et avec quelles clés. Seul endroit qui touche à un secret.
@@ -576,8 +584,9 @@ BaselineStorage: workspace/proof/baselines/
  - .sdda/stacks/serving/{{Serving}}.md
 # - .sdda/stacks/serving/cli.md                     # [python] ligne de commande + NDJSON
 # - .sdda/stacks/serving/cli-dotnet.md              # [csharp] idem, System.CommandLine
+# - .sdda/stacks/serving/cli-node.md                # [typescript] idem, commander
+# - .sdda/stacks/serving/cli-kotlin.md              # [kotlin] idem, clikt
 # - .sdda/stacks/serving/cli-java.md                # (fiche absente) — lang/java.md non plus
-# - .sdda/stacks/serving/cli-node.md                # (fiche absente) — lang/typescript.md non plus
 # --- Surfaces réseau : uniquement si DeliverableType = backend-api ---
 # - .sdda/stacks/serving/fastapi-sse.md             # [python] HTTP + SSE (Python)
 # - .sdda/stacks/serving/aspnet-minimal.md          # [csharp] HTTP + SSE (.NET)
@@ -592,10 +601,42 @@ StreamingEnabled: true
 HumanInTheLoopEnabled: false          # exige un pattern d'orchestration avec checkpointing
 
 
+## Active Architecture Pattern
+# COMMENT est structurée la COQUILLE applicative autour du moteur agentic :
+# l'entrée, la composition, la configuration, les règles métier calculables de
+# la MISSION, les adaptateurs. Le découpage du MOTEUR (agents/ tools/
+# orchestration/ retrieval/ data/) n'est PAS ici : il est imposé par la matrice
+# d'ownership. Exactement 1 actif ; hérité de SDD_Pro `stacks/archi/`.
+# Lu par dev-backend (composition, packaging) et dev-api (où placer la surface).
+ - .sdda/stacks/archi/{{ArchiPattern}}.md
+# - .sdda/stacks/archi/mvc.md            # [*] LE DÉFAUT — entrée / service / domaine léger / adaptateurs
+# - .sdda/stacks/archi/ddd.md            # [*] domaine riche : les règles métier de la MISSION en code pur, exposées en outils
+# - .sdda/stacks/archi/microservice.md   # [*] un service déployé seul : santé, métriques, idempotence, contrat versionné, image
+
+
+## Active Backend Stack
+# Lu UNIQUEMENT si DeliverableType = backend-api : le framework HTTP qui porte
+# la coquille (projet, DI, config, middleware, sécurité, packaging). 0 ou 1
+# actif, du langage actif, cohérent avec `ApiFramework` (validate_packaging).
+# À ne pas confondre avec `## Active Serving Surface`, qui dit PAR OÙ L'ON
+# ENTRE (routes, SSE, contrat dérivé de l'IR) : la surface est le transport, la
+# fiche backend est la maison autour. Hérité de SDD_Pro `stacks/backend/`.
+{{BackendActiveLines}}
+# - .sdda/stacks/backend/python-fastapi.md      # [python]     ApiFramework: fastapi        — pins dans serving/fastapi-sse.libs.json
+# - .sdda/stacks/backend/node-express.md        # [typescript] ApiFramework: express
+# - .sdda/stacks/backend/nestjs.md              # [typescript] ApiFramework: nestjs
+# - .sdda/stacks/backend/kotlin-spring-boot.md  # [kotlin]     ApiFramework: spring-boot
+# - .sdda/stacks/backend/dotnet-minimalapi.md   # [csharp]     ApiFramework: aspnet-minimal — pins dans serving/aspnet-minimal.libs.json
+
+
 ## Active Secrets
-# Valeurs réelles en clair — STACK.md est gitignored.
-# Ne DOIVENT apparaître dans aucun prompt, aucun trace span, aucun dataset.
- - LLM_API_KEY: {{LlmApiKey}}
-# - EMBEDDING_API_KEY: <...>
-# - LANGSMITH_API_KEY: <...>
-# - ZENDESK_TOKEN: <...>
+# Les NOMS des variables que l'application et les outils attendent. Les VALEURS
+# vivent dans `.env` à la racine du projet, gitignoré — jamais ici : STACK.md
+# est versionné. `bootstrap.py` écrit les deux ; `smoke-check` refuse une valeur
+# en clair ([STACK_SECRET_IN_CLEAR]). Aucune valeur ne DOIT apparaître dans un
+# prompt, un trace span ni un dataset (scan-secrets, G7).
+SecretsFile: .env
+ - LLM_API_KEY: ${LLM_API_KEY}
+# - EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+# - LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
+# - ZENDESK_TOKEN: ${ZENDESK_TOKEN}

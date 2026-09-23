@@ -1,0 +1,216 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "backend-node-express",
+  "category": "backend",
+  "schemaVersion": 1,
+  "buildSystem": "pnpm",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/package.json",
+      "workspace/src/{AppName}/pnpm-lock.yaml",
+      "workspace/src/{AppName}/tsconfig.json"
+    ]
+  },
+  "versions": {
+    "node": "22",
+    "express": "4.22.3",
+    "zod": "4.6.5",
+    "pino": "10.3.1",
+    "pino-http": "11.0.0",
+    "helmet": "8.3.0",
+    "cors": "2.8.6",
+    "compression": "1.8.2",
+    "express-rate-limit": "8.7.0",
+    "p-retry": "8.0.1",
+    "jose": "6.2.12",
+    "opentelemetry-sdk-node": "0.222.0",
+    "opentelemetry-api": "1.9.1",
+    "opentelemetry-exporter-trace-otlp-http": "0.222.0",
+    "typescript": "6.0.3",
+    "tsx": "4.23.15",
+    "types-node": "26.6.2",
+    "types-express": "4.17.25",
+    "types-cors": "2.8.19",
+    "types-compression": "1.8.1",
+    "eslint": "10.11.0",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.1"
+  },
+  "core": [
+    {
+      "module": "express",
+      "ref": "express",
+      "rationale": "Routeur HTTP minimal, ligne 4 : la 5 est publiée mais aucun bench ne la mesure (fiche §7). Le contrat de la surface est celui de l'IR, pas d'Express."
+    },
+    {
+      "module": "zod",
+      "ref": "zod",
+      "rationale": "Validation au bord : RunRequest/RunResponse GÉNÉRÉS depuis l'IR, config parsée une fois. Le type est la conséquence du schéma."
+    },
+    {
+      "module": "pino",
+      "ref": "pino",
+      "rationale": "Logs JSON sur stderr, redaction des champs sensibles."
+    },
+    {
+      "module": "pino-http",
+      "ref": "pino-http",
+      "rationale": "Un log par requête, genReqId = run_id."
+    },
+    {
+      "module": "helmet",
+      "ref": "helmet",
+      "rationale": "En-têtes de sécurité en premier middleware."
+    },
+    {
+      "module": "cors",
+      "ref": "cors",
+      "rationale": "Origines explicites depuis la config ; jamais `origin: true` avec identifiants."
+    },
+    {
+      "module": "compression",
+      "ref": "compression",
+      "rationale": "Compression des réponses JSON — exclue de text/event-stream, sinon le proxy tamponne le flux SSE."
+    },
+    {
+      "module": "express-rate-limit",
+      "ref": "express-rate-limit",
+      "rationale": "Quota par appelant : sans lui, un client épuise le budget d'exécution du produit (P6)."
+    },
+    {
+      "module": "p-retry",
+      "ref": "p-retry",
+      "rationale": "Backoff exponentiel avec gigue sur le fournisseur de modèles et les serveurs MCP — jamais sur un outil non idempotent."
+    },
+    {
+      "module": "typescript",
+      "ref": "typescript",
+      "rationale": "Plafonné sous 7 : la chaîne typescript-eslint / tsx suit avec retard (lang/typescript.md §7)."
+    },
+    {
+      "module": "tsx",
+      "ref": "tsx",
+      "rationale": "Exécution directe en dev et en tests."
+    },
+    {
+      "module": "@types/node",
+      "ref": "types-node"
+    },
+    {
+      "module": "@types/express",
+      "ref": "types-express"
+    },
+    {
+      "module": "@types/cors",
+      "ref": "types-cors"
+    },
+    {
+      "module": "@types/compression",
+      "ref": "types-compression"
+    },
+    {
+      "module": "eslint",
+      "ref": "eslint",
+      "rationale": "Lint L0."
+    },
+    {
+      "module": "typescript-eslint",
+      "ref": "typescript-eslint",
+      "rationale": "Règles strict-type-checked : no-floating-promises, no-explicit-any."
+    },
+    {
+      "module": "vitest",
+      "ref": "vitest",
+      "rationale": "Tests L1/L2."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "jose",
+      "ref": "jose",
+      "capability": "auth-jwt",
+      "rationale": "Vérification de jeton pour ApiAuthMode: oauth2. L'identité vient du jeton, jamais du corps.",
+      "triggers": [
+        "ApiAuthMode:\\s*oauth2",
+        "jwt",
+        "bearer"
+      ]
+    },
+    {
+      "module": "@opentelemetry/sdk-node",
+      "ref": "opentelemetry-sdk-node",
+      "capability": "otel-http",
+      "rationale": "Propagation du traceparent W3C jusqu'aux spans d'agents.",
+      "triggers": [
+        "otel",
+        "opentelemetry",
+        "traceparent"
+      ]
+    },
+    {
+      "module": "@opentelemetry/api",
+      "ref": "opentelemetry-api",
+      "capability": "otel-http",
+      "triggers": [
+        "otel",
+        "opentelemetry",
+        "traceparent"
+      ]
+    },
+    {
+      "module": "@opentelemetry/exporter-trace-otlp-http",
+      "ref": "opentelemetry-exporter-trace-otlp-http",
+      "capability": "otel-export",
+      "triggers": [
+        "otlp",
+        "observability"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "prisma",
+      "reason": "Aucune base possédée : l'accès aux données appartient à dev-data derrière l'enveloppe de ## Active Data Access. Un client de base dans la coquille est le premier pas vers une règle métier hors du chemin que les evals parcourent."
+    },
+    {
+      "module": "swagger-jsdoc",
+      "reason": "Le contrat OpenAPI est DÉRIVÉ de l'IR et confronté à lui par l'API GATE, pas annoté en commentaires : deux générateurs produiraient deux contrats."
+    },
+    {
+      "module": "swagger-ui-express",
+      "reason": "La publication d'une UI n'est pas la surface ; si elle est voulue, c'est une capability de la fiche serving, pas de la maison."
+    },
+    {
+      "module": "dotenv",
+      "reason": "Node 22 charge .env nativement (--env-file) en développement ; en production l'environnement fournit les valeurs. Un chargeur de .env en production est un secret lu depuis un fichier dans l'image."
+    },
+    {
+      "module": "axios",
+      "reason": "fetch natif + AbortSignal.timeout + p-retry suffisent ; un second client HTTP double les politiques de résilience."
+    },
+    {
+      "module": "class-validator",
+      "reason": "Zod porte déjà la validation et les types dérivés ; une seconde source de schéma diverge de la première."
+    }
+  ],
+  "runtimeRequirements": {
+    "node": ">=22",
+    "notes": "Un checkpointer PARTAGÉ est requis dès qu'il y a plus d'un processus (cluster, réplicas) ; vérifié par /readyz."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-23",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Hérité de SDD_Pro .sdd/stacks/backend/node-express.libs.json (audit du 2026-09-02), RÉÉCRIT pour l'agentic : prisma, swagger-jsdoc, dotenv, axios, class-validator retirés (absentByDesign) ; p-retry, jose et OpenTelemetry ajoutés.",
+      "express reste sur la ligne 4 (4.22.3) et typescript plafonné à 6.0.3 : ce sont les deux décisions de version de l'audit SDD_Pro, reprises telles quelles — la montée est une tâche, pas un bump.",
+      "Les clés de versions{} sont des ALIAS internes (`langchain-core` pour `@langchain/core`) : le méta-schéma refuse un nom qui commence par `@`. Le `module` porte l'identifiant npm exact."
+    ],
+    "changeLog": [
+      "2026-09-23 — Création depuis SDD_Pro ; résolution registry.npmjs.org via `npm view` : express@4 4.22.2→4.22.3 · compression 1.8.1→1.8.2 · eslint 10.9.1→10.11.0 · typescript-eslint 8.69.0→8.70.1 · @types/node 26.4.1→26.6.2 · zod 4.5.4→4.6.5 ; nouveaux pins p-retry 8.0.1 · jose 6.2.12 · tsx 4.23.15 · vitest 5.0.1 · @opentelemetry/* 0.222.0 / 1.9.1."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-23",
+    "verifiedAgainst": "registry.npmjs.org via `npm view <pkg> version` (dernière publication par ligne de version demandée ; express@4, typescript@6)"
+  }
+}

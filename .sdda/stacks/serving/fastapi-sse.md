@@ -45,7 +45,7 @@ l'exploitation.
 | **Langage** | Python 3.12 (`lang/python.md`) |
 | **Librairies** | `fastapi` 0.128.x · `uvicorn[standard]` 0.38.x · `sse-starlette` 3.x · `pydantic` 2.x (déjà présent) — capability `serving-fastapi-sse` du `.libs.json` du framework actif |
 | **Point d'entrée** | `[project.scripts] {AppName}-serve = "{AppName}.serving.http.app:main"` → `uvicorn {AppName}.serving.http.app:app` |
-| **Paramètres STACK.md** | `DeliverableType: backend-api`, `ApiFramework: fastapi`, `ApiArchitecture`, `ApiContractFirst`, `ApiAuthMode`, `ServingLocalPort`, `StreamingEnabled`, `HumanInTheLoopEnabled` |
+| **Paramètres STACK.md** | `DeliverableType: backend-api`, `ApiFramework: fastapi`, `## Active Architecture Pattern` (couches de la coquille), `## Active Backend Stack` → `backend/python-fastapi.md` (le projet, la DI, la config, le packaging autour de cette surface), `ApiContractFirst`, `ApiAuthMode`, `ServingLocalPort`, `StreamingEnabled`, `HumanInTheLoopEnabled` |
 | **Contrat machine** | OpenAPI 3.1 dérivé de l'IR + flux SSE dont chaque `data:` est un `RunEvent` |
 | **Codes** | HTTP en surface, `[CLASS]` en profondeur — table §3.3 |
 
