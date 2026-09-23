@@ -210,6 +210,34 @@ def test_read_violation_distinguishes_the_three_scopes() -> None:
     assert ao.read_violation(loader, "a", "workspace/feats/missions", scope="content") is None
 
 
+def test_other_placeholder_spares_what_reads_declares() -> None:
+    """`missions/{other}-*.md` interdit les AUTRES MISSIONs, jamais celle que `reads:` autorise.
+
+    `{other}` se compile comme `{n}` (`[^/]+`) : sans cette règle, l'interdit
+    matchait la MISSION courante et `po-capabilities` ne pouvait pas lire ce
+    qu'il découpe — la phase 1 était impossible dès que le hook recevait
+    l'identité de l'agent. Un interdit sans `{other}` reste absolu.
+    """
+    loader = {"a": {"reads": ["workspace/feats/missions/{n}-*.md"],
+                    "forbidden_reads": ["workspace/feats/missions/{other}-*.md", "workspace/stack/STACK.md"]}}
+    assert ao.read_violation(loader, "a", "workspace/feats/missions/1-SupportDesk.md") is None
+    assert ao.read_violation(loader, "a", "workspace/stack/STACK.md") == "workspace/stack/STACK.md"
+    # Un interdit ABSOLU sur la même zone n'est pas adouci par `reads:`.
+    strict = {"a": {"reads": ["workspace/feats/missions/{n}-*.md"],
+                    "forbidden_reads": ["workspace/feats/missions/*-*.md"]}}
+    assert ao.read_violation(strict, "a", "workspace/feats/missions/1-SupportDesk.md") == "workspace/feats/missions/*-*.md"
+
+
+def test_po_capabilities_reads_its_own_mission(project: Path) -> None:
+    """Le cas réel de la matrice : la MISSION `{n}` est lisible, STACK.md ne l'est pas."""
+    mission = project / "workspace/feats/missions/1-Demo.md"
+    mission.parent.mkdir(parents=True, exist_ok=True)
+    mission.write_text("# MISSION: Demo\n", encoding="utf-8")
+    code, err = read_tool(project, "po-capabilities", "Read", file_path=str(mission))
+    assert code == ALLOW, err
+    assert read_tool(project, "po-capabilities", "Read", file_path=str(project / "workspace/stack/STACK.md"))[0] != ALLOW
+
+
 def test_classify_extracts_writes_and_reads(tmp_path: Path) -> None:
     writes, reads = preflight_bash_ownership.classify(
         tmp_path,
