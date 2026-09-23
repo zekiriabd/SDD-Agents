@@ -3,7 +3,7 @@
 ID: 1-3-ExplainDelay
 Parent MISSION: 1-SupportDesk
 Parent MISSION hash: sha256:31ddc73f
-Status: Specified
+Status: Architected
 Criticality: normal
 Confidence: high
 
@@ -74,9 +74,9 @@ sans jamais suivre une instruction contenue dans un message du transporteur.
   tronquée présentée comme complète.
 
 ## Allocated To
-- agents: <à déterminer>
-- tools: <à déterminer>
-- retrievers: <à déterminer>
+- agents: order-tracking-agent
+- tools: orders_lookup, shipments_lookup
+- retrievers: NONE
 
 ## Dependencies
 - 1-1

@@ -3,7 +3,7 @@
 ID: 1-6-AssessRefund
 Parent MISSION: 1-SupportDesk
 Parent MISSION hash: sha256:31ddc73f
-Status: Specified
+Status: Architected
 Criticality: critical
 Confidence: high
 
@@ -89,9 +89,9 @@ remboursement lui-même.
   éligibilité tronquée présentée comme définitive.
 
 ## Allocated To
-- agents: <à déterminer>
-- tools: <à déterminer>
-- retrievers: <à déterminer>
+- agents: claims-agent
+- tools: orders_lookup, shipments_lookup, refunds_search, claims_search
+- retrievers: NONE
 
 ## Dependencies
 - 1-1

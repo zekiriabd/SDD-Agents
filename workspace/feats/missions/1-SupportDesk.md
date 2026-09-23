@@ -1,7 +1,7 @@
 # MISSION: SupportDesk
 
 MISSION ID: 1-SupportDesk
-Status: Specified
+Status: Architected
 Confidence: high
 
 ## Context

@@ -3,7 +3,7 @@
 ID: 1-4-AnswerBilling
 Parent MISSION: 1-SupportDesk
 Parent MISSION hash: sha256:31ddc73f
-Status: Specified
+Status: Architected
 Criticality: normal
 Confidence: high
 
@@ -74,9 +74,9 @@ sans recommander d'action hors mandat.
   tronquée présentée comme complète.
 
 ## Allocated To
-- agents: <à déterminer>
-- tools: <à déterminer>
-- retrievers: <à déterminer>
+- agents: billing-agent
+- tools: invoices_search, payments_search, orders_lookup
+- retrievers: NONE
 
 ## Dependencies
 - 1-1

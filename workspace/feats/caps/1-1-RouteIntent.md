@@ -3,7 +3,7 @@
 ID: 1-1-RouteIntent
 Parent MISSION: 1-SupportDesk
 Parent MISSION hash: sha256:31ddc73f
-Status: Specified
+Status: Architected
 Criticality: critical
 Confidence: high
 
@@ -103,9 +103,9 @@ clarification, ou refuse poliment.
   « borne atteinte », jamais un routage deviné.
 
 ## Allocated To
-- agents: <à déterminer>
-- tools: <à déterminer>
-- retrievers: <à déterminer>
+- agents: support-router
+- tools: NONE
+- retrievers: NONE
 
 ## Dependencies
 - NONE

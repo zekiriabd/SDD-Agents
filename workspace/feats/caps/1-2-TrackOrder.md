@@ -3,7 +3,7 @@
 ID: 1-2-TrackOrder
 Parent MISSION: 1-SupportDesk
 Parent MISSION hash: sha256:31ddc73f
-Status: Specified
+Status: Architected
 Criticality: normal
 Confidence: high
 
@@ -75,9 +75,9 @@ la date promise — sans rien affirmer d'autre.
   tronquée présentée comme complète.
 
 ## Allocated To
-- agents: <à déterminer>
-- tools: <à déterminer>
-- retrievers: <à déterminer>
+- agents: order-tracking-agent
+- tools: orders_lookup, shipments_lookup, orders_search
+- retrievers: NONE
 
 ## Dependencies
 - 1-1
