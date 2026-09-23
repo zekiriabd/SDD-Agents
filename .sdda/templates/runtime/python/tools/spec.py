@@ -150,6 +150,11 @@ class ToolContext:
     registry_path: str | None = None
     span: Callable[[str, dict[str, Any]], None] | None = None
     clock: Callable[[], float] | None = None
+    #: L'identité de l'APPELANT, établie par le transport (`--tenant` en CLI,
+    #: l'authentification en HTTP) — jamais par le modèle. Chaque source qui
+    #: déclare `required_filter: [customer_id]` est filtrée sur ces valeurs par
+    #: le runtime ; absente, la lecture est refusée (fail-closed).
+    identity: dict[str, str] = field(default_factory=dict)
 
     _indexes: dict[str, Any] = field(default_factory=dict)
 
