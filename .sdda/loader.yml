@@ -520,7 +520,11 @@ dev-backend:
 # ---------------------------------------------------------------------------
 qa-evals:
   model_tier: deep
-  budget_bytes: 180000
+  budget_bytes: 300000      # 180000 refusait le premier run réel : l'IR compilée seule pèse
+                            # 175 Ko (21 contrats d'outils embarqués, schémas et descriptions).
+                            # Relevé explicitement ; la vraie correction est un EXTRAIT d'IR par
+                            # agent (context_pack qui ne sert que agents[], evaluation.suites[]
+                            # et les ids d'outils) — 🟡 à faire avant d'élargir le catalogue.
   reads:
     - .sdda/rules/eval-protocol.md                   # stable — sa règle centrale
     - .sdda/templates/eval-suite.template.md         # stable

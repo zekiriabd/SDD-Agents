@@ -78,6 +78,7 @@ supprime sans perte.
 workspace/
 ├── stack/     ce qu'on CONFIGURE — STACK.md, seul, versionné (noms de variables ; valeurs dans src/{App}/.env)
 ├── feats/     ce qu'on SPÉCIFIE  — Markdown seul : briefs · missions · caps · roster + topology · contracts · decisions (ADR)
+├── assets/    ce qu'on DÉPOSE    — fichiers statiques (exports JSON/CSV, corpus) : la racine des stores `kind: local` (l'assets/ de SDD_Pro)
 ├── src/       ce qu'on PRODUIT   — l'application générée, prompts et schémas figés compris
 ├── proof/     ce qui JUGE        — seed (votre vérité terrain) · datasets · suites · baselines · calibration
 └── .sys/      état interne et sorties de run — IR, validation, rapports, traces (régénérable)
@@ -244,7 +245,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1140<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->1141<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification

@@ -14,7 +14,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:351682e64b836e945b4daf2de38e1b2e026c00b0bf916e66d93dc2c3d8a38f66",
       "trust": "untrusted"
     },
@@ -32,7 +32,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:06eddc21274f7d11664c35daba50a232a544812335249d335821e93a5ac512c9",
       "trust": "untrusted"
     },
@@ -51,7 +51,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:78ef35990d4ef80be2be5e4db560b4e5bc17a67dc2d1248a7019d4cea74edf55",
       "trust": "untrusted"
     },
@@ -69,7 +69,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:e704913c39b246302d65c3c52c02bc0055bc630a3e74ed4d59f6b6b9259251ac",
       "trust": "untrusted"
     },
@@ -87,7 +87,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:50abc6e1cc8fc1326c0d397d6e923b617df799249f338e7d26fa8e9e0934c300",
       "trust": "untrusted"
     },
@@ -106,7 +106,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:37b5f0864dc9e55c628bb57363105db66d6cff308c83fe92e7e958d06222d894",
       "trust": "untrusted"
     },
@@ -124,7 +124,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:69849806a4135ca16ba1b70792e6f0d0da6e124246e52e7d83b4988459268c90",
       "trust": "trusted"
     },
@@ -142,7 +142,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:31ef7406dc9d59b9fec64998a713fdb20907712bce594fb53629fab5364f47de",
       "trust": "trusted"
     },
@@ -161,7 +161,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:ab4a378407d851b3014c163c31491d6ef28b826aaa0fe4f6887249e9ab699502",
       "trust": "trusted"
     },
@@ -179,7 +179,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:12e626971c95aa11bd8eb5b1e41b74322189747fe3c8dfeddd2d715a45fa73cb",
       "trust": "untrusted"
     },
@@ -197,7 +197,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:22db6d9af209bd73ae32ae54e354e4bd94a7b1128c652fdc9927d859d0a2e828",
       "trust": "untrusted"
     },
@@ -216,7 +216,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:5ccffd491ae043188d28b89b24ae9625bbfbedc532bd18c8c0401e4b19e17e60",
       "trust": "untrusted"
     },
@@ -234,7 +234,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:ea44c83b437246ab8cade7c649adbe99c9523f8cffd19b02566e342e5369ef99",
       "trust": "untrusted"
     },
@@ -252,7 +252,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:bd73fd4c29fa1086a21f052c7764c6daba1d150c80c12189b84190a41e53d082",
       "trust": "untrusted"
     },
@@ -271,7 +271,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:d9b1d797fc75f610afac87cb971b49dfca60cf7bb5c4f2dbdfa101264056e345",
       "trust": "untrusted"
     },
@@ -289,7 +289,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:8baf9d581f6dc83c1ac81aa8eb7638482587b60096fef6bcd1f1f94ec8ccb15d",
       "trust": "trusted"
     },
@@ -307,7 +307,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:36b3bf3d892a916a5975da8231c88b82d94f9aa571bcc6a3342ecbf315cdaeea",
       "trust": "trusted"
     },
@@ -326,7 +326,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:8916cf985e4a6461ed2b9a53f585cf26b75583c409705bf78ef0a5e040c178c8",
       "trust": "trusted"
     },
@@ -344,7 +344,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:b4eca88fe32ddb48384fc0134c482f57a163a2d0fc084d0edddc237438a1e7be",
       "trust": "untrusted"
     },
@@ -362,7 +362,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:17813fded4d5ba6c4c4937f6a3fdbd9b3406f30721c20455f9f10b4b03c5499f",
       "trust": "untrusted"
     },
@@ -381,7 +381,7 @@
       "rate_limit_rpm": 600,
       "retry_policy": "exponential:2",
       "side_effect_class": "read-only",
-      "timeout_s": 3,
+      "timeout_s": 1,
       "tool_schema_hash": "sha256:c5d9432ce96b327427fb44f2197f0036725826a05e6dab1babd8f6097c2ab77e",
       "trust": "untrusted"
     }

@@ -77,6 +77,28 @@ def test_nominal_over_target_is_only_a_warning(project: Path) -> None:
     assert "BUDGET_TARGET_MISSED" in {w.cls for w in report.warnings}
 
 
+def test_latency_target_is_judged_on_the_nominal_path_not_the_worst_case(project: Path) -> None:
+    """Un p95 est un percentile : le pire cas (chaque appel à son timeout) n'est pas sa référence.
+
+    Comparer les deux rendait G2 jaune sur toute topologie aux bornes serrées —
+    précisément les bien conçues. Le pire cas reste dans les données.
+    """
+    ir = _compiled(project)
+    _, est = estimate_budget.estimate(ir, root=project, config=read_layered_config(project))
+    nominal, worst = est["nominalLatencyMs"], est["worstCaseLatencyMs"]
+    assert worst >= nominal
+    # cible entre nominal et pire cas : pas d'avertissement, mais le fait est dans les données
+    ir["budget"]["latencyP95TargetMs"] = int(nominal) + 1
+    report, est = estimate_budget.estimate(ir, root=project, config=read_layered_config(project))
+    assert "LATENCY_P95_EXCEEDED" not in {w.cls for w in report.warnings}
+    assert report.data["worstLatencyAboveTarget"] is (worst > int(nominal) + 1)
+    assert "worstLatencyAboveTarget" not in est          # l'IR porte des mesures, pas des lectures
+    # cible sous le nominal : avertissement, jamais un blocage
+    ir["budget"]["latencyP95TargetMs"] = 1
+    report, _ = estimate_budget.estimate(ir, root=project, config=read_layered_config(project))
+    assert report.ok and "LATENCY_P95_EXCEEDED" in {w.cls for w in report.warnings}
+
+
 def test_token_ceiling_exceeded_is_a_warning_not_a_block(project: Path) -> None:
     # Le plafond de tokens est une borne du système généré : il coupe, il n'est pas dépassé.
     ir = _compiled(project)

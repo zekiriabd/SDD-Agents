@@ -316,11 +316,20 @@ def estimate(ir: dict[str, Any], *, root: Path | None = None, config: LayeredCon
         report.warn("TOKEN_CEILING_EXCEEDED", f"pire cas {worst.tokens} tokens/run > tokenCeilingPerRun {ceiling} : le plafond coupera le run avant maxHops", "résumer au lieu d'accumuler, ou resserrer maxIterations", loc)
     elif isinstance(ceiling, int) and nominal.tokens > ceiling:
         report.warn("TOKEN_CEILING_EXCEEDED", f"nominal {nominal.tokens} tokens/run > tokenCeilingPerRun {ceiling} : même le chemin nominal sera coupé", "", loc)
+    # Un p95 est un PERCENTILE : le comparer au pire cas (le 100e, chaque appel
+    # à son timeout, chaque boucle à sa borne) est une erreur de catégorie —
+    # elle rendait G2 jaune sur toute topologie dont les bornes sont serrées,
+    # c'est-à-dire précisément les bien conçues. Le nominal est la bonne
+    # référence pour la cible ; le pire cas reste dans les données du rapport
+    # (`worstCaseLatencyMs`, `worstLatencyAboveTarget`) et dans le récap, pour
+    # dimensionner, pas pour bloquer.
     if isinstance(p95, int):
-        if worst.latency_ms > p95:
-            report.warn("LATENCY_P95_EXCEEDED", f"pire cas {int(worst.latency_ms)} ms > latencyP95TargetMs {p95} : dire quelle borne le ramène sous la cible", "", loc)
-        elif nominal.latency_ms > p95:
-            report.warn("LATENCY_P95_EXCEEDED", f"nominal {int(nominal.latency_ms)} ms > latencyP95TargetMs {p95}", "", loc)
+        # Dans le rapport, pas dans `budget.estimated` de l'IR : l'IR porte des
+        # mesures, le rapport porte des lectures de ces mesures.
+        report.data["worstLatencyAboveTarget"] = worst.latency_ms > p95
+        if nominal.latency_ms > p95:
+            report.warn("LATENCY_P95_EXCEEDED", f"nominal {int(nominal.latency_ms)} ms > latencyP95TargetMs {p95} : la cible n'est pas tenable sur le chemin ordinaire",
+                        "resserrer maxIterations / maxToolCalls des agents du chemin nominal, passer un agent en tier fast, ou revoir la cible dans la MISSION", loc)
     return report, estimated
 
 
