@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from .errors import DataAccessError, InvalidFilter, SourceStale, Timeout
+from .errors import DataAccessError, InvalidFilter, Timeout
 from .formats import read_records
 from .index import SourceIndex, build_index, record_at
 from ..tools.spec import ToolContext
@@ -124,13 +124,32 @@ def _resolve(ctx: ToolContext, source_id: str) -> tuple[Registry, Source]:
 
 
 def _check_freshness(registry: Registry, source: Source, index: SourceIndex) -> bool:
+    """`True` si l'instantané dépasse `max_staleness_hours` — la donnée est SERVIE, marquée.
+
+    Le contrat d'outil dit « répondre en signalant la date de la donnée » :
+    c'est le champ `stale` de la sortie, avec `as_of`, que l'agent cite. Lever
+    ici privait l'agent de la donnée ET de sa date — il ne pouvait plus rien
+    dire d'exact, même « voici l'état au 3 septembre ».
+    """
     limit = registry.staleness_hours(source)
-    age = index.age_hours
-    if limit and age > limit:
-        raise SourceStale(
-            f"source `{source.id}` périmée : {age:.1f}h > {limit}h",
-            source=source.id, as_of=index.as_of, age_hours=age)
-    return False
+    return bool(limit and index.age_hours > limit)
+
+
+def _identity_filters(ctx: ToolContext, source: Source) -> dict[str, str]:
+    """Les valeurs des `required_filter` de la source, tirées de l'identité de l'APPELANT.
+
+    Le modèle ne fournit pas ce filtre et ne peut pas l'omettre : le runtime
+    l'impose. Une identité absente est un refus, pas une lecture non filtrée —
+    un outil qui « marche » sans identité est un outil qui lit tout le monde.
+    """
+    out: dict[str, str] = {}
+    for name in source.required_filter:
+        value = str((ctx.identity or {}).get(name, "")).strip()
+        if not value:
+            raise InvalidFilter(f"identité `{name}` absente du contexte d'appel", source=source.id,
+                                detail="le cloisonnement est établi par le transport (--tenant, authentification), jamais par le modèle")
+        out[name] = value
+    return out
 
 
 def _validate_filters(source: Source, filters: dict[str, Any]) -> dict[str, Any]:
@@ -254,8 +273,16 @@ async def lookup_record(*, source: str, key: Any, ctx: ToolContext,
     index = _index_of(ctx, spec)
     stale = _check_freshness(registry, spec, index)
 
+    identity = _identity_filters(ctx, spec)
+    deadline = ctx.clock() + registry.envelope.read_timeout_ms / 1000.0
     location = index.by_key.get(str(key))
     record = record_at(location, spec) if location else None
+    if ctx.clock() > deadline:
+        raise Timeout(f"budget de lecture dépassé ({registry.envelope.read_timeout_ms} ms)", source=spec.id)
+    if record is not None and any(str(record.get(k)) != v for k, v in identity.items()):
+        # L'enregistrement d'un AUTRE appelant n'existe pas pour celui-ci :
+        # même réponse qu'une clé absente, rien qui dise qu'elle existe ailleurs.
+        record = None
     ctx.emit("data.lookup", _redact(spec, {
         "source": spec.id, "key": str(key), "found": record is not None,
         "as_of": index.as_of, "content_hash": index.content_hash}))
@@ -271,7 +298,8 @@ async def search_records(*, source: str, filters: dict[str, Any] | None = None,
     registry, spec = _resolve(ctx, source)
     index = _index_of(ctx, spec)
     stale = _check_freshness(registry, spec, index)
-    clean = _validate_filters(spec, filters or {})
+    supplied = {k: v for k, v in (filters or {}).items() if k not in spec.required_filter}
+    clean = _validate_filters(spec, {**supplied, **_identity_filters(ctx, spec)})
 
     max_rows = registry.envelope.max_records_returned
     budget = registry.envelope.read_timeout_ms
@@ -302,7 +330,8 @@ async def count_records(*, source: str, filters: dict[str, Any] | None = None,
     registry, spec = _resolve(ctx, source)
     index = _index_of(ctx, spec)
     stale = _check_freshness(registry, spec, index)
-    clean = _validate_filters(spec, filters or {})
+    supplied = {k: v for k, v in (filters or {}).items() if k not in spec.required_filter}
+    clean = _validate_filters(spec, {**supplied, **_identity_filters(ctx, spec)})
 
     total = sum(1 for _ in _scan(ctx, spec, index, clean,
                                  registry.envelope.read_timeout_ms, limit=None))

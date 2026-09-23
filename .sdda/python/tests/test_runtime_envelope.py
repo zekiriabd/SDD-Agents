@@ -113,16 +113,42 @@ def test_every_operation_returns_as_of(runtime) -> None:
         assert result.stale is False
 
 
-def test_a_stale_source_raises_rather_than_warns(runtime) -> None:
-    """Répondre sur des données périmées sans le signaler est une régression silencieuse."""
+def test_a_stale_source_is_served_flagged_never_silently(runtime) -> None:
+    """Périmée : la donnée est servie AVEC `stale: true` et sa date — jamais sans le dire.
+
+    Le contrat d'outil dit « répondre en signalant la date de la donnée ». Lever
+    privait l'agent de la donnée ET de sa date : il ne pouvait plus rien dire d'exact.
+    """
     old = time.time() - 72 * 3600
     os.utime(runtime.project / TRACKING, (old, old))
+    result = runtime.run(runtime.envelope.lookup_record(source="order_tracking", key="ORD-000101", ctx=runtime.ctx()))
+    assert result.stale is True and result.as_of and result.record["order_id"] == "ORD-000101"
 
-    env, ctx = runtime.envelope, runtime.ctx()
-    with pytest.raises(runtime.errors.SourceStale) as excinfo:
-        runtime.run(env.lookup_record(source="order_tracking", key="ORD-000101", ctx=ctx))
-    assert excinfo.value.code == "SOURCE_STALE"
-    assert excinfo.value.age_hours > 24
+
+def _require_customer(runtime) -> None:
+    import json as _json
+    reg = runtime.data / "sources.json"
+    payload = _json.loads(reg.read_text(encoding="utf-8"))
+    for src in payload["sources"]:
+        if src["id"] == "order_tracking":
+            src["required_filter"] = ["customer_id"]
+    reg.write_text(_json.dumps(payload), encoding="utf-8")
+    runtime.registry.load_registry.cache_clear()
+
+
+def test_the_caller_identity_is_imposed_by_the_runtime_never_by_the_model(runtime) -> None:
+    """BR-1 : la commande d'un autre client n'existe pas ; sans identité, rien n'est lu."""
+    _require_customer(runtime)
+    env = runtime.envelope
+    with pytest.raises(runtime.errors.InvalidFilter):          # fail-closed : pas d'identité, pas de lecture
+        runtime.run(env.lookup_record(source="order_tracking", key="ORD-000101", ctx=runtime.ctx()))
+    mine = env.Context(base=runtime.project, registry_path=str(runtime.data / "sources.json"), identity={"customer_id": "CUS-1"})
+    other = env.Context(base=runtime.project, registry_path=str(runtime.data / "sources.json"), identity={"customer_id": "CUS-2"})
+    assert runtime.run(env.lookup_record(source="order_tracking", key="ORD-000101", ctx=mine)).record["customer_id"] == "CUS-1"
+    assert runtime.run(env.lookup_record(source="order_tracking", key="ORD-000101", ctx=other)).record is None
+    # search : la valeur fournie par le modèle est REMPLACÉE par l'identité de l'appelant
+    found = runtime.run(env.search_records(source="order_tracking", filters={"customer_id": "CUS-1"}, ctx=other))
+    assert {r["customer_id"] for r in found.records} <= {"CUS-2"}
 
 
 # ---------------------------------------------------------------------------
