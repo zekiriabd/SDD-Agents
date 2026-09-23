@@ -639,7 +639,7 @@ CostTrackingEnabled: true
 ## Active Eval Stack
  - .sdda/stacks/eval/pytest-eval.md
 # Les minima sont ceux du framework ; la vérité terrain de départ est
-# workspace/feats/briefs/1-SupportDesk.scenarios.jsonl (51 scénarios annotés),
+# workspace/proof/seed/1-SupportDesk.scenarios.jsonl (51 scénarios annotés),
 # que qa-evals étend par paraphrase pour atteindre golden 50 / holdout 30
 # DISJOINTS, puis 25 items adversariaux (dont les 2 injections indirectes du jeu).
 GoldenSetMinItems: 50
