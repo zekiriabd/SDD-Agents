@@ -483,7 +483,7 @@ dev-backend:
   # métier calculables, packaging. Son contexte stable est la fiche de langage,
   # la fiche d'architecture, la fiche backend si backend-api, et les catalogues
   # de versions — le pack les tranche. L'IR et STACK.md sont lus en entier.
-  budget_bytes: 220000      # 170000 refusait le premier run réel : pack de fiches 76 Ko + IR + STACK.md 35 Ko + MISSION
+  budget_bytes: 260000      # 170000 refusait le premier run réel : pack de fiches 76 Ko + IR ~100 Ko + STACK.md 35 Ko + MISSION 14 Ko + règles 22 Ko
   reads:
     - workspace/.sys/.context/packs/dev-backend.md   # stable — LE PACK
     - workspace/stack/STACK.md                       # semi
