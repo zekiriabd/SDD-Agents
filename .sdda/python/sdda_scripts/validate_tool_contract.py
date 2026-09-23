@@ -120,8 +120,17 @@ def check_schemas(tool: dict[str, Any], validator: SchemaValidator, report: Repo
                             "le modèle remplit ces champs d'après leur description ; sans elle, il remplit au jugé", loc)
 
 
-def check_contract_tests(root: Path, tool: dict[str, Any], ir: dict[str, Any], report: Report, loc: str) -> str:
-    """La suite L2 est-elle déclarée, présente, et rattachée à une suite de l'IR ?"""
+def check_contract_tests(root: Path, tool: dict[str, Any], ir: dict[str, Any], report: Report, loc: str,
+                         *, static: bool = False) -> str:
+    """La suite L2 est-elle déclarée, présente, et rattachée à une suite de l'IR ?
+
+    En mode `static` (PHASE 2, juste après les architectes), la suite est
+    exigée DÉCLARÉE mais pas PRÉSENTE : `workspace/proof/suites/**` appartient
+    à `qa-evals` et `qa-tests`, qui n'écrivent qu'en PHASE 6. Exiger le fichier
+    ici rendait le post-step de `/sdda-topology` rouge sur tout contrat
+    correct — 21 fois sur 21 au premier run réel — et apprenait au lecteur que
+    ce rouge-là n'est pas grave.
+    """
     tid = str(tool.get("id"))
     ref = str(tool.get("contractTestsRef") or "")
     if not ref:
@@ -129,6 +138,8 @@ def check_contract_tests(root: Path, tool: dict[str, Any], ir: dict[str, Any], r
                      "écrire `## 8. Tests de contrat (L2)` dans le contrat : happy path, chaque erreur déclarée, timeout, auth KO", loc)
         return ""
     if not (root / ref).is_file():
+        if static:
+            return ref     # attendue en PHASE 6 ; G3 (sur l'IR, sans --static) l'exigera
         report.error("TOOL_CONTRACT_FAILED", f"outil `{tid}` : suite `{ref}` déclarée mais absente du disque",
                      "produire la suite de contrat, ou corriger la référence du contrat", ref)
         return ref
@@ -249,6 +260,7 @@ def validate_tools(
     report: Report,
     only: set[str] | None = None,
     require_code: bool = False,
+    static: bool = False,
 ) -> list[ToolCheck]:
     validator = SchemaValidator(json.loads(markdown_io.read_text(meta_schema_path(root))))
     checks: list[ToolCheck] = []
@@ -262,7 +274,7 @@ def validate_tools(
         before = len(report.findings)
 
         check_schemas(tool, validator, report, loc)
-        tests_ref = check_contract_tests(root, tool, ir, report, loc)
+        tests_ref = check_contract_tests(root, tool, ir, report, loc, static=static)
         check_safety(tool, report, loc)
         code_files = check_code(root, tool, report, loc, require_code=require_code)
 
@@ -293,9 +305,10 @@ def run(
     only: set[str] | None = None,
     require_code: bool = False,
     write_report: bool = True,
+    static: bool = False,
 ) -> dict[str, Any]:
     mid = str(ir.get("missionId") or "")
-    checks = validate_tools(root, ir, report=report, only=only, require_code=require_code)
+    checks = validate_tools(root, ir, report=report, only=only, require_code=require_code, static=static)
     envelopes = check_envelopes(root, ir, report, mid or str(root))
 
     if not (ir.get("tools") or []):
@@ -426,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         # un rapport écrit depuis des contrats non compilés ferait croire la
         # gate franchie avant que le graphe n'ait été vérifié.
         payload = run(root, ir or {}, report=report, only=_split(args.tool),
-                      require_code=False, write_report=False)
+                      require_code=False, write_report=False, static=True)
         report.data["payload"] = payload
         if not args.json:
             for line in report.data.get("lines", []):
