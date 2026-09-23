@@ -33,7 +33,7 @@ from sdda_scripts import gen_source_tools as gst
 
 APP = "SupportAssistant"
 MANIFEST = "workspace/stack/STACK.md"          # la déclaration des sources est inline (v3)
-TRACKING = "workspace/data/exports/tracking/2026-09-20.jsonl"
+TRACKING = "workspace/assets/exports/tracking/2026-09-20.jsonl"
 
 
 class Runtime:
@@ -41,7 +41,7 @@ class Runtime:
 
     def __init__(self, project: Path):
         self.project = project
-        self.src = project / "workspace/src" / APP / "src"
+        self.src = project / "workspace/src"   # layout plat : `workspace/src/{App}` est le paquet
         self.data = self.src / APP / "data"
         sys.path.insert(0, str(self.src))
         for name in [m for m in sys.modules if m.startswith(APP)]:
@@ -293,7 +293,7 @@ def test_a_glob_escaping_the_root_is_refused(runtime) -> None:
 @pytest.mark.skipif(sys.platform == "win32", reason="les liens exigent des privilèges sous Windows")
 def test_a_symlink_in_the_root_is_refused(runtime) -> None:
     """Une racine montée en lecture seule reste contournable par un lien."""
-    link = runtime.project / "workspace/data/exports/tracking/lien.jsonl"
+    link = runtime.project / "workspace/assets/exports/tracking/lien.jsonl"
     link.symlink_to(runtime.project / "workspace/stack/STACK.md")
     fresh = Runtime(runtime.project)
     try:

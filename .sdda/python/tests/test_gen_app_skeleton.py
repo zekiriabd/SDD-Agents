@@ -28,7 +28,7 @@ from sdda_scripts import gen_app_skeleton as gas
 from sdda_scripts import gen_source_tools as gst
 
 APP = "SupportAssistant"
-SRC = f"workspace/src/{APP}/src/{APP}"
+SRC = f"workspace/src/{APP}"   # layout plat : le projet EST le paquet
 
 
 def classes(report: Report) -> set[str]:

@@ -48,7 +48,7 @@ class Runtime:
 
     def __init__(self, project: Path):
         self.project = project
-        self.src = project / "workspace/src" / APP / "src"
+        self.src = project / "workspace/src"   # layout plat : `workspace/src/{App}` est le paquet
         self.package = self.src / APP
         self._purge()
         sys.path.insert(0, str(self.src))

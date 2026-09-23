@@ -372,7 +372,7 @@ Toute autre clé → `[DATA_SOURCE_UNKNOWN_KEY]` au preflight.
 
 ```bash
 uv run python -m sdda_scripts.gen_source_tools --infer --source order_tracking
-#   -> workspace/src/{AppName}/src/{AppName}/data/schemas/order_tracking.schema.json   (à relire, puis commité)
+#   -> workspace/src/{AppName}/data/schemas/order_tracking.schema.json   (à relire, puis commité)
 #      Dans le PAQUET, à côté des wrappers : c'est là que `schema_guard` le lit au démarrage.
 #      Un schéma resté dans la zone des specs ne part pas avec le code — même raison que les prompts.
 
@@ -546,7 +546,7 @@ workspace/stack/
 └── mcp.json                       # optionnel — config MCP standard, importée (SourceManifests)
 workspace/src/{AppName}/.env       # gitignoré — les VALEURS des secrets, avec l'application qui les consomme
 
-workspace/src/{AppName}/src/{AppName}/data/
+workspace/src/{AppName}/data/
 ├── schemas/                       # les schémas FIGÉS, un par source (gen_source_tools --infer, relus, commités)
 ├── registry.py         # StoreConfig / SourceConfig (pydantic, frozen) <- sources.json résolu depuis STACK.md
 ├── stores/

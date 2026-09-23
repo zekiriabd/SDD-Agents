@@ -417,7 +417,7 @@ SourceSecretsFile: .env
 Stores:
 #  - id: exports_local
 #    kind: local                      # local|smb|nfs|s3|azure-blob|gcs|http|sftp|mcp
-#    root: workspace/data/exports
+#    root: workspace/assets/exports
 #    auth: { mode: none }
 #  - id: ops_share
 #    kind: smb

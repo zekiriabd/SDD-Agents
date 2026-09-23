@@ -154,7 +154,7 @@ alertes qui crient pour rien finissent coupées.
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/serving/
+workspace/src/{AppName}/serving/
 ├── run_service.py        # PARTAGÉ avec la CLI — inchangé
 ├── events.py             # RunEvent — inchangé
 ├── exit_codes.py         # [CLASS] -> code — inchangé, source de status.py

@@ -82,16 +82,16 @@ Aucun (`rag/none`).
 
 | Borne | Valeur | Comportement à l'atteinte |
 |---|---:|---|
-| `max_iterations` | 6 | fail-explicit |
-| `max_tool_calls` | 8 | fail-explicit |
+| `max_iterations` | 2 | fail-explicit |
+| `max_tool_calls` | 4 | fail-explicit |
 | `max_delegation_depth` | 1 | fail-explicit |
 | `timeout_s` | 60 | fail-explicit |
 | `budget_usd` | 0.12 | fail-explicit avec état partiel |
 
-> Hérités de `STACK.md`. `budget_usd` : routeur $0.01 + spécialiste $0.12 =
-> $0.13 ≤ plafond MISSION $0.15. Nominal estimé $0.0215 (2 tours). Levier de
-> latence signalé (`1-topology.md §5`) : `max_iterations = 2` — non appliqué,
-> décision de l'architecte.
+> `max_iterations` et `max_tool_calls` resserrés (STACK.md : 6 / 8) par décision
+> de l'architecte sur G2.budget : un tour d'outils en parallèle + une relance,
+> puis la réponse. `budget_usd` : routeur $0.01 + spécialiste $0.12 = $0.13 ≤
+> plafond MISSION $0.15. Nominal estimé $0.0215 (2 tours).
 
 ## 10. Posture de confiance
 

@@ -36,7 +36,12 @@ from sdda_lib import __version__ as _LIB_VERSION
 #:       `{n}-roster.md`, graphe inline), la vérité terrain sous `proof/seed/`.
 #:       Les schémas figés partent avec le code (`src/{App}/.../data/schemas/`),
 #:       les manifestes de sources rentrent dans STACK.md.
-WORKSPACE_VERSION: int = 3
+#:   4 — layout PLAT de l'application, comme SDD_Pro : `workspace/src/{App}/` EST
+#:       le paquet (`agents/`, `tools/`, `data/`, `orchestration/`, `serving/`,
+#:       `app/` à un seul niveau, `pyproject.toml` et `.env` à sa racine). Le
+#:       « src layout » `{App}/src/{App}/` doublait le nom du projet et cachait
+#:       l'application deux répertoires plus bas.
+WORKSPACE_VERSION: int = 4
 
 WORKSPACE_JSON_REL = "workspace/.sys/workspace.json"
 

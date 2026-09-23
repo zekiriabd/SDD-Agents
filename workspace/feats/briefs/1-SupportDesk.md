@@ -22,7 +22,7 @@ consultent cinq écrans différents (commandes, suivi transporteur, facturation,
 paiements, réclamations).
 
 Le système d'information est simulé par sept fichiers JSON dans
-`workspace/data/` (synthétiques, générés par `_generate.py`) : 6 clients,
+`workspace/assets/` (synthétiques, générés par `_generate.py`) : 6 clients,
 20 commandes (300 à 319), 15 expéditions, 19 factures, 20 paiements,
 4 remboursements, 6 réclamations. Il n'existe **aucune** base de données et
 aucun corpus documentaire.
@@ -75,7 +75,7 @@ intervention manuelle sur le code.
 - Source: `workspace/proof/seed/1-SupportDesk.scenarios.jsonl` — 51 scénarios
   annotés (client, question, intention attendue, comportement attendu, outils
   attendus, faits à citer, règles métier couvertes), générés avec les données
-  par `workspace/data/_generate.py` et relus par le Product Owner. Chaque
+  par `workspace/assets/_generate.py` et relus par le Product Owner. Chaque
   scénario est vérifiable à la main contre les JSON.
 - Owner: le Product Owner (Abdelali Zekiri) arbitre tout désaccord sur ce
   qu'est une bonne réponse ; en cas de conflit entre un scénario et une règle

@@ -136,7 +136,7 @@ renvoie une instruction »** (TESTING-AND-EVAL §4, ligne « Injection via outil
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/tools/mcp/
+workspace/src/{AppName}/tools/mcp/
 ├── __init__.py
 ├── config.py            # McpServerConfig (pydantic, frozen) lu depuis Settings ← STACK.md MCPServers[] ; auth = SecretStr
 ├── client.py            # connect(server) -> ClientSession : stdio_client | streamablehttp_client | sse_client ; env allowlist ; headers

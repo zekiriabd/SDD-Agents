@@ -6,7 +6,7 @@
   "buildSystem": "dotnet",
   "manifest": {
     "files": [
-      "workspace/src/{AppName}/src/{AppName}.Serving.Http/{AppName}.Serving.Http.csproj"
+      "workspace/src/{AppName}.Serving.Http/{AppName}.Serving.Http.csproj"
     ]
   },
   "metadata": {

@@ -200,7 +200,7 @@ n'importe **jamais** `opentelemetry` directement : uniquement `tracing.spans`.
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/tracing/
+workspace/src/{AppName}/tracing/
 ├── __init__.py
 ├── semconv.py            # TOUTES les constantes d'attributs (gen_ai.* via opentelemetry.semconv._incubating, sdda.* locales) + SCHEMA_URL + SEMCONV_VERSION
 ├── setup.py              # configure_tracing(settings, run_id) -> TracerProvider : Resource, sampler, BatchSpanProcessor(OTLP) + SimpleSpanProcessor(Jsonl), RedactionProcessor, MeterProvider ; shutdown()

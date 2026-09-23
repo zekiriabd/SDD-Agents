@@ -76,7 +76,7 @@ documents (→ `rag/*.md`).
 ### 3.1 Une vue, commentée comme du prompt
 
 ```sql
--- workspace/src/{AppName}/src/{AppName}/data/views/v_billing_specialist__unpaid_invoices.sql
+-- workspace/src/{AppName}/data/views/v_billing_specialist__unpaid_invoices.sql
 CREATE OR REPLACE VIEW agent_views.v_billing_specialist__unpaid_invoices
 WITH (security_barrier = true) AS
 SELECT i.invoice_id,

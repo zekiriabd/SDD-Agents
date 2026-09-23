@@ -79,7 +79,7 @@ python .sdda/sdda.py human-tasks [--mission {n}] --json     # ce qui attend un h
 
 | État dérivé de la MISSION `{n}` | Recommandation |
 |---|---|
-| `Draft`, G0 🔴 | `/sdda-mission {n}` (lire `{n}-G0-mission.json` : classes `[MISSION_*]`) |
+| `Draft`, G0 🔴 | `/sdda-mission {n}` (lire `G0-{n}-{Name}.json` : classes `[MISSION_*]`) |
 | G0 ✅, 0 CAP ou G1 🔴 | `/sdda-caps {n}` (lire `{n}-G1-cap.json` : `[AC_NOT_EVALUABLE]` = l'AC ne nomme pas métrique/seuil/dataset) |
 | G1 ✅, roster absent ou `[ARCH_ROSTER_*]` | `/sdda-roster {n}` puis remplir `workspace/feats/topology/{n}-roster.md` — chaque `<à préciser>` est une décision de l'architecte, pas du framework |
 | G1 ✅, G2 absente ou 🔴 | `/sdda-topology {n}` — `[TOPOLOGY_UNJUSTIFIED]` : nommer une des 5 raisons de P7 ou supprimer l'agent ; `[UNBOUNDED_LOOP]` : borner le cycle |

@@ -142,25 +142,35 @@ flowchart TD
 | nominal suivi / retard (2 outils, 2 tours) | 3 | 7 040 | $0.023 | 6.1 s |
 | nominal facturation (3 outils, 2 tours) | 3 | 7 580 | $0.025 | 6.3 s |
 | nominal réclamation / remboursement (4 outils, 2 tours) | 3 | 9 600 | $0.033 | 8.8 s |
-| pire cas borné (historique 12 tours, `claims-agent` jusqu'au `TokenCeilingPerRun`) | 6 | 30 000 | $0.100 | 12.7 s → fail-explicit |
-| pire cas sans plafond de tokens (MaxIterations = 6, MaxToolCalls = 8 atteints) | 7 | 37 400 | $0.119 | 18.4 s |
+| pire cas (historique 12 tours, `claims-agent` à `max_iterations` = 2, `max_tool_calls` = 4) | 3 | 11 520 | $0.036 | 9.6 s |
+
+Bornes des spécialistes resserrées par décision de l'architecte sur G2.budget :
+`max_iterations` 6 → 2, `max_tool_calls` 8 → 4 (routeur inchangé : 1 / 0).
+
+**Fait** (`estimate-budget` sur l'IR compilé, qui fait foi) : nominal
+**$0.016 / 10 155 ms**, pire cas **$0.030 / 19 055 ms** sur
+`entry → support-router → billing-agent` (54 700 ms avant resserrement).
+L'écart avec l'estimation manuelle (9.6 s) vient du modèle de latence du
+script, que je n'ai pas lu. Hypothèse, non vérifiée : il compte la latence des
+outils en série et à leur délai maximal (`SourceReadTimeoutMs` = 3 000 ms).
 
 - Budget MISSION : cible **$0.03** / plafond dur **$0.15** / p95 **6 000 ms** / **30 000 tokens**
-- Verdict coût : 🟢 pire cas $0.119 < plafond $0.15 ; 🟡 nominal réclamation
-  $0.033 > cible $0.03 (AC-6 porte sur le p50 du mélange : tenu si suivi et
-  facturation dominent, non garanti).
-- Verdict tokens : 🟡 le pire cas à bornes d'agent (37 400) dépasse
-  `TokenCeilingPerRun` (30 000) : c'est ce plafond qui coupe le run, en
-  `fail-explicit`, vers le 6e appel. Les bornes par agent seules ne suffisent pas.
-- Verdict latence : 🔴 **à l'estimation, les chemins routés sont au-dessus du
-  p95 cible** (6.1 / 6.3 / 8.8 s pour 6 s), pire cas 12.7 s. La latence est
-  dominée par la génération `balanced` (2 tours dont un de ~220–400 tokens de
-  sortie). Borne qui ramène le **pire cas** au voisinage du nominal :
-  `max_iterations = 2` pour les spécialistes (1 tour d'outils en parallèle + 1
-  tour de réponse). Leviers pour le **nominal**, à l'architecte : plafond de
-  tokens de sortie par tour, tier `fast` pour `order-tracking-agent` /
-  `billing-agent` (roster), ou renégocier la cible p95 dans la MISSION. Aucun
-  n'est appliqué ici.
+- Verdict coût : 🟢 pire cas $0.030 (script) / $0.036 (manuel) < plafond $0.15.
+  🟡 nominal réclamation $0.033 > cible $0.03 (manuel ; le script donne $0.016
+  en nominal).
+- Verdict tokens : 🟢 pire cas 11 520 < 30 000 ; le plafond de tokens n'est plus
+  la borne active.
+- Verdict latence : 🔴 **toujours au-dessus de la cible, y compris en nominal**
+  (script : 10.2 s nominal, 19.1 s pire cas ; manuel : 6.1 à 9.6 s). **Aucune
+  borne d'agent ne ramène le run sous 6 s** : à `max_iterations = 2`, un
+  spécialiste fait déjà le minimum (un tour de lecture, un tour de réponse), et
+  `max_iterations = 1` l'empêcherait de lire avant de répondre. Leviers
+  restants, à l'architecte : (a) si l'hypothèse ci-dessus est juste,
+  `SourceReadTimeoutMs` (3 000 ms pour des fichiers locaux de quelques Ko) et/ou
+  `max_tool_calls` compté par tour d'appels parallèles ; (b) plafond de tokens
+  de sortie par tour ; (c) tier `fast` pour `order-tracking-agent` /
+  `billing-agent` (roster) ; (d) renégocier `LatencyP95TargetMs` dans la
+  MISSION. Aucun n'est appliqué ici.
 
 ---
 
@@ -267,12 +277,13 @@ FIX: retirer orders_search du roster, ou ajouter à 1-2 l'AC qui l'exige
 
 ```
 WARN: agent architect-topology — budget de latence dépassé à l'estimation
-CAUSE: [BUDGET_EXCEEDED_ESTIMATE] p95 cible 6 000 ms ; estimé 6.1 s (suivi),
-       6.3 s (facturation), 8.8 s (réclamation), pire cas 12.7 s ; coût tenu
-       ($0.119 < $0.15)
-FIX: l'architecte choisit : max_iterations = 2 pour les spécialistes, plafond
-     de tokens de sortie, tier fast sur suivi/facturation, ou cible p95
-     renégociée dans la MISSION ; confirmer par estimate-budget puis mesure G6
+CAUSE: [BUDGET_EXCEEDED_ESTIMATE] p95 cible 6 000 ms ; après resserrement des
+       spécialistes (max_iterations 2, max_tool_calls 4), estimate-budget donne
+       nominal 10 155 ms et pire cas 19 055 ms (était 54 700 ms) ; coût tenu
+       ($0.030 < $0.15)
+FIX: aucune borne d'agent ne suffit : l'architecte choisit entre
+     SourceReadTimeoutMs / comptage des outils parallèles, plafond de tokens de
+     sortie, tier fast sur suivi/facturation, ou cible p95 renégociée dans la MISSION
 ```
 
 ```

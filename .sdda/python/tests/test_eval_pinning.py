@@ -32,7 +32,6 @@ def compiled(project: Path) -> tuple[Path, dict]:
 def test_identical_tuples_are_not_stale() -> None:
     pins = PinTuple(promptHash="sha256:aaa", modelId="m", datasetHash="sha256:bbb")
     assert pins.diff(pins) == {}
-    assert not pins.is_stale_against(pins)
 
 
 def test_a_moved_dimension_is_named_not_just_flagged() -> None:

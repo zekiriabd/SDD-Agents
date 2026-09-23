@@ -580,7 +580,7 @@ def v3_inline_graphs(ctx: Context) -> None:
 
 
 def v3_schemas_to_src(ctx: Context) -> None:
-    """Les schémas figés partent avec le code : `src/{App}/src/{App}/data/schemas/`."""
+    """Les schémas figés partent avec le code : `src/{App}/data/schemas/`."""
     old = "feats/contracts/dataaccess/schemas"
     src = ctx.workspace / old
     if not src.is_dir() or not [e for e in src.iterdir() if e.name != ".gitkeep"]:
@@ -709,6 +709,69 @@ def migrate_to_v3(ctx: Context) -> None:
         ctx.rmdir_if_empty(rel, "WORKSPACE_GHOST_DIR_NOT_EMPTY")
 
 
+def v4_flatten_app(ctx: Context) -> None:
+    """`src/{App}/*` remonte dans `src/{App}/` ; la coquille `src/{App}/src/` disparaît.
+
+    Layout plat, celui de SDD_Pro : le répertoire de l'application EST le
+    paquet. Les fichiers de projet déjà à la racine (`pyproject.toml`, `.env`,
+    `README.md`) ne bougent pas ; `app_config.json` est réécrit pour que
+    `workspaceRoot` pointe deux niveaux plus haut au lieu de quatre ; un
+    `pyproject.toml` d'ancien layout (`packages = ["src/{App}"]`) est signalé
+    — il se régénère (`gen-app-skeleton --write`), il ne se corrige pas à la main.
+    """
+    app = str(read_project_section(ctx.root).get("AppName") or "").strip()
+    if not app:
+        return
+    old_rel = f"src/{app}/src/{app}"
+    old = ctx.workspace / old_rel
+    if not old.is_dir():
+        return
+
+    def lift(rel_dir: str) -> None:
+        # Fusion RÉPERTOIRE par répertoire, fichier par fichier : un `data/` déjà
+        # présent à destination (les schémas de la v3) n'empêche pas les outils
+        # de l'ancien `data/` de le rejoindre. Seule une collision de FICHIER
+        # laisse l'original en place (`move_file`) — deux versions d'un même
+        # fichier, la migration ne tranche pas.
+        for entry in sorted((ctx.workspace / old_rel / rel_dir).iterdir()) if rel_dir else sorted(old.iterdir()):
+            if entry.name == ".gitkeep":
+                continue
+            sub = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
+            dst = ctx.workspace / "src" / app / sub
+            if entry.is_dir():
+                if dst.is_dir():
+                    lift(sub)
+                    ctx.rmdir_if_empty(f"{old_rel}/{sub}", "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+                else:
+                    ctx.move(f"{old_rel}/{sub}", f"src/{app}/{sub}")
+            else:
+                ctx.move_file(f"{old_rel}/{sub}", f"src/{app}/{sub}")
+
+    lift("")
+    ctx.rmdir_if_empty(old_rel, "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+    ctx.rmdir_if_empty(f"src/{app}/src", "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+
+    cfg = ctx.workspace / "src" / app / "app_config.json"
+    if cfg.is_file():
+        text = cfg.read_text(encoding="utf-8")
+        if '"workspaceRoot": "../../../.."' in text:
+            ctx.write_text(f"src/{app}/app_config.json", text.replace('"workspaceRoot": "../../../.."', '"workspaceRoot": "../.."'),
+                           "workspaceRoot : ../.. (layout plat)")
+    pyproject = ctx.workspace / "src" / app / "pyproject.toml"
+    if pyproject.is_file() and f'packages = ["src/{app}"]' in pyproject.read_text(encoding="utf-8"):
+        ctx.report.warn("WORKSPACE_MIGRATION_COLLISION",
+                        f"`workspace/src/{app}/pyproject.toml` déclare encore le src layout",
+                        "python .sdda/sdda.py gen-app-skeleton --write — le fichier est généré, il se régénère",
+                        f"workspace/src/{app}/pyproject.toml")
+
+
+def migrate_to_v4(ctx: Context) -> None:
+    """v3 -> v4 : layout plat de l'application (`workspace/src/{App}/` est le paquet)."""
+    v4_flatten_app(ctx)
+    for rel in WORKSPACE_TREE:
+        ctx.mkdir(rel)
+
+
 @dataclass(frozen=True)
 class Migration:
     target: int                       # version atteinte quand `apply` a réussi
@@ -724,6 +787,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(2, "quatre entrées : feats/ (spec) · stack/ · src/ (prompts compris) · proof/ (jamais un dev-*) · .sys/", migrate_to_v2),
     Migration(3, "STACK.md versionné (valeurs dans .env) · feats/ en Markdown seul (roster {n}-roster.md, graphe inline) · "
                  "schémas figés sous src/ · sources inline · vérité terrain proof/seed/", migrate_to_v3),
+    Migration(4, "layout plat de l'application : workspace/src/{App}/ EST le paquet (comme SDD_Pro) — "
+                 "plus de src/{App}/", migrate_to_v4),
 )
 
 

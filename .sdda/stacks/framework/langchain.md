@@ -238,7 +238,7 @@ par l'appelant.
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/
+workspace/src/{AppName}/
 ├── models.py                    # resolve(tier) -> BaseChatModel via init_chat_model
 ├── tools/
 │   ├── spec.py                  # ToolSpec.from_contract(id), ToolDeclaredError

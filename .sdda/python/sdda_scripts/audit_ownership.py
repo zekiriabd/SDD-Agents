@@ -327,12 +327,6 @@ def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -
 # 3. Une lecture donnée est-elle autorisée ?
 # ---------------------------------------------------------------------------
 #: Ce qu'un outil de lecture rend, et donc ce qu'un interdit doit couvrir.
-#: `Read` rend le CONTENU d'un fichier ; `Grep` rend le contenu de tout ce qui
-#: est sous sa racine ; `Glob` ne rend que des NOMS — un nom n'est pas une
-#: information interdite, un contenu si.
-READ_TOOL_SCOPE = {"Read": "file", "Grep": "content", "Glob": "names"}
-
-
 def _zone_root(pattern: str) -> str:
     """Le préfixe littéral d'un motif : `workspace/src/**` -> `workspace/src`."""
     out: list[str] = []

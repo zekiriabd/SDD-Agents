@@ -104,7 +104,7 @@ Identique à `cli.md` §3.4, avec ces correspondances :
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}.Serving.Cli/
+workspace/src/{AppName}.Serving.Cli/
 ├── Program.cs              # RootCommand + sous-commandes ; aucun métier
 ├── RunService.cs           # .RunAsync(input, ctx) / .ResumeAsync(threadId, decision, ctx)
 │                           #   -> IAsyncEnumerable<RunEvent> — PARTAGÉ avec Serving.Http

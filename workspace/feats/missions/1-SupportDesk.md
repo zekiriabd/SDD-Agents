@@ -9,7 +9,7 @@ Une boutique en ligne traite ses demandes de support après-vente (suivi,
 retard, facturation, réclamation, remboursement) via des conseillers qui
 consultent cinq écrans (commandes, suivi transporteur, facturation,
 paiements, réclamations). Le système d'information est simulé par sept
-fichiers JSON dans `workspace/data/` (6 clients, 20 commandes, 15 expéditions,
+fichiers JSON dans `workspace/assets/` (6 clients, 20 commandes, 15 expéditions,
 19 factures, 20 paiements, 4 remboursements, 6 réclamations) ; il n'existe
 aucune base de données ni aucun corpus documentaire. Il manque un assistant
 qui réponde à ces demandes depuis ces données, avec des faits cités et
@@ -38,8 +38,13 @@ par un conseiller.
 ## Execution Budget
 - CostPerRunTargetUsd: 0.03
 - CostPerRunHardCapUsd: 0.15
-- LatencyP95TargetMs: 6000
+- LatencyP95TargetMs: 12000
 - TokenCeilingPerRun: 30000
+- Révision 2026-09-23 (G2) : la cible p95 passe de 6 000 à 12 000 ms. L'estimation
+  sur l'IR donne ~10 s pour le chemin nominal (une classification `fast` + un
+  spécialiste `balanced` en deux tours, lectures de fichiers comprises) même aux
+  bornes minimales (2 itérations, 4 appels d'outils) ; 6 s n'était atteignable
+  par aucune borne. Le coût, lui, tient (pire cas 0,03 $).
 - Justification: un échange = une classification en tier `fast` (quelques
   centaines de tokens) + un spécialiste en tier `balanced` avec 1 à 4
   lectures de fichiers JSON (< 2 Ko chacune). Un conseiller humain coûte
@@ -51,7 +56,7 @@ par un conseiller.
 - Source: `workspace/proof/seed/1-SupportDesk.scenarios.jsonl` — 51
   scénarios annotés (client, question, intention attendue, comportement
   attendu, outils attendus, faits à citer, règles métier couvertes),
-  générés avec les données par `workspace/data/_generate.py` et relus par
+  générés avec les données par `workspace/assets/_generate.py` et relus par
   le Product Owner. Chaque scénario est vérifiable à la main contre les
   JSON.
 - Owner: le Product Owner (Abdelali Zekiri) arbitre tout désaccord sur ce
@@ -184,7 +189,7 @@ par un conseiller.
   comportement `answer`, la sortie contient un `claim_request` valide au
   schéma, avec `eligibility` et la règle BR citée ; 100 %.
 - AC-6: Coût mesuré p50 <= 0,03 $ et max <= 0,15 $ par exécution ; latence
-  p95 <= 6 s ; hops = 2 sur 100 % des trajectoires routées.
+  p95 <= 12 s (révisé le 2026-09-23, cf. ## Execution Budget) ; hops = 2 sur 100 % des trajectoires routées.
 - AC-7: Objectif chiffré : taux de réponses correctes >= 0,90 sur le
   holdout (## Quantified Goal), non-régression vs baseline dans la
   tolérance de 3 %.

@@ -21,7 +21,7 @@ STACK = "workspace/stack/STACK.md"
 #: qui subsiste est un `mcp.json` au format standard, à côté de STACK.md.
 MANIFEST = STACK
 MCP_CONFIG = "workspace/stack/mcp.json"
-SCHEMAS = "workspace/src/SupportAssistant/src/SupportAssistant/data/schemas"
+SCHEMAS = "workspace/src/SupportAssistant/data/schemas"
 
 
 @pytest.fixture
@@ -223,8 +223,8 @@ def test_unknown_source_key_is_refused(sources_project: Path) -> None:
 
 
 def test_unknown_store_key_is_refused(sources_project: Path) -> None:
-    patch(sources_project, MANIFEST, "    root: workspace/data/exports",
-          "    root: workspace/data/exports\n    bucket: acme")
+    patch(sources_project, MANIFEST, "    root: workspace/assets/exports",
+          "    root: workspace/assets/exports\n    bucket: acme")
     assert "DATA_STORE_UNKNOWN_KEY" in errors(sources_project)
 
 
@@ -283,13 +283,13 @@ def test_glob_matching_nothing(sources_project: Path) -> None:
 
 
 def test_store_root_unreachable(sources_project: Path) -> None:
-    patch(sources_project, MANIFEST, "    root: workspace/data/exports", "    root: workspace/data/absent")
+    patch(sources_project, MANIFEST, "    root: workspace/assets/exports", "    root: workspace/assets/absent")
     assert "DATA_STORE_UNREACHABLE" in errors(sources_project)
 
 
 def test_store_probe_can_be_downgraded_on_ci(sources_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SDDA_SKIP_STORE_PROBE", "1")
-    patch(sources_project, MANIFEST, "    root: workspace/data/exports", "    root: workspace/data/absent")
+    patch(sources_project, MANIFEST, "    root: workspace/assets/exports", "    root: workspace/assets/absent")
     report = vda.run(sources_project)
     assert "DATA_STORE_UNREACHABLE" not in {f.cls for f in report.errors}
     assert "DATA_STORE_UNREACHABLE" in {f.cls for f in report.warnings}

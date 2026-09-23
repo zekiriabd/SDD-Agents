@@ -50,7 +50,7 @@ hors du chemin que les evals parcourent.
 ## 3. Mapping couche → répertoire
 
 Sur `archi/mvc.md` §3, surchargé pour l'écosystème (racine
-`workspace/src/{AppName}/src/{AppName}/`) :
+`workspace/src/{AppName}/`) :
 
 | Couche | Emplacement |
 |---|---|

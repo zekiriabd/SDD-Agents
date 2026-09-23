@@ -177,7 +177,7 @@ class Settings:
         """L'environnement du processus, complété par le `.env` du LIVRABLE — jamais écrasé par lui.
 
         Le fichier vit à la racine de l'application, `workspace/src/{App}/.env`
-        (deux niveaux au-dessus du paquet), gitignoré : c'est l'application qui
+        (le répertoire même de ce module, layout plat), gitignoré : c'est l'application qui
         consomme la clé, et c'est de là qu'elle part en exécutable ou en
         conteneur. Le harnais de construction ne le lit jamais.
 
@@ -188,8 +188,8 @@ class Settings:
         environnement ne voit jamais les vraies clés du poste.
         """
         merged: dict[str, str] = dict(os.environ)
-        env_file = config_path.resolve().parents[2] / ".env" if len(config_path.resolve().parents) > 2 else None
-        if env_file is None or not env_file.is_file():
+        env_file = config_path.resolve().parent / ".env"
+        if not env_file.is_file():
             return merged
         try:
             lines = env_file.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -240,9 +240,9 @@ class Settings:
         declared = str(raw.get("workspaceRoot") or "").strip()
         if declared:
             return (path.parent / declared).resolve()
-        # workspace/src/{AppName}/src/{AppName}/config.py -> parents[4] == workspace/
+        # Layout plat : workspace/src/{AppName}/config.py -> parents[2] == workspace/
         parents = path.resolve().parents
-        return parents[4] if len(parents) > 4 else path.resolve().parent
+        return parents[2] if len(parents) > 2 else path.resolve().parent
 
     # -- Accès --------------------------------------------------------------
     def secret(self, name: str, *, required: bool = True) -> Secret:

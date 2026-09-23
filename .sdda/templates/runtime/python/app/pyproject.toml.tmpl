@@ -23,8 +23,15 @@ dependencies = []
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Layout PLAT (convention SDD_Pro) : ce répertoire EST le paquet `{AppName}`.
+# Dans la roue, la racine du projet est réécrite en `{AppName}/` ; ce qui n'est
+# pas du code livrable (tests, secrets, méta du projet) n'y entre pas.
 [tool.hatch.build.targets.wheel]
-packages = ["src/{AppName}"]
+only-include = ["."]
+exclude = ["tests", ".env", ".env.example", "README.md", "pyproject.toml", "uv.lock", "__pycache__"]
+
+[tool.hatch.build.targets.wheel.sources]
+"" = "{AppName}"
 
 [tool.ruff]
 line-length = 110

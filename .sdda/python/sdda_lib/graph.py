@@ -130,9 +130,6 @@ class Graph:
     def has_self_loop(self, n: str) -> bool:
         return n in self.adj.get(n, [])
 
-    def has_cycle(self) -> bool:
-        return any(len(c) > 1 or self.has_self_loop(c[0]) for c in self.strongly_connected_components())
-
     # -- cycles élémentaires -----------------------------------------------
     def elementary_cycles(self, max_cycles: int = 500) -> list[list[str]]:
         """Cycles élémentaires, chacun rendu comme liste de nœuds (fermé implicitement).

@@ -7,7 +7,7 @@
   "manifest": {
     "files": [
       "workspace/src/{AppName}/Directory.Packages.props",
-      "workspace/src/{AppName}/src/{AppName}/{AppName}.csproj",
+      "workspace/src/{AppName}/{AppName}.csproj",
       "workspace/src/{AppName}/{AppName}.slnx"
     ]
   },
@@ -32,43 +32,43 @@
       "module": "Microsoft.Agents.AI",
       "ref": "Microsoft.Agents.AI",
       "rationale": "AIAgent, AgentThread, exécution d'un tour. C'est le seul endroit du code généré où le framework apparaît nommément (orchestration/) — partout ailleurs il est interdit, et validate_ir le vérifie.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI --version 1.22.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Agents.AI --version 1.22.0"
     },
     {
       "module": "Microsoft.Agents.AI.Abstractions",
       "ref": "Microsoft.Agents.AI.Abstractions",
       "rationale": "Contrats sans implémentation. Les projets qui définissent des types partagés y référencent ceci, pas le paquet complet : une couche métier qui référence l'implémentation ne peut plus être testée sans elle.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI.Abstractions --version 1.22.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Agents.AI.Abstractions --version 1.22.0"
     },
     {
       "module": "Microsoft.Extensions.AI",
       "ref": "Microsoft.Extensions.AI",
       "rationale": "IChatClient, AIFunction, sorties structurées. C'est l'abstraction provider-agnostique : le code manipule un IChatClient résolu par tier, jamais un client OpenAI ou Anthropic nommé (équivalent de models.resolve(tier) côté Python).",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Extensions.AI --version 10.10.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Extensions.AI --version 10.10.0"
     },
     {
       "module": "Microsoft.Extensions.Hosting",
       "ref": "Microsoft.Extensions.Hosting",
       "rationale": "IHostBuilder, IOptions, IConfiguration : l'équivalent de Settings/pydantic-settings. Les secrets passent par IConfiguration, jamais par Environment.GetEnvironmentVariable — cf. [SEC_ENV_VAR_FORBIDDEN].",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Extensions.Hosting --version 10.0.12"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Extensions.Hosting --version 10.0.12"
     },
     {
       "module": "Microsoft.Extensions.Http.Resilience",
       "ref": "Microsoft.Extensions.Http.Resilience",
       "rationale": "Timeout, retry et circuit breaker déclarés sur le HttpClient (équivalent de tenacity). À n'activer QUE sur les outils dont retry_policy != none : un retry sur un outil non idempotent crée trois tickets.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Extensions.Http.Resilience --version 10.10.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Extensions.Http.Resilience --version 10.10.0"
     },
     {
       "module": "OpenTelemetry.Extensions.Hosting",
       "ref": "OpenTelemetry.Extensions.Hosting",
       "rationale": "Câblage OTel dans l'hôte. Sans trace, un système non déterministe n'est pas débogable — invariant trace-emitted-per-run.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package OpenTelemetry.Extensions.Hosting --version 1.19.1"
+      "installCommand": "dotnet add workspace/src/{AppName} package OpenTelemetry.Extensions.Hosting --version 1.19.1"
     },
     {
       "module": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
       "ref": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
       "rationale": "Export OTLP des spans GenAI (cf. observability/otel-genai.md). Le collecteur est une exigence runtime, pas une dépendance : voir runtimeRequirements.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package OpenTelemetry.Exporter.OpenTelemetryProtocol --version 1.19.1"
+      "installCommand": "dotnet add workspace/src/{AppName} package OpenTelemetry.Exporter.OpenTelemetryProtocol --version 1.19.1"
     }
   ],
   "dev": [
@@ -95,7 +95,7 @@
         "RuntimeProvider:\\s*(openai|azure-openai)",
         "gpt-"
       ],
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI.OpenAI --version 1.22.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Agents.AI.OpenAI --version 1.22.0"
     },
     {
       "module": "Anthropic.SDK",
@@ -107,7 +107,7 @@
         "claude-"
       ],
       "note": "Il n'existe PAS de Microsoft.Agents.AI.Anthropic : le provider passe par l'implémentation IChatClient de ce paquet communautaire. C'est le point de couplage le plus fragile de cette stack — à réévaluer dès qu'un paquet officiel existe.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Anthropic.SDK --version 5.10.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Anthropic.SDK --version 5.10.0"
     },
     {
       "module": "ModelContextProtocol",
@@ -118,7 +118,7 @@
         "MCPServers:\\s*\\n\\s*-",
         "stacks/tools/mcp\\.md"
       ],
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package ModelContextProtocol --version 2.2.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package ModelContextProtocol --version 2.2.0"
     },
     {
       "module": "Microsoft.Agents.AI.Workflows",
@@ -130,7 +130,7 @@
         "stacks/orchestration/(router|sequential)\\.md"
       ],
       "note": "Équivalent .NET du rôle de LangGraph : à n'activer que si la TOPOLOGY exige un cycle, une reprise ou un escalate-human. Un agent unique n'en a pas besoin, et l'ajouter par défaut introduit un graphe que personne n'a décidé.",
-      "installCommand": "dotnet add workspace/src/{AppName}/src/{AppName} package Microsoft.Agents.AI.Workflows --version 1.22.0"
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Agents.AI.Workflows --version 1.22.0"
     }
   ],
   "absentByDesign": [

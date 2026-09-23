@@ -60,8 +60,6 @@ BANNER = "GÉNÉRÉ par gen_source_tools.py — NE PAS ÉDITER."
 #: sans lui, « combien de commandes en exception ? » se répond en tronquant
 #: 1 800 enregistrements à 200 et en laissant le modèle compter. Il comptera
 #: faux, avec aplomb, et la réponse aura l'air d'un fait.
-TOOL_KINDS = ("lookup", "search", "count")
-
 #: JSON Schema -> annotation Python du modèle généré.
 PY_TYPES = {
     "string": "str", "integer": "int", "number": "float", "boolean": "bool",

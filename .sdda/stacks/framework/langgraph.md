@@ -299,7 +299,7 @@ async def confirm_refund_node(state: OrchestrationState) -> dict[str, object]:
 ## 4. Structure de fichiers générée
 
 ```
-workspace/src/{AppName}/src/{AppName}/
+workspace/src/{AppName}/
 ├── orchestration/
 │   ├── __init__.py
 │   ├── state.py            # OrchestrationState + initial_state()

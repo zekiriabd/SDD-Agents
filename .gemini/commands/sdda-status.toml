@@ -133,7 +133,7 @@ MISSION 1-SupportAssistant                                        Evaluated  �
   traces      workspace/.sys/traces/runs/ — 187 runs · dernier 2026-09-19T14:02Z
   bypasses    G5 jaune assumé (--force, 2026-09-19, jdoe, « variance connue, dataset v2 en cours »)
   dernier run 2026-09-19T14:02Z /sdda-build · build_agents items 3/4 pass (routing 🔴)
-  rapports    .sys/.validation/1-G0..G7-*.json · evals/reports/1-{run}.md
+  rapports    .sys/.validation/1-G0..G7-*.json · .sys/reports/{n}-{run-id}.json
 
   Tâches humaines : 1 (0 bloquante)
      [labels  ] Labelliser 12 item(s) pour le juge `groundedness`

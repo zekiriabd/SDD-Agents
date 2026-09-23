@@ -45,6 +45,7 @@ from sdda_lib import hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import append_bypass_audit, write_gate_report  # noqa: E402
 from sdda_lib.jsonschema_mini import SchemaValidator  # noqa: E402
+from sdda_lib.layered_config import read_project_section  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
 
@@ -191,17 +192,23 @@ def check_code(root: Path, tool: dict[str, Any], report: Report, loc: str, *, re
     """
     tid, name = str(tool.get("id")), str(tool.get("name") or "")
     declared = str(tool.get("sideEffectClass") or "")
-    directory = paths.workspace(root) / "src" / "tools"
+    # Le code des outils vit dans le paquet de l'application (`workspace/src/{App}/tools/`
+    # et `data/tools/` pour les outils générés depuis les sources), pas dans un
+    # `workspace/src/tools/` à plat qu'aucun générateur n'a jamais écrit.
+    app = str(read_project_section(root).get("AppName") or "").strip()
+    directory = paths.app_src_root(root, app) if app else paths.workspace(root) / "src"
     if not directory.is_dir():
         if require_code:
-            report.error("TOOL_CONTRACT_INCONSISTENT", f"outil `{tid}` : aucun code sous workspace/src/tools/",
+            report.error("TOOL_CONTRACT_INCONSISTENT", f"outil `{tid}` : aucun code sous {paths.rel(root, directory)}/",
                          "générer le socle (/sdda-build {n} --layer socle) avant de rejouer G3 en --require-code", loc)
         return []
 
-    files = [p for p in sorted(directory.rglob("*.py")) if name and name in markdown_io.read_text(p)]
+    files = [p for p in sorted(directory.rglob("*.py"))
+             if name and "tools" in p.relative_to(directory).parts and "tests" not in p.parts
+             and name in markdown_io.read_text(p)]
     if not files:
         if require_code:
-            report.error("TOOL_CONTRACT_INCONSISTENT", f"outil `{tid}` : aucun fichier de `workspace/src/tools/` ne mentionne `{name}`",
+            report.error("TOOL_CONTRACT_INCONSISTENT", f"outil `{tid}` : aucun fichier d'outil sous `{paths.rel(root, directory)}/` ne mentionne `{name}`",
                          "l'outil du contrat n'a pas d'implémentation : générer le socle, ou retirer le contrat", loc)
         return []
 

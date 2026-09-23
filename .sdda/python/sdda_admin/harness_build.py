@@ -196,8 +196,9 @@ class Adapter:
 
     # -- mémoire -----------------------------------------------------------
     def emit_memory_file(self, plan: BuildPlan, out: Path) -> None:
-        body = (SDDA / "entrypoint-body.md")
-        source = body if body.is_file() else (SDDA / "ARCHITECTURE.md")
+        # Le fichier mémoire de chaque harnais EST l'architecture : une seule
+        # source, pas de « corps d'entrée » optionnel qu'aucun dépôt n'a jamais eu.
+        source = SDDA / "ARCHITECTURE.md"
         text = rewrite_refs(strip_sync_markers(source.read_text(encoding="utf-8")), self.harness)
         plan.add(
             out / self.harness.memory_file,
