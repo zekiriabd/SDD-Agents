@@ -222,11 +222,43 @@ def expand(root: Path, pattern: str, *, mission: str | None, target: str | None,
         else:
             candidate = base / resolved
             found = [candidate] if candidate.is_file() else []
+        wired = _wired_tool_ids(root, mission) if "contracts/tools/" in resolved else None
+        # Artefacts d'outillage (caches de typage, de lint, d'environnement,
+        # lockfiles) : jamais du contexte. Un `src/**` les comptait — 5 Mo de
+        # `.mypy_cache` pour qa-tests au premier projet réel.
+        found = [p for p in found if not (_NOISE_DIRS & set(p.parts)) and p.name not in _NOISE_FILES
+                 and p.suffix not in _NOISE_SUFFIXES]
         for path in found:
+            if wired is not None and path.name.endswith(".tool.md") and path.name[: -len(".tool.md")] not in wired:
+                # Un contrat d'outil qu'aucun agent ne câble n'est pas du contexte :
+                # les sources déclarées en génèrent trois par source, le roster en
+                # câble une fraction. Les charger tous faisait déborder le budget
+                # de chaque agent de construction (21 contrats pour 7 outils).
+                continue
             if path not in seen:
                 seen.add(path)
                 files.append(path)
     return files, widened
+
+
+_NOISE_DIRS = frozenset({".mypy_cache", ".ruff_cache", ".pytest_cache", "__pycache__", ".venv", "venv",
+                         "node_modules", "build", "dist", ".git"})
+_NOISE_FILES = frozenset({"uv.lock", "poetry.lock", "package-lock.json", "pnpm-lock.yaml", ".env"})
+_NOISE_SUFFIXES = frozenset({".pyc", ".db", ".sqlite", ".whl", ".so", ".dll", ".exe"})
+
+
+def _wired_tool_ids(root: Path, mission: str | None) -> set[str] | None:
+    """Les outils que l'IR compilé porte (donc câblés) ; None sans IR — alors tout compte."""
+    if not mission:
+        return None
+    ir_file = paths.ir_path(root, mission)
+    if not ir_file.is_file():
+        return None
+    try:
+        ir = json.loads(ir_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return {str(t.get("id")) for t in ir.get("tools") or [] if isinstance(t, dict)}
 
 
 def layer_of(entry: Any, pattern: str) -> str:
