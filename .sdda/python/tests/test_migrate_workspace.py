@@ -387,18 +387,31 @@ def test_v3_secret_values_leave_stack_md_for_env(v2_with_content: Path) -> None:
     report = _migrate(root)
     stack = (root / "workspace/stack/STACK.md").read_text(encoding="utf-8")
     assert " - LLM_API_KEY: ${LLM_API_KEY}" in stack and SECRET_VALUE not in stack
-    env = (root / ".env").read_text(encoding="utf-8")
+    # Le `.env` vit AVEC l'application (`workspace/src/{App}/.env`), jamais à la racine du dépôt.
+    env = (root / "workspace/src/Projet/.env").read_text(encoding="utf-8")
     assert f"LLM_API_KEY={SECRET_VALUE}" in env
+    assert not (root / ".env").exists()
     # La valeur ne sort JAMAIS dans le journal : seulement le nom.
     assert SECRET_VALUE not in json.dumps(report)
     assert any("LLM_API_KEY" in a.get("detail", "") for a in report["data"]["actions"])
+
+
+def test_v3_root_env_moves_next_to_the_app(v2_with_content: Path) -> None:
+    """Un `.env` laissé à la racine par la première v3 rejoint l'application — déplacé, pas copié."""
+    root = v2_with_content
+    (root / ".env").write_text("OTHER_TOKEN=abc\n", encoding="utf-8")
+    report = _migrate(root)
+    env = (root / "workspace/src/Projet/.env").read_text(encoding="utf-8")
+    assert "OTHER_TOKEN=abc" in env and f"LLM_API_KEY={SECRET_VALUE}" in env
+    assert not (root / ".env").exists()
+    assert "abc" not in json.dumps(report) and SECRET_VALUE not in json.dumps(report)
 
 
 def test_v3_gitignore_versions_stack_md_and_ignores_env(v2_with_content: Path) -> None:
     root = v2_with_content
     _migrate(root)
     lines = {l.strip() for l in (root / ".gitignore").read_text(encoding="utf-8").splitlines()}
-    assert "workspace/stack/STACK.md" not in lines and ".env" in lines
+    assert "workspace/stack/STACK.md" not in lines and "workspace/src/*/.env" in lines
 
 
 def test_v3_roster_becomes_markdown_in_feats(v2_with_content: Path) -> None:

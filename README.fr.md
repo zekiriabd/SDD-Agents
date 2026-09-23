@@ -76,7 +76,7 @@ supprime sans perte.
 
 ```
 workspace/
-├── stack/     ce qu'on CONFIGURE — STACK.md, seul, versionné (noms de variables ; valeurs dans .env)
+├── stack/     ce qu'on CONFIGURE — STACK.md, seul, versionné (noms de variables ; valeurs dans src/{App}/.env)
 ├── feats/     ce qu'on SPÉCIFIE  — Markdown seul : briefs · missions · caps · roster + topology · contracts · decisions (ADR)
 ├── src/       ce qu'on PRODUIT   — l'application générée, prompts et schémas figés compris
 ├── proof/     ce qui JUGE        — seed (votre vérité terrain) · datasets · suites · baselines · calibration
@@ -85,7 +85,8 @@ workspace/
 
 Vous écrivez trois choses : `stack/STACK.md` (les choix techniques — langage,
 framework, pattern, sources de données, URL d'API, serveurs MCP ; les valeurs des
-secrets vont dans un `.env` gitignoré), des fichiers Markdown sous `feats/` (ce
+secrets vont dans un `src/{App}/.env` gitignoré, avec l'application qui les
+consomme — le harnais de construction ne le lit jamais), des fichiers Markdown sous `feats/` (ce
 que le système doit faire), et votre vérité terrain sous `proof/seed/`. Tout le
 reste est produit. **Aucun agent `dev-*` n'écrit jamais sous
 `proof/`** : l'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni
@@ -243,7 +244,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1118<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->1122<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification

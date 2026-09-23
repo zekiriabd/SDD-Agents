@@ -32,7 +32,7 @@ ne peut plus rien conclure.
 | Chemin | Owner exclusif | Mode | Phase |
 |---|---|---|---|
 | `workspace/stack/STACK.md` | **humain (Tech Lead)** | édition manuelle — aucun agent n'écrit ; versionné, noms de variables seulement | — |
-| `.env` | **humain** | les valeurs des secrets — gitignoré, lu par aucun agent | — |
+| `workspace/src/{App}/.env` | **humain** | les valeurs des secrets du RUNTIME — gitignoré, avec l'application qui les consomme ; lu par aucun agent, le harnais de construction compris | — |
 | `workspace/feats/briefs/*.md` | **humain** | ce qu'il dépose : specs, matière d'une MISSION | — |
 | `workspace/feats/topology/{n}-roster.md` | **humain (architecte)** | la décision d'architecture (P7) — `architect-topology` la lit, ne l'écrit jamais | — |
 | `workspace/proof/seed/**` | **humain** | la vérité terrain — `qa-evals` la lit et en dérive `datasets/`, jamais l'inverse | — |

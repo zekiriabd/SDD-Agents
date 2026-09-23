@@ -109,8 +109,9 @@ Un secret ne doit apparaître dans **aucun** de ces endroits :
 - un message d'erreur retourné au modèle ;
 - la description ou le schéma d'un outil.
 
-`.env` porte les valeurs, il est gitignoré ; `STACK.md` (versionné) et les
-contrats ne portent que des **noms de variables d'environnement**. Scan
+`workspace/src/{App}/.env` porte les valeurs, il est gitignoré et vit avec
+l'application qui les consomme ; `STACK.md` (versionné) et les contrats ne
+portent que des **noms de variables d'environnement**. Scan
 déterministe en G7, et `[STACK_SECRET_IN_CLEAR]` au smoke si une valeur entre
 dans STACK.md.
 Violation → `[SECRET_LEAK]`, bloquant.

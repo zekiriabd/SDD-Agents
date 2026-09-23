@@ -99,20 +99,38 @@ def test_inline_secret_in_store_is_refused(sources_project: Path) -> None:
     assert "DATA_SECRET_INLINE" in errors(sources_project)
 
 
+#: Le `.env` vit AVEC l'application (`workspace/src/{App}/.env`), pas à la racine
+#: du dépôt : c'est elle qui consomme les valeurs, et c'est de là qu'elle part.
+ENV_FILE = "workspace/src/SupportAssistant/.env"
+
+
 def test_secret_variable_absent_from_env_file(sources_project: Path) -> None:
-    patch(sources_project, ".env", "CRM_API_KEY=\n", "")
+    patch(sources_project, ENV_FILE, "CRM_API_KEY=\n", "")
     found = errors(sources_project)
     assert "DATA_SECRET_VAR_UNDECLARED" in found
 
 
 def test_env_file_missing(sources_project: Path) -> None:
-    (sources_project / ".env").unlink()
+    (sources_project / ENV_FILE).unlink()
+    assert "DATA_SECRET_FILE_MISSING" in errors(sources_project)
+
+
+def test_env_file_at_repo_root_is_not_the_app_env(sources_project: Path) -> None:
+    """Un `.env` à la racine du dépôt n'est pas celui de l'application : hors du livrable, il ne compte pas."""
+    (sources_project / ENV_FILE).rename(sources_project / ".env")
     assert "DATA_SECRET_FILE_MISSING" in errors(sources_project)
 
 
 def test_env_file_not_gitignored(sources_project: Path) -> None:
-    patch(sources_project, ".gitignore", ".env\n", "")
+    patch(sources_project, ".gitignore", "workspace/src/*/.env\n", "")
     assert "DATA_SECRET_FILE_UNIGNORED" in errors(sources_project)
+
+
+@pytest.mark.parametrize("pattern", ["workspace/src/*/.env", "workspace/**/.env", ".env", ENV_FILE, "/" + ENV_FILE])
+def test_env_file_gitignore_patterns_accepted(sources_project: Path, pattern: str) -> None:
+    """Les formes qu'un projet écrit vraiment — glob par application, glob profond, nom seul, chemin exact."""
+    (sources_project / ".gitignore").write_text(pattern + "\n", encoding="utf-8")
+    assert "DATA_SECRET_FILE_UNIGNORED" not in errors(sources_project)
 
 
 def test_literal_secret_in_imported_mcp_config(sources_project: Path) -> None:

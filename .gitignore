@@ -1,11 +1,15 @@
 # SDD_Agents — secrets et artefacts générés
 # STACK.md est VERSIONNÉ (il ne porte que des noms de variables) ; les valeurs
-# vivent dans .env. src/ est le livrable : il se versionne comme tout code.
+# vivent dans workspace/src/{App}/.env, avec l'application qui les consomme
+# (convention SDD_Pro). src/ est le livrable : il se versionne comme tout code,
+# son .env excepté.
 workspace/traces/
 workspace/.sys/
 workspace/evals/reports/
-/.env
+workspace/src/*/.env
+# Défense en profondeur : un .env égaré ailleurs ne part pas non plus.
 workspace/**/.env
+/.env
 __pycache__/
 *.pyc
 .pytest_cache/

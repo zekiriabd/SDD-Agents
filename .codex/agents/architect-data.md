@@ -59,7 +59,7 @@ Read **uniquement** :
 - `workspace/stack/mcp.json` s'il est déclaré par `SourceManifests[]`
   (`kind: mcp-config`) — la seule forme de manifeste qui subsiste : une
   configuration MCP standard importée telle quelle.
-  **Tu ne lis jamais `SourceSecretsFile`** (`.env`) : tu n'as besoin que des
+  **Tu ne lis jamais `SourceSecretsFile`** (`workspace/src/{App}/.env`) : tu n'as besoin que des
   noms de variables, et ils sont dans les stores.
 - `.sdda/templates/tool-contract.template.md`, `.sdda/templates/adr.template.md`.
 
@@ -99,7 +99,7 @@ chaque entrée respecte la séparation qui le rend sûr.
    caractères écrite **comme un prompt** (quand / quand pas / ce qui est
    retourné / unités / fuseau / ce que signifie `as_of`).
 3. **Les secrets sont des noms.** Toute clé d'authentification finit par `_env`
-   et porte le nom d'une variable du fichier `.env` gitignoré. Une valeur en
+   et porte le nom d'une variable du `.env` de l'application (`workspace/src/{App}/.env`, gitignoré). Une valeur en
    clair dans STACK.md ou dans un manifeste est `[DATA_SECRET_INLINE]`,
    bloquant ; une variable citée mais absente du fichier est
    `[DATA_SECRET_VAR_UNDECLARED]`.
@@ -118,7 +118,7 @@ chaque entrée respecte la séparation qui le rend sûr.
 ```
 ERROR: agent architect-data — secret en clair dans la déclaration
 CAUSE: [DATA_SECRET_INLINE] le store `crm_api` porte `auth.key: sk-live-…` au lieu d'un nom de variable
-FIX: écrire `key_env: CRM_API_KEY`, mettre la valeur dans le fichier .env gitignoré, et faire tourner la clé exposée
+FIX: écrire `key_env: CRM_API_KEY`, mettre la valeur dans workspace/src/{App}/.env (gitignoré), et faire tourner la clé exposée
 ```
 
 Ce que tu **n'écris pas** dans une source : une URL, un chemin absolu, un nom

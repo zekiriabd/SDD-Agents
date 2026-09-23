@@ -1,2 +1,1 @@
-.env
-workspace/stack/STACK.md
+workspace/src/*/.env

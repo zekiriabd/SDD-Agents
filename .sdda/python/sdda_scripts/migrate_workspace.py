@@ -128,12 +128,12 @@ class Context:
             shutil.move(str(src), str(dst))
         return True
 
-    def remove_file(self, rel: str, detail: str = "") -> bool:
-        """Supprime `workspace/{rel}` — uniquement après que son contenu a été reporté ailleurs."""
-        target = self.workspace / rel
+    def remove_file(self, rel: str, detail: str = "", *, at_root: bool = False) -> bool:
+        """Supprime `workspace/{rel}` (ou `{root}/{rel}`) — uniquement après que son contenu a été reporté ailleurs."""
+        target = (self.root if at_root else self.workspace) / rel
         if not target.is_file():
             return False
-        self._log("remove", rel, detail)
+        self._log("remove", rel, detail, at_root=at_root)
         self.emptied.add(rel)          # sinon `--dry-run` accuse le répertoire parent d'être encore plein
         if not self.dry_run:
             target.unlink()
@@ -400,18 +400,32 @@ def _env_names(path: Path) -> set[str]:
     return names
 
 
+def _app_env_rel(ctx: Context) -> str:
+    """`workspace/src/{App}/.env` — le `.env` vit avec le livrable, jamais à la racine du dépôt.
+
+    L'application générée consomme la clé et part de `workspace/src/{App}/` en
+    exécutable ou en conteneur ; un `.env` à la racine restait hors du paquet.
+    Sans `AppName`, on retombe sur `App`, comme `gen_app_skeleton`.
+    """
+    app = str(read_project_section(ctx.root).get("AppName") or "App").strip() or "App"
+    return paths.env_rel(app)
+
+
 def v3_secrets_to_env(ctx: Context) -> None:
-    """Les VALEURS de `## Active Secrets` et des `DB_*` sortent vers `.env` ; STACK.md garde `${NOM}`.
+    """Les VALEURS de `## Active Secrets` et des `DB_*` sortent vers `src/{App}/.env` ; STACK.md garde `${NOM}`.
 
     STACK.md devient versionnable à cet instant précis : c'est la seule étape de
     la v3 qui touche à un secret, et elle ne le journalise jamais — le détail de
-    l'action ne porte que des NOMS.
+    l'action ne porte que des NOMS. Un `.env` laissé à la racine du dépôt par
+    une v3 antérieure est d'abord rapatrié avec l'application.
     """
     stack = ctx.workspace / STACK_REL
     if not stack.is_file():
         return
     text = markdown_io.read_text(stack)
-    env_path = ctx.root / ".env"
+    env_rel = _app_env_rel(ctx)
+    env_path = ctx.root / env_rel
+    _v3_env_to_app(ctx, env_rel)
     known = _env_names(env_path)
     moved: list[tuple[str, str]] = []
     for title in ("Active Secrets", "Active Data Access"):
@@ -432,23 +446,53 @@ def v3_secrets_to_env(ctx: Context) -> None:
         return
     existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
     chunk = "".join(f"{n}={v}\n" for n, v in moved)
-    header = "" if existing else "# SDD_Agents — valeurs des secrets. Gitignoré. STACK.md n'en porte que les noms (${NOM}).\n"
+    header = "" if existing else ("# SDD_Agents — valeurs des secrets de L'APPLICATION. Gitignoré. "
+                                  "STACK.md n'en porte que les noms (${NOM}).\n")
     sep = "" if not existing or existing.endswith("\n") else "\n"
-    ctx.write_text(".env", existing + sep + header + "# extrait de workspace/stack/STACK.md par migrate-workspace (v3)\n" + chunk,
+    ctx.write_text(env_rel, existing + sep + header + "# extrait de workspace/stack/STACK.md par migrate-workspace (v3)\n" + chunk,
                    f"{len(moved)} variable(s) : {', '.join(n for n, _ in moved)}", at_root=True)
     ctx.write_text(STACK_REL, text, "valeurs remplacées par ${NOM} : " + ", ".join(n for n, _ in moved))
 
 
+def _v3_env_to_app(ctx: Context, env_rel: str) -> None:
+    """Un `.env` à la racine du dépôt (première v3) rejoint `workspace/src/{App}/.env`.
+
+    Déplacé, pas copié : deux fichiers de secrets, c'est un qu'on oublie de
+    faire tourner. Si la cible existe déjà, les lignes de la racine dont le NOM
+    n'y est pas encore sont ajoutées, et la racine est supprimée. Aucune valeur
+    n'est journalisée.
+    """
+    src = ctx.root / ".env"
+    if not src.is_file():
+        return
+    dst = ctx.root / env_rel
+    src_text = src.read_text(encoding="utf-8")
+    if dst.is_file():
+        known = _env_names(dst)
+        extra = [l for l in src_text.split("\n")
+                 if "=" in l and not l.lstrip().startswith("#") and l.split("=", 1)[0].strip() not in known]
+        if extra:
+            base = dst.read_text(encoding="utf-8")
+            sep = "" if not base or base.endswith("\n") else "\n"
+            ctx.write_text(env_rel, base + sep + "\n".join(extra) + "\n",
+                           f"{len(extra)} variable(s) rapatriée(s) depuis .env (racine)", at_root=True)
+    else:
+        ctx.write_text(env_rel, src_text, "rapatrié depuis .env (racine) — le .env vit avec l'application", at_root=True)
+    ctx.remove_file(".env", "remplacé par " + env_rel, at_root=True)
+
+
 def v3_gitignore(ctx: Context) -> None:
-    """STACK.md sort du .gitignore (il ne porte plus de valeur) ; `.env` y entre."""
+    """STACK.md sort du .gitignore (il ne porte plus de valeur) ; `workspace/src/*/.env` y entre."""
     gi = ctx.root / ".gitignore"
     lines = gi.read_text(encoding="utf-8").split("\n") if gi.is_file() else []
     kept = [l for l in lines if l.strip() not in ("workspace/stack/STACK.md", "workspace/stack/STACK.md*")]
     changed = len(kept) != len(lines)
-    if ".env" not in {l.strip() for l in kept} and "/.env" not in {l.strip() for l in kept}:
+    present = {l.strip() for l in kept}
+    if not present & {"workspace/src/*/.env", "workspace/**/.env", ".env"}:
         if kept and kept[-1].strip():
             kept.append("")
-        kept += ["# SDD_Agents — les valeurs des secrets ; STACK.md (versionné) n'en porte que les noms", ".env"]
+        kept += ["# SDD_Agents — les valeurs des secrets vivent avec l'application ; STACK.md (versionné) n'en porte que les noms",
+                 "workspace/src/*/.env"]
         changed = True
     if changed:
         ctx.write_text(".gitignore", "\n".join(kept).rstrip("\n") + "\n",
