@@ -197,8 +197,21 @@ def parse_nested_list(body: str) -> list[dict]:
             else:
                 blocks.append({"key": item.strip(), "value": "", "fields": {}})
         elif blocks and kv:
-            blocks[-1]["fields"][kv.group(1).strip().lower()] = kv.group(2).strip()
+            blocks[-1]["fields"][kv.group(1).strip().lower()] = _unquote(kv.group(2).strip())
     return blocks
+
+
+def _unquote(value: str) -> str:
+    """`">= 0.85"` -> `>= 0.85`. Des guillemets APPARIÉS autour d'une valeur ne sont pas la valeur.
+
+    Un agent qui a l'habitude du YAML met un seuil qui commence par `>` entre
+    guillemets — en YAML, c'est même obligatoire. Refuser 22 AC pour ce seul
+    motif, c'est renvoyer une découpe entière pour une différence que le
+    lecteur humain ne voit pas. Les guillemets non appariés restent tels quels.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1].strip()
+    return value
 
 
 # --------------------------------------------------------------------------

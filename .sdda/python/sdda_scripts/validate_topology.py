@@ -135,7 +135,7 @@ def parse_topology(text: str, path: Path | None = None) -> TopologySpec:
         graph_meta=meta, mermaid_text=mm[0] if mm else "",
         handoffs=markdown_io.parse_table(sec("Handoffs") or ""),
         contracts=markdown_io.parse_table(sec("Contrats produits") or ""),
-        alternative_body=alt, hash=hashing.sha256_text(text), path=path, text=text,
+        alternative_body=alt, hash=hashing.sha256_spec_text(text), path=path, text=text,
     )
     agents, tools, retrievers = [], [], []
     for row in allocation:
