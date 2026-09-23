@@ -31,11 +31,15 @@ ne peut plus rien conclure.
 
 | Chemin | Owner exclusif | Mode | Phase |
 |---|---|---|---|
-| `workspace/stack/STACK.md` | **humain (Tech Lead)** | édition manuelle — aucun agent n'écrit | — |
+| `workspace/stack/STACK.md` | **humain (Tech Lead)** | édition manuelle — aucun agent n'écrit ; versionné, noms de variables seulement | — |
+| `.env` | **humain** | les valeurs des secrets — gitignoré, lu par aucun agent | — |
+| `workspace/feats/briefs/*.md` | **humain** | ce qu'il dépose : specs, matière d'une MISSION | — |
+| `workspace/feats/topology/{n}-roster.md` | **humain (architecte)** | la décision d'architecture (P7) — `architect-topology` la lit, ne l'écrit jamais | — |
+| `workspace/proof/seed/**` | **humain** | la vérité terrain — `qa-evals` la lit et en dérive `datasets/`, jamais l'inverse | — |
 | `workspace/feats/missions/{n}-*.md` | `po-elicitor` | Create puis append-only | 0 |
 | `workspace/feats/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) | 1 |
 | `workspace/feats/caps/**` champ `Allocated To` | `architect-topology` | **Edit narrow** (ce champ seul) | 2 |
-| `workspace/feats/topology/{n}-*.{md,mmd}` | `architect-topology` | Create exclusif | 2 |
+| `workspace/feats/topology/{n}-topology.md` | `architect-topology` | Create exclusif — graphe Mermaid inclus (§4) ; **pas** `{n}-roster.md`, même répertoire, autre owner | 2 |
 | `workspace/feats/contracts/agents/*` | `architect-topology` (squelette) → `dev-prompt` (§Prompt: ref + hash) | Sérialisé par section | 2, 4 |
 | `workspace/feats/contracts/tools/{n}-*.tool.md` | `architect-tools` | Create exclusif | 2 |
 | `workspace/feats/contracts/tools/{n}-data-*.tool.md` | `architect-data` | Create exclusif — **préfixe `data-` réservé**, namespace disjoint | 2 |
@@ -49,6 +53,8 @@ ne peut plus rien conclure.
 | `workspace/src/**/agents/{agent}/**` | `dev-agent` (1 instance par agent) | Edit-augment exclusif, répertoires disjoints | 4 |
 | `workspace/src/**/orchestration/**` | `dev-orchestration` | Create + Edit exclusif | 5 |
 | `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif | 5 |
+| `workspace/src/{App}/*` (fichiers de projet, README, Dockerfile, .env.example) | `dev-backend` | Create + Edit — la coquille ; les fichiers générés par script se régénèrent, ne s'éditent pas | 3, 5 |
+| `workspace/src/**/app/**` (composition, config, Domaine) | `dev-backend` | Create + Edit exclusif — **rien du moteur** : aucun droit sur agents/, tools/, orchestration/, retrieval/, data/, serving/ | 3, 5 |
 | `workspace/src/tests/**` (transverses) | `qa-tests` | Create/Edit exclusif — **jamais le code de production** | 6 |
 | `workspace/src/**/{couche}/tests/**` | le `dev-*` de la couche | Create/Edit — ses propres tests de contrat | 3-5 |
 | `workspace/proof/datasets/**` | `qa-evals` | Create exclusif | 6 |

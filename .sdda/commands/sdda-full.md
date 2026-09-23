@@ -13,8 +13,9 @@ PHASE 0    — ELICITATION       (po-elicitor,        via /sdda-mission)   [G0 M
 PHASE 1    — CAPABILITIES      (po-capabilities,    via /sdda-caps)      [G1 CAP]
 PHASE 2    — TOPOLOGIE + IR    (architect-topology + 4 architectes ∥, via /sdda-topology)  [G2 TOPOLOGY]
 PHASE 6a   — DATASETS          (qa-evals,           via /sdda-eval --datasets-only)
-PHASE 3→5  — BUILD             (socle dev-* ∥ → dev-prompt (barrière) → dev-agent ∥ → orchestration,
-                                via /sdda-build)                         [G3 TOOL] [G4 RETRIEVAL] [G5 AGENT] [G6 ORCH]
+PHASE 3→5  — BUILD             (dev-backend squelette → socle dev-* ∥ → dev-prompt (barrière) → dev-agent ∥
+                                → orchestration → dev-api → dev-backend packaging, via /sdda-build)
+                                                                          [G3 TOOL] [G4 RETRIEVAL] [G5 AGENT] [G6 ORCH]
 PHASE 6    — EVAL + TESTS      (qa-evals ∥ qa-tests, via /sdda-eval)
 PHASE 7    — REVUE A→B→C       (6 reviewers,             via /sdda-review)    [G7 SAFETY]
 PHASE 8    — ACCEPTATION       (script, holdout,         via /sdda-eval --acceptance)  [G8 ACCEPTANCE]

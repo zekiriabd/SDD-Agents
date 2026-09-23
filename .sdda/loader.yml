@@ -171,7 +171,7 @@ architect-topology:
     - .sdda/digests/error-classification.architect-topology.md  # stable
     - workspace/.sys/.context/packs/architect-topology.md       # stable — LE PACK
     - workspace/stack/STACK.md                       # semi
-    - workspace/stack/topology/{n}-roster.yml        # semi — LE ROSTER déclaré par l'architecte (P7)
+    - workspace/feats/topology/{n}-roster.md         # semi — LE ROSTER déclaré par l'architecte (P7) ; lu, jamais écrit
     - workspace/feats/missions/{n}-*.md                    # volatile
     - workspace/feats/caps/{n}-*-*.md                      # volatile — toutes les CAPs
   # Sources DONT le pack est construit. Bloc distinct par nécessité : `reads:`
@@ -198,8 +198,9 @@ architect-topology:
     jamais retirée : une décision de packing n'écrase pas une décision d'auteur.
     Pack absent ou périmé -> [PACK_UNUSABLE], ERREUR bloquante.
   writes:
-    - workspace/feats/topology/{n}-topology.md
-    - workspace/feats/topology/{n}-topology.mmd
+    - workspace/feats/topology/{n}-topology.md             # le graphe est dedans (bloc ```mermaid)
+    #   PAS `{n}-roster.md` : même répertoire, autre owner (l'humain). Un agent
+    #   qui pourrait réécrire le roster serait un LLM qui décide l'architecture.
     - workspace/feats/contracts/agents/{n}-*.agent.md      # squelette
     - workspace/feats/caps/{n}-*-*.md                      # Edit narrow : champ `Allocated To`
     - workspace/feats/decisions/ADR-*.md
@@ -270,9 +271,8 @@ architect-data:
     - .sdda/docs/DATA-ACCESS.md                      # stable
     - .sdda/docs/DATA-SOURCES.md                     # stable — sources hors base
     - .sdda/stacks/dataaccess/{dataaccess}.md                   # stable
-    - workspace/stack/STACK.md                       # semi
-    - workspace/stack/sources/*.yml                  # semi — manifestes de sources
-    - workspace/stack/sources/*.json                 # semi
+    - workspace/stack/STACK.md                       # semi — Stores/Sources inline (## Active Data Sources)
+    - workspace/stack/mcp.json                       # semi — optionnel : config MCP standard importée
     - workspace/feats/topology/{n}-topology.md             # volatile
   writes:
     - workspace/feats/contracts/tools/{n}-data-*.tool.md   # préfixe `data-` RÉSERVÉ :
@@ -365,9 +365,8 @@ dev-data:
   budget_bytes: 140000
   reads:
     - workspace/.sys/.context/packs/dev-data.md      # stable
-    - workspace/stack/STACK.md                       # semi
-    - workspace/stack/sources/*.yml                  # semi — manifestes de sources
-    - workspace/stack/sources/*.json                 # semi
+    - workspace/stack/STACK.md                       # semi — Stores/Sources inline (## Active Data Sources)
+    - workspace/stack/mcp.json                       # semi — optionnel : config MCP standard importée
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
@@ -426,7 +425,6 @@ dev-orchestration:
     - workspace/.sys/.context/packs/dev-orchestration.md  # stable
     - workspace/stack/STACK.md                       # semi
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — le graphe ET les bornes
-    - workspace/feats/topology/{n}-topology.mmd            # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -467,6 +465,44 @@ dev-api:
   writes:
     - workspace/src/**/serving/**
 
+dev-backend:
+  model_tier: balanced
+  # La coquille de l'application : projet, composition, configuration, règles
+  # métier calculables, packaging. Son contexte stable est la fiche de langage,
+  # la fiche d'architecture, la fiche backend si backend-api, et les catalogues
+  # de versions — le pack les tranche. L'IR et STACK.md sont lus en entier.
+  budget_bytes: 170000
+  reads:
+    - workspace/.sys/.context/packs/dev-backend.md   # stable — LE PACK
+    - workspace/stack/STACK.md                       # semi
+    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/feats/missions/{n}-*.md                    # semi — Business Rules (le Domaine), Failure Policy
+    - .sdda/stacks/framework/{framework}.libs.json   # stable — les versions, rien d'autre
+  pack_sources:
+    - .sdda/stacks/lang/{lang}.md
+    - .sdda/stacks/archi/{archi}.md
+    - .sdda/stacks/backend/{backend}.md
+  writes:
+    # La coquille, et rien du moteur. `workspace/src/*/*` = les fichiers à la
+    # racine du projet applicatif (pyproject.toml, package.json, Dockerfile,
+    # README.md, .env.example) ; `**/app/**` = composition, config, Domaine.
+    - workspace/src/*/*
+    - workspace/src/*/src/*/*                        # racine du paquet (py.typed, __init__, index)
+    - workspace/src/**/app/**
+  forbidden_writes:
+    - workspace/src/prompts/**        # [PROMPT_OWNERSHIP_VIOLATION]
+    - workspace/proof/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
+    - workspace/proof/baselines/**
+    - workspace/src/**/agents/**      # dev-agent
+    - workspace/src/**/orchestration/**   # dev-orchestration
+    - workspace/src/**/tools/**       # dev-tools
+    - workspace/src/**/retrieval/**   # dev-retrieval
+    - workspace/src/**/data/**        # dev-data
+    - workspace/src/**/serving/**     # dev-api
+  forbidden_reads:
+    - workspace/proof/datasets/**
+    - workspace/src/prompts/**        # il charge un prompt par HASH, il ne le lit pas
+
 # ---------------------------------------------------------------------------
 # Phase 6 — evaluation et tests
 # ---------------------------------------------------------------------------
@@ -477,11 +513,12 @@ qa-evals:
     - .sdda/rules/eval-protocol.md                   # stable — sa règle centrale
     - .sdda/templates/eval-suite.template.md         # stable
     - .sdda/templates/golden-set.schema.json         # stable
-    - workspace/feats/missions/{n}-*.md                    # semi — la ground truth
+    - workspace/feats/missions/{n}-*.md                    # semi — où est la ground truth
+    - workspace/proof/seed/**                        # semi — la ground truth ELLE-MÊME, fournie par l'humain
     - workspace/feats/caps/{n}-*-*.md                      # volatile — les AC à mesurer
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
   writes:
-    - workspace/proof/datasets/**                          # OWNER EXCLUSIF
+    - workspace/proof/datasets/**                          # OWNER EXCLUSIF — dérivés de proof/seed/, jamais l'inverse
     - workspace/proof/suites/**
     - workspace/proof/calibration/**                 # sauf les labels, qui sont humains
   forbidden_writes:

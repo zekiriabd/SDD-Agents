@@ -79,6 +79,13 @@ agents:
     # facture non bornée en production.
   dev-api:
     { tier_default: balanced, tier_floor: fast, tier_ceiling: balanced }
+  dev-backend:
+    { tier_default: balanced, tier_floor: fast, tier_ceiling: deep }
+    # La coquille : projet, composition, config, règles calculables, packaging.
+    # Floor fast : en Python, les générateurs font l'essentiel et il relie.
+    # Ceiling deep : en TypeScript, Kotlin ou C#, aucun générateur — il écrit le
+    # squelette depuis la fiche, et une composition fausse se paie trois phases
+    # plus loin.
 
   # ── Phase 6 : evaluation et tests ────────────────────────────────────────
   qa-evals:
@@ -111,8 +118,8 @@ agents:
 
 # ── Bilan ──────────────────────────────────────────────────────────────────
 # sdda:bilan-begin — régénéré par sdda_admin/sync_counters.py depuis les entrées ci-dessus, ne pas éditer
-# 22 agents : 8 tier_default=deep, 13 balanced, 1 fast.
-#             17 floor=balanced, 5 floor=fast, 0 floor=deep.
+# 23 agents : 8 tier_default=deep, 14 balanced, 1 fast.
+#             17 floor=balanced, 6 floor=fast, 0 floor=deep.
 #             6 plafonnés balanced (architect-memory, dev-api, dev-data, po-elicitor, qa-tests, review-cost).
 # sdda:bilan-end
 #

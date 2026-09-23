@@ -35,7 +35,7 @@ MISSION            versioned business specification (quantified goal, budget, gr
 The IR is designed multi-language and checks it: `validate_ir.py` rejects any
 framework API name inside a contract, including `spring-ai`, `langchain4j` and
 `vercel-ai-sdk`. But **a generator only exists where the stack sheets exist**,
-and the catalogue covers <!--sdda:count stacks-->31<!--/sdda:count--> of the 99 lines that `STACK.md` offers. The gap is
+and the catalogue covers <!--sdda:count stacks-->45<!--/sdda:count--> of the 99 lines that `STACK.md` offers. The gap is
 announced line by line — `(fiche absente)`, "sheet missing" — rather than
 implied.
 
@@ -43,8 +43,17 @@ implied.
 |---|---|---|---|---|---|
 | **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | usable |
 | **.NET** | ✅ | Microsoft Agent Framework | ❌ **no sheet** | aspnet-minimal | **no RAG** |
-| **TypeScript** | ❌ | — | ❌ | ❌ | ROADMAP Lot 7 |
+| **TypeScript** | ✅ sheet | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **sheets only** — no bootstrap combo (eval/observability are `[python]`), no skeleton generator |
+| **Kotlin** | ✅ sheet | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **sheets only** — same reserve; Maven pins unverified |
 | **Java** | ❌ | — | ❌ | ❌ | not planned |
+
+Two catalogue families are inherited from SDD_Pro since 2026-09-23: `archi/`
+(mvc · ddd · microservice — the architecture of the application **shell**,
+selected by `## Active Architecture Pattern`) and `backend/` (python-fastapi ·
+node-express · nestjs · kotlin-spring-boot · dotnet-minimalapi — the HTTP house
+around the serving surface, active only for `DeliverableType: backend-api`).
+They are rewritten for agentic systems, not copied: no ORM, no entity, the
+"Model" is derived from the IR.
 
 **.NET cannot do RAG today.** The whole retrieval chain (`rag/hybrid.md`,
 `vectorstore/pgvector.md`, `dataaccess/*`) is written in Python and says so
@@ -67,15 +76,17 @@ same level, and nothing said that `caps/` is reviewed by humans while
 
 ```
 workspace/
-├── stack/     what you CONFIGURE — STACK.md (gitignored: secrets) + versioned manifests
-├── feats/     what you SPECIFY  — missions · caps · topology · contracts · decisions (ADR) · briefs
-├── src/       what gets PRODUCED — the generated application, prompts included
-├── proof/     what JUDGES        — datasets · suites · baselines · calibration
+├── stack/     what you CONFIGURE — STACK.md, alone, versioned (names of variables; values in .env)
+├── feats/     what you SPECIFY  — Markdown only: briefs · missions · caps · roster + topology · contracts · decisions (ADR)
+├── src/       what gets PRODUCED — the generated application, prompts and frozen schemas included
+├── proof/     what JUDGES        — seed (your ground truth) · datasets · suites · baselines · calibration
 └── .sys/      internal state and run output — IR, validation, reports, traces (regenerable)
 ```
 
-You write in `feats/` (the Markdown specification) and `stack/` (the technical
-choices). Everything else is produced. **No `dev-*` agent may ever write under
+You write three things: `stack/STACK.md` (the technical choices — language,
+framework, pattern, data sources, API URLs, MCP servers; secret values go in a
+gitignored `.env`), Markdown files under `feats/` (what the system must do),
+and your ground truth under `proof/seed/`. Everything else is produced. **No `dev-*` agent may ever write under
 `proof/`**: the agent that writes the code cannot touch the dataset that grades
 it, nor the baseline its regression is measured against. That is the one
 boundary of the framework with no exception, and it is enforced at runtime by
@@ -189,7 +200,7 @@ its available languages.
 | [DOMAIN-MODEL.md](.sdda/docs/DOMAIN-MODEL.md) | The closed vocabulary: MISSION, CAP, AGENT, TOOL, RETRIEVER… |
 | [AGENTIC-IR.md](.sdda/docs/AGENTIC-IR.md) | The intermediate representation that makes multi-framework deterministic |
 | [LIFECYCLE.md](.sdda/docs/LIFECYCLE.md) | State machine Draft → Approved, derived from the gates |
-| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | The <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents and their internal orchestration |
+| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | The <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents and their internal orchestration |
 | [ORCHESTRATION-PATTERNS.md](.sdda/docs/ORCHESTRATION-PATTERNS.md) | Catalogue + selection matrix |
 | [RAG-PATTERNS.md](.sdda/docs/RAG-PATTERNS.md) | Catalogue + gate metrics |
 | [MEMORY-PATTERNS.md](.sdda/docs/MEMORY-PATTERNS.md) | Scopes, costs, and memory as a persistent attack surface |
@@ -234,7 +245,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->1099<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->1118<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

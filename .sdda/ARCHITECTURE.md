@@ -16,7 +16,7 @@ Identique en esprit à SDD_Pro, adapté à l'agentic.
 | **Workspace** | `workspace/` | Le projet de l'utilisateur : spécifications, contrats, prompts, datasets, code généré | Les agents, au runtime |
 
 > `.sdda/` (et non `.sdd/`) : nom court volontaire — il est référencé des centaines
-> de fois dans 22 prompts d'agents ; deux caractères de moins sont des tokens
+> de fois dans <!--sdda:count agents-->23<!--/sdda:count--> prompts d'agents ; deux caractères de moins sont des tokens
 > économisés à chaque invocation. Distinct de `.sdd/` pour permettre de vendorer
 > SDD_Pro et SDD_Agents dans un même dépôt.
 
@@ -39,7 +39,7 @@ SDD-Agents/
 │   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache par agent
 │   ├── agent-bounds.yaml              # tier_default / floor / ceiling par agent
 │   ├── capability-matrix.yml          # harnais x mécanismes
-│   ├── agents/                        # 22 Developer Agents (cf. docs/AGENT-ROSTER.md)
+│   ├── agents/                        # <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents (cf. docs/AGENT-ROSTER.md)
 │   ├── commands/                      # commandes slash
 │   ├── rules/                         # règles opérationnelles
 │   │   ├── ownership.md               # matrice d'écriture (hérité SDD_Pro)
@@ -55,14 +55,26 @@ SDD-Agents/
 │   │                                  #   vivent au §5 des contrats et dans les
 │   │                                  #   prompts (cf. §7, rules/ownership.md §2.2)
 │   ├── providers/                     # anthropic / openai / google / azure / local
-│   ├── stacks/                        # ── LE CATALOGUE — <!--sdda:count stacks-->31<!--/sdda:count--> fiches sur disque ─
+│   ├── stacks/                        # ── LE CATALOGUE — <!--sdda:count stacks-->45<!--/sdda:count--> fiches sur disque ─
 │   │   │                    # Chaque fiche déclare `Languages:` (un langage,
 │   │   │                    # plusieurs, ou `*` si elle n'en suppose aucun).
 │   │   │                    # C'est la SSoT du couplage : preflight_stack_combo
 │   │   │                    # refuse une fiche d'un autre runtime que le
 │   │   │                    # langage actif -> [STACK_LANGUAGE_MISMATCH].
-│   │   ├── lang/            python.md · csharp.md
+│   │   ├── lang/            python.md · csharp.md · typescript.md · kotlin.md
+│   │   │                    # typescript et kotlin : fiches présentes, aucune combo
+│   │   │                    # de bootstrap (eval/ et observability/ sont [python])
+│   │   ├── archi/           mvc.md · ddd.md · microservice.md     [*]
+│   │   │                    # hérité de SDD_Pro : l'architecture de la COQUILLE
+│   │   │                    # (entrée, composition, config, Domaine) — le moteur
+│   │   │                    # garde son découpage par ownership
+│   │   ├── backend/         python-fastapi.md · node-express.md · nestjs.md
+│   │   │                    kotlin-spring-boot.md · dotnet-minimalapi.md
+│   │   │                    # hérité de SDD_Pro : la maison HTTP autour de la
+│   │   │                    # surface, active seulement si backend-api ; pins
+│   │   │                    # python/csharp dans serving/*.libs.json
 │   │   ├── framework/       langchain.md · langgraph.md · ms-agent-framework.md
+│   │   │                    langgraph-js.md [typescript] · spring-ai.md [kotlin]
 │   │   │                      (+ .libs.json chacun)
 │   │   ├── orchestration/   single-agent.md · router.md · sequential.md
 │   │   ├── rag/             none.md · hybrid.md            [python sauf none]
@@ -80,7 +92,8 @@ SDD-Agents/
 │   │   ├── observability/   otel-genai.md (+ .libs.json)
 │   │   ├── guardrails/      schema-validation.md · pii-redaction.md
 │   │   │                    injection-detection.md
-│   │   └── serving/         cli.md · fastapi-sse.md · aspnet-minimal.md · batch.md
+│   │   └── serving/         cli.md · cli-dotnet.md · cli-node.md · cli-kotlin.md
+│   │                        fastapi-sse.md · aspnet-minimal.md · batch.md
 │   │                        # surface = PAR OÙ L'ON ENTRE ; le LIVRABLE
 │   │                        # (DeliverableType) vit dans ## Project Config
 │   ├── registry/                      # ── REGISTRES MACHINE ─────────────────
@@ -98,8 +111,7 @@ SDD-Agents/
 │   │   ├── retrieval-contract.template.md
 │   │   ├── memory-contract.template.md
 │   │   ├── eval-suite.template.md
-│   │   ├── roster.manifest.template.yml   # roster déclaré par l'architecte (P7)
-│   │   ├── sources.manifest.template.yml  # sources de données déclarées
+│   │   ├── roster.template.md         # roster déclaré par l'architecte (P7) — Markdown, bloc yaml
 │   │   ├── golden-set.schema.json
 │   │   ├── tool-schema.schema.json
 │   │   ├── project-config.schema.json
@@ -122,30 +134,35 @@ SDD-Agents/
 │       │                              #   les câble TOUS, aucune table en dur
 │       └── tests/
 │
+├── .env                               # les VALEURS des secrets — gitignoré (comme SDD_Pro)
+│
 └── workspace/                         # ── LE PROJET — quatre entrées, cf. §2.ter
     │
     ├── stack/                         # ── CE QU'ON CONFIGURE ─────────────────
-    │   ├── STACK.md                   # gitignored (secrets en clair)
-    │   └── sources/ · topology/       # manifestes VERSIONNÉS (sources, roster)
+    │   ├── STACK.md                   # VERSIONNÉ — noms de variables (${LLM_API_KEY}), jamais de valeur.
+    │   │                              #   Stores/Sources inline, URL d'API et serveurs MCP compris.
+    │   └── mcp.json                   # optionnel — config MCP standard importée telle quelle
     │
-    ├── feats/                         # ── CE QU'ON SPÉCIFIE ──────────────────
+    ├── feats/                         # ── CE QU'ON SPÉCIFIE — du MARKDOWN, seul ─
+    │   ├── briefs/      {n}-{Name}.md       # ce que l'humain dépose (specs, --from-brief)
     │   ├── missions/    {n}-{Name}.md
     │   ├── caps/        {n}-{m}-{Name}.md
-    │   ├── topology/    {n}-topology.md   + {n}-topology.mmd (graphe Mermaid)
+    │   ├── topology/    {n}-roster.md       # le ROSTER de l'architecte (humain) — bloc yaml
+    │   │                {n}-topology.md     # la topologie (architect-topology), graphe Mermaid inclus
     │   ├── contracts/
     │   │   ├── agents/      {n}-{agent}.agent.md
     │   │   ├── tools/       {n}-{tool}.tool.md
     │   │   ├── retrieval/   {n}-{index}.retrieval.md
-    │   │   ├── memory/      {n}-memory.md
-    │   │   └── dataaccess/schemas/     # schémas figés des sources déclarées
-    │   ├── decisions/  ADR-{ts}-{slug}.md   # UN seul endroit (cf. §2.ter)
-    │   └── briefs/                     # matière première d'une MISSION
+    │   │   └── memory/      {n}-memory.md
+    │   └── decisions/  ADR-{ts}-{slug}.md   # UN seul endroit (cf. §2.ter)
     │
     ├── src/                           # ── CE QU'ON PRODUIT ───────────────────
     │   ├── prompts/     {agent}.system.md   # hashés — actif d'EXÉCUTION
     │   └── {AppName}/                       # l'application agentic générée
+    │       └── src/{AppName}/data/schemas/  # schémas figés des sources — actif d'EXÉCUTION
     │
     ├── proof/                         # ── CE QUI JUGE ────────────────────────
+    │   ├── seed/        la vérité terrain de l'HUMAIN (scénarios annotés, labels)
     │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/
     │   ├── suites/      les suites d'évaluation
     │   ├── baselines/   la référence de non-régression
@@ -170,16 +187,28 @@ perte.
 
 | Entrée | Nature | Écrite par | Régénérable |
 |---|---|---|---|
-| `stack/` | configuration | l'humain | non |
-| `feats/` | **spécification** — l'ENTRÉE de la génération | humain, PO, architectes | non |
-| `src/` | code généré, prompts compris | les six `dev-*`, `qa-tests` | oui |
-| `proof/` | **ce qui juge** | `qa-evals` et les scripts, **jamais** un `dev-*` | non |
+| `stack/` | configuration — `STACK.md`, seul, versionné | l'humain | non |
+| `feats/` | **spécification** — l'ENTRÉE de la génération, **Markdown seul** | humain, PO, architectes | non |
+| `src/` | code généré, prompts et schémas figés compris | les sept `dev-*` (six pour le moteur, `dev-backend` pour la coquille), `qa-tests`, les générateurs | oui |
+| `proof/` | **ce qui juge** — `seed/` fourni par l'humain, le reste dérivé | l'humain (`seed/`), `qa-evals` et les scripts, **jamais** un `dev-*` | non |
 | `.sys/` | état interne et sorties de run | les scripts | oui |
+
+**L'entrée de l'utilisateur tient en trois choses**, et c'est voulu : `STACK.md`
+(les choix techniques — langage, framework, pattern, sources de données, URL
+d'API, serveurs MCP), des fichiers Markdown sous `feats/` (ce que le système
+doit faire — écrits à la main ou par questions-réponses avec `po-elicitor`), et
+sa vérité terrain sous `proof/seed/`. Les valeurs des secrets vont dans `.env`,
+à la racine, gitignoré — même mécanisme que SDD_Pro. Trois règles le tiennent,
+vérifiées par `smoke-check` et non racontées : `feats/` ne contient que du
+Markdown (`[FEATS_NOT_MARKDOWN]`), `stack/` ne contient que `STACK.md`
+(`[STACK_DIR_UNEXPECTED_FILE]`), aucune valeur de secret n'entre dans STACK.md
+(`[STACK_SECRET_IN_CLEAR]`). Un workspace d'une version antérieure monte par
+`python .sdda/sdda.py migrate-workspace`, qui range chaque fichier à sa place.
 
 **La seule frontière qui ne souffre aucune exception est celle de `proof/`.**
 L'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni à la
 référence contre laquelle sa régression est mesurée. Ranger ces jeux sous
-`src/` les ferait tomber dans la zone d'écriture des six agents développeurs, et
+`src/` les ferait tomber dans la zone d'écriture des agents développeurs, et
 il faudrait creuser une exception à l'intérieur de leur propre périmètre. Une
 exception dans un glob d'ownership est une exception qu'on oublie.
 
@@ -201,7 +230,7 @@ de créer le nouvel arbre à côté de l'ancien.
 
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
 annoncé, pas encore écrit. La règle vaut surtout pour `stacks/` —
-<!--sdda:count stacks-->31<!--/sdda:count--> fiches existent, quand le
+<!--sdda:count stacks-->45<!--/sdda:count--> fiches existent, quand le
 catalogue visé en compte trois fois plus. Ce n'est pas un
 manque à combler avant d'annoncer : c'est la séquence de
 [docs/ROADMAP.md](docs/ROADMAP.md), qui livre **une combinaison validée de bout en
@@ -289,12 +318,14 @@ compilée, régénérable, jamais éditée à la main. Détail et schéma :
    |           architect-memory, architect-tools  (parallèle)
    | PHASE 2.9 COMPILATION IR  ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
    |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
- PHASE 3   SOCLE              dev-tools || dev-retrieval || dev-data     (parallèle)
+ PHASE 3   SOCLE              dev-backend (squelette : projet, composition, config, Domaine — seul, d'abord)
+   |                          puis dev-tools || dev-retrieval || dev-data     (parallèle)
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
  PHASE 4   PROMPTS + AGENTS   dev-prompt -> dev-agent  (parallèle par agent)
    |                                                         [AGENT GATE]
  PHASE 5   ORCHESTRATION      dev-orchestration             -> graphe / superviseur / routeur
    |       + dev-api (surface d'exposition)
+   |       + dev-backend (packaging : exécutable, image, README d'exploitation)
    |                                                         [ORCH GATE]
  PHASE 6   EVAL + TESTS       qa-evals || qa-tests
    |
@@ -405,7 +436,7 @@ obligatoire en agentic :
 | Notion | Qui exécute | Déclaré dans |
 |---|---|---|
 | **Harness** | où tourne l'orchestration de *construction* (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
-| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents) | `STACK.md ## Build Models` |
+| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents) | `STACK.md ## Build Models` |
 | **Runtime models** | quels modèles fait tourner l'**application générée** | `STACK.md ## Runtime Models` |
 
 Les trois sont indépendants. Construire avec Claude Code + Opus une application
@@ -438,6 +469,8 @@ artefacts agentic. Extrait :
 | `workspace/src/**/tools/**` | `dev-tools` | Edit-augment exclusif |
 | `workspace/src/**/retrieval/**` | `dev-retrieval` | Edit-augment exclusif |
 | `workspace/src/**/orchestration/**` | `dev-orchestration` | Create + Edit exclusif |
+| `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif |
+| `workspace/src/{App}/*` · `workspace/src/**/app/**` | `dev-backend` | la coquille : projet, composition, config, Domaine, packaging — rien du moteur |
 | `workspace/proof/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
 | `workspace/proof/baselines/**` | script déterministe uniquement | Write atomique |
 
@@ -508,7 +541,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->380<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->391<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

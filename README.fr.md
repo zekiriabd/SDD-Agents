@@ -35,7 +35,7 @@ MISSION            spécification métier versionnée (objectif chiffré, budget
 L'IR est conçue multi-langage et le vérifie : `validate_ir.py` refuse tout nom
 d'API de framework dans un contrat, y compris `spring-ai`, `langchain4j` et
 `vercel-ai-sdk`. Mais **un générateur n'existe que là où les fiches de stack
-existent**, et le catalogue en couvre <!--sdda:count stacks-->31<!--/sdda:count--> sur les 99 lignes que `STACK.md`
+existent**, et le catalogue en couvre <!--sdda:count stacks-->45<!--/sdda:count--> sur les 99 lignes que `STACK.md`
 propose. L'écart est annoncé ligne par ligne — `(fiche absente)` — plutôt que
 sous-entendu.
 
@@ -43,8 +43,17 @@ sous-entendu.
 |---|---|---|---|---|---|
 | **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | utilisable |
 | **.NET** | ✅ | Microsoft Agent Framework | ❌ **aucune fiche** | aspnet-minimal | **sans RAG** |
-| **TypeScript** | ❌ | — | ❌ | ❌ | ROADMAP Lot 7 |
+| **TypeScript** | ✅ fiche | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **fiches seulement** — aucune combo bootstrap (eval/observability sont `[python]`), pas de générateur de squelette |
+| **Kotlin** | ✅ fiche | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **fiches seulement** — même réserve ; pins Maven non vérifiés |
 | **Java** | ❌ | — | ❌ | ❌ | non planifié |
+
+Deux familles du catalogue sont héritées de SDD_Pro depuis le 2026-09-23 :
+`archi/` (mvc · ddd · microservice — l'architecture de la **coquille**
+applicative, sélectionnée par `## Active Architecture Pattern`) et `backend/`
+(python-fastapi · node-express · nestjs · kotlin-spring-boot · dotnet-minimalapi
+— la maison HTTP autour de la surface, active seulement si
+`DeliverableType: backend-api`). Réécrites pour l'agentic, pas copiées : pas
+d'ORM, pas d'entité, le « Model » est dérivé de l'IR.
 
 **.NET ne peut pas faire de RAG aujourd'hui.** Toute la chaîne de retrieval
 (`rag/hybrid.md`, `vectorstore/pgvector.md`, `dataaccess/*`) est écrite en
@@ -67,15 +76,18 @@ supprime sans perte.
 
 ```
 workspace/
-├── stack/     ce qu'on CONFIGURE — STACK.md (gitignoré : secrets) + manifestes versionnés
-├── feats/     ce qu'on SPÉCIFIE  — missions · caps · topology · contracts · decisions (ADR) · briefs
-├── src/       ce qu'on PRODUIT   — l'application générée, prompts compris
-├── proof/     ce qui JUGE        — datasets · suites · baselines · calibration
+├── stack/     ce qu'on CONFIGURE — STACK.md, seul, versionné (noms de variables ; valeurs dans .env)
+├── feats/     ce qu'on SPÉCIFIE  — Markdown seul : briefs · missions · caps · roster + topology · contracts · decisions (ADR)
+├── src/       ce qu'on PRODUIT   — l'application générée, prompts et schémas figés compris
+├── proof/     ce qui JUGE        — seed (votre vérité terrain) · datasets · suites · baselines · calibration
 └── .sys/      état interne et sorties de run — IR, validation, rapports, traces (régénérable)
 ```
 
-Vous écrivez dans `feats/` (la spécification en Markdown) et `stack/` (les choix
-techniques). Tout le reste est produit. **Aucun agent `dev-*` n'écrit jamais sous
+Vous écrivez trois choses : `stack/STACK.md` (les choix techniques — langage,
+framework, pattern, sources de données, URL d'API, serveurs MCP ; les valeurs des
+secrets vont dans un `.env` gitignoré), des fichiers Markdown sous `feats/` (ce
+que le système doit faire), et votre vérité terrain sous `proof/seed/`. Tout le
+reste est produit. **Aucun agent `dev-*` n'écrit jamais sous
 `proof/`** : l'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni
 à la référence contre laquelle sa régression est mesurée. C'est la seule
 frontière du framework sans exception, et elle est tenue au runtime par le hook
@@ -186,7 +198,7 @@ Spécification complète : [.sdda/templates/STACK.md.template](.sdda/templates/S
 | [DOMAIN-MODEL.md](.sdda/docs/DOMAIN-MODEL.md) | Le vocabulaire clos : MISSION, CAP, AGENT, TOOL, RETRIEVER… |
 | [AGENTIC-IR.md](.sdda/docs/AGENTIC-IR.md) | La représentation intermédiaire qui rend le multi-framework déterministe |
 | [LIFECYCLE.md](.sdda/docs/LIFECYCLE.md) | Machine à états Draft → Approved, dérivée des gates |
-| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | Les <!--sdda:count agents-->22<!--/sdda:count--> Developer Agents et leur orchestration interne |
+| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | Les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents et leur orchestration interne |
 | [ORCHESTRATION-PATTERNS.md](.sdda/docs/ORCHESTRATION-PATTERNS.md) | Catalogue + matrice de sélection |
 | [RAG-PATTERNS.md](.sdda/docs/RAG-PATTERNS.md) | Catalogue + métriques de gate |
 | [MEMORY-PATTERNS.md](.sdda/docs/MEMORY-PATTERNS.md) | Portées, coûts, et la mémoire comme surface d'attaque persistante |
@@ -231,7 +243,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1099<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->1118<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification
