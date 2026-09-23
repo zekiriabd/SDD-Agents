@@ -3,7 +3,7 @@
 ID: 1-5-QualifyClaim
 Parent MISSION: 1-SupportDesk
 Parent MISSION hash: sha256:31ddc73f
-Status: Specified
+Status: Architected
 Criticality: critical
 Confidence: high
 
@@ -92,9 +92,9 @@ jamais s'engager sur son issue.
   `claim_request` tronqué présenté comme complet.
 
 ## Allocated To
-- agents: <à déterminer>
-- tools: <à déterminer>
-- retrievers: <à déterminer>
+- agents: claims-agent
+- tools: claims_search, refunds_search, orders_lookup, shipments_lookup
+- retrievers: NONE
 
 ## Dependencies
 - 1-1
