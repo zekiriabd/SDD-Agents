@@ -51,7 +51,7 @@ IR absent → `[IR_NOT_FOUND]`, STOP.
 
 ## STEP 3 — L0 : statique, 0 token, à chaque commit
 
-Câble dans `workspace/src/tests/l0/` les vérifications déterministes, chacune
+Câble dans `workspace/src/{App}/tests/l0/` les vérifications déterministes, chacune
 un test qui appelle le script correspondant :
 
 - JSON Schema de chaque définition d'outil ↔ IR ↔ code (`validate_tool_contract.py --require-code`) ;
@@ -93,7 +93,7 @@ FIX: injecter le mock scripté de la stack ; un appel modèle appartient aux eva
 
 ## STEP 5 — L2 : tests de contrat d'outil
 
-Pour chaque `tools[]`, `workspace/src/tools/{tool}/tests/test_contract.*`,
+Pour chaque `tools[]`, `workspace/src/{App}/tools/{tool}/tests/test_contract.*`,
 référencé par `contractTestsRef`, contre un **serveur/mocks de transport**
 (pas le service réel) :
 

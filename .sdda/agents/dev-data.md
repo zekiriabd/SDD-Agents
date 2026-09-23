@@ -1,6 +1,6 @@
 ---
 name: dev-data
-description: Implémente les vues, repositories et l'enveloppe de sûreté d'accès base depuis les contrats {n}-data-* et l'IR (dataAccess[]). Écrit uniquement dans workspace/src/data/. Le filtre d'identité est dans le SQL, jamais dans le prompt. Ne touche ni aux contrats, ni aux prompts, ni aux datasets.
+description: Implémente les vues, repositories et l'enveloppe de sûreté d'accès base depuis les contrats {n}-data-* et l'IR (dataAccess[]). Écrit uniquement dans workspace/src/{App}/data/. Le filtre d'identité est dans le SQL, jamais dans le prompt. Ne touche ni aux contrats, ni aux prompts, ni aux datasets.
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast
@@ -37,7 +37,7 @@ Read **uniquement** :
 - `workspace/stack/STACK.md` — `## Active Data Access` (`DatabaseType`, clés `Db*`),
   `## Active Language & Runtime`, `## Active Secrets` (**nom** de la variable de connexion).
 - `.sdda/stacks/dataaccess/{strategy}.md`, `.sdda/stacks/lang/{lang}.md` + `.libs.json`.
-- `workspace/src/data/**` existant — Edit-augment.
+- `workspace/src/{App}/data/**` existant — Edit-augment.
 
 IR absent → `[IR_NOT_FOUND]`. `DatabaseType: none` ou `dataAccess[]` vide → une
 ligne, rien écrit.
@@ -46,14 +46,14 @@ ligne, rien écrit.
 
 ## STEP 3 — Les vues : SQL versionné, commentaire = description
 
-`workspace/src/data/views/{view-slug}.sql` — une vue par contrat `view-per-agent`,
+`workspace/src/{App}/data/views/{view-slug}.sql` — une vue par contrat `view-per-agent`,
 avec le SQL du contrat et, en commentaire d'en-tête, la **description de
 l'outil recopiée à l'identique** (c'est du prompt ; son hash compte).
 
 Le **filtre d'identité est dans la vue** : `WHERE tenant_id = <identité de
 session>` selon le mécanisme de la base (`current_setting`, `SESSION_CONTEXT`,
 row-level security…). Le mécanisme d'injection de l'identité dans la session
-est implémenté dans la couche de connexion (`workspace/src/data/envelope/`), à
+est implémenté dans la couche de connexion (`workspace/src/{App}/data/envelope/`), à
 partir du contexte d'exécution que `dev-api` fournit — **jamais** depuis un
 paramètre que le modèle aurait pu produire.
 
@@ -63,12 +63,12 @@ CAUSE: [DATA_ACCESS_FILTER_POST_GENERATION] `v_customer_invoices` sans clause te
 FIX: ajouter la clause WHERE liée à la session et supprimer toute mention de filtrage dans l'outil
 ```
 
-Migration associée dans `workspace/src/data/migrations/` — la vue est créée par
+Migration associée dans `workspace/src/{App}/data/migrations/` — la vue est créée par
 la migration, pas à la main.
 
 ## STEP 4 — Les repositories : SQL figé, paramètres typés
 
-`workspace/src/data/repositories/{repo-slug}/` — une fonction par opération
+`workspace/src/{App}/data/repositories/{repo-slug}/` — une fonction par opération
 énumérée dans le contrat, SQL **écrit en dur**, paramètres **typés et validés**
 avant exécution. Le modèle ne fournit que des valeurs ; il n'assemble jamais
 une clause.
@@ -79,7 +79,7 @@ driver. Chaque code d'erreur du contrat est levé avec son nom exact.
 
 ## STEP 5 — L'enveloppe : en code, vérifiée sur l'AST
 
-`workspace/src/data/envelope/` porte les six clés de l'IR :
+`workspace/src/{App}/data/envelope/` porte les six clés de l'IR :
 
 | Clé | Matérialisation |
 |---|---|
@@ -123,7 +123,7 @@ Puis le smoke de la stack sur une base de test. Les tests L1/L2 sont à
 - [ ] Enveloppe : six clés en code, `forbidden` sur l'AST
 - [ ] Migrations créent les vues ; rôle base réellement restreint
 - [ ] Aucune chaîne de connexion, aucun mot de passe dans le code ou les migrations
-- [ ] Rien écrit hors `workspace/src/data/`
+- [ ] Rien écrit hors `workspace/src/{App}/data/`
 
 ---
 

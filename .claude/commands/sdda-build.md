@@ -127,9 +127,9 @@ Construire le `BATCH` depuis l'IR :
 
 | Condition IR | Agent | Écrit dans (Edit-augment exclusif) | Tier |
 |---|---|---|:-:|
-| `tools[]` non vide | `dev-tools` | `workspace/src/tools/**` | balanced |
-| `retrievers[]` non vide | `dev-retrieval` | `workspace/src/retrieval/**` | balanced |
-| `dataAccess[]` non vide | `dev-data` | `workspace/src/data/**` | balanced |
+| `tools[]` non vide | `dev-tools` | `workspace/src/{App}/tools/**` | balanced |
+| `retrievers[]` non vide | `dev-retrieval` | `workspace/src/{App}/retrieval/**` | balanced |
+| `dataAccess[]` non vide | `dev-data` | `workspace/src/{App}/data/**` | balanced |
 
 Un seul message multi-`Agent`, **≤ `MaxParallel`** simultanés (3 agents au
 plus ici — sous le défaut `MaxParallel: 3`). Chemins disjoints par ownership.
@@ -319,7 +319,7 @@ FIX: relancer /sdda-build {n} --layer agents (dev-prompt lit le rapport) — ou 
 
 Pour chaque `agents[].id` de l'IR (ou le seul `--agent`), une instance de
 `dev-agent` (`.sdda/agents/dev-agent.md`, tier **`deep`**). Owner exclusif de
-`workspace/src/agents/{agent}/**` — deux instances n'écrivent jamais dans le
+`workspace/src/{App}/agents/{agent}/**` — deux instances n'écrivent jamais dans le
 même répertoire.
 
 Dispatch en vagues de **≤ `MaxParallel`** instances (un message multi-`Agent`
@@ -456,7 +456,7 @@ et pour chaque agent porté 🔴 par le rapport :
 ### 5.1 — `dev-orchestration` (seul)
 
 Agent : `dev-orchestration` (`.sdda/agents/dev-orchestration.md`). Tier
-**`deep`**. Owner exclusif de `workspace/src/orchestration/**`.
+**`deep`**. Owner exclusif de `workspace/src/{App}/orchestration/**`.
 
 ```
 Implémenter orchestration[] de l'IR pour la MISSION {n} : rootPattern {pattern}, nodes, edges,
@@ -478,7 +478,7 @@ Divergence (nœud ou arête en plus / en moins) → ERROR `[ORCH_DIVERGES_FROM_I
 ### 5.2 — `dev-api`
 
 Agent : `dev-api` (`.sdda/agents/dev-api.md`). Tier `balanced`. Owner
-exclusif de `workspace/src/serving/**`. Surface = `## Active Serving Surface`
+exclusif de `workspace/src/{App}/serving/**`. Surface = `## Active Serving Surface`
 (`cli`, `fastapi-sse`, `mcp-server`, `slack-bot`, …). Séquentiel après
 l'orchestrateur (il l'importe). Smoke de la stack serving exécuté en post-step.
 

@@ -58,7 +58,7 @@ ne peut plus rien conclure.
 | `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif | 5 |
 | `workspace/src/{App}/*` (fichiers de projet, README, Dockerfile, .env.example) | `dev-backend` | Create + Edit — la coquille ; les fichiers générés par script se régénèrent, ne s'éditent pas | 3, 5 |
 | `workspace/src/**/app/**` (composition, config, Domaine) | `dev-backend` | Create + Edit exclusif — **rien du moteur** : aucun droit sur agents/, tools/, orchestration/, retrieval/, data/, serving/ | 3, 5 |
-| `workspace/src/tests/**` (transverses) | `qa-tests` | Create/Edit exclusif — **jamais le code de production** | 6 |
+| `workspace/src/{App}/tests/**` (transverses) | `qa-tests` | Create/Edit exclusif — **jamais le code de production** | 6 |
 | `workspace/src/**/{couche}/tests/**` | le `dev-*` de la couche | Create/Edit — ses propres tests de contrat | 3-5 |
 | `workspace/proof/datasets/**` | `qa-evals` | Create exclusif | 6 |
 | `workspace/proof/suites/**` | `qa-evals` | Create exclusif | 6 |

@@ -46,9 +46,9 @@ Read **uniquement** :
   `AgentTimeoutSec`, `OnBoundExceeded`, `CostPerRunHardCapUsd`, `TokenCeilingPerRun`),
   `## Active Serving Surface` (`HumanInTheLoopEnabled`).
 - `.sdda/stacks/orchestration/{pattern}.md`, `.sdda/stacks/framework/{fw}.md` + `.libs.json`.
-- `workspace/src/agents/*/**` — **en lecture** : les points d'entrée que tu câbles.
+- `workspace/src/{App}/agents/*/**` — **en lecture** : les points d'entrée que tu câbles.
   AGENT GATE verte exigée (P5) ; sinon `[AGENT_GATE_NOT_PASSED]`, STOP.
-- `workspace/src/orchestration/**` existant — Create + Edit.
+- `workspace/src/{App}/orchestration/**` existant — Create + Edit.
 
 Validation préalable, 0 token :
 ```bash
@@ -60,7 +60,7 @@ Rouge → tu ne construis pas sur un graphe invalide : `[IR_INVALID]`, STOP.
 
 ## STEP 3 — Un nœud par nœud, une arête par arête
 
-`workspace/src/orchestration/` : chaque `nodes[]` devient un nœud (agent →
+`workspace/src/{App}/orchestration/` : chaque `nodes[]` devient un nœud (agent →
 appel du point d'entrée de `src/agents/{slug}/` ; `retriever` → appel du
 retriever ; `function` → fonction déterministe). Chaque `edges[]` devient une
 transition avec **sa condition telle que l'IR l'écrit** ; `entryNode` et
@@ -180,7 +180,7 @@ verrait l'écart aux trajectoires observées — trop tard, après que tout l'av
 - [ ] Ownership de l'état partagé appliqué à l'exécution
 - [ ] Aucun prompt inline (un superviseur a un prompt : il vit dans `prompts/`, écrit par `dev-prompt`)
 - [ ] `graph.manifest.json` émis par `dump_graph()` depuis le graphe compilé — jamais recopié de l'IR
-- [ ] **Rien écrit hors `workspace/src/orchestration/`**
+- [ ] **Rien écrit hors `workspace/src/{App}/orchestration/`**
 
 ---
 

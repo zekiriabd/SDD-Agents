@@ -206,7 +206,7 @@ exception.
 - Un contrat par accès : `workspace/feats/contracts/tools/{n}-data-{slug}.tool.md`,
   depuis le template tool-contract, `Status: Draft`, avec une section
   `## Data Access` (stratégie, enveloppe, chemin d'identité, SQL de la vue à
-  matérialiser par `dev-data` dans `workspace/src/data/views/`).
+  matérialiser par `dev-data` dans `workspace/src/{App}/data/views/`).
 - Les ADR exigés dans `workspace/feats/decisions/`.
 
 ---
