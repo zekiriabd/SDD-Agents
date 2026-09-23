@@ -102,7 +102,10 @@ def spec_files(base: Path | None = None) -> list[Path]:
     ferait qu'une régénération partielle en effacerait la moitié.
     """
     root = base or Path(__file__).resolve().parent.parent
-    return sorted(root.rglob(SPEC_FILE))
+    # Un environnement virtuel laissé DANS le paquet (`.venv/`) en contient une
+    # copie installée : la compter doublait chaque outil ([TOOL_SPEC_DUPLICATE]).
+    skip = {".venv", "venv", "site-packages", "build", "dist", "__pycache__"}
+    return sorted(p for p in root.rglob(SPEC_FILE) if not skip & set(p.relative_to(root).parts))
 
 
 @lru_cache(maxsize=4)

@@ -67,18 +67,18 @@ Mode: static
 # Un agent du produit déclare un tier dans son contrat ; la résolution se
 # fait ici. Le mixage cross-provider est autorisé (deep=anthropic pour le
 # raisonnement critique, fast=openai-mini comme levier de coût).
-RuntimeProvider: anthropic
+RuntimeProvider: google                # Gemini (clé AI Studio) — API compatible OpenAI, cf. models.py
 RuntimeTierMap:
-  deep: claude-opus-5
-  balanced: claude-sonnet-5
-  fast: claude-haiku-4-5
+  deep: gemini-2.5-flash
+  balanced: gemini-2.5-flash
+  fast: gemini-2.5-flash
 # Modèles spécialisés hors tiers :
 EmbeddingModel: none                  # aucun RAG dans cette MISSION (cf. ## Active RAG Pattern)
 RerankModel: none                     # IDENTIFIANT du modèle seulement. La fiche
                                       # qui décide COMMENT on rerank vit dans
                                       # `## Active Reranker` ; ce champ doit
                                       # s'accorder avec elle (`none` <-> none.md).
-JudgeModel: claude-sonnet-5           # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
+JudgeModel: gemini-2.5-flash          # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
 # Règle : JudgeModel != le modèle évalué quand c'est possible. Un modèle qui
 # se note lui-même mesure sa propre complaisance. Ici les spécialistes tournent
 # en `balanced` = claude-sonnet-5 : le juge est donc le même modèle. Assumé pour

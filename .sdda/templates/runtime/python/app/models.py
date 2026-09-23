@@ -157,6 +157,10 @@ def cost_usd(model: str, usage: Usage, pricing: Mapping[str, Mapping[str, float]
 # ---------------------------------------------------------------------------
 # Résolution du tier
 # ---------------------------------------------------------------------------
+#: Point d'entrée compatible OpenAI de l'API Gemini (Google AI Studio).
+GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
 def resolve(tier: str | None, settings: Settings) -> str:
     """Tier -> identifiant de modèle, déclaré dans `## Runtime Models`."""
     return settings.model_for(tier)
@@ -183,6 +187,15 @@ def provider_client(settings: Settings) -> LLMClient:
 
         return _OpenAIClient(openai.OpenAI(
             api_key=settings.secret("llmApiKey").get_secret_value()))
+    if provider in ("google", "gemini"):
+        # Gemini expose une API compatible OpenAI : un seul client, une seule
+        # traduction des appels d'outils, et le même comptage de tokens dans les
+        # spans. Le SDK natif n'apporterait rien que le squelette utilise.
+        import openai  # noqa: PLC0415 - import paresseux volontaire
+
+        return _OpenAIClient(openai.OpenAI(
+            api_key=settings.secret("llmApiKey").get_secret_value(),
+            base_url=GEMINI_OPENAI_BASE_URL))
     raise ConfigError(
         f"fournisseur `{settings.provider}` inconnu",
         fix="déclarer un fournisseur servi par `.sdda/providers/` dans `## Runtime Models`, "

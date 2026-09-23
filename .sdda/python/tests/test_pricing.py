@@ -94,7 +94,7 @@ def test_check_table_refuses_orphan_meta_and_bad_dates() -> None:
 def test_review_dates_are_derived_from_meta() -> None:
     dates = sorted(m["reviewed"] for m in pricing.PRICING_META.values())
     assert pricing.PRICING_OLDEST_REVIEWED == dates[0] == "2026-08-30"
-    assert pricing.PRICING_LAST_REVIEWED == dates[-1] == "2026-09-22"
+    assert pricing.PRICING_LAST_REVIEWED == dates[-1]   # dérivée de la ligne la plus récente, jamais écrite à la main
     assert "claude-sonnet-4-6" in pricing.oldest_reviewed_models()
     assert "claude-fable-5-1" not in pricing.oldest_reviewed_models()
 
