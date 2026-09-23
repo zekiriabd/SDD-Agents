@@ -986,6 +986,35 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
         if acceptance is not None:
             suites.append(acceptance)
             evaluation["suites"] = sorted(suites, key=lambda s: s["id"])
+    # Suites SYSTÈME (L5 trajectoires, L7 bout en bout) : elles ne naissent
+    # d'aucune CAP — elles mesurent la MISSION entière (AC système, budget) — et
+    # le compilateur n'en émettait donc aucune. Or `eval-runner` ne lit que
+    # `evaluation.suites` de l'IR : G6 (ORCH) n'avait AUCUNE exécution à rendre
+    # verte, sur aucune mission. Leur auteur est `qa-evals`
+    # (`workspace/proof/suites/{n}-*.yaml`, niveau L5/L7) ; l'IR les projette.
+    existing = {s["id"] for s in suites}
+    for path in sorted(paths.proof_dir(ctx.root).joinpath("suites").glob(f"{ctx.number}-*.yaml")):
+        try:
+            spec = yaml_mini.parse_mapping(markdown_io.read_text(path))
+        except (yaml_mini.YamlMiniError, OSError):
+            continue
+        level = str(spec.get("level") or "")
+        sid = str(spec.get("id") or path.stem)
+        if level not in ("L5", "L7") or sid in existing:
+            continue
+        grader = str(spec.get("grader") or "")
+        threshold = spec.get("threshold")
+        runs = spec.get("runs")
+        dataset = str(spec.get("dataset") or "")
+        if grader not in GRADERS or not isinstance(threshold, (int, float)) or not isinstance(runs, int) or not dataset:
+            ctx.report.warn("EVAL_SUITE_INCOMPLETE", f"suite système `{sid}` ({level}) ignorée : grader, threshold, runs ou dataset manquant",
+                            "compléter la suite (qa-evals) puis recompiler l'IR", paths.rel(ctx.root, path))
+            continue
+        suites.append({"id": sid, "level": level, "dataset": dataset, "grader": grader,
+                       "threshold": float(threshold), "runs": runs})
+        existing.add(sid)
+    evaluation["suites"] = sorted(suites, key=lambda s: s["id"])
+
     adv = sorted({s["dataset"] for s in suites if s["level"] == "L8"})
     if len(adv) == 1:
         evaluation["adversarial"] = adv[0]

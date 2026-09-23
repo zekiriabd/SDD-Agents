@@ -221,6 +221,27 @@ def test_tools_resolve_by_the_name_the_model_calls(project: Path) -> None:
     assert "1-invoice-lookup" in billing["tools"] and "1-invoice_lookup" not in billing["tools"]
 
 
+def test_system_level_suites_written_by_qa_evals_enter_the_ir(project: Path) -> None:
+    """L5 / L7 ne naissent d'aucune CAP : sans cette projection, G6 n'avait aucune exécution possible."""
+    suites = project / "workspace/proof/suites"
+    suites.mkdir(parents=True, exist_ok=True)
+    (suites / "1-trajectory.yaml").write_text(
+        'id: "1-trajectory"\nlevel: "L5"\ndataset: "workspace/proof/datasets/golden/x.jsonl"\n'
+        'grader: "trajectory"\nthreshold: 1.0\nruns: 3\n', encoding="utf-8")
+    (suites / "1-mission.yaml").write_text(
+        'id: "1-mission"\nlevel: "L7"\ndataset: "workspace/proof/datasets/golden/x.jsonl"\n'
+        'grader: "cost"\nthreshold: 0.03\nruns: 3\n', encoding="utf-8")
+    (suites / "1-broken.yaml").write_text('id: "1-broken"\nlevel: "L7"\ngrader: "cost"\n', encoding="utf-8")
+    (suites / "1-1-routing.yaml").write_text('id: "1-1-routing"\nlevel: "L4"\ngrader: "exact"\n', encoding="utf-8")
+    ir, report = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    by_id = {s["id"]: s for s in ir["evaluation"]["suites"]}
+    assert by_id["1-trajectory"]["level"] == "L5" and by_id["1-mission"]["grader"] == "cost"
+    assert "1-broken" not in by_id and "1-1-routing" not in by_id       # incomplète / pas une suite système
+    assert "EVAL_SUITE_INCOMPLETE" in {w.cls for w in report.warnings}
+    schema = json.loads(paths.ir_schema_path(None).read_text(encoding="utf-8-sig"))
+    assert SchemaValidator(schema).validate(ir) == []
+
+
 def test_cli_exit_codes_and_json(project: Path) -> None:
     code, out = run_main(ir_compiler.main, ["--root", str(project), "--json", "--compiled-at", FIXED_AT])
     assert code == 0
