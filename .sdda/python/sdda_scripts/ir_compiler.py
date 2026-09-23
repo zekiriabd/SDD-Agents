@@ -1171,6 +1171,26 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
     orchestration = compile_orchestration(ctx, topo, load_mermaid(root, topo))
     evaluation, traceability = compile_evaluation(ctx, caps, agents, tools, retrievers, mission)
 
+    # L'IR décrit le SYSTÈME : un outil qu'aucun agent n'appelle, qu'aucune CAP
+    # n'alloue et qu'aucun nœud ne référence n'en fait pas partie. Les sources
+    # déclarées génèrent trois outils par source (lookup / search / count) ; un
+    # roster de moindre privilège en câble une fraction. Porter les autres dans
+    # l'IR (4 Ko chacun : schémas, description, erreurs) doublait sa taille et
+    # faisait déborder le budget de contexte de chaque agent de construction
+    # — 14 outils sur 21 au premier run réel. Leur contrat et leur wrapper
+    # restent sur disque ; ils entreront dans l'IR le jour où un agent les câble.
+    wired = {t for a in agents for t in a.get("tools", [])}
+    wired |= {ctx.canonical_tool(t) for cap in caps for t in cap.allocated.get("tools", [])}
+    wired |= {str(n.get("ref")) for n in orchestration.get("nodes", []) if n.get("kind") == "tool"}
+    unwired = sorted(t["id"] for t in tools if t["id"] not in wired)
+    if unwired:
+        report.warn("TOOL_SCOPE_EXCESS",
+                    f"{len(unwired)} outil(s) sous contrat mais câblé(s) à aucun agent, exclus de l'IR : {', '.join(unwired[:6])}{' …' if len(unwired) > 6 else ''}",
+                    "rien à faire si c'est voulu (moindre privilège) ; sinon câbler l'outil dans le roster et la CAP qui l'exige",
+                    paths.rel(root, paths.contracts_dir(root, "tools")))
+        report.data.setdefault(str(number), {})["unwiredTools"] = unwired
+    tools = [t for t in tools if t["id"] in wired]
+
     ir: dict[str, Any] = {
         "irVersion": IR_VERSION,
         "missionId": mission.id,
