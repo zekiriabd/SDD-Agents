@@ -526,9 +526,17 @@ def write_env(app_name: str, combo: Combo, secrets: dict[str, str]) -> Path:
 def write_gitignore() -> None:
     """`src/*/.env` porte les valeurs : il ne doit jamais partir en commit. STACK.md, lui, est versionné."""
     gitignore = ROOT / ".gitignore"
+    # Même mécanique que SDD_Pro : le dépôt du framework ne porte que la
+    # STRUCTURE du workspace (répertoires + .gitkeep) et STACK.md ; le projet de
+    # l'utilisateur vit dans son propre dépôt. L'ordre compte — la dernière
+    # règle qui matche gagne, les ré-inclusions restent en dernier.
     required = [
-        "workspace/src/*/.env",
-        "workspace/.sys/",
+        "workspace/**",
+        "!workspace/**/",
+        "!workspace/**/.gitkeep",
+        "!workspace/stack/STACK.md",
+        "workspace/**/.env",
+        "/.env",
         "__pycache__/",
         "*.pyc",
         ".venv/",

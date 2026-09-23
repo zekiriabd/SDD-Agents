@@ -1,13 +1,23 @@
-# SDD_Agents — secrets et artefacts générés
-# STACK.md est VERSIONNÉ (il ne porte que des noms de variables) ; les valeurs
-# vivent dans workspace/src/{App}/.env, avec l'application qui les consomme
-# (convention SDD_Pro). src/ est le livrable : il se versionne comme tout code,
-# son .env excepté.
-workspace/.sys/
-workspace/src/*/.env
-# Défense en profondeur : un .env égaré ailleurs ne part pas non plus.
+# SDD_Agents — le dépôt porte le FRAMEWORK ; le workspace n'y laisse que sa structure.
+#
+# Mécanique gitignore (l'ordre est load-bearing, même modèle que SDD_Pro) :
+#   1. tout ignorer sous workspace/ — spécifications, code généré, assets,
+#      preuves, état interne : le projet de l'utilisateur vit dans SON dépôt
+#   2. ré-inclure les RÉPERTOIRES (sinon git ne descend pas dedans)
+#   3. ré-inclure les .gitkeep (ils matérialisent l'arbre vide attendu par smoke-check)
+#   4. ré-inclure le SEUL fichier STACK.md — versionné, il ne porte que des NOMS
+#      de variables ; les valeurs vivent dans workspace/src/{App}/.env
+# La ré-inclusion porte sur des FICHIERS nommés, jamais sur un répertoire : un
+# `!workspace/stack/**` ré-inclurait un .env égaré à côté.
+workspace/**
+!workspace/**/
+!workspace/**/.gitkeep
+!workspace/stack/STACK.md
+
+# Défense en profondeur : aucun .env, nulle part, jamais.
 workspace/**/.env
 /.env
+
 __pycache__/
 *.pyc
 .pytest_cache/
