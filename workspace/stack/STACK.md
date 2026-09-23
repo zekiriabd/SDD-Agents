@@ -10,10 +10,11 @@
 # CONTRAT DE PROPAGATION DES SECRETS
 # ============================================================================
 # Ce fichier ne contient AUCUNE valeur de secret — seulement des NOMS de
-# variables, sous la forme `${LLM_API_KEY}`. Les valeurs vivent dans `.env`
-# à la racine du projet, gitignoré (même mécanisme que SDD_Pro). Une valeur
-# en clair ici est refusée au smoke : [STACK_SECRET_IN_CLEAR].
-#   1. Le Tech Lead déclare les noms ici et écrit les valeurs dans `.env`.
+# variables, sous la forme `${LLM_API_KEY}`. Les valeurs vivent dans
+# `workspace/src/SupportDesk/.env`, gitignoré, AVEC l'application (même
+# mécanisme que SDD_Pro). Une valeur en clair ici est refusée au smoke :
+# [STACK_SECRET_IN_CLEAR].
+#   1. Le Tech Lead déclare les noms ici et écrit les valeurs dans ce `.env`.
 #   2. `dev-api` les projette dans la config native de la stack cible
 #      (.env chargé par pydantic-settings, appsettings.json, application.yml) :
 #      c'est lui qui possède `workspace/src/serving/`, donc la couche Settings.
@@ -321,7 +322,7 @@ IndexRefreshPolicy: on-source-change
 
 DatabaseType: none              # declared-sources N'EST PAS une base : un DatabaseType
                                 # non `none` en même temps est [DATA_SOURCE_DB_CONFLICT]
-# Valeurs réelles en clair (STACK.md gitignored) — sans objet, aucune base :
+# Noms de variables seulement (valeurs dans le .env de l'application) — sans objet, aucune base :
 # - DB_HOST:
 # - DB_PORT:
 # - DB_NAME:
