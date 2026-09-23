@@ -25,6 +25,8 @@ instantané périmé est fausse, et elle est fausse avec assurance.
 """
 from __future__ import annotations
 
+import functools
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
@@ -152,8 +154,38 @@ def _identity_filters(ctx: ToolContext, source: Source) -> dict[str, str]:
     return out
 
 
+@functools.lru_cache(maxsize=None)
+def _enums_of(source_id: str) -> dict[str, tuple[Any, ...]]:
+    """Les `enum` du schéma FIGÉ de la source (`data/schemas/{id}.schema.json`).
+
+    Schéma absent : aucune contrainte ici — `schema_guard` refuse déjà de
+    démarrer sans lui ; ce n'est pas à la lecture de le redire.
+    """
+    path = Path(__file__).resolve().parent / "schemas" / f"{source_id}.schema.json"
+    if not path.is_file():
+        return {}
+    properties = (json.loads(path.read_text(encoding="utf-8")).get("properties") or {})
+    return {name: tuple(spec["enum"]) for name, spec in properties.items()
+            if isinstance(spec, dict) and isinstance(spec.get("enum"), list) and spec["enum"]}
+
+
+def _check_enum(source: Source, name: str, values: list[Any]) -> None:
+    """Une valeur hors enum ne filtre pas « rien » : elle dit que l'appel est faux.
+
+    Rendre 0 résultat laisserait le modèle conclure « aucune commande » là où il
+    a simplement mal écrit `shipped`. L'erreur le lui dit, avec les valeurs admises.
+    """
+    allowed = _enums_of(source.id).get(name)
+    if not allowed:
+        return
+    bad = [v for v in values if v not in allowed]
+    if bad:
+        raise InvalidFilter(f"`{name}` : valeur(s) hors enum {bad}", source=source.id,
+                            detail=f"admis : {list(allowed)}")
+
+
 def _validate_filters(source: Source, filters: dict[str, Any]) -> dict[str, Any]:
-    """Refuse tout filtre hors des champs déclarés. Rend les filtres normalisés."""
+    """Refuse tout filtre hors des champs déclarés ou hors enum. Rend les filtres normalisés."""
     queryable = source.queryable
     clean: dict[str, Any] = {}
 
@@ -177,8 +209,12 @@ def _validate_filters(source: Source, filters: dict[str, Any]) -> dict[str, Any]
                 raise InvalidFilter(
                     f"`{name}` : {len(values)} valeurs (plafond {MAX_IN_VALUES})", source=source.id,
                     detail="au-delà, ce n'est plus un filtre mais une jointure à faire côté données")
+            if not suffix:
+                _check_enum(source, name, values)
             clean[name] = values
         else:
+            if not suffix:
+                _check_enum(source, name, [value])
             clean[name] = value
 
     missing = [f for f in source.required_filter if f not in clean]
