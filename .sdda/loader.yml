@@ -283,7 +283,10 @@ architect-data:
 
 architect-memory:
   model_tier: balanced
-  budget_bytes: 80000
+  budget_bytes: 100000      # 80000 refusait le premier run réel (SupportDesk : STACK.md 35 Ko
+                            # + topologie à 4 agents 18 Ko + gabarit 9 Ko = 89 Ko) — relevé
+                            # explicitement, comme le hook l'exige, pas en retirant une lecture
+                            # dont le contrat a besoin
   reads:
     - .sdda/templates/memory-contract.template.md    # stable
     - .sdda/stacks/memory/{memory}.md                       # stable
