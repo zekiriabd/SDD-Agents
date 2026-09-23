@@ -1,6 +1,6 @@
 # Les Developer Agents de SDD_Agents
 
-<!--sdda:count agents-->22<!--/sdda:count--> agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
+<!--sdda:count agents-->23<!--/sdda:count--> agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
 confondre avec les agents du produit généré, décrits dans `contracts/agents/`.
 
 Règle d'orchestration interne héritée de SDD_Pro : **aucun agent ne spawne un
@@ -15,7 +15,7 @@ Cinq préfixes, un par métier, dans l'ordre du pipeline :
 |---|---|:---:|---|
 | `po-` | product owner — le besoin et son découpage | 0-1 | `po-elicitor`, `po-capabilities` |
 | `architect-` | architecture — les décisions de structure | 2 | `architect-topology`, `architect-rag`, `architect-data`, `architect-memory`, `architect-tools` |
-| `dev-` | implémentation | 3-5 | `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` |
+| `dev-` | implémentation | 3-5 | `dev-backend` (la coquille), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` |
 | `qa-` | ce qui prouve | 6 | `qa-tests`, `qa-evals` |
 | `review-` | ce qui conteste | 7 | `review-spec`, `review-safety`, `review-cost`, `review-orchestration`, `review-rag`, `review-adversarial` |
 
@@ -62,6 +62,7 @@ MISSION dont elle dérive.
 | **`dev-agent`** | 4 | **deep** | `src/agents/{agent}/` | — implémente un agent (1 instance par agent) |
 | **`dev-orchestration`** | 5 | **deep** | `src/orchestration/` | — implémente le graphe/superviseur/routeur |
 | **`dev-api`** | 5 | balanced | `src/serving/` | — implémente la surface d'exposition |
+| **`dev-backend`** | 3, 5 | balanced | `src/{App}/*`, `src/app/` | — la coquille : projet, composition, config, règles calculables, packaging (hérité de SDD_Pro, EN PLUS des six du moteur) |
 | **`qa-evals`** | 6 | **deep** | `datasets/`, `evals/` | Quel jeu, quel grader, quel seuil, calibré comment ? |
 | **`qa-tests`** | 6 | balanced | `src/**/tests/` | — tests déterministes L0→L2 |
 | **`review-spec`** | 7A | balanced | rapports | Chaque AC de CAP a-t-elle une eval qui la couvre vraiment ? |
@@ -105,8 +106,8 @@ maintenable ou un plat de spaghettis à $0.40 l'appel.
 4. Écrire dans `topology/{n}-topology.md` la section **« Alternative plus simple
    écartée »** : quelle topologie à N-1 agents a été envisagée, et quel critère
    précis la disqualifie. Section vide = `[TOPOLOGY_UNJUSTIFIED]`, bloquant.
-5. Produire le graphe (`{n}-topology.mmd`, Mermaid) et le **budget estimé** par
-   chemin.
+5. Produire le graphe (bloc ```mermaid de `## 4. Le graphe`, dans la topologie
+   elle-même) et le **budget estimé** par chemin.
 
 Il **n'écrit pas** de prompt, **ne choisit pas** de modèle (il choisit un tier),
 **ne nomme aucune API** de framework.

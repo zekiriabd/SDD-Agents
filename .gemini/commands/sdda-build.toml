@@ -93,6 +93,29 @@ tronquée et confiante, indétectable en aval.
 
 ## STEP 3 — PHASE 3 : le socle (parallèle)
 
+### 3.0 — `dev-backend --phase skeleton` (seul, AVANT le socle)
+
+Agent : `dev-backend` (`.sdda/agents/dev-backend.md`). Tier `balanced`. Owner
+de la **coquille** : fichiers de projet (`workspace/src/{AppName}/*`),
+composition, configuration et Domaine (`workspace/src/**/app/**`). Il lance
+les générateurs déterministes quand ils existent (`gen-app-skeleton --write`,
+`gen-source-tools --write` en Python) et écrit le squelette depuis la fiche de
+langage sinon. Il part **seul et d'abord** : le projet doit exister pour que
+`dev-tools`, `dev-retrieval` et `dev-data` écrivent dedans, et la composition
+doit exposer les points d'attache que les agents et le graphe honoreront.
+
+Prompt d'invocation :
+```
+Construire la coquille de la MISSION {n}-{MissionName} — phase skeleton.
+Livrable : {DeliverableType} · archi : {archi} · backend : {backend|aucune} · langage : {lang}.
+Générateurs d'abord (gen-app-skeleton, gen-source-tools si sources déclarées), puis projet,
+composition contre l'IR, configuration par NOMS de variables, Domaine (BR-x calculables).
+N'écrire ni agent, ni outil, ni orchestration, ni prompt, ni dataset.
+Fin : `python .sdda/sdda.py gen-app-skeleton --check` et `validate-packaging` verts, une ligne de confirmation.
+```
+
+Exit ≠ 0 → STOP : sans coquille, le socle n'a pas de projet où s'écrire.
+
 ### 3.1 — Dispatch
 
 Construire le `BATCH` depuis l'IR :
@@ -453,6 +476,25 @@ Agent : `dev-api` (`.sdda/agents/dev-api.md`). Tier `balanced`. Owner
 exclusif de `workspace/src/serving/**`. Surface = `## Active Serving Surface`
 (`cli`, `fastapi-sse`, `mcp-server`, `slack-bot`, …). Séquentiel après
 l'orchestrateur (il l'importe). Smoke de la stack serving exécuté en post-step.
+
+### 5.2bis — `dev-backend --phase packaging` (séquentiel, après `dev-api`)
+
+Agent : `dev-backend`. Ce qu'on **livre** : point d'entrée déclaré, `README.md`
+d'exploitation (installation, variables attendues par leur NOM, codes de
+sortie ou routes), `.env.example`, `Dockerfile` si `container`, la maison HTTP
+de `backend/{backend}.md` si `backend-api` (bootstrap, middlewares, sondes,
+résilience, `openapi.json` exporté). Le smoke de la fiche de langage et de la
+fiche backend est exécuté et **vert** avant de rendre la main.
+
+Prompt d'invocation :
+```
+Emballer la MISSION {n}-{MissionName} — phase packaging.
+Livrable : {DeliverableType} · archi : {archi} · backend : {backend|aucune}.
+Produire ce que la fiche du livrable exige (dev-backend STEP 4), exécuter le smoke, rendre une ligne.
+```
+
+Exit ≠ 0 → STOP : l'API GATE et l'ORCH GATE mesurent un livrable qui doit se
+lancer.
 
 ### 5.3 — API GATE (G6, part `api`) — déterministe, 0 token
 

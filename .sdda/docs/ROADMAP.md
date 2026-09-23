@@ -86,6 +86,14 @@ la taxonomie `[CLASS]`.
 `dev-api`, et les stacks `python.md`, `langgraph.md`, `pgvector.md`,
 `hybrid.md`, `view-per-agent.md`, `mcp.md`, `otel-genai.md` (+ `.libs.json`).
 
+S'y ajoute `dev-backend`, le septième `dev-*`, hérité de SDD_Pro : la COQUILLE
+de l'application (projet, composition, config, Domaine, packaging), jamais le
+moteur. Il lit les fiches `archi/` (mvc, ddd, microservice — sélectionnées par
+`## Active Architecture Pattern`) et, si `DeliverableType: backend-api`, les
+fiches `backend/` (python-fastapi, node-express, nestjs, kotlin-spring-boot,
+dotnet-minimalapi). Ces fiches sont réécrites pour l'agentic, pas copiées : pas
+d'ORM, pas d'entité, le « Model » est dérivé de l'IR.
+
 Gates G3 à G6 câblées.
 
 ## Lot 5 — Revue et acceptation
@@ -126,12 +134,17 @@ Un axe à la fois, chacun validé avant le suivant :
    qui a écarté LangChain seul en Python (tableau du MVP ci-dessus) vaut mot
    pour mot en TypeScript : il ne borne pas les boucles et ne persiste pas
    l'état, or P12 et la reprise sont structurants. Annoncer LangChain.js
-   contredisait ce tableau dans le même document.
-   Note Java : aucun des deux candidats n'apporte l'équivalent de LangGraph.
-   Entre Spring AI et Semantic Kernel Java, c'est Spring AI — Microsoft
-   n'avance pas le portage Java. Mais l'absence de graphe borné avec
-   checkpointing reporte la charge sur `dev-orchestration`, et c'est un coût à
-   déclarer dans la fiche, pas à découvrir au premier cycle non borné.
+   contredisait ce tableau dans le même document. Les fiches
+   `lang/typescript.md`, `framework/langgraph-js.md` et `serving/cli-node.md`
+   existent, en design-phase : elles décrivent, aucun générateur ne les lit
+   encore, et le bootstrap ne propose aucune combo TypeScript.
+   Note Java/Kotlin : aucun des deux candidats n'apporte l'équivalent de
+   LangGraph. Entre Spring AI et Semantic Kernel Java, c'est Spring AI —
+   Microsoft n'avance pas le portage Java. Mais l'absence de graphe borné avec
+   checkpointing reporte la charge sur `dev-orchestration`, et c'est un coût
+   que `framework/spring-ai.md` déclare, pas à découvrir au premier cycle non
+   borné. Même statut que TypeScript : `lang/kotlin.md`, `spring-ai.md` et
+   `serving/cli-kotlin.md` sont sur disque, aucune combo de bootstrap.
 2. **Patterns d'orchestration** : `supervisor`, `graph`, `plan-execute`,
    `reflection`.
 3. **Patterns RAG** : `contextual`, `agentic`, `self-rag`, `corrective-rag`.
