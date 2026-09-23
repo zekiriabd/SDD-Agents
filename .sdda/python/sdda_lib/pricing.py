@@ -39,6 +39,7 @@ PRICING: dict[str, dict[str, float]] = {
     "claude-sonnet-4-6": {"input": 3.00,  "output": 15.00, "cache_read": 0.30, "cache_creation": 3.75},
     "claude-sonnet-4-5": {"input": 3.00,  "output": 15.00, "cache_read": 0.30, "cache_creation": 3.75},
     "claude-haiku-4-5":  {"input": 1.00,  "output": 5.00,  "cache_read": 0.10, "cache_creation": 1.25},
+    "gemini-2.5-flash":  {"input": 0.30,  "output": 2.50,  "cache_read": 0.075, "cache_creation": 0.30},
     # Embeddings (sortie sans objet)
     "voyage-3-large":    {"input": 0.18,  "output": 0.0,   "cache_read": 0.18, "cache_creation": 0.18},
     "voyage-3":          {"input": 0.06,  "output": 0.0,   "cache_read": 0.06, "cache_creation": 0.06},
@@ -60,6 +61,7 @@ PRICING_META: dict[str, dict[str, str]] = {
     "claude-sonnet-4-6": {"reviewed": "2026-08-30", "source": _SDD_PRO},
     "claude-sonnet-4-5": {"reviewed": "2026-08-30", "source": _SDD_PRO},
     "claude-haiku-4-5":  {"reviewed": "2026-08-30", "source": _SDD_PRO},
+    "gemini-2.5-flash":  {"reviewed": "2026-09-23", "source": "tarif public Google AI (texte, <= 200k) — à revérifier avant une mesure opposable"},
     "voyage-3-large":    {"reviewed": "2026-08-30", "source": _SDD_PRO},
     "voyage-3":          {"reviewed": "2026-08-30", "source": _SDD_PRO},
 }

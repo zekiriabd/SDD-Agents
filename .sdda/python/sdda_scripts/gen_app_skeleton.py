@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -192,7 +193,15 @@ def render_app_config(ctx: Context, template: str) -> str:
     configurations différentes ne sont pas comparables, et le pipeline doit
     pouvoir le dire.
     """
-    secrets = SECRET_ENV.get(ctx.provider.lower(), SECRET_ENV["none"])
+    secrets = dict(SECRET_ENV.get(ctx.provider.lower(), SECRET_ENV["none"]))
+    # Le NOM de la variable est celui que STACK.md déclare (`## Active Secrets`,
+    # ex. `LLM_API_KEY`), pas celui que le SDK du fournisseur suppose : sinon
+    # `.env` porte `LLM_API_KEY`, l'application lit `ANTHROPIC_API_KEY`, et la
+    # clé « manque » alors qu'elle est là. Le défaut par fournisseur ne sert
+    # que si STACK.md ne déclare aucun secret de modèle.
+    declared = _declared_secret_names(ctx.root)
+    if "LLM_API_KEY" in declared and "llmApiKey" in secrets:
+        secrets["llmApiKey"] = "LLM_API_KEY"
     substitutions = {
         "{MissionId}": ctx.mission,
         "{RuntimeProvider}": ctx.provider,
@@ -259,6 +268,32 @@ def _subst(text: str, ctx: Context) -> str:
 # ---------------------------------------------------------------------------
 # Écriture
 # ---------------------------------------------------------------------------
+_DEPENDENCIES_RE = re.compile(r"^dependencies = \[(?:[^\]]|\n)*?\]$", re.M)
+
+
+def _comparable(target: Path, text: str) -> str:
+    """Ce que `--check` compare. Pour `pyproject.toml`, tout SAUF `dependencies`.
+
+    La liste de dépendances est remplie par `uv add` depuis les `.libs.json`
+    des stacks actives (`lang/python.md §2.1`) : le squelette l'écrit vide, et
+    l'exiger vide faisait de chaque projet correctement installé un projet
+    « dérivé ». Le reste du fichier (identité, point d'entrée, layout) reste
+    comparé à l'octet.
+    """
+    if target.name != "pyproject.toml":
+        return text
+    return _DEPENDENCIES_RE.sub("dependencies = []", text)
+
+
+def _declared_secret_names(root: Path) -> set[str]:
+    """Les NOMS déclarés sous `## Active Secrets` de STACK.md (`- LLM_API_KEY: ${LLM_API_KEY}`)."""
+    stack = paths.stack_md_path(root)
+    if not stack.is_file():
+        return set()
+    body = markdown_io.section_body(markdown_io.read_text(stack), "Active Secrets") or ""
+    return set(re.findall(r"^\s*-\s*([A-Z][A-Z0-9_]*)\s*:", body, re.M))
+
+
 def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
     targets = plan(ctx, report)
     written: list[str] = []
@@ -268,9 +303,15 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
     for target, content in targets:
         rel = paths.rel(ctx.root, target)
         exists = target.is_file()
-        same = exists and markdown_io.read_text(target) == content
+        same = exists and _comparable(target, markdown_io.read_text(target)) == _comparable(target, content)
         if write:
             if not same:
+                if exists and target.name == "pyproject.toml":
+                    # La liste `dependencies` appartient à `uv add` : la
+                    # régénération réécrit tout le reste, jamais elle.
+                    current = _DEPENDENCIES_RE.search(markdown_io.read_text(target))
+                    if current:
+                        content = _DEPENDENCIES_RE.sub(lambda _m: current.group(0), content, count=1)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(content, encoding="utf-8")
                 written.append(rel)

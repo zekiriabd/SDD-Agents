@@ -33,6 +33,14 @@ exclude = ["tests", ".env", ".env.example", "README.md", "pyproject.toml", "uv.l
 [tool.hatch.build.targets.wheel.sources]
 "" = "{AppName}"
 
+# Installation éditable (`uv sync`, `pip install -e`) : hatchling refuse de
+# réécrire le préfixe `""` en mode dev. On expose le répertoire PARENT sur
+# sys.path, où `{AppName}/` est un paquet importable tel quel.
+[tool.hatch.build.targets.wheel.force-include]
+
+[tool.hatch.build]
+dev-mode-dirs = [".."]
+
 [tool.ruff]
 line-length = 110
 target-version = "py312"
@@ -41,6 +49,10 @@ target-version = "py312"
 # `T20` (print) : la sortie machine passe par `sys.stdout.write` en NDJSON, et
 # le diagnostic par `stderr`. Un `print` égaré casse le contrat `--json`.
 select = ["E", "F", "I", "B", "ASYNC", "S", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` est l'outil de pytest ; S101 ne vaut que pour le code livré.
+"**/tests/**" = ["S101"]
 
 [tool.mypy]
 strict = true
