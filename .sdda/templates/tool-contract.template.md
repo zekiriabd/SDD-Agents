@@ -78,8 +78,9 @@ Trust: <trusted | untrusted>          # la SORTIE de cet outil est-elle du texte
 ## 6. Authentification
 
 - **Variable d'environnement** : `{ENV_VAR}`
-- **Jamais** la valeur ici. `STACK.md` porte les secrets, gitignored, et ils ne
-  doivent apparaître dans aucun prompt, aucun trace span, aucun dataset.
+- **Jamais** la valeur ici. `.env` (gitignoré) porte les secrets ; `STACK.md`
+  n'en porte que les noms, et ils ne doivent apparaître dans aucun prompt,
+  aucun trace span, aucun dataset.
 
 ## 7. Exposé à
 

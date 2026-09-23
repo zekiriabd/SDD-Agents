@@ -13,7 +13,9 @@ Contrat :
 
     - **idempotent** : relancé sur un workspace à jour, il ne touche à rien et
       sort 0 ;
-    - **une ligne par action** (`mkdir`, `rmdir`, `keep`, `write`) sur stdout ;
+    - **une ligne par action** (`mkdir`, `rmdir`, `move`, `write`, `edit`,
+      `remove`, `keep`) sur stdout — jamais une VALEUR de secret, seulement
+      des noms ;
       `--json` remplace ces lignes par le rapport machine (`data.actions`) ;
     - `--dry-run` calcule et affiche les actions, n'écrit rien — pas même la
       version ;
@@ -42,6 +44,7 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -50,7 +53,9 @@ from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sdda_lib import markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.layered_config import read_project_section, read_stack_section_kv  # noqa: E402
 from sdda_lib.workspace import (  # noqa: E402
     WORKSPACE_JSON_REL,
     WORKSPACE_VERSION,
@@ -92,9 +97,47 @@ class Context:
     def workspace(self) -> Path:
         return self.root / "workspace"
 
-    def _log(self, op: str, rel: str, detail: str = "") -> None:
-        self.actions.append({"op": op, "path": f"workspace/{rel}", "applied": not self.dry_run,
+    def _log(self, op: str, rel: str, detail: str = "", *, at_root: bool = False) -> None:
+        shown = rel if at_root else f"workspace/{rel}"
+        self.actions.append({"op": op, "path": shown, "applied": not self.dry_run,
                              **({"detail": detail} if detail else {})})
+
+    def write_text(self, rel: str, text: str, detail: str = "", *, at_root: bool = False) -> None:
+        """Écrit `workspace/{rel}` (ou `{root}/{rel}` si `at_root`), journalisé, neutralisé en dry-run."""
+        target = (self.root if at_root else self.workspace) / rel
+        self._log("write" if not target.exists() else "edit", rel, detail, at_root=at_root)
+        if not self.dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8", newline="\n")
+
+    def move_file(self, old: str, new: str) -> bool:
+        """Déplace UN fichier `workspace/{old}` -> `workspace/{new}` ; collision = l'original reste."""
+        src, dst = self.workspace / old, self.workspace / new
+        if not src.is_file():
+            return False
+        if dst.exists():
+            self.report.warn("WORKSPACE_MIGRATION_COLLISION",
+                             f"`workspace/{new}` existe déjà : l'original `workspace/{old}` reste en place",
+                             "fusionner à la main ; la migration ne tranche pas entre deux versions d'un fichier",
+                             f"workspace/{old}")
+            return False
+        self._log("move", old, f"-> {new}")
+        self.emptied.add(old)          # la simulation doit savoir que ce fichier n'est plus là
+        if not self.dry_run:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+        return True
+
+    def remove_file(self, rel: str, detail: str = "") -> bool:
+        """Supprime `workspace/{rel}` — uniquement après que son contenu a été reporté ailleurs."""
+        target = self.workspace / rel
+        if not target.is_file():
+            return False
+        self._log("remove", rel, detail)
+        self.emptied.add(rel)          # sinon `--dry-run` accuse le répertoire parent d'être encore plein
+        if not self.dry_run:
+            target.unlink()
+        return True
 
     def mkdir(self, rel: str) -> bool:
         """Crée `workspace/{rel}` (+ `.gitkeep`, comme le bootstrap) s'il manque."""
@@ -255,6 +298,21 @@ GHOST_DIRS_V2: tuple[str, ...] = (
 )
 
 
+#: L'arborescence telle qu'elle était EN v2, figée en dur — même raison que
+#: `TREE_V1` : une migration produit l'état de son époque.
+TREE_V2: tuple[str, ...] = (
+    "stack", "stack/sources",
+    "feats/missions", "feats/caps", "feats/topology",
+    "feats/contracts/agents", "feats/contracts/tools", "feats/contracts/retrieval", "feats/contracts/memory",
+    "feats/contracts/dataaccess/schemas", "feats/decisions", "feats/briefs",
+    "src", "src/prompts",
+    "proof/datasets/golden", "proof/datasets/holdout", "proof/datasets/calibration", "proof/datasets/adversarial",
+    "proof/suites", "proof/baselines", "proof/calibration",
+    ".sys/.ir", ".sys/.context/packs", ".sys/.state", ".sys/.validation", ".sys/.audit",
+    ".sys/reports", ".sys/traces/runs",
+)
+
+
 def migrate_to_v2(ctx: Context) -> None:
     """v1 -> v2 : feats / stack / src / proof / .sys.
 
@@ -265,9 +323,345 @@ def migrate_to_v2(ctx: Context) -> None:
     """
     for old, new in MOVES_V2:
         ctx.move(old, new)
-    for rel in WORKSPACE_TREE:
+    for rel in TREE_V2:
         ctx.mkdir(rel)
     for rel in GHOST_DIRS_V2:
+        ctx.rmdir_if_empty(rel, "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+
+
+# ---------------------------------------------------------------------------
+# v2 -> v3 : l'entrée de l'utilisateur tient en trois choses
+# ---------------------------------------------------------------------------
+#: Répertoires vidés par la v3 et absents du nouvel arbre. Du plus profond vers
+#: le plus haut (cf. GHOST_DIRS_V2).
+GHOST_DIRS_V3: tuple[str, ...] = (
+    "stack/sources", "stack/topology",
+    "feats/contracts/dataaccess/schemas", "feats/contracts/dataaccess",
+)
+
+STACK_REL = "stack/STACK.md"
+_SECTION_RE = r"^## {title}\s*$"
+_BULLET_KV_RE = re.compile(r"^(\s*-\s*)([A-Z][A-Z0-9_]*)(\s*:\s*)(.*?)(\s*(?:#.*)?)$")
+_ENV_REF_RE = re.compile(r"^\$\{[A-Z][A-Z0-9_]*\}$")
+_TOP_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*):")
+_MANIFEST_CHILD_RE = re.compile(r"^\s*(?:#\s*)?-\s*(?:path:|\{)")
+_MMD_LINE_RE = re.compile(r"^Fichier\s*:\s*`workspace/feats/topology/\d+-topology\.mmd`.*$", re.M)
+
+
+def _section_span(text: str, title: str) -> tuple[int, int] | None:
+    """(début, fin) du CORPS de `## {title}` — jusqu'au prochain `## ` ou la fin."""
+    m = re.search(_SECTION_RE.format(title=re.escape(title)), text, re.M)
+    if not m:
+        return None
+    start = m.end()
+    nxt = re.compile(r"^## ", re.M).search(text, start)
+    return start, (nxt.start() if nxt else len(text))
+
+
+def _replace_section_body(text: str, title: str, new_body: str) -> str:
+    span = _section_span(text, title)
+    if span is None:
+        return text
+    start, end = span
+    body = new_body if new_body.startswith("\n") else "\n" + new_body
+    if not body.endswith("\n"):
+        body += "\n"
+    return text[:start] + body + text[end:]
+
+
+def _section_body(text: str, title: str) -> str | None:
+    span = _section_span(text, title)
+    return text[span[0]:span[1]] if span else None
+
+
+def _template_section_body(title: str) -> str | None:
+    """Le corps d'une section du gabarit courant — pour réaligner un STACK.md sans deviner."""
+    tmpl = paths.FRAMEWORK_SDDA_DIR / "templates" / "STACK.md.template"
+    if not tmpl.is_file():
+        return None
+    return _section_body(markdown_io.read_text(tmpl), title)
+
+
+def _is_clear_value(value: str) -> bool:
+    v = value.strip()
+    if not v or _ENV_REF_RE.match(v) or v.startswith("<") or v.startswith("{{"):
+        return False
+    return v.lower() not in ("n/a", "none", "-", "~", "null")
+
+
+def _env_names(path: Path) -> set[str]:
+    if not path.is_file():
+        return set()
+    names: set[str] = set()
+    for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
+        s = line.strip()
+        if s and not s.startswith("#") and "=" in s:
+            names.add(s.split("=", 1)[0].strip().removeprefix("export").strip())
+    return names
+
+
+def v3_secrets_to_env(ctx: Context) -> None:
+    """Les VALEURS de `## Active Secrets` et des `DB_*` sortent vers `.env` ; STACK.md garde `${NOM}`.
+
+    STACK.md devient versionnable à cet instant précis : c'est la seule étape de
+    la v3 qui touche à un secret, et elle ne le journalise jamais — le détail de
+    l'action ne porte que des NOMS.
+    """
+    stack = ctx.workspace / STACK_REL
+    if not stack.is_file():
+        return
+    text = markdown_io.read_text(stack)
+    env_path = ctx.root / ".env"
+    known = _env_names(env_path)
+    moved: list[tuple[str, str]] = []
+    for title in ("Active Secrets", "Active Data Access"):
+        body = _section_body(text, title)
+        if body is None:
+            continue
+        new_lines: list[str] = []
+        for line in body.split("\n"):
+            m = _BULLET_KV_RE.match(line)
+            if m and not line.lstrip().startswith("#") and _is_clear_value(m.group(4)):
+                name = m.group(2)
+                if name not in known and name not in {n for n, _ in moved}:
+                    moved.append((name, m.group(4).strip()))
+                line = f"{m.group(1)}{name}{m.group(3)}${{{name}}}{m.group(5)}"
+            new_lines.append(line)
+        text = _replace_section_body(text, title, "\n".join(new_lines))
+    if not moved:
+        return
+    existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
+    chunk = "".join(f"{n}={v}\n" for n, v in moved)
+    header = "" if existing else "# SDD_Agents — valeurs des secrets. Gitignoré. STACK.md n'en porte que les noms (${NOM}).\n"
+    sep = "" if not existing or existing.endswith("\n") else "\n"
+    ctx.write_text(".env", existing + sep + header + "# extrait de workspace/stack/STACK.md par migrate-workspace (v3)\n" + chunk,
+                   f"{len(moved)} variable(s) : {', '.join(n for n, _ in moved)}", at_root=True)
+    ctx.write_text(STACK_REL, text, "valeurs remplacées par ${NOM} : " + ", ".join(n for n, _ in moved))
+
+
+def v3_gitignore(ctx: Context) -> None:
+    """STACK.md sort du .gitignore (il ne porte plus de valeur) ; `.env` y entre."""
+    gi = ctx.root / ".gitignore"
+    lines = gi.read_text(encoding="utf-8").split("\n") if gi.is_file() else []
+    kept = [l for l in lines if l.strip() not in ("workspace/stack/STACK.md", "workspace/stack/STACK.md*")]
+    changed = len(kept) != len(lines)
+    if ".env" not in {l.strip() for l in kept} and "/.env" not in {l.strip() for l in kept}:
+        if kept and kept[-1].strip():
+            kept.append("")
+        kept += ["# SDD_Agents — les valeurs des secrets ; STACK.md (versionné) n'en porte que les noms", ".env"]
+        changed = True
+    if changed:
+        ctx.write_text(".gitignore", "\n".join(kept).rstrip("\n") + "\n",
+                       "STACK.md versionné, .env ignoré", at_root=True)
+
+
+def _mission_name(ctx: Context, number: str) -> str:
+    for p in sorted((ctx.workspace / "feats" / "missions").glob(f"{number}-*.md")):
+        return p.stem.split("-", 1)[1] if "-" in p.stem else p.stem
+    return "Mission"
+
+
+def v3_roster_to_markdown(ctx: Context) -> None:
+    """`stack/topology/{n}-roster.yml` -> `feats/topology/{n}-roster.md` (YAML dans un bloc)."""
+    from sdda_scripts.roster import wrap_roster_markdown  # import tardif : chaîne d'imports lourde
+
+    src_dir = ctx.workspace / "stack" / "topology"
+    for yml in sorted(src_dir.glob("*-roster.y*ml")) if src_dir.is_dir() else []:
+        number = yml.name.split("-", 1)[0]
+        target_rel = f"feats/topology/{number}-roster.md"
+        if (ctx.workspace / target_rel).exists():
+            ctx.report.warn("WORKSPACE_MIGRATION_COLLISION",
+                            f"`workspace/{target_rel}` existe déjà : `workspace/stack/topology/{yml.name}` reste en place",
+                            "fusionner à la main", f"workspace/stack/topology/{yml.name}")
+            continue
+        yaml_text = markdown_io.read_text(yml)
+        try:
+            num = int(number)
+        except ValueError:
+            num = 0
+        ctx.write_text(target_rel, wrap_roster_markdown(num, _mission_name(ctx, number), yaml_text),
+                       f"depuis stack/topology/{yml.name}")
+        ctx.remove_file(f"stack/topology/{yml.name}", "reporté en Markdown")
+
+    # STACK.md : les clés de localisation du roster n'ont plus d'objet.
+    stack = ctx.workspace / STACK_REL
+    if not stack.is_file():
+        return
+    text = markdown_io.read_text(stack)
+    body = _section_body(text, "Active Agent Topology")
+    if body is None or not re.search(r"^RosterManifest(Root|s)\s*:", body, re.M):
+        return
+    lines, skip = [], False
+    for line in body.split("\n"):
+        if re.match(r"^RosterManifests\s*:", line):
+            skip = True
+            continue
+        if re.match(r"^RosterManifestRoot\s*:", line):
+            continue
+        if skip and _MANIFEST_CHILD_RE.match(line):
+            continue
+        skip = False
+        lines.append(line)
+    remaining = "\n".join(lines)
+    if not any(l.strip() and not l.lstrip().startswith("#") for l in lines):
+        remaining = _template_section_body("Active Agent Topology") or remaining
+    ctx.write_text(STACK_REL, _replace_section_body(text, "Active Agent Topology", remaining),
+                   "## Active Agent Topology : RosterManifestRoot/RosterManifests retirés (convention feats/topology/{n}-roster.md)")
+
+
+def v3_inline_graphs(ctx: Context) -> None:
+    """`{n}-topology.mmd` entre dans le bloc ```mermaid de `{n}-topology.md`, puis disparaît."""
+    topo = ctx.workspace / "feats" / "topology"
+    for mmd in sorted(topo.glob("*-topology.mmd")) if topo.is_dir() else []:
+        number = mmd.name.split("-", 1)[0]
+        md_rel = f"feats/topology/{number}-topology.md"
+        md = ctx.workspace / md_rel
+        graph = markdown_io.read_text(mmd).strip("\n") + "\n"
+        if md.is_file():
+            text = markdown_io.read_text(md)
+            replaced = markdown_io.replace_first_fenced_block(text, "mermaid", graph)
+            if replaced is None:
+                block = f"\n```mermaid\n{graph}```\n"
+                span = _section_span(text, "4. Le graphe")
+                replaced = (text[:span[1]].rstrip("\n") + "\n" + block + text[span[1]:]) if span \
+                    else text.rstrip("\n") + "\n\n---\n\n## 4. Le graphe\n" + block
+            replaced = _MMD_LINE_RE.sub("Le graphe ci-dessous est compilé dans l'IR ; il n'existe nulle part ailleurs.", replaced)
+        else:
+            replaced = (f"# TOPOLOGY: {number}\n\n## 4. Le graphe\n\n```mermaid\n{graph}```\n")
+            ctx.report.warn("WORKSPACE_MIGRATION_COLLISION",
+                            f"`workspace/{md_rel}` n'existait pas : créé autour du graphe de `{mmd.name}`",
+                            "compléter la topologie", md_rel)
+        ctx.write_text(md_rel, replaced, f"graphe de {mmd.name} inline")
+        ctx.remove_file(f"feats/topology/{mmd.name}", "reporté dans le bloc ```mermaid")
+
+
+def v3_schemas_to_src(ctx: Context) -> None:
+    """Les schémas figés partent avec le code : `src/{App}/src/{App}/data/schemas/`."""
+    old = "feats/contracts/dataaccess/schemas"
+    src = ctx.workspace / old
+    if not src.is_dir() or not [e for e in src.iterdir() if e.name != ".gitkeep"]:
+        return
+    app = str(read_project_section(ctx.root).get("AppName") or "").strip()
+    if not app:
+        ctx.report.error("WORKSPACE_GHOST_DIR_NOT_EMPTY",
+                         f"`workspace/{old}` contient des schémas figés mais STACK.md n'a pas d'`AppName` : "
+                         "impossible de savoir dans quel paquet les ranger",
+                         "renseigner `AppName` dans ## Project Config puis relancer la migration", f"workspace/{old}")
+        return
+    ctx.move(old, paths.rel(ctx.workspace, paths.app_src_root(ctx.root, app) / "data" / "schemas"))
+
+
+def _manifest_blocks(text: str) -> list[tuple[str, list[str]]]:
+    """Les blocs de premier niveau `Stores:` / `Sources:` d'un manifeste, lignes comprises (commentaires gardés)."""
+    blocks: list[tuple[str, list[str]]] = []
+    current: tuple[str, list[str]] | None = None
+    for line in text.split("\n"):
+        m = _TOP_KEY_RE.match(line)
+        if m:
+            key = m.group(1)
+            current = (key, []) if key.lower() in ("stores", "sources") else None
+            if current:
+                blocks.append(current)
+            continue
+        if current is not None:
+            current[1].append(line)
+    for _key, lines in blocks:
+        while lines and not lines[-1].strip():
+            lines.pop()
+    return blocks
+
+
+def v3_sources_inline(ctx: Context) -> None:
+    """Les manifestes `stack/sources/*.yml` rentrent dans `## Active Data Sources` ; un `mcp.json` monte à côté de STACK.md."""
+    stack = ctx.workspace / STACK_REL
+    if not stack.is_file():
+        return
+    section = read_stack_section_kv(ctx.root, "Active Data Sources")
+    declared = section.get("SourceManifests") or []
+    if not isinstance(declared, list) or not declared:
+        return
+    old_root = str(section.get("SourceManifestRoot") or "workspace/stack/sources").strip()
+    root_dir = ctx.root / old_root
+    text = markdown_io.read_text(stack)
+    body = _section_body(text, "Active Data Sources")
+    if body is None:
+        return
+    lines = body.split("\n")
+    kept_manifests: list[str] = []
+
+    for raw in declared:
+        entry = {"path": raw} if isinstance(raw, str) else (raw if isinstance(raw, dict) else {})
+        rel_path = str(entry.get("path") or "").strip()
+        kind = str(entry.get("kind") or "sdda-sources").strip()
+        if not rel_path:
+            continue
+        src = root_dir / rel_path
+        if kind == "mcp-config":
+            new_rel = f"stack/{Path(rel_path).name}"
+            if src.is_file() and paths.rel(ctx.workspace, src) != new_rel:
+                ctx.move_file(paths.rel(ctx.workspace, src), new_rel)
+            kept_manifests.append(f"  - {{ path: {Path(rel_path).name}, kind: mcp-config }}")
+            continue
+        if not src.is_file():
+            continue
+        for key, item_lines in _manifest_blocks(markdown_io.read_text(src)):
+            idx = next((i for i, l in enumerate(lines) if re.match(rf"^{re.escape(key)}\s*:\s*(#.*)?$", l)), None)
+            if idx is None:
+                lines += ["", f"{key}:"]
+                idx = len(lines) - 1
+            lines[idx + 1:idx + 1] = item_lines
+        ctx.remove_file(paths.rel(ctx.workspace, src), "reporté inline dans ## Active Data Sources")
+
+    # Les clés de localisation : retirées, ou réduites aux manifestes MCP conservés.
+    out, skip = [], False
+    for line in lines:
+        if re.match(r"^SourceManifests\s*:", line):
+            skip = True
+            if kept_manifests:
+                out += ["SourceManifestRoot: workspace/stack", "SourceManifests:", *kept_manifests]
+            continue
+        if re.match(r"^SourceManifestRoot\s*:", line):
+            continue
+        if skip and _MANIFEST_CHILD_RE.match(line):
+            continue
+        skip = False
+        out.append(line)
+    ctx.write_text(STACK_REL, _replace_section_body(text, "Active Data Sources", "\n".join(out)),
+                   "## Active Data Sources : manifestes rapatriés inline")
+
+
+def v3_seed_from_feats(ctx: Context) -> None:
+    """Tout ce qui n'est pas du Markdown sous `feats/` est de la vérité terrain : `proof/seed/`."""
+    feats = ctx.workspace / "feats"
+    if not feats.is_dir():
+        return
+    for p in sorted(feats.rglob("*")):
+        if not p.is_file() or p.suffix.lower() == ".md" or p.name == ".gitkeep":
+            continue
+        rel = paths.rel(ctx.workspace, p)
+        if rel.startswith("feats/contracts/dataaccess/schemas/"):
+            continue  # les schémas ont leur destination (v3_schemas_to_src) ; s'ils restent, le fantôme le dira
+        ctx.move_file(rel, f"proof/seed/{p.name}")
+
+
+def migrate_to_v3(ctx: Context) -> None:
+    """v2 -> v3 : STACK.md versionné (secrets dans .env), feats/ en Markdown seul, proof/seed/.
+
+    L'ordre suit la même règle qu'en v2 — reporter le contenu d'abord, créer
+    l'arbre ensuite, retirer les coquilles en dernier — avec une contrainte de
+    plus : les schémas et le roster ont une destination PRÉCISE et passent
+    avant le balayage générique de `feats/`, qui ne connaît que `proof/seed/`.
+    """
+    v3_secrets_to_env(ctx)
+    v3_gitignore(ctx)
+    v3_roster_to_markdown(ctx)
+    v3_inline_graphs(ctx)
+    v3_schemas_to_src(ctx)
+    v3_sources_inline(ctx)
+    v3_seed_from_feats(ctx)
+    for rel in WORKSPACE_TREE:
+        ctx.mkdir(rel)
+    for rel in GHOST_DIRS_V3:
         ctx.rmdir_if_empty(rel, "WORKSPACE_GHOST_DIR_NOT_EMPTY")
 
 
@@ -284,6 +678,8 @@ class Migration:
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "arborescence canonique + retrait de .sys/.routing, .sys/.cache, .sys/.reverse", migrate_to_v1),
     Migration(2, "quatre entrées : feats/ (spec) · stack/ · src/ (prompts compris) · proof/ (jamais un dev-*) · .sys/", migrate_to_v2),
+    Migration(3, "STACK.md versionné (valeurs dans .env) · feats/ en Markdown seul (roster {n}-roster.md, graphe inline) · "
+                 "schémas figés sous src/ · sources inline · vérité terrain proof/seed/", migrate_to_v3),
 )
 
 
@@ -341,7 +737,7 @@ def main(argv: list[str] | None = None) -> int:
         prefix = "(dry-run) " if args.dry_run else ""
         for action in report.data["actions"]:
             detail = f"  — {action['detail']}" if action.get("detail") else ""
-            print(f"  {prefix}{action['op']:<5} {action['path']}{detail}")
+            print(f"  {prefix}{action['op']:<6} {action['path']}{detail}")
         if not report.data["actions"] and report.ok:
             print(f"  workspace déjà en v{report.data['reached']} — rien à faire")
         elif report.ok:

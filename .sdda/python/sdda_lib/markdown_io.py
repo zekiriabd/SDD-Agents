@@ -260,6 +260,31 @@ def fenced_blocks(body: str, lang: str | None = None) -> list[str]:
     return out
 
 
+def first_yaml_block(text: str) -> str | None:
+    """Le premier bloc ```yaml (ou ```yml) d'un document Markdown, None s'il n'y en a pas.
+
+    C'est la convention des déclarations que `feats/` porte en Markdown — le
+    roster (`{n}-roster.md`), un manifeste de sources en `.md` : la prose
+    autour du bloc est de la documentation pour l'humain, le bloc est ce que
+    la machine lit. Un seul bloc fait foi, le premier, pour qu'un exemple cité
+    plus bas dans le même fichier ne devienne jamais la déclaration.
+    """
+    for lang in ("yaml", "yml"):
+        blocks = fenced_blocks(text, lang)
+        if blocks:
+            return blocks[0]
+    return None
+
+
+def replace_first_fenced_block(text: str, lang: str, new_body: str) -> str | None:
+    """Remplace le CONTENU du premier bloc ```{lang} par `new_body` ; None si aucun bloc."""
+    for m in _FENCE_RE.finditer(text):
+        if m.group(1).lower() == lang.lower():
+            body = new_body if new_body.endswith("\n") else new_body + "\n"
+            return text[: m.start(2)] + body + text[m.end(2):]
+    return None
+
+
 # --------------------------------------------------------------------------
 # Valeurs
 # --------------------------------------------------------------------------

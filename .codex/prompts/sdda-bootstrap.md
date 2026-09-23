@@ -108,18 +108,20 @@ Lancer : python bootstrap.py (sans --force : les MISSIONs sont conservées)
 Écrit par le script, **jamais** par cette commande :
 
 ```
+.env                               # les VALEURS des secrets — gitignoré
 workspace/
 ├── stack/                         # CE QU'ON CONFIGURE
-│   ├── STACK.md                   #   gitignored — secrets en clair
-│   └── sources/  topology/        #   manifestes versionnés
-├── feats/                         # CE QU'ON SPÉCIFIE
-│   ├── missions/  caps/  topology/
-│   ├── contracts/{agents,tools,retrieval,memory,dataaccess/schemas}/
-│   ├── decisions/                 #   ADR — un seul endroit
-│   └── briefs/
-├── src/                           # CE QU'ON PRODUIT — prompts compris
+│   └── STACK.md                   #   VERSIONNÉ — noms de variables (${LLM_API_KEY}), jamais de valeur
+├── feats/                         # CE QU'ON SPÉCIFIE — du Markdown, seul
+│   ├── briefs/                    #   ce que l'humain dépose (specs, --from-brief)
+│   ├── missions/  caps/
+│   ├── topology/                  #   {n}-roster.md (humain) · {n}-topology.md (architecte, graphe inclus)
+│   ├── contracts/{agents,tools,retrieval,memory}/
+│   └── decisions/                 #   ADR — un seul endroit
+├── src/                           # CE QU'ON PRODUIT — prompts et schémas figés compris
 │   └── prompts/
 ├── proof/                         # CE QUI JUGE — jamais écrit par un dev-*
+│   ├── seed/                      #   la vérité terrain de l'HUMAIN (scénarios annotés, labels)
 │   ├── datasets/{golden,holdout,calibration,adversarial}/
 │   └── suites/  baselines/  calibration/
 ├── .sys/                          # ÉTAT INTERNE ET SORTIES DE RUN — régénérable

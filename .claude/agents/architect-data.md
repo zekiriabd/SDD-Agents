@@ -58,12 +58,14 @@ Read **uniquement** :
 - `workspace/stack/STACK.md` — `## Active Data Access` : `DatabaseType`,
   `DbAgentRole`, `DbStatementTimeoutMs`, `DbMaxRowsReturned`, `DbAllowedSchemas`,
   `DbForbiddenStatements`, `DbQueryLogging`. Et, si `declared-sources` est
-  actif, `## Active Data Sources` : `SourceManifests`, `Stores`, `Sources`,
-  l'enveloppe `Source*`, `SourceEgressAllowlist`, `SourceSecretsFile`.
-- les **manifestes** cités par `SourceManifests[]` (sous
-  `SourceManifestRoot`) — ce sont eux qui sont versionnés, pas STACK.md.
-  **Tu ne lis jamais `SourceSecretsFile`** : tu n'as besoin que des noms de
-  variables, et ils sont dans les stores.
+  actif, `## Active Data Sources` : `Stores`, `Sources` (déclarés INLINE —
+  STACK.md est versionné), l'enveloppe `Source*`, `SourceEgressAllowlist`,
+  `SourceSecretsFile`.
+- `workspace/stack/mcp.json` s'il est déclaré par `SourceManifests[]`
+  (`kind: mcp-config`) — la seule forme de manifeste qui subsiste : une
+  configuration MCP standard importée telle quelle.
+  **Tu ne lis jamais `SourceSecretsFile`** (`.env`) : tu n'as besoin que des
+  noms de variables, et ils sont dans les stores.
 - `.sdda/templates/tool-contract.template.md`, `.sdda/templates/adr.template.md`.
 
 `DatabaseType: none` et aucun accès base dans la topologie → tu rends la main

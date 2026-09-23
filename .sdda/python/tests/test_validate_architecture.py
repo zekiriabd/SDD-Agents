@@ -235,12 +235,13 @@ def test_an_empty_simplicity_section_only_warns(project: Path) -> None:
 # ---------------------------------------------------------------------------
 # Le manifeste de roster — la forme recommandée
 # ---------------------------------------------------------------------------
-TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "roster.manifest.template.yml"
+TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "roster.template.md"
+ROSTER = "workspace/feats/topology/1-roster.md"
 
 
 def use_manifest(project: Path, content: str | None = None) -> Path:
-    """Bascule le projet sur un manifeste : le Markdown ne peut pas coexister."""
-    manifest = project / "workspace/stack/topology/1-roster.yml"
+    """Bascule le projet sur le roster Markdown : la section de la topologie ne peut pas coexister."""
+    manifest = project / ROSTER
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(content if content is not None else TEMPLATE.read_text(encoding="utf-8"),
                         encoding="utf-8")
@@ -259,7 +260,7 @@ def test_a_manifest_roster_is_accepted(project: Path) -> None:
     drop_markdown_roster(project)
     report = va.run(project, mission=1)
     assert report.ok, report.render_text()
-    assert report.data["rosterSource"] == "workspace/stack/topology/1-roster.yml"
+    assert report.data["rosterSource"] == ROSTER
     assert report.data["orchestrator"] == "support-orchestrator"
     assert report.data["subagents"] == ["billing-specialist"]
     assert report.data["loopBounds"] == 1
@@ -307,12 +308,11 @@ def test_a_malformed_manifest_is_reported(project: Path) -> None:
     assert "ARCH_ROSTER_MANIFEST_MALFORMED" in errors(project)
 
 
-def test_a_listed_manifest_that_does_not_exist_is_reported(project: Path) -> None:
+def test_a_roster_file_without_a_yaml_block_is_malformed(project: Path) -> None:
+    """La prose est pour le relecteur ; sans bloc ```yaml, il n'y a rien à lire pour G2."""
+    use_manifest(project, "# ROSTER: 1-Demo\n\nQuatre agents, on verra les détails plus tard.\n")
     drop_markdown_roster(project)
-    patch(project, STACK, "## Active Data Access",
-          "## Active Agent Topology\nRosterManifestRoot: workspace/stack/topology\n"
-          "RosterManifests:\n  - path: absent.yml\n\n## Active Data Access")
-    assert "ARCH_ROSTER_MANIFEST_MISSING" in errors(project)
+    assert "ARCH_ROSTER_MANIFEST_MALFORMED" in errors(project)
 
 
 def test_no_roster_at_all_blocks(project: Path) -> None:

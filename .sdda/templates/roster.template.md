@@ -1,27 +1,28 @@
-# Roster d'agents — déclaré par l'ARCHITECTE (PHILOSOPHY P7).
-#
-# C'est CE fichier qui fixe l'architecture agentic : combien d'agents, lesquels,
-# qui fait quoi, avec quels outils et quel modèle. Le framework le vérifie et
-# l'implémente ; il n'en décide aucune ligne.
-#
-# Référencé depuis `STACK.md ## Active Agent Topology` :
-#     RosterManifestRoot: workspace/stack/topology
-#     RosterManifests:
-#       - path: 1-roster.yml
-#
-# Convention de nommage : `{n}-roster.yml`, où {n} est le numéro de MISSION.
-# Un fichier trouvé par cette convention est chargé même sans être listé.
-#
-# VERSIONNÉ, contrairement à STACK.md (gitignoré, il porte les secrets) : la
-# décision d'architecture doit être relue en revue, et retrouvable dans six mois.
-#
-# Ce qui est OBLIGATOIRE dépend du pattern actif de `## Active Orchestration
-# Pattern`. La liste exacte :
-#     python .sdda/sdda.py validate-architecture --explain
-#
-# Spécification complète : .sdda/registry/architecture-requirements.yml
+# ROSTER: {n}-{MissionName}
 
+> Déclaré par l'ARCHITECTE (PHILOSOPHY P7). C'est CE fichier qui fixe
+> l'architecture agentic : combien d'agents, lesquels, qui porte quelle CAP,
+> avec quels outils, quelles skills, quelles règles et quel tier. Le framework
+> le vérifie et l'implémente ; il n'en décide aucune ligne.
+>
+> Emplacement : `workspace/feats/topology/{n}-roster.md`. Le premier bloc
+> `yaml` clôturé ci-dessous EST la déclaration ; la prose autour est pour le
+> relecteur. `feats/` ne contient que du Markdown, et le roster est la
+> première ligne de la spécification — pas une configuration : il se relit en
+> revue à côté de la topologie qu'il commande.
+>
+> Ce fichier appartient à l'HUMAIN. `architect-topology` le lit et n'y écrit
+> jamais ; le voisin `{n}-topology.md` est à lui.
+>
+> Pré-remplir : `python .sdda/sdda.py roster scaffold --mission {n}`
+> Vérifier    : `python .sdda/sdda.py roster validate --mission {n}`
+> Ce qui est OBLIGATOIRE dépend du pattern actif de `STACK.md ## Active
+> Orchestration Pattern` : `python .sdda/sdda.py validate-architecture --explain`
+> (spécification : `.sdda/registry/architecture-requirements.yml`).
+
+```yaml
 mission: 1
+pattern: router                   # doit rester égal au pattern actif de STACK.md
 
 # ---------------------------------------------------------------------------
 # L'orchestrateur — celui qui reçoit l'entrée et décide de la suite.
@@ -63,6 +64,16 @@ subagents:
     model:
 
 # ---------------------------------------------------------------------------
+# L'allocation — chaque CAP de la MISSION est portée par EXACTEMENT un agent.
+# Les identifiants sont ceux de workspace/feats/caps/{n}-{m}-{Name}.md.
+# ---------------------------------------------------------------------------
+allocation:
+  - cap: 1-1-ClassifyIntent
+    agent: support-orchestrator
+  - cap: 1-2-ExplainInvoiceLine
+    agent: billing-specialist
+
+# ---------------------------------------------------------------------------
 # Les relations — qui appelle qui, à quelle condition.
 # Une condition vide est refusée : « le contexte suit » n'est pas une condition.
 # ---------------------------------------------------------------------------
@@ -94,3 +105,4 @@ loop_bounds:
 # Réconcilier des sorties contradictoires est le vrai travail.
 # ---------------------------------------------------------------------------
 merge_strategy:                   # vote | priorité déclarée | synthèse par un agent dédié | échec si divergence
+```

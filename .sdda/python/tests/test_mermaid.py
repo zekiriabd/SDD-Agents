@@ -10,9 +10,20 @@ from pathlib import Path
 
 import pytest
 
+from sdda_lib import markdown_io
 from sdda_lib.mermaid import MermaidEdge, parse
 
-FIXTURE = Path(__file__).resolve().parent / "fixtures/project_ok/workspace/feats/topology/1-topology.mmd"
+_TOPOLOGY = Path(__file__).resolve().parent / "fixtures/project_ok/workspace/feats/topology/1-topology.md"
+
+
+class _Fixture:
+    """Le graphe de la fixture : le bloc ```mermaid de `## 4. Le graphe` — sa seule source."""
+
+    def read_text(self, encoding: str = "utf-8") -> str:
+        return markdown_io.fenced_blocks(_TOPOLOGY.read_text(encoding=encoding), "mermaid")[0]
+
+
+FIXTURE = _Fixture()
 
 
 def edges_of(text: str) -> list[tuple[str, str, str]]:

@@ -14,9 +14,10 @@ règles et quel tier. Cette commande ne la prend pas. Elle fait les deux choses
 qu'un humain n'a pas à faire lui-même :
 
 ```
-scaffold   écrire workspace/stack/topology/{n}-roster.yml PRÉ-REMPLI depuis la MISSION,
+scaffold   écrire workspace/feats/topology/{n}-roster.md PRÉ-REMPLI depuis la MISSION,
            les CAPs et le pattern actif de STACK.md — ce qui se DÉRIVE est écrit,
-           ce qui se DÉCIDE reste `<à préciser>`
+           ce qui se DÉCIDE reste `<à préciser>`. Un Markdown : le premier bloc
+           `yaml` est la déclaration, la prose autour est pour le relecteur
 validate   vérifier que la déclaration est complète pour le pattern actif, que chaque
            CAP est portée par exactement un agent, que chaque subagent sert une CAP
            ou dit pourquoi il existe, qu'aucun trou ne reste, et qu'aucune API de
@@ -130,7 +131,7 @@ au sein de G2, sur la même source.
 ```
 ERROR: /sdda-roster {n} — roster incomplet
 CAUSE: [ARCH_ROSTER_PLACEHOLDER] `$.subagents[0].id` est encore `<à préciser>` ; [ARCH_ROSTER_CAP_UNALLOCATED] CAP `{n}-2-{Name}` n'est portée par aucun agent
-FIX: l'architecte tranche dans workspace/stack/topology/{n}-roster.yml — le framework ne comble aucun trou (P7) ; puis /sdda-roster {n} --validate
+FIX: l'architecte tranche dans workspace/feats/topology/{n}-roster.md — le framework ne comble aucun trou (P7) ; puis /sdda-roster {n} --validate
 ```
 
 ---
@@ -140,14 +141,14 @@ FIX: l'architecte tranche dans workspace/stack/topology/{n}-roster.yml — le fr
 ```
 {✅|🔴} /sdda-roster {n}-{MissionName} — roster {validé|à compléter}
 
-Manifeste        : workspace/stack/topology/{n}-roster.yml ({written|kept|overwritten})
+Roster           : workspace/feats/topology/{n}-roster.md ({written|kept|overwritten})
 Pattern actif    : {pattern} (STACK.md ## Active Orchestration Pattern)
 Roster           : orchestrateur `{id}` · {S} subagent(s) · {R} relation(s) · {L} borne(s)
 Allocation       : {A}/{C} CAPs portées   {✅ | 🔴 non allouées : {liste}}
 Trous            : {k} `<à préciser>`     {✅ | 🔴 → l'architecte tranche}
 
 Prochaine étape :
-  - {k > 0 → éditer le manifeste, puis /sdda-roster {n} --validate}
+  - {k > 0 → éditer le roster, puis /sdda-roster {n} --validate}
   - {🟢 → /sdda-topology {n} : architect-topology matérialise CE roster — il n'en change aucune ligne}
 ```
 

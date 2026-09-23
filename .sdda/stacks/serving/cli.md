@@ -200,7 +200,7 @@ uv run {AppName} --help                                   # exit 0 ; liste les c
 uv run {AppName} version --json | python -c "import sys,json; json.loads(sys.stdin.read())"
 uv run {AppName} health --json                            # exit 0 : Settings OK, prompts hashés, outils == contrats, IR à jour
 #   exit 8 sinon, avec la [CLASS] précise dans l'événement error
-uv run {AppName} inspect --graph > /tmp/graph.mmd && diff -w /tmp/graph.mmd ../../topology/{n}-topology.mmd
+uv run {AppName} inspect --graph > /tmp/graph.mmd    # à comparer au bloc ```mermaid de feats/topology/{n}-topology.md §4 (diff-code-vs-ir)
 uv run pytest tests/serving -q
 ```
 

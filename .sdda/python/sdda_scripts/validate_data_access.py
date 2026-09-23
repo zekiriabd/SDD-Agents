@@ -12,9 +12,9 @@ code métier.
 
 Le script confronte **quatre sources** qui doivent dire la même chose :
 
-    1. `STACK.md` — la stack active, l'enveloppe, la racine des manifestes
-    2. les **manifestes** — `SourceManifests[]` : stores et sources éclatés en
-       fichiers `.yml` / `.json` / `.md`, plus les configurations MCP standard
+    1. `STACK.md` — la stack active, l'enveloppe, `Stores[]` et `Sources[]` inline
+    2. le **manifeste** optionnel — `SourceManifests[]` : une configuration MCP
+       standard (`mcp.json`) importée telle quelle, à côté de STACK.md
     3. le **disque** — les racines existent, les globs résolvent, les schémas
        figés sont là, le fichier `.env` déclare bien les variables citées
     4. l'**IR** (s'il est compilé) — `dataAccess[]` décrit la même stratégie et
@@ -51,7 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import markdown_io, paths, source_registry as sr  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import active_stacks, read_stack_section_kv  # noqa: E402
+from sdda_lib.layered_config import active_stacks, read_project_section, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 #: Stratégies qui s'appuient sur une base : leur enveloppe est déclarée par les
@@ -75,7 +75,8 @@ def active_strategy(root: Path) -> str:
 
 
 def schema_path(root: Path, source_id: str) -> Path:
-    return root / sr.schema_rel_path(source_id)
+    app = str(read_project_section(root).get("AppName") or "App").strip() or "App"
+    return root / sr.schema_rel_path(source_id, app)
 
 
 def _positive_int(value: Any) -> int | None:

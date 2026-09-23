@@ -78,3 +78,9 @@ TraceLevel: full
  - .sdda/stacks/serving/cli.md
 StreamingEnabled: false
 HumanInTheLoopEnabled: false
+
+## Active Architecture Pattern
+ - .sdda/stacks/archi/mvc.md
+
+## Active Backend Stack
+# (aucune : DeliverableType != backend-api)

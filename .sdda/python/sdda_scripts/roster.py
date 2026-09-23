@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Le manifeste de roster — gabarit pré-rempli, puis vérification (0 token, PHILOSOPHY P7).
+"""Le roster déclaré — gabarit pré-rempli, puis vérification (0 token, PHILOSOPHY P7).
 
 Le roster est la décision d'architecture : combien d'agents, lesquels, qui porte
 quelle CAP, avec quels outils et quel tier. C'est l'**architecte** qui l'écrit ;
 ce script fait les deux choses qu'un humain n'a pas à faire lui-même :
 
-    scaffold   écrit `workspace/stack/topology/{n}-roster.yml` depuis la MISSION,
+    scaffold   écrit `workspace/feats/topology/{n}-roster.md` depuis la MISSION,
                les CAPs et le pattern actif de STACK.md — tout ce qui se DÉRIVE
                est pré-rempli, tout ce qui se DÉCIDE reste `<à préciser>`.
     validate   vérifie que la déclaration est complète pour le pattern actif
@@ -14,11 +14,13 @@ ce script fait les deux choses qu'un humain n'a pas à faire lui-même :
                une CAP ou dit pourquoi il existe, qu'aucun trou ne reste et
                qu'aucune API de framework n'y est nommée (P11).
 
-Emplacement : la convention de `STACK.md ## Active Agent Topology` —
-`RosterManifestRoot` (défaut `workspace/stack/topology`) + `{n}-roster.yml`. C'est
-le chemin que `validate_architecture.py` lit en G2 ; `workspace/stack/` est la zone
-de l'humain (ownership.md), là où `workspace/feats/topology/` appartient à
-`architect-topology`.
+Emplacement et forme : `workspace/feats/topology/{n}-roster.md`, un document
+Markdown dont le PREMIER bloc ```yaml est la déclaration (`paths.roster_path`).
+`feats/` ne contient que du Markdown, et le roster est la première ligne de la
+spécification, pas une configuration : il se relit en revue à côté de la
+topologie qu'il commande. Le fichier appartient à l'HUMAIN — `architect-topology`
+le lit et n'y écrit jamais (`loader.yml`) ; le voisin `{n}-topology.md` est à
+l'agent. Même chemin lu par `validate_architecture.py` en G2.
 
 Aucun rapport de gate n'est écrit : `roster` n'est pas une part connue de G2
 (`gate_reports.GATE_PARTS_ADVISORY`), et un rapport que la machine à états ignore
@@ -42,14 +44,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import append_bypass_audit  # noqa: E402
-from sdda_lib.layered_config import active_stacks, read_stack_section_kv  # noqa: E402
+from sdda_lib.layered_config import active_stacks  # noqa: E402
 from sdda_scripts import validate_architecture as va  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 from sdda_scripts.audit_bypass import is_real_reason  # noqa: E402
 from sdda_scripts.validate_ir import framework_leaks  # noqa: E402
 from sdda_scripts.validate_mission import parse_mission  # noqa: E402
 
-DEFAULT_MANIFEST_ROOT = "workspace/stack/topology"
 PLACEHOLDER = "<à préciser>"
 BYPASS_NAME = "ROSTER_SCAFFOLD_FORCE"
 ORCHESTRATION_SECTION = "Active Orchestration Pattern"
@@ -62,22 +63,38 @@ _ANGLE_RE = re.compile(r"^<[^>]*>$")
 # Localisation
 # ---------------------------------------------------------------------------
 def manifest_path(root: Path, mission: int | str) -> Path:
-    """Le chemin du manifeste de la MISSION — même résolution que `validate_architecture`.
+    """Le chemin du roster de la MISSION — même résolution que `validate_architecture`.
 
-    `RosterManifests[]` de STACK.md prime s'il nomme un fichier de cette mission ;
-    sinon la convention `{n}-roster.yml` sous `RosterManifestRoot`.
+    Une convention, aucune clé de STACK.md : `feats/topology/{n}-roster.md`. Le
+    roster a eu une racine configurable (`RosterManifestRoot`) ; une décision
+    d'architecture qu'on peut ranger n'importe où est une décision qu'on ne
+    retrouve pas en revue.
     """
-    section = read_stack_section_kv(root, "Active Agent Topology")
-    declared_root = str(section.get("RosterManifestRoot") or DEFAULT_MANIFEST_ROOT).strip()
-    base = Path(declared_root)
-    manifest_root = base if base.is_absolute() else root / base
-    listed = section.get("RosterManifests")
-    if isinstance(listed, list):
-        for entry in listed:
-            rel = entry.get("path") if isinstance(entry, dict) else entry
-            if rel and Path(str(rel)).name.startswith(f"{mission}-"):
-                return manifest_root / str(rel)
-    return manifest_root / f"{mission}-roster.yml"
+    return paths.roster_path(root, mission)
+
+
+#: Une seule lecture du roster, celle de G2 : ce script et `validate_architecture`
+#: ne peuvent pas lire deux formes différentes du même fichier.
+read_roster_yaml = va.read_roster_yaml
+
+
+def wrap_roster_markdown(number: int, name: str, yaml_text: str) -> str:
+    """Le document Markdown autour du bloc YAML : ce qu'un relecteur lit d'abord."""
+    return (
+        f"# ROSTER: {number}-{name}\n"
+        "\n"
+        "> Déclaré par l'ARCHITECTE (PHILOSOPHY P7). C'est CE fichier qui fixe\n"
+        "> l'architecture agentic : combien d'agents, lesquels, qui porte quelle CAP,\n"
+        "> avec quels outils, quelles skills, quelles règles et quel tier. Le framework\n"
+        f"> le vérifie (`python .sdda/sdda.py roster validate --mission {number}`) et\n"
+        "> `architect-topology` le matérialise en topologie et contrats — il n'en décide\n"
+        "> aucune ligne. Le premier bloc `yaml` clôturé ci-dessous est la déclaration ;\n"
+        "> la prose autour est pour le relecteur. Gabarit : .sdda/templates/roster.template.md\n"
+        "\n"
+        "```yaml\n"
+        f"{yaml_text.rstrip()}\n"
+        "```\n"
+    )
 
 
 def find_mission(root: Path, mission: int | str, report: Report):
@@ -138,11 +155,10 @@ def render_scaffold(number: int, name: str, pattern: str, caps: list[str], requi
     needs_merge = bool(requires.get("merge_strategy"))
 
     out: list[str] = [
-        f"# Roster d'agents — MISSION {number}-{name} (PHILOSOPHY P7).",
         f"# Généré par `python .sdda/sdda.py roster scaffold --mission {number}`.",
         "# À COMPLÉTER par l'ARCHITECTE : chaque `<à préciser>` est une décision qui lui",
-        f"# revient. Le framework vérifie (`roster.py validate --mission {number}`), il n'en",
-        "# décide aucune ligne. Gabarit commenté : .sdda/templates/roster.manifest.template.yml",
+        f"# revient. Le framework vérifie (`roster validate --mission {number}`), il n'en",
+        "# décide aucune ligne.",
         "#",
         f"# Pattern actif (STACK.md ## {ORCHESTRATION_SECTION}) : {pattern}",
         "# Ce qu'il exige : python .sdda/sdda.py validate-architecture --explain",
@@ -222,7 +238,7 @@ def scaffold(root: Path, mission: int | str, *, force: bool = False, reason: str
     if target.is_file():
         existing = markdown_io.read_text(target)
         try:
-            holes = placeholders(yaml_mini.parse_mapping(existing))
+            holes = placeholders(read_roster_yaml(target))
         except yaml_mini.YamlMiniError:
             holes = [f"$ ({len(_PLACEHOLDER_RE.findall(existing))} `<à préciser>`)"] if _PLACEHOLDER_RE.search(existing) else []
         report.data["placeholders"] = len(holes)
@@ -254,10 +270,11 @@ def scaffold(root: Path, mission: int | str, *, force: bool = False, reason: str
     registry = va.load_registry(root, report)
     requires, _ = va.requirements_for(registry, "orchestration", pattern) if registry else ({}, {})
     caps = cap_ids(root, mission)
-    text = render_scaffold(spec.number, spec.name, pattern, caps, requires)
+    yaml_text = render_scaffold(spec.number, spec.name, pattern, caps, requires)
+    text = wrap_roster_markdown(spec.number, spec.name, yaml_text)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8", newline="\n")
-    report.data.update({"caps": caps, "placeholders": len(placeholders(yaml_mini.parse_mapping(text)))})
+    report.data.update({"caps": caps, "placeholders": len(placeholders(yaml_mini.parse_mapping(yaml_text)))})
     if not caps:
         report.warn("ARCH_ROSTER_CAP_UNALLOCATED", f"aucune CAP `{mission}-*.md` : l'allocation est vide",
                     fix=f"lancer /sdda-caps {mission}, puis compléter `allocation:`", location=rel)
@@ -294,16 +311,16 @@ def load_manifest(root: Path, mission: int | str, report: Report) -> tuple[Path,
     target = manifest_path(root, mission)
     rel = paths.rel(root, target)
     if not target.is_file():
-        report.error("ARCH_ROSTER_MANIFEST_MISSING", f"manifeste de roster introuvable ({rel})",
+        report.error("ARCH_ROSTER_MANIFEST_MISSING", f"roster introuvable ({rel})",
                      fix=f"python .sdda/sdda.py roster scaffold --mission {mission} — puis le remplir. "
                          "C'est l'architecte qui déclare les agents ; le framework les vérifie (P7)",
                      location=rel)
         return target, None
     try:
-        data = yaml_mini.parse_mapping(markdown_io.read_text(target))
+        data = read_roster_yaml(target)
     except (yaml_mini.YamlMiniError, OSError) as exc:
-        report.error("ARCH_ROSTER_MANIFEST_MALFORMED", f"manifeste `{rel}` illisible : {exc}",
-                     fix="corriger la syntaxe (sous-ensemble YAML de sdda_lib/yaml_mini)", location=rel)
+        report.error("ARCH_ROSTER_MANIFEST_MALFORMED", f"roster `{rel}` illisible : {exc}",
+                     fix="corriger le bloc ```yaml (sous-ensemble YAML de sdda_lib/yaml_mini)", location=rel)
         return target, None
     return target, data
 
@@ -322,7 +339,7 @@ def validate_manifest(root: Path, mission: int | str, *, if_present: bool = Fals
             # Le repli `## 2. Roster déclaré` du Markdown reste accepté par G2 :
             # sans manifeste, ce script n'a rien à juger et le dit.
             report.findings = [f for f in report.findings if f.cls != "ARCH_ROSTER_MANIFEST_MISSING"]
-            report.warn("ARCH_ROSTER_MANIFEST_MISSING", f"aucun manifeste `{loc}` — repli Markdown possible",
+            report.warn("ARCH_ROSTER_MANIFEST_MISSING", f"aucun roster `{loc}` — repli `## 2. Roster déclaré` possible",
                         fix=f"/sdda-roster {mission} pour la forme recommandée", location=loc)
             report.data["action"] = "absent"
         return report
@@ -428,7 +445,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Manifeste de roster : gabarit pré-rempli puis vérification (P7, 0 token, aucun rapport de gate)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sc = sub.add_parser("scaffold", help="écrire {n}-roster.yml pré-rempli ; idempotent, --force écrase (bypass audité)")
+    sc = sub.add_parser("scaffold", help="écrire feats/topology/{n}-roster.md pré-rempli ; idempotent, --force écrase (bypass audité)")
     sc.add_argument("--mission", required=True, help="numéro de MISSION")
     sc.add_argument("--force", action="store_true", help="écraser un manifeste existant — exige --reason ou SDDA_BYPASS_REASON")
     sc.add_argument("--reason", default=None, help="pourquoi écraser, en une phrase (défaut : $SDDA_BYPASS_REASON)")
@@ -453,9 +470,9 @@ def main(argv: list[str] | None = None) -> int:
         if report.ok and not args.json:
             action = report.data.get("action")
             holes = report.data.get("placeholders", 0)
-            print({"written": f"  manifeste écrit -> {report.data.get('manifest')} ({holes} `<à préciser>` à remplir)",
-                   "overwritten": f"  manifeste RÉÉCRIT -> {report.data.get('manifest')} ({holes} `<à préciser>`) · bypass journalisé {report.data.get('audit')}",
-                   "kept": f"  manifeste déjà présent -> {report.data.get('manifest')} ({holes} `<à préciser>` restant(s)) — rien réécrit (--force pour regénérer)",
+            print({"written": f"  roster écrit -> {report.data.get('manifest')} ({holes} `<à préciser>` à remplir)",
+                   "overwritten": f"  roster RÉÉCRIT -> {report.data.get('manifest')} ({holes} `<à préciser>`) · bypass journalisé {report.data.get('audit')}",
+                   "kept": f"  roster déjà présent -> {report.data.get('manifest')} ({holes} `<à préciser>` restant(s)) — rien réécrit (--force pour regénérer)",
                    }.get(str(action), f"  {action}"))
         return finish(report, args)
     report = validate_manifest(root, args.mission, if_present=args.if_present)

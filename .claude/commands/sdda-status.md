@@ -104,8 +104,8 @@ MISSION 3-Onboarding                                              Draft
 Total : {M} MISSION(s) · {C} CAPs · {A} Approved · {B} Blocked · {S} résultat(s) périmé(s)
 
 Tâches humaines : 3 (2 bloquantes)
-  ⚠️ [roster  ] MISSION 2 — Compléter le manifeste de roster (4 `<à préciser>`)
-       → éditer workspace/stack/topology/2-roster.yml, puis roster.py validate --mission 2
+  ⚠️ [roster  ] MISSION 2 — Compléter le roster (4 `<à préciser>`)
+       → éditer workspace/feats/topology/2-roster.md, puis roster validate --mission 2
   ⚠️ [findings] MISSION 1 — Assumer ou corriger le jaune G5 sur `1-2-ExplainInvoiceLine`
        → corriger puis relancer la gate G5 ; ou l'assumer nominativement par --force
      [labels  ] MISSION 1 — Labelliser 12 item(s) pour le juge `groundedness`

@@ -32,7 +32,7 @@ from conftest import make_project
 from sdda_scripts import gen_source_tools as gst
 
 APP = "SupportAssistant"
-MANIFEST = "workspace/stack/sources/files.sources.yml"
+MANIFEST = "workspace/stack/STACK.md"          # la déclaration des sources est inline (v3)
 TRACKING = "workspace/data/exports/tracking/2026-09-20.jsonl"
 
 
@@ -363,12 +363,11 @@ def test_every_operation_emits_a_span(runtime) -> None:
 # Schéma figé
 # ---------------------------------------------------------------------------
 def test_a_type_drift_refuses_the_startup(runtime) -> None:
-    schema_dir = runtime.project / "workspace/feats/contracts/dataaccess/schemas"
-    schema = json.loads((schema_dir / "order_tracking.schema.json").read_text(encoding="utf-8"))
+    # Le schéma figé vit dans le paquet, là où `schema_guard` le lit : une seule copie.
+    frozen = runtime.data / "schemas" / "order_tracking.schema.json"
+    schema = json.loads(frozen.read_text(encoding="utf-8"))
     schema["properties"]["carrier"]["type"] = "integer"
-    (runtime.data / "schemas").mkdir(parents=True, exist_ok=True)
-    (runtime.data / "schemas" / "order_tracking.schema.json").write_text(
-        json.dumps(schema), encoding="utf-8")
+    frozen.write_text(json.dumps(schema), encoding="utf-8")
 
     reg = runtime.registry.load_registry(str(runtime.data / "sources.json"))
     source = reg.source("order_tracking")
@@ -387,10 +386,7 @@ def test_a_type_drift_refuses_the_startup(runtime) -> None:
 
 def test_an_undeclared_field_is_reported_as_omitted(runtime) -> None:
     """Une colonne ajoutée par l'amont ne doit pas entrer dans le contexte."""
-    schema_dir = runtime.project / "workspace/feats/contracts/dataaccess/schemas"
-    (runtime.data / "schemas").mkdir(parents=True, exist_ok=True)
-    (runtime.data / "schemas" / "order_tracking.schema.json").write_text(
-        (schema_dir / "order_tracking.schema.json").read_text(encoding="utf-8"), encoding="utf-8")
+    assert (runtime.data / "schemas" / "order_tracking.schema.json").is_file()   # le schéma figé est déjà dans le paquet
 
     path = runtime.project / TRACKING
     rows = [json.loads(l) for l in path.read_text(encoding="utf-8").split("\n") if l.strip()]

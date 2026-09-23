@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 2.9 — compilation de l'Agentic IR (0 token, déterministe).
 
-Projette MISSION + CAPs + TOPOLOGY (+ `.mmd`) + `contracts/**` + STACK.md vers
+Projette MISSION + CAPs + TOPOLOGY (graphe Mermaid compris) + `contracts/**` + STACK.md vers
 `workspace/.sys/.ir/{n}-system.ir.json`, conforme à `registry/ir.schema.json`.
 
 Trois règles non négociables (AGENTIC-IR.md §1, §5) :
@@ -771,7 +771,7 @@ def compile_orchestration(ctx: CompileContext, topo: TopologySpec, mmd_text: str
         orch["maxHops"] = max_hops
 
     if not mmd_text.strip():
-        ctx.fail("topologie : aucun graphe (ni bloc ```mermaid ni fichier .mmd)", "dessiner le graphe : c'est lui qui est compilé", f"{loc}:3")
+        ctx.fail("topologie : aucun graphe (pas de bloc ```mermaid dans `## 4. Le graphe`)", "dessiner le graphe : c'est lui qui est compilé", f"{loc}:3")
         return orch
     mg = mermaid.parse(mmd_text)
     nodes = []
@@ -977,11 +977,14 @@ def compile_guardrails(root: Path) -> dict[str, Any] | None:
 # Hashes des sources et identité de l'IR
 # --------------------------------------------------------------------------
 def topology_source_hash(root: Path, number: int) -> str:
-    """Hash conjoint `{n}-topology.md` + `{n}-topology.mmd` (le graphe fait partie de la topologie)."""
+    """Hash de `{n}-topology.md` — le graphe est une section du fichier, donc déjà dedans.
+
+    La forme `sha256_struct({"md": …})` est conservée : elle a porté un second
+    membre `mmd` tant que le graphe vivait dans un fichier à côté, et changer
+    la forme du hash ferait passer pour périmé tout IR compilé avant.
+    """
     md = paths.topology_dir(root) / f"{number}-topology.md"
-    mmd = paths.topology_dir(root) / f"{number}-topology.mmd"
-    parts = {"md": hashing.sha256_file(md) if md.is_file() else "", "mmd": hashing.sha256_file(mmd) if mmd.is_file() else ""}
-    return hashing.sha256_struct(parts)
+    return hashing.sha256_struct({"md": hashing.sha256_file(md) if md.is_file() else ""})
 
 
 def contract_source_hashes(root: Path, number: int) -> dict[str, str]:

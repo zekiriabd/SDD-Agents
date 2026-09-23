@@ -47,7 +47,7 @@ def test_no_roster_at_all_is_a_blocking_task_of_the_architect(project: Path) -> 
     (found,) = only(tasks(project), "roster")
     assert found["blocking"] is True and found["mission"] == 1
     assert "/sdda-roster 1" in found["how"] and "P7" in found["why"]
-    assert found["ref"].endswith("1-roster.yml")
+    assert found["ref"].endswith("feats/topology/1-roster.md")
 
 
 def test_a_scaffolded_manifest_asks_to_fill_each_hole(project: Path) -> None:

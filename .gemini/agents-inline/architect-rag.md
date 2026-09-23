@@ -63,7 +63,7 @@ python .sdda/sdda.py corpus-profile --mission {n} --out workspace/.sys/.validati
 
 > ⏳ **Planifié** (ROADMAP Lot 4) — `corpus_profile.py` n'existe pas encore.
 > Tant qu'il est absent : caractérise le corpus depuis les sources déclarées
-> (`workspace/stack/sources/*.yml`) — nombre de documents, longueurs, formats —
+> (`STACK.md ## Active Data Sources`) — nombre de documents, longueurs, formats —
 > en le disant **à la main, donc hypothèse** : `Confidence` ≤ 0.6 dans le
 > contrat, et chaque chiffre porte la mention « non mesuré ».
 

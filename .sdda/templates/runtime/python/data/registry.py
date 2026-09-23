@@ -6,8 +6,8 @@ L'application ne lit donc jamais `STACK.md` ni les manifestes.
 
 Trois raisons, et la troisième est la plus importante :
 
-1. `STACK.md` est gitignoré et porte des secrets — il n'a rien à faire dans le
-   processus applicatif ;
+1. `STACK.md` est la déclaration du projet, pas une configuration d'exécution —
+   il n'a rien à faire dans le processus applicatif ;
 2. parser du Markdown au démarrage d'un service est une dépendance inutile ;
 3. **ce qui est résolu est épinglable.** `sources.json` entre dans le tuple
    d'épinglage des evals (P10) : deux runs sur deux registres différents ne sont

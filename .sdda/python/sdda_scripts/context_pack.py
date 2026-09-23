@@ -140,6 +140,8 @@ STACK_PLACEHOLDERS: dict[str, str] = {
     "dataaccess": "Active Data Access",
     "memory": "Active Memory Strategy",
     "serving": "Active Serving Surface",
+    "archi": "Active Architecture Pattern",
+    "backend": "Active Backend Stack",
     # Les catégories restantes. Deux d'entre elles partagent une section —
     # `## Active Retrieval Stack` déclare à la fois le store et l'embedding —
     # et c'est sans conséquence : chaque motif est ancré sur SON répertoire,

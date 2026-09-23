@@ -4,7 +4,7 @@ Stack ID: dataaccess-declared-sources
 Status: Draft
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: python
-Scope: stratégie **DATA ACCESS** pour une surface de données **hétérogène et déclarée** — des fichiers (`json`, `jsonl`, `csv`, `tsv`, `xlsx`, `parquet`) sur un répertoire local, un partage réseau ou un stockage objet (S3 / Azure Blob / GCS), des **API HTTP** authentifiées, et des **outils MCP**. Un seul registre : `Stores[]` (où c'est, et avec quelles clés) + `Sources[]` (ce que c'est, et ce qu'on en expose), déclarés dans `STACK.md ## Active Data Sources` et/ou éclatés en **manifestes** `.yml` / `.json` / `.md` — y compris des fichiers de configuration MCP au format standard. Secrets **par noms de variables** dans un fichier `.env` gitignoré, jamais en clair. Schéma **inféré puis figé** par source, index déterministe, exposition en outils `read-only` typés, enveloppe de sûreté complète (frontières de racine, allowlist d'egress, timeout, plafonds, allowlists de stores et de sources, champs libres traités comme hostiles). Pas de `.libs.json` propre : `json`, `csv` et `sqlite3` sont dans la stdlib ; `openpyxl` (xlsx) et `pyarrow` (parquet) sont des ajouts optionnels au `.libs.json` du framework actif (§7.11).
+Scope: stratégie **DATA ACCESS** pour une surface de données **hétérogène et déclarée** — des fichiers (`json`, `jsonl`, `csv`, `tsv`, `xlsx`, `parquet`) sur un répertoire local, un partage réseau ou un stockage objet (S3 / Azure Blob / GCS), des **API HTTP** authentifiées, et des **outils MCP**. Un seul registre : `Stores[]` (où c'est, et avec quelles clés) + `Sources[]` (ce que c'est, et ce qu'on en expose), déclarés **inline** dans `STACK.md ## Active Data Sources` (versionné) — avec, en option, l'import d'un fichier de configuration MCP au format standard. Secrets **par noms de variables** dans un fichier `.env` gitignoré, jamais en clair. Schéma **inféré puis figé** par source, index déterministe, exposition en outils `read-only` typés, enveloppe de sûreté complète (frontières de racine, allowlist d'egress, timeout, plafonds, allowlists de stores et de sources, champs libres traités comme hostiles). Pas de `.libs.json` propre : `json`, `csv` et `sqlite3` sont dans la stdlib ; `openpyxl` (xlsx) et `pyarrow` (parquet) sont des ajouts optionnels au `.libs.json` du framework actif (§7.11).
 
 ---
 
@@ -79,7 +79,7 @@ volumétrie au-delà de §2.1 (→ une base, et `view-per-agent.md`).
 | **Sources cibles** | fichiers (`json` / `jsonl` / `csv` / `tsv` / `xlsx` / `parquet`) sur `local` / `smb` / `nfs` / `s3` / `azure-blob` / `gcs` / `sftp` · API `http` · serveurs `mcp` |
 | **Client** | Python 3.12 · `json`, `csv` (stdlib) · `pydantic` 2.x pour les modèles générés · `httpx` pour le connecteur `http-api` · `mcp` pour le connecteur `mcp` · `openpyxl` / `pyarrow` **optionnels** (§7.11) |
 | **`DatabaseType`** | `none` — cette stack **n'est pas** une base ; déclarer un `DatabaseType` non `none` en même temps est `[DATA_SOURCE_DB_CONFLICT]` |
-| **Déclaration** | `STACK.md ## Active Data Sources` → `SourceManifests[]`, `Stores[]`, `Sources[]`, enveloppe `Source*` |
+| **Déclaration** | `STACK.md ## Active Data Sources` → `Stores[]`, `Sources[]` inline, enveloppe `Source*` ; `SourceManifests[]` optionnel pour un `mcp.json` standard |
 | **Secrets** | `SourceSecretsFile` (défaut `.env`), gitignoré ; les déclarations ne portent que des **noms** de variables (`*_env`) |
 | **Générateur** | `sdda_scripts/gen_source_tools.py` — lit stores + sources + schémas figés → wrappers Python + squelettes de tool-contracts. 0 token, aucun réseau. Trois modes : `--infer` (une fois, §3.8), `--write` (à chaque changement de déclaration), `--check` (défaut, en CI). |
 | **Validateur** | `sdda_scripts/validate_data_access.py` — enforcer de l'invariant `db-safety-envelope-present` pour cette stack. 0 token, aucun réseau, sans exécuter l'application. |
@@ -107,11 +107,11 @@ d'attente.
 ### 3.1 Vue d'ensemble — deux tables, trois connecteurs
 
 ```
-SourceManifests[]  ──┐
+STACK.md inline    ──┐
                      ├──►  Stores[]   : où c'est          ──┐
-STACK.md inline    ──┘      Sources[] : ce que c'est       ──┤
+mcp.json (option)  ──┘      Sources[] : ce que c'est       ──┤
                                                              ├──► outils générés
-schemas/*.schema.json  : la forme, figée  ───────────────────┘
+src/{App}/.../data/schemas/*.schema.json : la forme, figée ──┘
 .env                   : les valeurs des secrets (jamais lues par le framework)
 ```
 
@@ -124,13 +124,11 @@ authentification.
 ```yaml
 ## Active Data Sources
 SourceSecretsFile: .env                       # gitignoré — contient les VALEURS
-SourceManifestRoot: workspace/stack/sources   # frontière des manifestes
-SourceManifests:
-  - path: files.sources.yml                   # relatif à SourceManifestRoot
-  - path: apis.sources.json
-  - path: crm.sources.md                      # 1er bloc ```yaml du fichier
-  - path: ../../../.mcp.json                  # refusé : hors racine
-  - { path: mcp.json, kind: mcp-config }      # config MCP standard, importée
+# Optionnel — UN seul usage : importer une config MCP standard sans la retranscrire.
+# SourceManifestRoot: workspace/stack           # frontière : à côté de STACK.md
+# SourceManifests:
+#   - { path: mcp.json, kind: mcp-config }      # config MCP standard, importée
+#   - { path: ../../../.mcp.json, kind: mcp-config }   # refusé : hors racine
 
 Stores:
   - id: ops_share
@@ -181,39 +179,40 @@ ni un store hors `SourceAllowedStores`, ne peut joindre aucun hôte absent de
 `SourceEgressAllowlist`, et ne reçoit jamais plus de
 `SourceMaxRecordsReturned` enregistrements.
 
-### 3.3 Les manifestes — éclater la déclaration sans éclater la garantie
+### 3.3 La déclaration est inline — et un seul manifeste subsiste
 
-Une déclaration de trente sources dans STACK.md devient illisible, et STACK.md
-est gitignoré : la surface de données du projet ne serait versionnée nulle part.
-`SourceManifests[]` inclut des fichiers, **versionnés**, sous
-`SourceManifestRoot`.
+La surface de données se déclare **dans STACK.md**, et nulle part ailleurs.
+Elle a été éclatable en manifestes `.yml` / `.json` / `.md` sous
+`workspace/stack/sources/` : la raison était que STACK.md, gitignoré, ne
+versionnait rien. Depuis la v3 du workspace, STACK.md est versionné et ne porte
+que des noms de variables — la raison a disparu, et avec elle le répertoire.
+L'utilisateur écrit **un** fichier de configuration, pas quatre.
 
-| Extension | Lu comme | Usage |
+Une seule porte reste ouverte, pour un cas que retranscrire n'améliorerait
+pas : importer une configuration MCP au format standard, celui que lisent
+Claude, Cursor ou VS Code.
+
+| Entrée de `SourceManifests[]` | Lu comme | Usage |
 |---|---|---|
-| `.yml` / `.yaml` | mapping `Stores:` / `Sources:` | le cas courant |
-| `.json` | idem, en JSON | manifeste généré par un autre outil |
-| `.md` | le **premier bloc** ` ```yaml ` du fichier | quand la déclaration mérite d'être expliquée à côté (c'est de la doc que l'on relit en revue) |
-| `kind: mcp-config` | `{"mcpServers": {…}}` ou `{"servers": {…}}` | importe un fichier MCP standard (Claude, Cursor, VS Code) tel quel |
+| `{ path: mcp.json, kind: mcp-config }` | `{"mcpServers": {…}}` ou `{"servers": {…}}` | le fichier MCP du projet, à côté de STACK.md, importé tel quel |
 
-Règles, toutes vérifiées par `validate_data_access.py` :
+Règles, toutes vérifiées par `validate_data_access.py` (et `smoke_check` pour la
+dernière) :
 
-1. **Un manifeste ne porte que `Stores:` et `Sources:`.** L'enveloppe reste dans
-   STACK.md. Sinon n'importe quel manifeste pourrait relâcher une borne, et
-   l'enveloppe effective dépendrait de l'ordre de lecture.
-2. **Pas de collision d'`id`.** Deux manifestes qui déclarent `orders` →
-   `[DATA_MANIFEST_DUPLICATE_ID]`, avec les deux fichiers nommés. Il n'y a
-   **aucun** écrasement : la surface de l'agent ne doit pas dépendre de l'ordre
-   des lignes de `SourceManifests`.
-3. **La racine est une frontière.** Un chemin qui résout hors du projet est
-   `[DATA_MANIFEST_OUTSIDE_ROOT]`. Un manifeste est du code de configuration ;
-   `../../autre-projet/sources.yml` rattacherait la surface de données à un
-   fichier que personne ne relit dans cette revue.
-4. **L'import MCP ne fait pas confiance au fichier.** Une valeur littérale dans
+1. **Pas de collision d'`id`.** Un store importé qui porte l'`id` d'un store
+   inline → `[DATA_MANIFEST_DUPLICATE_ID]`, avec les deux sources nommées. Il
+   n'y a **aucun** écrasement.
+2. **La racine est une frontière.** `SourceManifestRoot` est `workspace/stack`
+   ; un chemin qui résout ailleurs est `[DATA_MANIFEST_OUTSIDE_ROOT]`.
+3. **L'import MCP ne fait pas confiance au fichier.** Une valeur littérale dans
    le bloc `env` d'un serveur est `[DATA_SECRET_INLINE]` : seule la forme
    `"CRM_TOKEN": "${CRM_TOKEN}"` est acceptée. C'est le piège n°1 de ces
    fichiers (§7.4).
+4. **Rien d'autre sous `workspace/stack/`.** Un fichier que STACK.md ne déclare
+   pas est `[STACK_DIR_UNEXPECTED_FILE]` : la configuration tient dans STACK.md,
+   les valeurs dans `.env`.
 
-Chaque serveur d'un manifeste `mcp-config` devient un **store** `kind: mcp`
+Chaque serveur du `mcp.json` importé devient un **store** `kind: mcp`
 nommé d'après lui. Il n'existe pour l'application que s'il est dans
 `SourceAllowedStores` — importer un fichier MCP ne câble rien à lui seul.
 
@@ -372,7 +371,9 @@ Toute autre clé → `[DATA_SOURCE_UNKNOWN_KEY]` au preflight.
 
 ```bash
 uv run python -m sdda_scripts.gen_source_tools --infer --source order_tracking
-#   -> workspace/feats/contracts/dataaccess/schemas/order_tracking.schema.json   (à relire, puis commité)
+#   -> workspace/src/{AppName}/src/{AppName}/data/schemas/order_tracking.schema.json   (à relire, puis commité)
+#      Dans le PAQUET, à côté des wrappers : c'est là que `schema_guard` le lit au démarrage.
+#      Un schéma resté dans la zone des specs ne part pas avec le code — même raison que les prompts.
 
 # Source distante (http-api, mcp, ou store non local) : le générateur ne joint
 # jamais un hôte — sinon il ne tournerait pas en CI. Capturer une réponse :
@@ -539,15 +540,14 @@ ou hôte), timeout, lecture, validation contre le schéma figé, troncature à
 ## 4. Structure de fichiers générée
 
 ```
+.env                               # gitignoré — les VALEURS des secrets
 workspace/stack/
-├── STACK.md                       # gitignored — enveloppe + secrets + inline
-└── sources/                       # VERSIONNÉ — les manifestes
-    ├── files.sources.yml
-    ├── apis.sources.json
-    └── crm.sources.md
+├── STACK.md                       # VERSIONNÉ — enveloppe + Stores/Sources inline, noms de variables seulement
+└── mcp.json                       # optionnel — config MCP standard, importée (SourceManifests)
 
 workspace/src/{AppName}/src/{AppName}/data/
-├── registry.py         # StoreConfig / SourceConfig (pydantic, frozen) <- Settings <- STACK.md + manifestes
+├── schemas/                       # les schémas FIGÉS, un par source (gen_source_tools --infer, relus, commités)
+├── registry.py         # StoreConfig / SourceConfig (pydantic, frozen) <- sources.json résolu depuis STACK.md
 ├── stores/
 │   ├── local.py        # local | smb | nfs — frontière de racine, symlinks refusés
 │   ├── objectstore.py  # s3 | azure-blob | gcs — préfixe verrouillé, egress vérifié
@@ -579,9 +579,10 @@ workspace/src/{AppName}/tests/data/
 ```
 
 Les données elles-mêmes ne sont **pas** dans `workspace/src/` : ce sont des
-données d'exploitation, pas du code. Elles sont gitignorées, et un échantillon
-anonymisé vit dans `workspace/proof/datasets/` pour les tests. Les **manifestes**, eux,
-sont versionnés : c'est la seule trace revue de la surface de données.
+données d'exploitation, pas du code. Elles vivent là où le store les déclare, et
+un échantillon anonymisé vit dans `workspace/proof/datasets/` pour les tests. La
+**déclaration**, elle, est versionnée avec STACK.md : c'est la trace revue de la
+surface de données. Les **schémas figés** partent avec le code, dans le paquet.
 
 ---
 
@@ -646,7 +647,7 @@ Aucune base, aucun appel réseau, 0 token :
 ```bash
 cd workspace/src/{AppName}
 uv run python -m sdda_scripts.validate_data_access --json
-#   -> STACK.md + manifestes vs disque : manifestes résolus sous leur racine, aucun `id` en double,
+#   -> STACK.md (+ mcp.json importé) vs disque : aucun `id` en double,
 #      chaque store complet et authentifié par NOM de variable, chaque variable présente dans .env,
 #      .env gitignoré, chaque hôte distant dans l'egress allowlist, TLS hors localhost,
 #      chaque glob résout >= 1 fichier, chaque source a son schéma figé, enveloppe complète et bornée

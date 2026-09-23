@@ -110,8 +110,12 @@ def test_the_generated_facades_carry_the_model_key_the_harness_reads() -> None:
     appel. La seule trace de l'écart était la facture."""
     from sdda_lib import markdown_io
 
-    facades = sorted((Path(_hook.__file__).resolve().parents[3] / ".claude" / "agents").glob("*.md"))
-    assert len(facades) == 22
+    root = Path(_hook.__file__).resolve().parents[3]
+    facades = sorted((root / ".claude" / "agents").glob("*.md"))
+    sources = sorted((root / ".sdda" / "agents").glob("*.md"))
+    # Une façade par fiche source, ni plus ni moins : le compte suit le roster,
+    # il ne se fige pas dans un test (22 hier, 23 avec dev-backend).
+    assert [f.name for f in facades] == [s.name for s in sources]
     expected = {"deep": "opus", "balanced": "sonnet", "fast": "haiku"}
     for path in facades:
         meta = markdown_io.parse_header_fields(path.read_text(encoding="utf-8"))

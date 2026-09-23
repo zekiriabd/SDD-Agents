@@ -72,8 +72,11 @@ def test_a_deleted_contract_is_named_too(compiled: Path) -> None:
 
 
 def test_editing_the_topology_graph_counts(compiled: Path) -> None:
-    """Le `.mmd` fait partie de la topologie : le graphe EST la topologie."""
-    _touch(compiled / "workspace/feats/topology/1-topology.mmd", "\n%% édité\n")
+    """Le graphe est une section de la topologie : l'éditer, c'est éditer la topologie."""
+    topo = compiled / "workspace/feats/topology/1-topology.md"
+    text = topo.read_text(encoding="utf-8")
+    assert "  clarify --> finalize\n" in text
+    topo.write_text(text.replace("  clarify --> finalize\n", "  clarify --> finalize\n  %% édité\n", 1), encoding="utf-8")
     _, payload = _check(compiled, "--mission", "1")
     assert "topologyHash" in payload["data"]["missions"][0]["moved"]
 

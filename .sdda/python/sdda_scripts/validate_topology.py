@@ -152,11 +152,14 @@ def parse_topology(text: str, path: Path | None = None) -> TopologySpec:
 
 
 def load_mermaid(root: Path | None, spec: TopologySpec) -> str:
-    """Le fichier `.mmd` fait foi s'il existe, sinon le bloc ```mermaid du .md."""
-    if root is not None and spec.mission_number:
-        p = paths.topology_dir(root) / f"{spec.mission_number}-topology.mmd"
-        if p.is_file():
-            return markdown_io.read_text(p)
+    """Le graphe : le bloc ```mermaid de `## 4. Le graphe` dans `{n}-topology.md`.
+
+    Il a eu un fichier à côté, `{n}-topology.mmd`, qui « faisait foi » quand il
+    existait. Deux artefacts pour un graphe, c'est celui que personne ne relit
+    qui gouverne l'IR — et `feats/` ne porte que du Markdown. Le graphe EST une
+    section de la topologie, et son hash est celui du fichier qui la contient.
+    """
+    del root  # conservé pour la signature ; la source est unique désormais
     return spec.mermaid_text
 
 
@@ -256,7 +259,7 @@ def validate_topology_text(text: str, *, path: Path | None, root: Path | None, c
         report.error("TOPOLOGY_GRAPH_INCOMPLETE", f"`maxHops` = `{mh}` n'est pas un entier", "", loc)
     mm_text = load_mermaid(root, spec)
     if not mm_text.strip():
-        report.error("TOPOLOGY_GRAPH_INCOMPLETE", "aucun graphe : ni bloc ```mermaid ni fichier {n}-topology.mmd", "dessiner le graphe — il sera compilé dans l'IR", loc)
+        report.error("TOPOLOGY_GRAPH_INCOMPLETE", "aucun graphe : pas de bloc ```mermaid dans `## 4. Le graphe`", "dessiner le graphe dans la topologie — il sera compilé dans l'IR", loc)
     else:
         mg = mermaid.parse(mm_text)
         g = Graph(mg.nodes.keys(), [(e.src, e.dst) for e in mg.edges])

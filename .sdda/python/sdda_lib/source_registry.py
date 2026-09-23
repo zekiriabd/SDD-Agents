@@ -15,9 +15,14 @@ Trois principes tiennent tout le module :
    termine par `_env` et porte le nom d'une variable déclarée dans le fichier
    `.env` du projet. Ce module lit les **noms** de ce fichier, jamais les
    valeurs : une valeur qui n'entre pas en mémoire n'entre pas dans un rapport.
-3. **La déclaration peut être éclatée.** `SourceManifests[]` inclut des fichiers
-   `.yml` / `.json` / `.md` — et des configurations MCP au format standard —
-   sous une racine vérifiée. Un manifeste hors racine est refusé.
+3. **La déclaration vit dans STACK.md.** `Stores:` et `Sources:` s'écrivent
+   inline dans `## Active Data Sources` — c'est la forme par défaut, et la
+   seule que le gabarit propose : STACK.md est versionné, il ne porte que des
+   noms de variables, il n'y a plus de raison d'éclater la surface de données
+   ailleurs. `SourceManifests[]` subsiste comme porte optionnelle pour UN cas :
+   importer une configuration MCP au format standard (`mcp.json`, celui que
+   lisent Claude, Cursor ou VS Code) sans la retranscrire. Un manifeste hors
+   de `workspace/stack/` est refusé.
 
 Ce module ne lit **aucune** donnée métier, n'ouvre aucun enregistrement,
 n'appelle aucun réseau. Il résout, fusionne et vérifie des déclarations.
@@ -31,6 +36,11 @@ from pathlib import Path
 from typing import Any
 
 from sdda_lib import markdown_io, yaml_mini
+
+#: Racine des manifestes optionnels : `workspace/stack/`, à côté de STACK.md.
+#: Il n'y a plus de sous-répertoire `sources/` — la déclaration est inline, et
+#: le seul fichier qui puisse encore vivre ici est un `mcp.json` standard.
+DEFAULT_MANIFEST_ROOT = "workspace/stack"
 
 # ---------------------------------------------------------------------------
 # Grammaire close
@@ -388,7 +398,7 @@ def _absorb(registry: Registry, data: Any, label: str) -> None:
 
 
 def manifest_root(root: Path, section: dict[str, Any]) -> Path:
-    declared = str(section.get("SourceManifestRoot") or "workspace/stack/sources").strip()
+    declared = str(section.get("SourceManifestRoot") or DEFAULT_MANIFEST_ROOT).strip()
     candidate = Path(declared)
     return (candidate if candidate.is_absolute() else root / candidate)
 
@@ -449,7 +459,7 @@ def load_registry(root: Path, section: dict[str, Any]) -> Registry:
             registry.error(
                 "DATA_MANIFEST_OUTSIDE_ROOT",
                 f"manifeste `{rel_path}` résout hors du projet ({resolved})",
-                fix=f"placer le manifeste sous `{section.get('SourceManifestRoot') or 'workspace/stack/sources'}` — "
+                fix=f"placer le manifeste sous `{section.get('SourceManifestRoot') or DEFAULT_MANIFEST_ROOT}` — "
                     "la racine des manifestes est une frontière, pas une convention",
                 location="workspace/stack/STACK.md",
             )
@@ -563,5 +573,15 @@ def allowed_keys(source: dict[str, Any]) -> frozenset[str]:
     return SOURCE_COMMON_KEYS | SOURCE_CONNECTOR_KEYS.get(connector, frozenset())
 
 
-def schema_rel_path(source_id: str) -> str:
-    return f"workspace/feats/contracts/dataaccess/schemas/{source_id}.schema.json"
+def schema_rel_path(source_id: str, app_name: str) -> str:
+    """Le schéma figé d'une source : `workspace/src/{App}/src/{App}/data/schemas/{id}.schema.json`.
+
+    Il vivait sous `feats/contracts/dataaccess/schemas/`. Or ce n'est ni une
+    spécification ni du Markdown : c'est le fichier contre lequel l'application
+    valide sa donnée au démarrage (`schema_guard.py`, `[DATA_SOURCE_SCHEMA_DRIFT]`).
+    Un actif d'exécution qui reste dans la zone des specs ne part pas avec le
+    code — l'application livrée cherchait son schéma dans un répertoire resté
+    dans le dépôt. Même raison que pour les prompts. Il est écrit par
+    `gen_source_tools --infer`, relu par l'humain, jamais par un `dev-*`.
+    """
+    return f"workspace/src/{app_name}/src/{app_name}/data/schemas/{source_id}.schema.json"

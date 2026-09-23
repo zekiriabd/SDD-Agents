@@ -13,6 +13,14 @@ produit, ce qui juge. C'est la première migration qui DÉPLACE du contenu, et
 donc la première qui peut détruire le travail de quelqu'un. Les tests qui
 suivent existent surtout pour cela : vérifier qu'après la montée, chaque
 fichier écrit avant est toujours là, et lisible au nouvel endroit.
+
+v2 -> v3 : l'entrée de l'utilisateur tient en trois choses — STACK.md
+(versionné, les valeurs partent dans `.env`), du Markdown seul sous `feats/`
+(le roster devient `{n}-roster.md`, le graphe rentre dans la topologie), la
+vérité terrain sous `proof/seed/`. Les schémas figés partent avec le code, les
+manifestes de sources rentrent dans STACK.md. C'est la première migration qui
+RÉÉCRIT du contenu, pas seulement des chemins : chaque réécriture a son test,
+et le seul qui touche un secret vérifie qu'aucune valeur n'est journalisée.
 """
 from __future__ import annotations
 
@@ -240,3 +248,224 @@ def test_bootstrap_shares_the_tree_with_smoke_check() -> None:
     assert bs.WORKSPACE_TREE is smoke_check.WORKSPACE_TREE
     assert not (set(smoke_check.WORKSPACE_TREE) & set(migrate_workspace.GHOST_DIRS_V1))
     assert not (set(smoke_check.WORKSPACE_TREE) & set(migrate_workspace.GHOST_DIRS_V2))
+    assert not (set(smoke_check.WORKSPACE_TREE) & set(migrate_workspace.GHOST_DIRS_V3))
+
+
+# ---------------------------------------------------------------------------
+# v2 -> v3 : la première migration qui RÉÉCRIT du contenu
+# ---------------------------------------------------------------------------
+SECRET_VALUE = "sk-test-0123456789abcdef"
+
+ROSTER_V2 = """\
+mission: 1
+pattern: router
+orchestrator:
+  id: intent-classifier
+  role: classe l'intention
+  responsibilities: route ou clarifie
+  tier: fast
+  tools: []
+  rules: route si confidence >= 0.7
+subagents:
+  - id: billing-specialist
+    role: facturation
+    responsibilities: explique une facture
+    tools: [invoice_lookup]
+    tier: balanced
+allocation:
+  - cap: 1-1-Classify
+    agent: intent-classifier
+relations:
+  - from: intent-classifier
+    to: billing-specialist
+    condition: "intent == 'billing'"
+    counts_as_hop: true
+  - from: intent-classifier
+    to: clarify_request
+    condition: "aucune classe — chemin de repli"
+    counts_as_hop: true
+loop_bounds: []
+merge_strategy:
+"""
+
+SOURCES_V2 = """\
+# Manifeste de sources — VERSIONNÉ.
+Stores:
+  - id: exports_local
+    kind: local
+    root: workspace/data/exports
+    read_only: true
+    auth: { mode: none }
+
+Sources:
+  - id: order_tracking
+    connector: file
+    store: exports_local
+    glob: tracking/*.jsonl
+    format: jsonl
+    key: order_id
+    filters: [order_id]
+    description: |
+      Suivi transporteur, un enregistrement par commande. Utiliser pour localiser un colis.
+      Ne pas utiliser pour le contenu de la commande. as_of porte la date de l'export.
+"""
+
+GRAPH_V2 = "flowchart TD\n  classify{intent-classifier} -->|billing| billing[billing-specialist]\n  billing --> finalize[compose_answer]\n"
+
+TOPOLOGY_V2 = """\
+# TOPOLOGY: 1-Demo
+
+MISSION: 1-Demo
+Root Pattern: router
+
+## 1. Allocation des capabilities
+
+| CAP | Portée par | Pourquoi là et pas ailleurs |
+|---|---|---|
+| 1-1-Classify | agent `intent-classifier` | jugement |
+
+## 4. Le graphe
+
+Fichier : `workspace/feats/topology/1-topology.mmd` (Mermaid).
+
+```mermaid
+flowchart TD
+  ancien --> graphe
+```
+
+- **Nœud d'entrée** : `classify`
+
+## 5. Budget estimé
+"""
+
+
+def _legacy_stack_md(app_name: str) -> str:
+    """Un STACK.md tel que la v2 l'écrivait : clés de manifestes, secret en clair."""
+    text = bs.build_stack_md(app_name, bs.COMBOS["c1"], {})
+    text = text.replace(
+        "## Active Agent Topology\n",
+        "## Active Agent Topology\nRosterManifestRoot: workspace/stack/topology\nRosterManifests:\n  - path: 1-roster.yml\n", 1)
+    assert "\nStores:\n" in text
+    text = text.replace(
+        "\nStores:\n",
+        "\nSourceManifestRoot: workspace/stack/sources\nSourceManifests:\n  - path: files.sources.yml\nStores:\n", 1)
+    assert " - LLM_API_KEY: ${LLM_API_KEY}" in text
+    text = text.replace(" - LLM_API_KEY: ${LLM_API_KEY}", f" - LLM_API_KEY: {SECRET_VALUE}", 1)
+    return text
+
+
+@pytest.fixture
+def v2_with_content(tmp_path: Path) -> Path:
+    """Un workspace v2 peuplé de tout ce que la v3 range ailleurs."""
+    root = tmp_path / "projet"
+    for rel in migrate_workspace.TREE_V2:
+        (root / "workspace" / rel).mkdir(parents=True, exist_ok=True)
+    (root / "workspace/stack/STACK.md").write_text(_legacy_stack_md("Projet"), encoding="utf-8")
+    (root / ".gitignore").write_text("workspace/stack/STACK.md\nworkspace/.sys/\n", encoding="utf-8")
+    (root / "workspace/stack/topology").mkdir(parents=True, exist_ok=True)
+    (root / "workspace/stack/topology/1-roster.yml").write_text(ROSTER_V2, encoding="utf-8")
+    (root / "workspace/stack/sources/files.sources.yml").write_text(SOURCES_V2, encoding="utf-8")
+    (root / "workspace/feats/missions/1-Demo.md").write_text("# MISSION: 1-Demo\n", encoding="utf-8")
+    (root / "workspace/feats/topology/1-topology.md").write_text(TOPOLOGY_V2, encoding="utf-8")
+    (root / "workspace/feats/topology/1-topology.mmd").write_text(GRAPH_V2, encoding="utf-8")
+    (root / "workspace/feats/contracts/dataaccess/schemas/order_tracking.schema.json").write_text(
+        '{"type": "object", "properties": {"order_id": {"type": "string"}}}\n', encoding="utf-8")
+    (root / "workspace/feats/briefs/1-Demo.md").write_text("# Brief\n", encoding="utf-8")
+    (root / "workspace/feats/briefs/1-Demo.scenarios.jsonl").write_text('{"id": "SC-001"}\n', encoding="utf-8")
+    ws.write_workspace_version(root, version=2, written_by="test")
+    return root
+
+
+def _migrate(root: Path) -> dict:
+    code, out = run_main(migrate_workspace.main, ["--root", str(root), "--json"])
+    assert code == 0, out
+    return json.loads(out)
+
+
+def test_v3_secret_values_leave_stack_md_for_env(v2_with_content: Path) -> None:
+    root = v2_with_content
+    report = _migrate(root)
+    stack = (root / "workspace/stack/STACK.md").read_text(encoding="utf-8")
+    assert " - LLM_API_KEY: ${LLM_API_KEY}" in stack and SECRET_VALUE not in stack
+    env = (root / ".env").read_text(encoding="utf-8")
+    assert f"LLM_API_KEY={SECRET_VALUE}" in env
+    # La valeur ne sort JAMAIS dans le journal : seulement le nom.
+    assert SECRET_VALUE not in json.dumps(report)
+    assert any("LLM_API_KEY" in a.get("detail", "") for a in report["data"]["actions"])
+
+
+def test_v3_gitignore_versions_stack_md_and_ignores_env(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    lines = {l.strip() for l in (root / ".gitignore").read_text(encoding="utf-8").splitlines()}
+    assert "workspace/stack/STACK.md" not in lines and ".env" in lines
+
+
+def test_v3_roster_becomes_markdown_in_feats(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    roster_md = root / "workspace/feats/topology/1-roster.md"
+    assert roster_md.is_file() and not (root / "workspace/stack/topology").exists()
+    from sdda_scripts.validate_architecture import read_roster_yaml
+    data = read_roster_yaml(roster_md)
+    assert data["mission"] == 1 and data["orchestrator"]["id"] == "intent-classifier"
+    stack = (root / "workspace/stack/STACK.md").read_text(encoding="utf-8")
+    assert "RosterManifest" not in stack
+
+
+def test_v3_graph_is_inlined_in_the_topology(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    topo = (root / "workspace/feats/topology/1-topology.md").read_text(encoding="utf-8")
+    assert "classify{intent-classifier} -->|billing|" in topo and "ancien --> graphe" not in topo
+    assert "1-topology.mmd" not in topo
+    assert not (root / "workspace/feats/topology/1-topology.mmd").exists()
+
+
+def test_v3_frozen_schemas_travel_with_the_code(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    moved = root / "workspace/src/Projet/src/Projet/data/schemas/order_tracking.schema.json"
+    assert moved.is_file() and not (root / "workspace/feats/contracts/dataaccess").exists()
+
+
+def test_v3_source_manifests_are_inlined_in_stack_md(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    stack = (root / "workspace/stack/STACK.md").read_text(encoding="utf-8")
+    body = stack.split("## Active Data Sources", 1)[1].split("\n## ", 1)[0]
+    assert "  - id: exports_local" in body and "  - id: order_tracking" in body
+    # Plus aucune clé de manifeste ACTIVE (le gabarit en garde une, en commentaire, pour mcp.json).
+    assert not [l for l in body.splitlines() if l.startswith("SourceManifest")]
+    assert not (root / "workspace/stack/sources").exists()
+
+
+def test_v3_ground_truth_moves_to_proof_seed(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    assert (root / "workspace/proof/seed/1-Demo.scenarios.jsonl").is_file()
+    assert (root / "workspace/feats/briefs/1-Demo.md").is_file()
+    assert not (root / "workspace/feats/briefs/1-Demo.scenarios.jsonl").exists()
+
+
+def test_v3_workspace_passes_the_smoke_and_its_three_new_rules(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    code, out = run_main(smoke_check.main, ["--root", str(root), "--json"])
+    assert code == 0, out
+    # Et les trois règles crient si on les viole après coup.
+    (root / "workspace/feats/briefs/notes.yml").write_text("x: 1\n", encoding="utf-8")
+    (root / "workspace/stack/extra.yml").write_text("x: 1\n", encoding="utf-8")
+    stack = root / "workspace/stack/STACK.md"
+    stack.write_text(stack.read_text(encoding="utf-8").replace("${LLM_API_KEY}", "sk-live-en-clair"), encoding="utf-8")
+    code, out = run_main(smoke_check.main, ["--root", str(root), "--json"])
+    classes = {e["class"] for e in json.loads(out)["errors"]}
+    assert {"FEATS_NOT_MARKDOWN", "STACK_DIR_UNEXPECTED_FILE", "STACK_SECRET_IN_CLEAR"} <= classes
+
+
+def test_v3_migration_is_idempotent(v2_with_content: Path) -> None:
+    root = v2_with_content
+    _migrate(root)
+    before = _snapshot(root)
+    report = _migrate(root)
+    assert report["data"]["actions"] == [] and _snapshot(root) == before

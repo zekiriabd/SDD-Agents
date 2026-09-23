@@ -70,14 +70,14 @@ def roster_tasks(root: Path, number: int, mission_id: str, index: compute_status
         if topo.is_file() and va.Roster.from_markdown(markdown_io.read_text(topo), paths.rel(root, topo)).present:
             return []                              # repli Markdown en place : G2 en jugera
         return [task("roster", number, "Déclarer le roster d'agents",
-                     "aucun manifeste de roster : c'est l'architecte qui nomme les agents, leurs rôles et leurs "
+                     "aucun roster déclaré : c'est l'architecte qui nomme les agents, leurs rôles et leurs "
                      "outils — le framework les vérifie, il ne les invente pas (P7)",
                      f"/sdda-roster {number} (scaffold pré-rempli), remplir `{rel}`, puis /sdda-topology {number}",
                      blocking=True, ref=rel)]
     report = roster.validate_manifest(root, number)
     holes = int(report.data.get("placeholders") or 0)
     if holes:
-        return [task("roster", number, f"Compléter le manifeste de roster ({holes} `<à préciser>`)",
+        return [task("roster", number, f"Compléter le roster ({holes} `<à préciser>`)",
                      "chaque trou est une décision d'architecture ; laissé vide, il serait comblé par un LLM "
                      "au moment de la génération, sans que personne l'ait décidé ni relu (P7)",
                      f"éditer `{rel}`, puis python .sdda/sdda.py roster validate --mission {number}",

@@ -178,7 +178,6 @@ def source_pins(root: Path, ir: dict[str, Any]) -> dict[str, str]:
     n = int(str(ir.get("missionId", "0")).split("-", 1)[0] or 0)
     pins: dict[str, str] = {"ir": ir_compiler.ir_identity_hash(ir)}
     md = paths.topology_dir(root) / f"{n}-topology.md"
-    mmd = paths.topology_dir(root) / f"{n}-topology.mmd"
     stack = paths.stack_md_path(root)
     missions = sorted(paths.missions_dir(root).glob(f"{n}-*.md"))
     if missions:
@@ -186,9 +185,7 @@ def source_pins(root: Path, ir: dict[str, Any]) -> dict[str, str]:
     for cap in sorted(paths.caps_dir(root).glob(f"{n}-*.md")):
         pins[f"cap:{cap.stem}"] = hashing.sha256_file(cap)
     if md.is_file():
-        pins["topology"] = hashing.sha256_file(md)
-    if mmd.is_file():
-        pins["topology-mmd"] = hashing.sha256_file(mmd)
+        pins["topology"] = hashing.sha256_file(md)   # le graphe est dedans (bloc ```mermaid)
     if stack.is_file():
         pins["stack"] = hashing.sha256_file(stack)
     return pins

@@ -118,8 +118,10 @@ def current_hash(root: Path, key: str, artifact: str) -> str | None:
         p = paths.topology_dir(root) / f"{n}-topology.md"
         return hashing.sha256_file(p) if p.is_file() else ""
     if key == "topology-mmd":
-        p = paths.topology_dir(root) / f"{n}-topology.mmd"
-        return hashing.sha256_file(p) if p.is_file() else ""
+        # Clé d'un rapport compilé avant la v3 : le graphe vit désormais dans
+        # `{n}-topology.md`. Un rapport qui l'épingle encore est périmé, et le
+        # dire (hash vide != hash épinglé) vaut mieux que de le faire passer.
+        return ""
     if key == "stack":
         p = paths.stack_md_path(root)
         return hashing.sha256_file(p) if p.is_file() else ""

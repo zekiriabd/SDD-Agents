@@ -16,7 +16,9 @@ from sdda_lib import paths
 from sdda_scripts import roster
 from sdda_scripts import validate_architecture as va
 
-MANIFEST = "workspace/stack/topology/1-roster.yml"
+#: Le roster vit dans `feats/` — la spécification —, en Markdown, à côté de la
+#: topologie qu'il commande. Deux fichiers, deux owners : l'humain et l'agent.
+MANIFEST = "workspace/feats/topology/1-roster.md"
 TOPOLOGY = "workspace/feats/topology/1-topology.md"
 STACK = "workspace/stack/STACK.md"
 
@@ -61,6 +63,9 @@ loop_bounds:
 merge_strategy:
 """
 
+#: La forme sur disque : le YAML dans un bloc, la prose autour.
+COMPLETE_MD = roster.wrap_roster_markdown(1, "Demo", COMPLETE)
+
 
 def patch(project: Path, rel: str, old: str, new: str) -> None:
     path = project / rel
@@ -70,9 +75,10 @@ def patch(project: Path, rel: str, old: str, new: str) -> None:
 
 
 def write_manifest(project: Path, content: str = COMPLETE) -> Path:
+    """Écrit le roster tel que l'architecte le laisse : `content` est le YAML, enveloppé en Markdown."""
     path = project / MANIFEST
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    path.write_text(roster.wrap_roster_markdown(1, "Demo", content), encoding="utf-8")
     return path
 
 
@@ -107,6 +113,9 @@ def test_scaffold_writes_the_manifest_where_g2_reads_it(project: Path) -> None:
     path = project / MANIFEST
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
+    # Un Markdown : le YAML est dans le premier bloc clôturé, et c'est lui que G2 lit.
+    assert text.startswith("# ROSTER: 1-") and text.count("```yaml") == 1
+    assert va.read_roster_yaml(path)["mission"] == 1
     assert "mission: 1\n" in text and text.count("pattern: router") == 1
     assert "- cap: 1-1-ClassifyIntent" in text and "- cap: 1-2-ExplainInvoiceLine" in text
     assert data["data"]["caps"] == ["1-1-ClassifyIntent", "1-2-ExplainInvoiceLine"]
@@ -125,12 +134,12 @@ def test_scaffold_adapts_to_the_active_pattern(project: Path) -> None:
 def test_scaffold_is_idempotent_and_never_overwrites_without_force(project: Path) -> None:
     scaffold(project)
     path = project / MANIFEST
-    path.write_text(COMPLETE, encoding="utf-8")            # l'architecte a décidé
+    path.write_text(COMPLETE_MD, encoding="utf-8")         # l'architecte a décidé
     code, data = scaffold(project)
     assert code == 0 and data["data"]["action"] == "kept" and data["data"]["placeholders"] == 0
-    assert path.read_text(encoding="utf-8") == COMPLETE
-    # Idem pour un manifeste en cours de remplissage : rien n'est réécrit.
-    path.write_text(COMPLETE.replace("tier: balanced", "tier: <à préciser>"), encoding="utf-8")
+    assert path.read_text(encoding="utf-8") == COMPLETE_MD
+    # Idem pour un roster en cours de remplissage : rien n'est réécrit.
+    path.write_text(COMPLETE_MD.replace("tier: balanced", "tier: <à préciser>"), encoding="utf-8")
     code, data = scaffold(project)
     assert data["data"]["action"] == "kept" and data["data"]["placeholders"] == 1
 
@@ -140,7 +149,7 @@ def test_force_without_a_reason_is_refused_and_writes_nothing(project: Path) -> 
     code, data = scaffold(project, "--force")
     assert code == 1
     assert {e["class"] for e in data["errors"]} == {"BYPASS_REASON_MISSING"}
-    assert (project / MANIFEST).read_text(encoding="utf-8") == COMPLETE
+    assert (project / MANIFEST).read_text(encoding="utf-8") == COMPLETE_MD
     assert not (paths.audit_dir(project) / "bypasses.jsonl").exists()
 
 
@@ -165,15 +174,18 @@ def test_force_reason_can_come_from_the_environment(project: Path, monkeypatch) 
 def test_scaffold_without_a_mission_is_an_error(project: Path) -> None:
     code, out = run_main(roster.main, ["scaffold", "--root", str(project), "--mission", "7", "--json"])
     assert code == 1 and "MISSION_NOT_FOUND" in out
-    assert not (project / "workspace/stack/topology/7-roster.yml").exists()
+    assert not (project / "workspace/feats/topology/7-roster.md").exists()
 
 
-def test_scaffold_honors_the_declared_manifest_root(project: Path) -> None:
+def test_the_roster_location_is_a_convention_not_a_stack_key(project: Path) -> None:
+    """`RosterManifestRoot` a existé : une décision d'architecture qu'on peut ranger
+    n'importe où est une décision qu'on ne retrouve pas en revue. La clé est ignorée."""
     patch(project, STACK, "## Active Data Access",
           "## Active Agent Topology\nRosterManifestRoot: workspace/stack/agents\n\n## Active Data Access")
     _, data = scaffold(project)
-    assert data["data"]["manifest"] == "workspace/stack/agents/1-roster.yml"
-    assert (project / "workspace/stack/agents/1-roster.yml").is_file()
+    assert data["data"]["manifest"] == MANIFEST
+    assert (project / MANIFEST).is_file()
+    assert not (project / "workspace/stack/agents").exists()
 
 
 # ---------------------------------------------------------------------------
