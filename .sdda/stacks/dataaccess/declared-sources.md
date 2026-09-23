@@ -361,12 +361,30 @@ description ; le faire quand le serveur MCP est lui-même `untrusted` est une
 |---|---|---|
 | `filters:` | champs | paramètre optionnel, égalité ou `IN` (≤ 20 valeurs) |
 | `ranges:` | champs date/nombre | paramètres `{champ}_min` / `{champ}_max` |
-| `required_filter:` | champs | paramètre **obligatoire** ; la source n'est pas interrogeable sans |
+| `required_filter:` | champs | filtre d'**identité** imposé par le runtime depuis `ToolContext.identity` ; la valeur fournie par le modèle est **ignorée** ; sans identité, la lecture est refusée (`INVALID_FILTER`) |
 | `pii:` | champs | valeur redigée dans les spans et les datasets (`TracePIIPolicy`) |
 | `free_text:` | champs | l'outil passe `trust: untrusted` ; valeur enveloppée par `wrap_untrusted` |
 | `date_field:` | un champ | référence des calculs « depuis N jours » et de la fraîcheur |
 
 Toute autre clé → `[DATA_SOURCE_UNKNOWN_KEY]` au preflight.
+
+**`required_filter` est une frontière de tenant, pas un paramètre.** Le modèle
+lit du texte hostile ; une valeur qu'il choisit ne peut pas décider de qui on
+lit les données. Le runtime (`data/envelope.py`) retire donc des filtres toute
+clé de `required_filter` que l'appel fournit et la remplace par la valeur de
+`ToolContext.identity`. Un enregistrement lu par clé qui appartient à un autre
+appelant est rendu comme **introuvable** — jamais « interdit », qui confirmerait
+son existence. Sans identité, rien n'est lu : fail-closed.
+
+Deux obligations en découlent, pour deux owners :
+
+- **`dev-backend`** (composition) construit le contexte avec l'identité établie
+  au transport : `ToolContext(..., identity={"customer_id": settings.tenant_id})`,
+  une entrée par champ de `required_filter`. `settings.tenant_id` vient de
+  `--tenant` en CLI, de l'en-tête authentifié en `backend-api`, jamais du message.
+- **`qa-tests`** construit ses contextes de test avec une identité explicite, et
+  teste les trois cas : sans identité (refus), la sienne (servie), celle d'un
+  autre (introuvable).
 
 ### 3.8 Le schéma, inféré puis figé — pour tous les connecteurs
 
