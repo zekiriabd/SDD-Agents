@@ -105,10 +105,11 @@ Lancer : python bootstrap.py (sans --force : les MISSIONs sont conservées)
 Écrit par le script, **jamais** par cette commande :
 
 ```
-.env                               # les VALEURS des secrets — gitignoré
 workspace/
 ├── stack/                         # CE QU'ON CONFIGURE
 │   └── STACK.md                   #   VERSIONNÉ — noms de variables (${LLM_API_KEY}), jamais de valeur
+├── src/{AppName}/.env             # les VALEURS des secrets du RUNTIME — gitignoré, avec l'application
+│                                  #   qui les consomme ; le harnais de construction ne le lit jamais
 ├── feats/                         # CE QU'ON SPÉCIFIE — du Markdown, seul
 │   ├── briefs/                    #   ce que l'humain dépose (specs, --from-brief)
 │   ├── missions/  caps/

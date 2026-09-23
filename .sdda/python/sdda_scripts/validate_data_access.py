@@ -40,6 +40,7 @@ Variable d'environnement :
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import sys
@@ -193,25 +194,30 @@ def check_secrets(root: Path, section: dict[str, Any], registry: sr.Registry,
     qui n'a jamais eu la valeur en mémoire ne peut pas la recopier dans un
     rapport de gate — lequel, lui, n'est pas gitignoré partout.
     """
+    # `SourceSecretsFile` est RELATIF AU LIVRABLE (`workspace/src/{App}/`), pas
+    # à la racine du dépôt : c'est l'application qui consomme ces valeurs, et
+    # c'est de là qu'elle part en exécutable ou en conteneur (paths.env_path).
     declared = str(section.get("SourceSecretsFile") or ".env").strip()
+    app = str(read_project_section(root).get("AppName") or "App").strip() or "App"
     candidate = Path(declared)
-    env_path = candidate if candidate.is_absolute() else (root / candidate)
+    env_path = candidate if candidate.is_absolute() else (paths.app_dir(root, app) / candidate)
+    shown = declared if candidate.is_absolute() else f"workspace/src/{app}/{declared}"
 
     referenced: dict[str, list[str]] = {}
     for sid, store in registry.stores.items():
         for name in sr.auth_env_refs(store):
             referenced.setdefault(name, []).append(sid)
 
-    summary = {"file": declared, "referenced": sorted(referenced), "present": False}
+    summary = {"file": shown, "referenced": sorted(referenced), "present": False}
 
     if not env_path.is_file():
         if referenced:
             report.error(
                 "DATA_SECRET_FILE_MISSING",
-                f"`SourceSecretsFile: {declared}` introuvable alors que {len(referenced)} variable(s) y sont référencées "
-                f"({', '.join(sorted(referenced)[:5])})",
-                fix=f"créer `{declared}` à la racine du projet avec une ligne `NOM=` par variable citée, "
-                    "et vérifier qu'il est bien dans `.gitignore`",
+                f"`SourceSecretsFile: {declared}` introuvable ({shown}) alors que {len(referenced)} variable(s) "
+                f"y sont référencées ({', '.join(sorted(referenced)[:5])})",
+                fix=f"créer `{shown}` — avec l'application, pas à la racine du dépôt — avec une ligne `NOM=` "
+                    "par variable citée, et vérifier qu'il est bien dans `.gitignore`",
                 location=SECTION,
             )
         return summary
@@ -224,40 +230,51 @@ def check_secrets(root: Path, section: dict[str, Any], registry: sr.Registry,
     if missing:
         report.error(
             "DATA_SECRET_VAR_UNDECLARED",
-            f"variable(s) citée(s) par un store mais absente(s) de `{declared}` : "
+            f"variable(s) citée(s) par un store mais absente(s) de `{shown}` : "
             + ", ".join(f"{n} (store `{referenced[n][0]}`)" for n in missing[:5]),
-            fix=f"ajouter `NOM=` dans `{declared}` — une variable absente ne produit pas une erreur "
+            fix=f"ajouter `NOM=` dans `{shown}` — une variable absente ne produit pas une erreur "
                 "d'authentification claire, elle produit un appel anonyme qui renvoie 200 et zéro ligne",
             location=SECTION,
         )
 
-    if not _is_git_ignored(root, declared):
+    if not _is_git_ignored(root, env_path):
         report.error(
             "DATA_SECRET_FILE_UNIGNORED",
-            f"`{declared}` n'apparaît pas dans le `.gitignore` du projet",
-            fix=f"ajouter `{declared}` à `.gitignore` avant d'y écrire la moindre clé — "
+            f"`{shown}` n'apparaît pas dans le `.gitignore` du projet",
+            fix=f"ajouter `workspace/src/*/.env` (ou `{shown}`) à `.gitignore` avant d'y écrire la moindre clé — "
                 "un secret commité reste dans l'historique après sa suppression",
             location=".gitignore",
         )
     return summary
 
 
-def _is_git_ignored(root: Path, target: str) -> bool:
+def _is_git_ignored(root: Path, target: Path) -> bool:
     """Le fichier de secrets est-il couvert par le `.gitignore` du projet ?
 
     Comparaison sur les motifs, pas d'appel à git : le validateur doit tourner
-    sur un dossier qui n'est pas encore un dépôt.
+    sur un dossier qui n'est pas encore un dépôt. On honore les formes que les
+    projets écrivent vraiment — le chemin exact, le nom seul (`.env`, qui
+    s'applique à tout niveau), et un glob (`workspace/src/*/.env`,
+    `workspace/**/.env`) — sans prétendre réimplémenter gitignore.
     """
     gitignore = root / ".gitignore"
     if not gitignore.is_file():
         return False
-    wanted = target.replace("\\", "/").removeprefix("./")
-    candidates = {wanted, Path(wanted).name, "*" + Path(wanted).suffix}
+    try:
+        rel = target.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        rel = target.as_posix()
+    name = target.name
     for line in markdown_io.read_text(gitignore).split("\n"):
         pattern = line.strip()
-        if not pattern or pattern.startswith("#"):
+        if not pattern or pattern.startswith("#") or pattern.startswith("!"):
             continue
-        if pattern.removeprefix("/").removesuffix("/") in candidates:
+        pattern = pattern.removeprefix("/").removesuffix("/")
+        if pattern in (rel, name, "*" + target.suffix):
+            return True
+        if "*" in pattern and (fnmatch.fnmatchcase(rel, pattern)
+                               or fnmatch.fnmatchcase(rel, pattern.replace("**/", "*/"))
+                               or fnmatch.fnmatchcase(rel, pattern.replace("**/", ""))):
             return True
     return False
 

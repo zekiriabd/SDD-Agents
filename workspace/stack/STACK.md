@@ -681,6 +681,12 @@ HumanInTheLoopEnabled: false          # exige un pattern d'orchestration avec ch
 
 
 ## Active Secrets
-# Valeurs réelles en clair — STACK.md est gitignored.
-# Ne DOIVENT apparaître dans aucun prompt, aucun trace span, aucun dataset.
- - LLM_API_KEY: <à compléter>
+# Les NOMS des variables que l'application et les outils attendent. Les VALEURS
+# vivent dans `workspace/src/SupportDesk/.env`, gitignoré, AVEC l'application :
+# c'est elle qui consomme la clé (Runtime Models), et c'est de là qu'elle part
+# en exécutable ou en conteneur. Le harnais de construction ne lit jamais ce
+# fichier — il paie ses tokens avec son propre compte. Jamais ici : STACK.md est
+# versionné. `smoke-check` refuse une valeur en clair ([STACK_SECRET_IN_CLEAR]).
+# Aucune valeur ne DOIT apparaître dans un prompt, un trace span ni un dataset.
+SecretsFile: .env                     # relatif à workspace/src/SupportDesk/
+ - LLM_API_KEY: ${LLM_API_KEY}

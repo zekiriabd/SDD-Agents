@@ -46,8 +46,9 @@ def workspace(root: Path) -> Path:
 #:            l'humain et les agents de spécification, relue en revue,
 #:            versionnée. C'est l'ENTRÉE de la génération, jamais sa sortie.
 #:   stack/   la CONFIGURATION technique : `STACK.md`, seul. Versionné — il ne
-#:            porte que des NOMS de variables ; les valeurs vivent dans `.env`,
-#:            gitignoré, à la racine du projet (même mécanisme que SDD_Pro).
+#:            porte que des NOMS de variables ; les valeurs vivent dans
+#:            `src/{App}/.env`, gitignoré, avec l'application qui les consomme
+#:            (même mécanisme que SDD_Pro).
 #:   src/     le CODE GÉNÉRÉ, prompts et schémas figés compris. Un prompt est
 #:            un actif d'exécution : hors du paquet, l'application livrée part
 #:            sans lui. Un schéma figé aussi : c'est contre lui que l'application
@@ -64,7 +65,7 @@ def workspace(root: Path) -> Path:
 #: techniques), des fichiers Markdown sous `feats/` (ce que le système doit
 #: faire), et sa vérité terrain sous `proof/seed/`. Les URL d'API et les
 #: serveurs MCP sont des choix techniques : ils vont dans `STACK.md`, leurs
-#: identifiants dans `.env`.
+#: identifiants dans `src/{App}/.env`.
 FEATS = "feats"
 PROOF = "proof"
 
@@ -207,15 +208,33 @@ def stack_md_path(root: Path) -> Path:
     return stack_dir(root) / "STACK.md"
 
 
-def env_path(root: Path) -> Path:
-    """`.env` à la racine du projet : les VALEURS des secrets, gitignoré.
+def app_dir(root: Path, app_name: str) -> Path:
+    """`workspace/src/{App}` : la racine du LIVRABLE — projet, build, `.env`."""
+    return workspace(root) / "src" / app_name
+
+
+def env_rel(app_name: str) -> str:
+    """Le chemin de `.env` tel qu'on l'écrit dans un message : `workspace/src/{App}/.env`."""
+    return f"workspace/src/{app_name}/.env"
+
+
+def env_path(root: Path, app_name: str) -> Path:
+    """`workspace/src/{App}/.env` : les VALEURS des secrets, gitignoré.
+
+    Le fichier vit avec l'application, pas à la racine du dépôt : c'est
+    l'application générée qui consomme la clé (Runtime Models, §6), et c'est
+    depuis `workspace/src/{App}/` qu'elle part en exécutable ou en conteneur.
+    Un `.env` à la racine du dépôt restait hors du livrable — et SDD_Pro l'a
+    retiré pour cette raison (`workspace/src/*/.env` dans son .gitignore). Le
+    harnais de CONSTRUCTION, lui, ne lit jamais ce fichier : il paie ses
+    tokens avec son propre compte.
 
     STACK.md n'en porte que les noms (`${LLM_API_KEY}`), et c'est ce qui le
     rend versionnable. Le même fichier sert aux stores de `declared-sources`
-    (`SourceSecretsFile`) et au code généré (`gen_app_skeleton`, qui n'écrit que
-    des noms dans `config.py`).
+    (`SourceSecretsFile`, relatif à ce répertoire) et au code généré
+    (`config.py`, qui le charge au démarrage sans écraser l'environnement).
     """
-    return root / ".env"
+    return app_dir(root, app_name) / ".env"
 
 
 def app_src_root(root: Path, app_name: str) -> Path:

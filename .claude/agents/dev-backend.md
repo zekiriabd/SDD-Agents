@@ -71,7 +71,8 @@ Read **uniquement** :
   `## Active Language & Runtime`, `## Active Agent Framework`,
   `## Active Architecture Pattern`, `## Active Backend Stack`,
   `## Active Serving Surface`, `## Active Observability`, `## Runtime Models`,
-  `## Active Secrets` (**les noms** — tu ne lis jamais `.env`).
+  `## Active Secrets` (**les noms** — tu ne lis jamais `workspace/src/{App}/.env` ;
+  tu écris son `.env.example` à côté, noms seuls, valeurs vides).
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (ids, tiers, bounds),
   `tools[]`, `retrievers[]`, `dataAccess[]`, `orchestration.entryNode`,
   `inputSchema` / `outputSchema`, `budget`. IR absent → `[IR_NOT_FOUND]`, STOP.

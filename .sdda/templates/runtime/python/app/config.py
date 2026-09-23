@@ -7,7 +7,10 @@ Deux sources, et la frontière entre elles est la raison d'être du module :
                       table de tarifs, politique de trace. Un run n'est
                       reproductible que si ces valeurs sont dans le dépôt.
     variables d'env   les secrets, et eux seuls. Ils ne sont jamais écrits,
-                      jamais journalisés, jamais rendus par `repr`.
+                      jamais journalisés, jamais rendus par `repr`. En
+                      développement, le `.env` du livrable
+                      (`workspace/src/{App}/.env`, gitignoré) les complète —
+                      sans jamais écraser l'environnement réel.
 
 **`os.environ` ne s'ouvre qu'ici.** Ailleurs dans `src/`, un `os.getenv("…")`
 est `[SEC_ENV_VAR_FORBIDDEN]` (`lang/python.md §5.2`) — et le lint le cherche.
@@ -129,8 +132,8 @@ class Settings:
         qu'elles se contaminent, et c'est la seule façon d'écrire un test qui
         prouve qu'une clé manquante échoue AVANT le premier appel au modèle.
         """
-        env = os.environ if environ is None else environ
         path = Path(config_path) if config_path else Path(__file__).resolve().parent / CONFIG_FILE
+        env = cls._environ_with_env_file(path) if environ is None else environ
         raw = cls._read(path)
 
         secret_env = {str(k): str(v) for k, v in (raw.get("secretEnv") or {}).items()}
@@ -168,6 +171,44 @@ class Settings:
             secret_env=secret_env,
             _secrets=secrets,
         )
+
+    @staticmethod
+    def _environ_with_env_file(config_path: Path) -> Mapping[str, str]:
+        """L'environnement du processus, complété par le `.env` du LIVRABLE — jamais écrasé par lui.
+
+        Le fichier vit à la racine de l'application, `workspace/src/{App}/.env`
+        (deux niveaux au-dessus du paquet), gitignoré : c'est l'application qui
+        consomme la clé, et c'est de là qu'elle part en exécutable ou en
+        conteneur. Le harnais de construction ne le lit jamais.
+
+        L'environnement réel gagne toujours : en production, c'est lui qui
+        fournit les valeurs, et un `.env` resté dans une image ne doit pas
+        pouvoir remplacer ce que l'orchestrateur a injecté. Le fichier n'est
+        lu que quand `environ` n'est pas injecté — un test qui injecte son
+        environnement ne voit jamais les vraies clés du poste.
+        """
+        merged: dict[str, str] = dict(os.environ)
+        env_file = config_path.resolve().parents[2] / ".env" if len(config_path.resolve().parents) > 2 else None
+        if env_file is None or not env_file.is_file():
+            return merged
+        try:
+            lines = env_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return merged
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            if stripped.startswith("export "):
+                stripped = stripped[len("export "):].lstrip()
+            name, value = stripped.split("=", 1)
+            name = name.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            if name and name not in merged:
+                merged[name] = value
+        return merged
 
     @staticmethod
     def _read(path: Path) -> dict[str, Any]:

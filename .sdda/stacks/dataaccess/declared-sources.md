@@ -51,8 +51,9 @@ Ce que la stack impose, par construction et non par bonne volonté :
   `SourceEgressAllowlist` est `[DATA_EGRESS_UNDECLARED]`. Les deux sont
   fail-closed.
 - **Les secrets sont des noms.** Aucune valeur d'identifiant n'apparaît dans
-  STACK.md, dans un manifeste, ni dans un rapport de gate. Elles vivent dans un
-  fichier `.env` gitignoré, et le validateur n'en lit **que les noms** (§3.5).
+  STACK.md, dans un manifeste, ni dans un rapport de gate. Elles vivent dans
+  `workspace/src/{App}/.env`, gitignoré, avec l'application qui les consomme,
+  et le validateur n'en lit **que les noms** (§3.5).
 - **Le contenu est daté.** Un export, une réponse d'API en cache et un outil MCP
   sont tous des instantanés ; l'outil retourne toujours `as_of` avec ses
   données, parce que « commande non reçue depuis 10 jours » calculé sur un
@@ -80,7 +81,7 @@ volumétrie au-delà de §2.1 (→ une base, et `view-per-agent.md`).
 | **Client** | Python 3.12 · `json`, `csv` (stdlib) · `pydantic` 2.x pour les modèles générés · `httpx` pour le connecteur `http-api` · `mcp` pour le connecteur `mcp` · `openpyxl` / `pyarrow` **optionnels** (§7.11) |
 | **`DatabaseType`** | `none` — cette stack **n'est pas** une base ; déclarer un `DatabaseType` non `none` en même temps est `[DATA_SOURCE_DB_CONFLICT]` |
 | **Déclaration** | `STACK.md ## Active Data Sources` → `Stores[]`, `Sources[]` inline, enveloppe `Source*` ; `SourceManifests[]` optionnel pour un `mcp.json` standard |
-| **Secrets** | `SourceSecretsFile` (défaut `.env`), gitignoré ; les déclarations ne portent que des **noms** de variables (`*_env`) |
+| **Secrets** | `SourceSecretsFile` (défaut `.env`, **relatif à `workspace/src/{App}/`**), gitignoré ; les déclarations ne portent que des **noms** de variables (`*_env`) |
 | **Générateur** | `sdda_scripts/gen_source_tools.py` — lit stores + sources + schémas figés → wrappers Python + squelettes de tool-contracts. 0 token, aucun réseau. Trois modes : `--infer` (une fois, §3.8), `--write` (à chaque changement de déclaration), `--check` (défaut, en CI). |
 | **Validateur** | `sdda_scripts/validate_data_access.py` — enforcer de l'invariant `db-safety-envelope-present` pour cette stack. 0 token, aucun réseau, sans exécuter l'application. |
 
@@ -112,7 +113,7 @@ STACK.md inline    ──┐
 mcp.json (option)  ──┘      Sources[] : ce que c'est       ──┤
                                                              ├──► outils générés
 src/{App}/.../data/schemas/*.schema.json : la forme, figée ──┘
-.env                   : les valeurs des secrets (jamais lues par le framework)
+src/{App}/.env         : les valeurs des secrets, avec l'application (jamais lues par le framework)
 ```
 
 Une source référence un store par son `id`. Un store ne référence rien : il est
@@ -123,7 +124,7 @@ authentification.
 
 ```yaml
 ## Active Data Sources
-SourceSecretsFile: .env                       # gitignoré — contient les VALEURS
+SourceSecretsFile: .env                       # gitignoré — les VALEURS ; relatif à workspace/src/{App}/
 # Optionnel — UN seul usage : importer une config MCP standard sans la retranscrire.
 # SourceManifestRoot: workspace/stack           # frontière : à côté de STACK.md
 # SourceManifests:
@@ -210,7 +211,7 @@ dernière) :
    fichiers (§7.4).
 4. **Rien d'autre sous `workspace/stack/`.** Un fichier que STACK.md ne déclare
    pas est `[STACK_DIR_UNEXPECTED_FILE]` : la configuration tient dans STACK.md,
-   les valeurs dans `.env`.
+   les valeurs dans `workspace/src/{App}/.env`.
 
 Chaque serveur du `mcp.json` importé devient un **store** `kind: mcp`
 nommé d'après lui. Il n'existe pour l'application que s'il est dans
@@ -540,10 +541,10 @@ ou hôte), timeout, lecture, validation contre le schéma figé, troncature à
 ## 4. Structure de fichiers générée
 
 ```
-.env                               # gitignoré — les VALEURS des secrets
 workspace/stack/
 ├── STACK.md                       # VERSIONNÉ — enveloppe + Stores/Sources inline, noms de variables seulement
 └── mcp.json                       # optionnel — config MCP standard, importée (SourceManifests)
+workspace/src/{AppName}/.env       # gitignoré — les VALEURS des secrets, avec l'application qui les consomme
 
 workspace/src/{AppName}/src/{AppName}/data/
 ├── schemas/                       # les schémas FIGÉS, un par source (gen_source_tools --infer, relus, commités)

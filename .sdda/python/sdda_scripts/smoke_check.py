@@ -26,7 +26,7 @@ Ce qu'il vérifie :
     8. (v3+) `stack/` ne contient que STACK.md (+ manifestes déclarés)
                                                          [STACK_DIR_UNEXPECTED_FILE]
     9. (v3+) aucune valeur de secret en clair dans STACK.md — des `${NOM}`,
-       les valeurs dans `.env`                            [STACK_SECRET_IN_CLEAR]
+       les valeurs dans `workspace/src/{App}/.env`        [STACK_SECRET_IN_CLEAR]
 
 Une ligne activée pour une fiche absente ne charge rien (ARCHITECTURE §2) : la
 détecter ici, avant le premier spawn, coûte cinquante millisecondes ; la
@@ -58,7 +58,7 @@ MIGRATE_CMD = "python .sdda/sdda.py migrate-workspace"
 #: fantôme : il se retire dans une migration, pas en silence.
 WORKSPACE_TREE: tuple[str, ...] = (
     # stack/ — la CONFIGURATION : STACK.md, seul. Versionné ; les valeurs des
-    # secrets vivent dans `.env` à la racine du projet.
+    # secrets vivent dans `src/{App}/.env`, avec l'application qui les consomme.
     "stack",
     # feats/ — la SPÉCIFICATION : ce qu'on écrit et qu'on relit en revue.
     # Du MARKDOWN, et rien d'autre (`check_feats_markdown_only`).
@@ -196,7 +196,7 @@ _STACK_DIR_ALLOWED = {"STACK.md", "STACK.md.bak", ".gitkeep"}
 _MANIFEST_PATH_RE = re.compile(r"^\s*-\s*(?:\{\s*)?path:\s*([^\s,}]+)", re.M)
 
 #: Un nom de clé qui désigne un secret. La VALEUR, si elle est en clair dans
-#: STACK.md, part en commit : c'est tout ce que `.env` existe pour empêcher.
+#: STACK.md, part en commit : c'est tout ce que `src/{App}/.env` existe pour empêcher.
 _SECRET_NAME_RE = re.compile(r"(KEY|TOKEN|PASSWORD|PASSWD|SECRET)", re.I)
 _SECRET_LINE_RE = re.compile(r"^\s*-\s*([A-Z][A-Z0-9_]*)\s*:\s*(.*?)\s*(?:#.*)?$", re.M)
 _ENV_REF_RE = re.compile(r"^\$\{[A-Z][A-Z0-9_]*\}$")
@@ -244,7 +244,7 @@ def check_stack_dir(root: Path, report: Report, stack_text: str | None) -> list[
         report.error("STACK_DIR_UNEXPECTED_FILE",
                      f"{len(strays)} fichier(s) inattendu(s) sous workspace/stack/ : " + ", ".join(strays[:5]),
                      f"{MIGRATE_CMD} rapatrie roster et sources dans leurs sections ; la configuration tient dans STACK.md, "
-                     "les valeurs dans .env",
+                     "les valeurs dans workspace/src/{App}/.env",
                      "workspace/stack/")
     return strays
 
@@ -273,7 +273,7 @@ def check_secrets_not_in_clear(stack_text: str | None, report: Report) -> list[s
     if leaks:
         report.error("STACK_SECRET_IN_CLEAR",
                      f"{len(leaks)} secret(s) en clair dans workspace/stack/STACK.md : " + ", ".join(leaks[:4]),
-                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans .env (gitignoré) — {MIGRATE_CMD} le fait",
+                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans workspace/src/{{App}}/.env (gitignoré) — {MIGRATE_CMD} le fait",
                      "workspace/stack/STACK.md")
     return leaks
 

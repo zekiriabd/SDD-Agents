@@ -92,11 +92,14 @@ niveau réel du système.
 
 ---
 
-## 4. Les secrets : des noms, dans un `.env`
+## 4. Les secrets : des noms, dans le `.env` de l'application
 
 La règle tient en une phrase : **une déclaration porte le nom d'une variable,
-un fichier `.env` gitignoré porte sa valeur, et le framework ne lit jamais la
-valeur.**
+le fichier `workspace/src/{App}/.env` gitignoré porte sa valeur, et le framework
+ne lit jamais la valeur.** Le fichier vit avec l'application, pas à la racine
+du dépôt : c'est elle qui consomme la clé, et c'est de là qu'elle part en
+exécutable ou en conteneur (convention SDD_Pro). `SourceSecretsFile` se résout
+relativement à ce répertoire.
 
 ```yaml
 # workspace/stack/STACK.md ## Active Data Sources   <- VERSIONNÉ (noms seulement)
@@ -108,7 +111,7 @@ Stores:
 ```
 
 ```bash
-# .env   <- GITIGNORÉ, jamais commité, jamais lu par un agent
+# workspace/src/{App}/.env   <- GITIGNORÉ, jamais commité, jamais lu par un agent
 CRM_API_KEY=…
 ```
 
@@ -118,7 +121,7 @@ Ce que le validateur impose, et pourquoi :
 |---|---|---|
 | Toute clé `*_env` porte un nom, pas une valeur | `[DATA_SECRET_INLINE]` | une clé d'API commitée, qui reste dans l'historique après suppression |
 | `auth` est obligatoire, `mode: none` compris | `[DATA_AUTH_INCOMPLETE]` | un store « public » par oubli, dont personne n'a décidé qu'il l'était |
-| Toute variable citée existe dans le `.env` | `[DATA_SECRET_VAR_UNDECLARED]` | un appel anonyme qui renvoie `200` et zéro ligne — l'agent répond « je ne trouve rien » |
+| Toute variable citée existe dans le `.env` de l'application | `[DATA_SECRET_VAR_UNDECLARED]` | un appel anonyme qui renvoie `200` et zéro ligne — l'agent répond « je ne trouve rien » |
 | Le fichier de secrets est dans `.gitignore` | `[DATA_SECRET_FILE_UNIGNORED]` | le commit qui arrive trois semaines plus tard |
 | Un `env` littéral dans un `.mcp.json` importé | `[DATA_SECRET_INLINE]` | la fuite la plus fréquente de cette famille de fichiers |
 

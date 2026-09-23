@@ -76,7 +76,7 @@ same level, and nothing said that `caps/` is reviewed by humans while
 
 ```
 workspace/
-├── stack/     what you CONFIGURE — STACK.md, alone, versioned (names of variables; values in .env)
+├── stack/     what you CONFIGURE — STACK.md, alone, versioned (names of variables; values in src/{App}/.env)
 ├── feats/     what you SPECIFY  — Markdown only: briefs · missions · caps · roster + topology · contracts · decisions (ADR)
 ├── src/       what gets PRODUCED — the generated application, prompts and frozen schemas included
 ├── proof/     what JUDGES        — seed (your ground truth) · datasets · suites · baselines · calibration
@@ -85,7 +85,8 @@ workspace/
 
 You write three things: `stack/STACK.md` (the technical choices — language,
 framework, pattern, data sources, API URLs, MCP servers; secret values go in a
-gitignored `.env`), Markdown files under `feats/` (what the system must do),
+gitignored `src/{App}/.env`, next to the application that consumes them — the
+build harness never reads it), Markdown files under `feats/` (what the system must do),
 and your ground truth under `proof/seed/`. Everything else is produced. **No `dev-*` agent may ever write under
 `proof/`**: the agent that writes the code cannot touch the dataset that grades
 it, nor the baseline its regression is measured against. That is the one
@@ -245,7 +246,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->1118<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->1122<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

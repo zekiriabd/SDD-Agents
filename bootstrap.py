@@ -3,9 +3,10 @@
 SDD_Agents — bootstrap d'un nouveau projet agentic.
 
 Génère `workspace/stack/STACK.md` (versionné — il ne porte que des NOMS de
-variables), `.env` à la racine (gitignoré — les VALEURS), l'arborescence du
-workspace, et vérifie que l'installation tient debout. Même mécanisme que
-SDD_Pro : la déclaration dans le stack, les secrets dans `.env`.
+variables), `workspace/src/{App}/.env` (gitignoré — les VALEURS, avec
+l'application qui les consomme), l'arborescence du workspace, et vérifie que
+l'installation tient debout. Même mécanisme que SDD_Pro : la déclaration dans
+le stack, les secrets dans le `.env` du livrable.
 
 Usage :
     python bootstrap.py                      # interactif
@@ -418,7 +419,7 @@ def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str]) -> str:
         "{{BackendActiveLines}}": (f" - .sdda/stacks/backend/{combo.backend}.md" if combo.backend != "none"
                                    else "# (aucune : DeliverableType != backend-api)"),
         # Aucune VALEUR de secret ici : STACK.md ne porte que `${NOM}` (le gabarit
-        # les écrit tel quel), et `write_env` range les valeurs dans `.env`.
+        # les écrit tel quel), et `write_env` range les valeurs dans `workspace/src/{App}/.env`.
     }
     del secrets, has_db  # lus par write_env ; gardés dans la signature pour les appelants
     for placeholder, value in mapping.items():
@@ -500,6 +501,8 @@ def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: st
     if not existing.strip():
         lines += [
             "# SDD_Agents — VALEURS des secrets et de la configuration sensible. Gitignoré.",
+            "# Ce fichier appartient à L'APPLICATION (Runtime Models) : c'est elle qui consomme la clé,",
+            "# et elle part d'ici en exécutable ou en conteneur. Le harnais de construction ne le lit jamais.",
             "# workspace/stack/STACK.md (versionné) n'en porte que les noms : `LLM_API_KEY: ${LLM_API_KEY}`.",
             "# Le code généré lit ces variables par leur NOM (config.py) ; aucune valeur ne voyage ailleurs.",
         ]
@@ -510,17 +513,21 @@ def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: st
 
 
 def write_env(app_name: str, combo: Combo, secrets: dict[str, str]) -> Path:
-    env_path = ROOT / ".env"
+    """`workspace/src/{App}/.env` — avec le livrable, jamais à la racine du dépôt (`sdda_lib.paths.env_path`)."""
+    from sdda_lib import paths  # import tardif : sys.path est complété après les constantes
+
+    env_path = paths.env_path(ROOT, app_name)
+    env_path.parent.mkdir(parents=True, exist_ok=True)
     existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
     env_path.write_text(build_env(app_name, combo, secrets, existing), encoding="utf-8")
     return env_path
 
 
 def write_gitignore() -> None:
-    """`.env` porte les valeurs : il ne doit jamais partir en commit. STACK.md, lui, est versionné."""
+    """`src/*/.env` porte les valeurs : il ne doit jamais partir en commit. STACK.md, lui, est versionné."""
     gitignore = ROOT / ".gitignore"
     required = [
-        ".env",
+        "workspace/src/*/.env",
         "workspace/.sys/",
         "__pycache__/",
         "*.pyc",
@@ -602,8 +609,9 @@ def interactive() -> tuple[str, Combo, dict[str, str]]:
 
     secrets: dict[str, str] = {}
     say()
-    say("  Secrets — écrits dans .env à la racine (gitignoré). STACK.md, versionné,")
-    say("  n'en porte que les noms. Laisser vide pour compléter .env plus tard.")
+    say("  Secrets — écrits dans workspace/src/{App}/.env (gitignoré, avec l'application")
+    say("  qui les consomme). STACK.md, versionné, n'en porte que les noms. Laisser vide")
+    say("  pour compléter le .env plus tard.")
     say()
     key = ask("Clé API du fournisseur de modèles (LLM_API_KEY)", "")
     if key:
@@ -690,7 +698,7 @@ def main() -> int:
     step("workspace/stack/STACK.md  (versionné — noms de variables seulement)")
 
     write_env(app_name, combo, secrets)
-    step(".env  (gitignoré — les valeurs ; complété, jamais réécrit)")
+    step(f"workspace/src/{app_name}/.env  (gitignoré — les valeurs ; complété, jamais réécrit)")
 
     write_gitignore()
     build_context_packs()
@@ -711,7 +719,7 @@ def main() -> int:
     say()
     say("  Étapes suivantes")
     say()
-    say("   1. Compléter .env (LLM_API_KEY, DB_* si base) — puis workspace/stack/STACK.md,")
+    say(f"   1. Compléter workspace/src/{app_name}/.env (LLM_API_KEY, DB_* si base) — puis workspace/stack/STACK.md,")
     say("      surtout ## Project Config > budget d'exécution :")
     say("        CostPerRunTargetUsd / LatencyP95TargetMs n'ont pas de défaut,")
     say("        et la MISSION GATE les exigera.")

@@ -352,6 +352,30 @@ def test_a_missing_secret_fails_before_any_model_call(rt: Runtime) -> None:
     assert excinfo.value.cls == "CONFIG_INVALID"
 
 
+def test_the_app_env_file_lives_with_the_deliverable(rt: Runtime, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`workspace/src/{App}/.env` complète l'environnement réel sans jamais l'écraser.
+
+    Le fichier vit avec l'application — c'est elle qui consomme la clé, et
+    c'est de là qu'elle part. Un `.env` à la racine du dépôt n'est pas lu.
+    """
+    app_root = rt.project / "workspace/src" / APP
+    (app_root / ".env").write_text("# secrets du livrable\nexport FROM_FILE_KEY='file-value'\nSHARED_KEY=file-loses\n",
+                                   encoding="utf-8")
+    (rt.project / ".env").write_text("ROOT_KEY=must-not-load\n", encoding="utf-8")
+    monkeypatch.delenv("FROM_FILE_KEY", raising=False)
+    monkeypatch.delenv("ROOT_KEY", raising=False)
+    monkeypatch.setenv("SHARED_KEY", "environment-wins")
+
+    env = rt.config.Settings._environ_with_env_file(rt.package / "app_config.json")
+    assert env["FROM_FILE_KEY"] == "file-value"
+    assert env["SHARED_KEY"] == "environment-wins"
+    assert "ROOT_KEY" not in env
+
+    # Un environnement injecté ne voit jamais le fichier : c'est ce qui rend les tests hermétiques.
+    settings = rt.config.Settings.load(config_path=rt.package / "app_config.json", environ={})
+    assert settings.tenant_id == ""
+
+
 # ---------------------------------------------------------------------------
 # 5. L'exécuteur, chargé comme le runner le charge
 # ---------------------------------------------------------------------------

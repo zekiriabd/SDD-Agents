@@ -14,8 +14,10 @@
 # comportement voulu : un changement de modèle périme les résultats d'eval.
 #
 # Aucun secret ici : uniquement des NOMS de variables d'environnement. Les
-# valeurs vivent dans `.env` à la racine du projet (gitignoré) ; STACK.md,
-# versionné, n'en porte lui aussi que les noms.
+# valeurs vivent dans `workspace/src/{App}/.env` (gitignoré, avec l'application
+# qui les consomme) ; STACK.md, versionné, n'en porte lui aussi que les noms.
+# Ce fichier décrit les BUILD models : le harnais qui les exécute paie avec son
+# propre compte et ne lit jamais ce `.env`, réservé aux RUNTIME models.
 # ============================================================================
 
 schema: sdda.provider/v1

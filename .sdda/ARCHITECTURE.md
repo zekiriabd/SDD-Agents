@@ -134,8 +134,6 @@ SDD-Agents/
 │       │                              #   les câble TOUS, aucune table en dur
 │       └── tests/
 │
-├── .env                               # les VALEURS des secrets — gitignoré (comme SDD_Pro)
-│
 └── workspace/                         # ── LE PROJET — quatre entrées, cf. §2.ter
     │
     ├── stack/                         # ── CE QU'ON CONFIGURE ─────────────────
@@ -159,6 +157,8 @@ SDD-Agents/
     ├── src/                           # ── CE QU'ON PRODUIT ───────────────────
     │   ├── prompts/     {agent}.system.md   # hashés — actif d'EXÉCUTION
     │   └── {AppName}/                       # l'application agentic générée
+    │       ├── .env                         # les VALEURS des secrets du RUNTIME — gitignoré,
+    │       │                                #   avec l'application qui les consomme (comme SDD_Pro)
     │       └── src/{AppName}/data/schemas/  # schémas figés des sources — actif d'EXÉCUTION
     │
     ├── proof/                         # ── CE QUI JUGE ────────────────────────
@@ -197,8 +197,12 @@ perte.
 (les choix techniques — langage, framework, pattern, sources de données, URL
 d'API, serveurs MCP), des fichiers Markdown sous `feats/` (ce que le système
 doit faire — écrits à la main ou par questions-réponses avec `po-elicitor`), et
-sa vérité terrain sous `proof/seed/`. Les valeurs des secrets vont dans `.env`,
-à la racine, gitignoré — même mécanisme que SDD_Pro. Trois règles le tiennent,
+sa vérité terrain sous `proof/seed/`. Les valeurs des secrets vont dans
+`src/{AppName}/.env`, gitignoré, **avec l'application qui les consomme** — même
+mécanisme que SDD_Pro. Ce fichier porte la clé des *Runtime Models* (§6) : le
+harnais de construction ne le lit jamais, il paie ses tokens avec son propre
+compte. Le placer à la racine du dépôt le mettrait hors du livrable, qui part
+de `src/{AppName}/` en exécutable ou en conteneur. Trois règles le tiennent,
 vérifiées par `smoke-check` et non racontées : `feats/` ne contient que du
 Markdown (`[FEATS_NOT_MARKDOWN]`), `stack/` ne contient que `STACK.md`
 (`[STACK_DIR_UNEXPECTED_FILE]`), aucune valeur de secret n'entre dans STACK.md

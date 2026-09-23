@@ -12,8 +12,9 @@ Trois principes tiennent tout le module :
 1. **Grammaire close.** Une clé inconnue est une erreur, pas un champ ignoré.
    `pii` écrit `pii_fields` ne redige plus rien, et rien ne le signalerait.
 2. **Les secrets sont des NOMS de variables.** Toute clé d'authentification se
-   termine par `_env` et porte le nom d'une variable déclarée dans le fichier
-   `.env` du projet. Ce module lit les **noms** de ce fichier, jamais les
+   termine par `_env` et porte le nom d'une variable déclarée dans le `.env`
+   de l'application (`workspace/src/{App}/.env`, avec le livrable — jamais à la
+   racine du dépôt). Ce module lit les **noms** de ce fichier, jamais les
    valeurs : une valeur qui n'entre pas en mémoire n'entre pas dans un rapport.
 3. **La déclaration vit dans STACK.md.** `Stores:` et `Sources:` s'écrivent
    inline dans `## Active Data Sources` — c'est la forme par défaut, et la
