@@ -57,7 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import hashing, markdown_io, mermaid, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
-from sdda_lib.layered_config import LayeredConfig, read_stack_section_kv  # noqa: E402
+from sdda_lib.layered_config import LayeredConfig, app_name, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, load_config, resolve_root  # noqa: E402
 from sdda_scripts.validate_cap import CapSpec, load_caps_for_mission  # noqa: E402
 from sdda_scripts.validate_mission import MissionSpec, load_mission  # noqa: E402
@@ -280,9 +280,11 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
     # §3 Prompt --------------------------------------------------------------
     prompt_kv = markdown_io.parse_kv_list(sec("Prompt") or "")
     prompt_ref = markdown_io.strip_code(prompt_kv.get("Fichier", ""))
-    if markdown_io.is_placeholder(prompt_ref) or not prompt_ref.startswith("workspace/src/prompts/"):
-        ctx.fail(f"agent `{aid}` : `## 3. Prompt` ne nomme pas de fichier `workspace/src/prompts/….system.md`",
-                 "écrire `- Fichier : `workspace/src/prompts/{slug}.system.md``", f"{loc}:3")
+    # Le prompt vit DANS l'application : `workspace/src/{App}/prompts/{slug}.system.md`.
+    expected_dir = paths.rel(ctx.root, paths.prompts_dir(ctx.root, app_name(ctx.root))) + "/"
+    if markdown_io.is_placeholder(prompt_ref) or not prompt_ref.startswith(expected_dir) or not prompt_ref.endswith(".system.md"):
+        ctx.fail(f"agent `{aid}` : `## 3. Prompt` ne nomme pas de fichier `{expected_dir}….system.md`",
+                 f"écrire `- Fichier : `{expected_dir}{{slug}}.system.md`` — le prompt part avec l'application", f"{loc}:3")
     else:
         agent["promptRef"] = prompt_ref
         prompt_path = paths.resolve_rel(ctx.root, prompt_ref)
@@ -1080,7 +1082,7 @@ def source_hashes(root: Path, number: int) -> dict[str, Any]:
         # `agents[].promptHash` reste absent pour toujours et G5 n'a rien à
         # épingler. Clé par slug de prompt, comme `capHashes` par CAP.
         "promptHashes": {p.stem.removesuffix(".system"): hashing.sha256_file(p)
-                         for p in sorted(paths.prompts_dir(root).glob("*.system.md"))},
+                         for p in sorted(paths.prompts_dir(root, app_name(root)).glob("*.system.md"))},
     }
 
 

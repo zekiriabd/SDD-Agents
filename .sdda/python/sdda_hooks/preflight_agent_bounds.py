@@ -71,7 +71,7 @@ def check(root: Path, data: dict) -> int:
     if not unbounded and unpinned:
         return deny(HOOK, "PROMPT_NOT_PINNED",
                     f"{len(unpinned)} agent(s) sans `promptHash` dans l'IR — {unpinned[0]}",
-                    "dev-prompt écrit `workspace/src/prompts/{slug}.system.md`, puis recompiler l'IR "
+                    "dev-prompt écrit `workspace/src/{App}/prompts/{slug}.system.md`, puis recompiler l'IR "
                     "(`python .sdda/sdda.py ir-compiler --mission {n}`) : l'empreinte s'épingle à la "
                     "recompilation, jamais à la main")
     if not unbounded:

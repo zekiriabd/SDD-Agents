@@ -54,7 +54,7 @@ from sdda_lib import hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.eval_stats import GLYPH, SEVERITY  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import LayeredConfig  # noqa: E402
+from sdda_lib.layered_config import LayeredConfig, app_name  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_json as _atomic_write_json, now_iso as _now_iso, run_id_now  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
@@ -428,7 +428,7 @@ def pinned_hashes(root: Path, coverages: list[AgentCoverage]) -> dict[str, str]:
         p = root / c.suite_ref
         if p.is_file():
             pins[f"suite:{c.suite_ref}"] = hashing.sha256_file(p)
-        prompt = paths.prompts_dir(root) / f"{c.agent_id}.system.md"
+        prompt = paths.prompts_dir(root, app_name(root)) / f"{c.agent_id}.system.md"
         if prompt.is_file():
             pins[f"prompt:{c.agent_id}"] = hashing.sha256_file(prompt)
     return dict(sorted(pins.items()))

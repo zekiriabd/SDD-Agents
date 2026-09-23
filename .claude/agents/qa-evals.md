@@ -191,7 +191,7 @@ Une baseline se déplace par une action tracée, jamais par écrasement.
 - [ ] Juge ≠ modèle évalué
 - [ ] Jeu adversarial par agent `untrusted`, neuf familles, refusal policy retournée en attaques, attendus vérifiables
 - [ ] Toute suite : dataset + grader + threshold + runs + pins ; rapport avec variance
-- [ ] Rien écrit dans `workspace/src/**`, `workspace/src/prompts/**`, `workspace/proof/baselines/**`
+- [ ] Rien écrit dans `workspace/src/**`, `workspace/src/{App}/prompts/**`, `workspace/proof/baselines/**`
 - [ ] Le holdout n'a servi à aucun ajustement
 
 ---

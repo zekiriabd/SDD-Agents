@@ -65,7 +65,7 @@ CONTENT_V1: tuple[tuple[str, str], ...] = (
     ("caps/1-1-Classify.md", "feats/caps/1-1-Classify.md"),
     ("topology/1-topology.md", "feats/topology/1-topology.md"),
     ("contracts/agents/1-router.agent.md", "feats/contracts/agents/1-router.agent.md"),
-    ("prompts/router.system.md", "src/prompts/router.system.md"),
+    ("prompts/router.system.md", "src/Projet/prompts/router.system.md"),
     ("datasets/golden/g-v1.jsonl", "proof/datasets/golden/g-v1.jsonl"),
     ("datasets/holdout/mission-1-v1.jsonl", "proof/datasets/holdout/mission-1-v1.jsonl"),
     ("evals/suites/s.yaml", "proof/suites/s.yaml"),

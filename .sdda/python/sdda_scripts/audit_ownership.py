@@ -11,7 +11,7 @@ Il attrape deux fautes de nature différente :
     1. **Hors zone** — un agent a écrit là où `loader.yml writes:` ne l'autorise
        pas. Le cas qui coûte le plus cher n'est pas la collision (elle se voit) :
        c'est le `dev-agent` qui retouche `workspace/proof/datasets/` ou
-       `workspace/src/prompts/`, c'est-à-dire qui modifie le jeu qui le juge ou le
+       `workspace/src/{App}/prompts/`, c'est-à-dire qui modifie le jeu qui le juge ou le
        prompt qu'il implémente. `[DATASET_OWNERSHIP_VIOLATION]`,
        `[PROMPT_OWNERSHIP_VIOLATION]` — la note devient invérifiable.
 
@@ -50,14 +50,21 @@ NON_AGENT_KEYS = frozenset({"version", "updated", "cross_agent_reads", "shared_w
 #: Répertoires dont une écriture par un `dev-*` invalide la mesure elle-même.
 #: Ce ne sont pas des zones « sensibles » au sens vague : ce sont celles qui
 #: portent le juge et le sujet, et les confondre rend le verdict sans valeur.
+#: Des MOTIFS (globs de `loader.yml`), pas des préfixes : les prompts, skills et
+#: rules vivent DANS l'application (`workspace/src/{App}/…`), et le nom de
+#: l'application n'est pas connu ici.
 SACRED: dict[str, tuple[str, str]] = {
-    "workspace/proof/datasets": ("DATASET_OWNERSHIP_VIOLATION",
-                           "un `dev-*` qui modifie le jeu qui le juge produit une note invérifiable"),
-    "workspace/src/prompts": ("PROMPT_OWNERSHIP_VIOLATION",
-                          "un `dev-*` qui réécrit le prompt qu'il implémente efface la spécification "
-                          "qu'on voulait comparer au code"),
-    "workspace/proof/baselines": ("BASELINE_OWNERSHIP_VIOLATION",
-                                  "déplacer la baseline de référence rend toute non-régression tautologique"),
+    "workspace/proof/datasets/**": ("DATASET_OWNERSHIP_VIOLATION",
+                                    "un `dev-*` qui modifie le jeu qui le juge produit une note invérifiable"),
+    "workspace/src/*/prompts/**": ("PROMPT_OWNERSHIP_VIOLATION",
+                                   "un `dev-*` qui réécrit le prompt qu'il implémente efface la spécification "
+                                   "qu'on voulait comparer au code"),
+    "workspace/src/*/skills/**": ("PROMPT_OWNERSHIP_VIOLATION",
+                                  "une skill est une consigne du prompt : la réécrire depuis le code, c'est réécrire le prompt"),
+    "workspace/src/*/rules/**": ("PROMPT_OWNERSHIP_VIOLATION",
+                                 "une rule est une consigne du prompt : la réécrire depuis le code, c'est réécrire le prompt"),
+    "workspace/proof/baselines/**": ("BASELINE_OWNERSHIP_VIOLATION",
+                                     "déplacer la baseline de référence rend toute non-régression tautologique"),
 }
 
 
@@ -71,7 +78,7 @@ def _sacred_class(path: str) -> tuple[str, str]:
     """
     normalized = path.replace("\\", "/").lstrip("./")
     for zone, (cls, why) in SACRED.items():
-        if normalized == zone or normalized.startswith(zone + "/"):
+        if matches(zone, normalized) or matches(zone, normalized + "/x"):
             return cls, why
     return "", ""
 

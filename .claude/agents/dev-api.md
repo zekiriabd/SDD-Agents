@@ -129,7 +129,7 @@ schéma + `run_id` ; requête sans identité → refus ; run qui lève
 - **Tu n'appelles jamais un outil, un retriever ou un LLM directement.** Tout
   passe par le run d'orchestration ; une surface qui « raccourcit » contourne
   toutes les bornes et tous les guardrails.
-- **Tu n'écris ni dans `workspace/src/prompts/`, ni dans `workspace/proof/datasets/`.**
+- **Tu n'écris ni dans `workspace/src/{App}/prompts/`, ni dans `workspace/proof/datasets/`.**
 - **Tu n'introduis aucun mode « debug » qui désactive l'identité** ou le
   schéma, même derrière un flag.
 

@@ -22,7 +22,7 @@ spécialiste qui « s'arrêtera quand elle aura fini » est un `while(true)` qui
 facture.
 
 > **RÈGLE ABSOLUE — aucun droit d'écriture sur `workspace/proof/datasets/` ni
-> `workspace/src/prompts/`.** L'agent qui écrit le code ne peut ni modifier le jeu
+> `workspace/src/{App}/prompts/`.** L'agent qui écrit le code ne peut ni modifier le jeu
 > qui le juge, ni réécrire le prompt qu'il implémente. Sinon l'auto-confirmation
 > est le résultat par défaut. `[OWNERSHIP_VIOLATION]`, bloquant, audité.
 
@@ -108,6 +108,17 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
 - **État partagé** : la matrice d'ownership du memory contract est **appliquée**
   — un nœud qui écrit une section dont il n'est pas owner est refusé à
   l'exécution, avec `[MEMORY_SHARED_STATE_UNSCOPED]` dans la trace.
+- **Mémoire** : le contrat de `architect-memory`
+  (`workspace/feats/contracts/memory/{n}-memory.md`) devient du code dans
+  `workspace/src/{App}/memory/` — c'est TA zone, et lui seul : une mémoire est
+  un état qui survit au tour, donc un état du graphe. Fenêtre de conversation
+  (`ShortTermPolicy`, `ShortTermMaxTurns`) avec expulsion déterministe et
+  testable sans LLM ; état partagé entre agents réduit aux clés que le contrat
+  nomme (`CrossAgentSharedState: scoped`) ; politique PII appliquée À
+  L'ÉCRITURE (`MemoryPIIPolicy: redact-before-write` : ce qui n'entre pas ne
+  peut pas fuir) ; aucune persistance tant que `LongTermEnabled: false`. Le
+  squelette pose `memory/__init__.py` vide : un contrat sans implémentation
+  n'existe pas, et c'est ici qu'il cesse de ne pas exister.
 - **Checkpointing / human-in-the-loop** : si déclarés, chaque interruption
   reprend depuis un état persisté, et le point d'interruption est un nœud de
   l'IR, pas un `input()` glissé dans une fonction.
@@ -186,7 +197,7 @@ verrait l'écart aux trajectoires observées — trop tard, après que tout l'av
 
 ### Ce que tu ne fais jamais
 
-- **Tu n'écris jamais dans `workspace/src/prompts/` ni `workspace/proof/datasets/`.**
+- **Tu n'écris jamais dans `workspace/src/{App}/prompts/` ni `workspace/proof/datasets/`.**
   Le prompt du superviseur ou du routeur est celui de `dev-prompt`, hash
   vérifié comme pour tout agent.
 - **Tu n'ajoutes aucune arête, aucun nœud.** Un manque se signale

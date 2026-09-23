@@ -8,14 +8,14 @@
 
 ## 1. Les prompts sont des fichiers
 
-`workspace/src/prompts/{agent}.system.md`. Chargés au runtime, hashés, épinglés aux
+`workspace/src/{App}/prompts/{agent}.system.md`. Chargés au runtime, hashés, épinglés aux
 baselines d'eval. Invariant `prompts-are-files` (P1).
 
 **Aucun prompt inline dans le code généré.** Un prompt noyé dans une f-string au
 milieu d'un service est un changement de comportement invisible à la revue et
 introuvable en production. Violation → `[PROMPT_INLINE_FORBIDDEN]`.
 
-Corollaire d'ownership : `dev-agent` n'écrit **jamais** dans `workspace/src/prompts/`.
+Corollaire d'ownership : `dev-agent` n'écrit **jamais** dans `workspace/src/{App}/prompts/`.
 L'agent qui implémente ne réécrit pas la spécification qu'il implémente — sinon
 l'écart entre contrat et code se résout silencieusement en faveur du code.
 

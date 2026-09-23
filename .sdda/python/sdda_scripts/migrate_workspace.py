@@ -772,6 +772,42 @@ def migrate_to_v4(ctx: Context) -> None:
         ctx.mkdir(rel)
 
 
+_PROMPT_REF_RE = re.compile(r"workspace/src/prompts/")
+
+
+def v5_prompts_into_app(ctx: Context) -> None:
+    """`src/prompts/*.system.md` -> `src/{App}/prompts/` ; les contrats d'agents suivent.
+
+    Un prompt est un actif d'exécution : à côté de l'application, il ne partait
+    pas avec elle. `skills/`, `rules/` et `memory/` naissent vides à côté (le
+    squelette les documente) ; `## 3. Prompt` de chaque contrat d'agent est
+    réécrit vers le nouveau chemin — sinon l'IR le refuserait.
+    """
+    app = str(read_project_section(ctx.root).get("AppName") or "").strip()
+    if not app:
+        return
+    old = ctx.workspace / "src" / "prompts"
+    if old.is_dir():
+        for p in sorted(old.glob("*.system.md")):
+            ctx.move_file(f"src/prompts/{p.name}", f"src/{app}/prompts/{p.name}")
+        ctx.rmdir_if_empty("src/prompts", "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+    for sub in ("prompts", "skills", "rules", "memory"):
+        ctx.mkdir(f"src/{app}/{sub}")
+    contracts = ctx.workspace / "feats" / "contracts" / "agents"
+    for c in sorted(contracts.glob("*.agent.md")) if contracts.is_dir() else []:
+        text = markdown_io.read_text(c)
+        if _PROMPT_REF_RE.search(text):
+            ctx.write_text(f"feats/contracts/agents/{c.name}", _PROMPT_REF_RE.sub(f"workspace/src/{app}/prompts/", text),
+                           "§3 Prompt : chemin du prompt dans l'application")
+
+
+def migrate_to_v5(ctx: Context) -> None:
+    """v4 -> v5 : prompts, skills, rules et memory DANS l'application."""
+    v5_prompts_into_app(ctx)
+    for rel in WORKSPACE_TREE:
+        ctx.mkdir(rel)
+
+
 @dataclass(frozen=True)
 class Migration:
     target: int                       # version atteinte quand `apply` a réussi
@@ -788,7 +824,9 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(3, "STACK.md versionné (valeurs dans .env) · feats/ en Markdown seul (roster {n}-roster.md, graphe inline) · "
                  "schémas figés sous src/ · sources inline · vérité terrain proof/seed/", migrate_to_v3),
     Migration(4, "layout plat de l'application : workspace/src/{App}/ EST le paquet (comme SDD_Pro) — "
-                 "plus de src/{App}/", migrate_to_v4),
+                 "plus de src/{App}/src/{App}/", migrate_to_v4),
+    Migration(5, "prompts, skills, rules et memory DANS l'application (src/{App}/prompts/ …) — "
+                 "plus de src/prompts/ à côté", migrate_to_v5),
 )
 
 

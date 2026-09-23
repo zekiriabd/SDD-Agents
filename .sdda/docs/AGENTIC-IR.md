@@ -89,7 +89,7 @@ Schéma canonique : `.sdda/registry/ir.schema.json`. Structure :
     {
       "id": "1-billing-specialist",
       "servesCaps": ["1-2-ExplainInvoiceLine", "1-4-IssueRefundTicket"],
-      "promptRef": "workspace/src/prompts/billing-specialist.system.md",
+      "promptRef": "workspace/src/{App}/prompts/billing-specialist.system.md",
       "promptHash": "sha256:…",
       "modelTier": "balanced",
       "tools": ["1-invoice-lookup", "1-zendesk-create-ticket"],

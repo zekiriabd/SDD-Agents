@@ -136,7 +136,7 @@ def current_hash(root: Path, key: str, artifact: str) -> str | None:
         except ValueError:
             return ""
     if key.startswith("prompt:"):
-        p = paths.prompts_dir(root) / f"{key[7:]}.system.md"
+        p = paths.prompts_dir(root, app_name(root)) / f"{key[7:]}.system.md"
         return hashing.sha256_file(p) if p.is_file() else ""
     if ":" in key and "/" in key:
         p = paths.resolve_rel(root, key.split(":", 1)[1])

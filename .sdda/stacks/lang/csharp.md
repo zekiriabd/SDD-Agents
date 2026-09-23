@@ -99,7 +99,7 @@ contourne.
 | Concept | Idiome | Où |
 |---|---|---|
 | **AGENT** | un dossier `Agents/{AgentSlug}/` exposant `Build(AgentDeps deps, Bounds bounds)` ; le type concret dépend du framework | `src/{AppName}/Agents/` |
-| **PROMPT** (`prompt_ref` + hash) | `LoadedPrompt(string Text, string Sha256, string Path)` chargé au démarrage par `Prompts.LoadSystemPrompt(slug)` depuis `workspace/src/prompts/{slug}.system.md`. **Jamais de texte système dans le code.** | `src/{AppName}/Prompts.cs` |
+| **PROMPT** (`prompt_ref` + hash) | `LoadedPrompt(string Text, string Sha256, string Path)` chargé au démarrage par `Prompts.LoadSystemPrompt(slug)` depuis `workspace/src/{App}/prompts/{slug}.system.md`. **Jamais de texte système dans le code.** | `src/{AppName}/Prompts.cs` |
 | **TOOL** | une méthode `async Task<TOut>` typée + un `ToolSpec` (record, init-only) portant `Name`, `Description`, `SideEffectClass`, `Trust`, `TimeoutSeconds`, `RetryPolicy` ; schémas dérivés des records d'entrée/sortie | `src/{AppName}/Tools/{ToolSlug}.cs` |
 | **BOUNDS** (P12) | `record Bounds` : `MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`, `TimeoutSeconds`, `BudgetUsd` ; hiérarchie `BoundExceededException` → `IterationsExceeded`, `ToolCallsExceeded`, `DelegationDepthExceeded`, `TimeoutExceeded`, `BudgetExceeded` | `src/{AppName}/Bounds.cs` |
 | **MODEL BINDING** (tier) | `AppOptions.RuntimeTierMap : IReadOnlyDictionary<Tier, string>` — le code manipule `Tier`, jamais un nom de modèle ; la résolution se fait dans `Models.Resolve(tier) -> IChatClient` | `src/{AppName}/AppOptions.cs`, `Models.cs` |

@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import read_project_section  # noqa: E402
+from sdda_lib.layered_config import app_name, read_project_section  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 #: Au-delà, un prompt système n'est plus relu par personne — et le modèle en
@@ -111,6 +111,39 @@ SYMMETRIC_FIELDS = {
 
 SKILL_RE = re.compile(r"`([a-z0-9][a-z0-9-]{2,})`")
 
+#: Un slug cité sous `## Compétences` / `## Règles` sans fragment dans
+#: `skills/` / `rules/` : le prompt nomme une compétence dont la matière n'est
+#: écrite nulle part. Avertissement, pas erreur — le prompt reste l'exécutable,
+#: le fragment est ce qu'un relecteur lit pour savoir ce que le slug veut dire.
+CLS_SKILL_FILE_MISSING = "SKILL_FILE_MISSING"
+CLS_RULE_FILE_MISSING = "RULE_FILE_MISSING"
+FRAGMENT_DIRS = {"skills": ("Compétences", paths.skills_dir, CLS_SKILL_FILE_MISSING),
+                 "rules": ("Règles", paths.rules_dir, CLS_RULE_FILE_MISSING)}
+
+
+def check_fragments(root: Path, files: list[Path], report: Report) -> int:
+    """Chaque slug cité par un prompt a son fragment `skills/{slug}.md` ou `rules/{slug}.md`.
+
+    Le répertoire est celui de l'application (`workspace/src/{App}/`) : les
+    fragments partent avec le prompt, ou ne servent à rien.
+    """
+    app = app_name(root)
+    missing = 0
+    for path in files:
+        text = markdown_io.read_text(path)
+        for field, (heading, dir_of, cls) in FRAGMENT_DIRS.items():
+            slugs = prompt_slugs(text, heading) or set()
+            for slug in sorted(slugs):
+                fragment = dir_of(root, app) / f"{slug}.md"
+                if not fragment.is_file():
+                    missing += 1
+                    report.warn(cls, f"prompt `{path.stem.removesuffix('.system')}` cite `{slug}` sous `## {heading}` "
+                                     f"sans fragment `{paths.rel(root, fragment)}`",
+                                fix=f"écrire le fragment : quand la {field[:-1]} s'applique, ce qu'elle produit, ce qui prouve "
+                                    "qu'elle a joué — c'est la matière du prompt, relue par la revue",
+                                location=paths.rel(root, path))
+    return missing
+
 
 def _unqualified(slug: str) -> str:
     """`1-explain-invoice-line` -> `explain-invoice-line`.
@@ -155,7 +188,7 @@ def declared_by_prompt(agents: list[dict[str, Any]], field: str) -> dict[str, se
 # 1. Les fichiers de prompt
 # ---------------------------------------------------------------------------
 def prompt_files(root: Path) -> list[Path]:
-    return sorted(paths.prompts_dir(root).glob("*.system.md"))
+    return sorted(paths.prompts_dir(root, app_name(root)).glob("*.system.md"))
 
 
 def ir_agents(root: Path, mission: int | str | None) -> tuple[list[dict[str, Any]], str]:
@@ -364,7 +397,7 @@ def scan_inline_prompts(root: Path, report: Report) -> int:
                 "PROMPT_INLINE_FORBIDDEN",
                 f"{paths.rel(root, path)}:{line} — littéral de {len(literal)} caractères à l'allure "
                 "d'instruction système",
-                fix="déplacer le texte dans `workspace/src/prompts/{slug}.system.md` et le charger au "
+                fix="déplacer le texte dans `workspace/src/{App}/prompts/{slug}.system.md` et le charger au "
                     "démarrage. Un prompt sans fichier n'a pas de hash, donc pas d'épinglage (P10), "
                     "donc aucune eval rejouable",
                 location=paths.rel(root, path),
@@ -382,6 +415,7 @@ def run(root: Path, mission: int | str | None = None, require_code: bool = False
     agents, ir_loc = ir_agents(root, mission)
     tool_names = {str(t) for a in agents for t in (a.get("tools") or [])}
     tool_names |= contract_tool_names(root)
+    report.data["fragmentsMissing"] = check_fragments(root, files, report)
 
     if agents:
         have = {p.name[: -len(".system.md")] for p in files}
@@ -392,7 +426,7 @@ def run(root: Path, mission: int | str | None = None, require_code: bool = False
                 report.error(
                     "PROMPT_MISSING",
                     f"agent `{slug}` de l'IR n'a pas de prompt sur disque",
-                    fix=f"écrire `workspace/src/prompts/{slug}.system.md` — un agent sans prompt de "
+                    fix=f"écrire `workspace/src/{App}/prompts/{slug}.system.md` — un agent sans prompt de "
                         "fichier est un agent dont le comportement n'est ni versionné ni hashé",
                     location=ir_loc or "workspace/.sys/.ir/",
                 )

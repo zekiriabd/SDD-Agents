@@ -329,7 +329,7 @@ def test_report_and_gate_reports_are_written_with_pins(compiled) -> None:
     g5 = json.loads((paths.validation_dir(root) / "G5-1-1-ClassifyIntent.json").read_text(encoding="utf-8"))
     g7 = json.loads((paths.validation_dir(root) / "G7-1-SupportAssistant.suites.json").read_text(encoding="utf-8"))
     assert g5["ok"] is True and g5["artifact"] == "1-1-ClassifyIntent"
-    assert "ir" in g5["pinnedHashes"] and "workspace/src/prompts/intent-classifier.system.md" in g5["pinnedHashes"]
+    assert "ir" in g5["pinnedHashes"] and "workspace/src/SupportAssistant/prompts/intent-classifier.system.md" in g5["pinnedHashes"]
     assert (paths.validation_dir(root) / "G5-1-2-ExplainInvoiceLine.json").is_file()
     assert g7["ok"] is True and payload["written"]["G5:1-1-ClassifyIntent"].endswith("G5-1-1-ClassifyIntent.json")
 
@@ -348,7 +348,7 @@ def test_edited_prompt_marks_result_stale_against_baseline(compiled) -> None:
     root, ir, cfg = compiled
     run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing, sid_citations}), run_id="BASE", write_gates=False)
     assert run_main(promote_baseline.main, ["--root", str(root), "--mission", "1", "--run", "BASE", "--label", "première baseline"])[0] == 0
-    prompt = root / "workspace/src/prompts/intent-classifier.system.md"
+    prompt = root / "workspace/src/SupportAssistant/prompts/intent-classifier.system.md"
     prompt.write_text(prompt.read_text(encoding="utf-8") + "\nRéponds toujours en majuscules.\n", encoding="utf-8")
     report, payload = run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing, sid_citations}), write_report=False, write_gates=False)
     routing, citations = _suite(payload, sid_routing), _suite(payload, sid_citations)

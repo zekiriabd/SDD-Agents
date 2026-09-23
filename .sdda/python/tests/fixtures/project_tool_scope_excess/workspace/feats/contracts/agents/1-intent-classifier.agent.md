@@ -19,7 +19,7 @@ jamais au fond.
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/intent-classifier.system.md`
+- Fichier : `workspace/src/SupportAssistant/prompts/intent-classifier.system.md`
 - Hash : `sha256:…`
 - Rédigé par : `dev-prompt` depuis ce contrat
 

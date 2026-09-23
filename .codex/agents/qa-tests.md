@@ -153,7 +153,7 @@ propriété à tolérer par `retry`.
 ### Ce que tu ne fais jamais
 
 - **Tu n'appelles jamais un modèle.** Ni pour un test, ni pour « vérifier vite ».
-- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/prompts/`,
+- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/{App}/prompts/`,
   ni dans le code testé.** Un test qui échoue est un fait rapporté, pas un
   motif de correction en douce.
 - **Tu ne marques jamais un test `skip` ou `xfail`** pour faire passer une gate.

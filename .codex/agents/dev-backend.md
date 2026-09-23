@@ -221,7 +221,7 @@ STOP. Aucun autre texte.
 - Tu n'ajoutes pas de librairie hors `.libs.json`.
 - Tu n'écris ni prompt, ni règle de jugement, ni appel de modèle : un appel
   LLM dans `app/` ou la surface est un appel que les evals ne mesurent pas.
-- Tu ne lis pas `workspace/proof/**`, `workspace/src/prompts/**` (hors hash), ni
+- Tu ne lis pas `workspace/proof/**`, `workspace/src/{App}/prompts/**` (hors hash), ni
   `.env`.
 - Tu ne « corriges » pas un fichier généré par un script : tu régénères.
 - Une règle métier qui exige un jugement reste au prompt ; tu le dis, tu ne la

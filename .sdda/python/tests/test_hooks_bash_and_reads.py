@@ -74,15 +74,15 @@ def test_a_redirection_into_the_dataset_is_a_dataset_violation(project: Path) ->
 
 
 def test_rm_on_a_prompt_is_a_prompt_violation(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "rm -f workspace/src/prompts/billing-specialist.system.md")
+    code, err = bash(project, "dev-agent", "rm -f workspace/src/SupportAssistant/prompts/billing-specialist.system.md")
     assert code == DENY and "PROMPT_OWNERSHIP_VIOLATION" in err
 
 
 def test_tee_sed_in_place_and_mv_are_writes(project: Path) -> None:
     for command in (
-        "cat x | tee workspace/src/prompts/a.system.md",
-        "sed -i 's/a/b/' workspace/src/prompts/a.system.md",
-        "mv workspace/src/agents/x.py workspace/src/prompts/a.system.md",
+        "cat x | tee workspace/src/SupportAssistant/prompts/a.system.md",
+        "sed -i 's/a/b/' workspace/src/SupportAssistant/prompts/a.system.md",
+        "mv workspace/src/agents/x.py workspace/src/SupportAssistant/prompts/a.system.md",
         "cp workspace/src/agents/x.py workspace/proof/datasets/golden/y.jsonl",
     ):
         code, err = bash(project, "dev-agent", command)
@@ -93,7 +93,7 @@ def test_tee_sed_in_place_and_mv_are_writes(project: Path) -> None:
 def test_powershell_verbs_are_understood(project: Path) -> None:
     code, err = bash(project, "dev-agent", "Set-Content -Path workspace/proof/datasets/golden/x.jsonl -Value '{}'")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
-    code, err = bash(project, "dev-agent", "Remove-Item workspace/src/prompts/a.system.md -Force")
+    code, err = bash(project, "dev-agent", "Remove-Item workspace/src/SupportAssistant/prompts/a.system.md -Force")
     assert code == DENY and "PROMPT_OWNERSHIP_VIOLATION" in err
 
 
@@ -220,12 +220,12 @@ def test_other_placeholder_spares_what_reads_declares() -> None:
     """
     loader = {"a": {"reads": ["workspace/feats/missions/{n}-*.md"],
                     "forbidden_reads": ["workspace/feats/missions/{other}-*.md", "workspace/stack/STACK.md"]}}
-    assert ao.read_violation(loader, "a", "workspace/feats/missions/1-SupportDesk.md") is None
+    assert ao.read_violation(loader, "a", "workspace/feats/missions/1-Demo.md") is None
     assert ao.read_violation(loader, "a", "workspace/stack/STACK.md") == "workspace/stack/STACK.md"
     # Un interdit ABSOLU sur la même zone n'est pas adouci par `reads:`.
     strict = {"a": {"reads": ["workspace/feats/missions/{n}-*.md"],
                     "forbidden_reads": ["workspace/feats/missions/*-*.md"]}}
-    assert ao.read_violation(strict, "a", "workspace/feats/missions/1-SupportDesk.md") == "workspace/feats/missions/*-*.md"
+    assert ao.read_violation(strict, "a", "workspace/feats/missions/1-Demo.md") == "workspace/feats/missions/*-*.md"
 
 
 def test_po_capabilities_reads_its_own_mission(project: Path) -> None:

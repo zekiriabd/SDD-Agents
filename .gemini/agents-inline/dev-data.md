@@ -141,7 +141,7 @@ Puis le smoke de la stack sur une base de test. Les tests L1/L2 sont à
 
 - **Tu n'élargis jamais une vue** « parce que l'agent aura sûrement besoin de
   cette colonne ». Une colonne non exigée par une CAP est une fuite potentielle.
-- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/prompts/`,
+- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/{App}/prompts/`,
   ni dans `workspace/feats/contracts/`.**
 - **Tu ne remplaces jamais le parser AST par une regex**, même « en attendant ».
 

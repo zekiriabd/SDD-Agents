@@ -286,4 +286,12 @@ class Settings:
         return self.workspace_root / ".sys" / "traces" / "runs"
 
     def prompts_dir(self) -> Path:
-        return self.workspace_root / "src" / "prompts"
+        # Les prompts partent AVEC l'application : à côté de ce module, pas dans
+        # un répertoire du dépôt qu'un exécutable ou un conteneur n'emporterait pas.
+        return Path(__file__).resolve().parent / "prompts"
+
+    def skills_dir(self) -> Path:
+        return Path(__file__).resolve().parent / "skills"
+
+    def rules_dir(self) -> Path:
+        return Path(__file__).resolve().parent / "rules"

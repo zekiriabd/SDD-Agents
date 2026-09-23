@@ -232,7 +232,7 @@ Post-step : arrêt du système, traces conservées sous `workspace/.sys/traces/r
 python .sdda/sdda.py eval-runner --mission {n} --level L8 --executor {module}:{CliExecutor} --json   > workspace/.sys/.validation/{n}-G7-{MissionName}.suites.json
 
 python .sdda/sdda.py run-adversarial-suite --mission {n} --replay workspace/.sys/reports/runs/{n}-adversarial.jsonl --json   # couverture des familles + rejeu du set versionné, sans LLM attaquant
-python .sdda/sdda.py scan-secrets --paths workspace/src/prompts workspace/.sys/traces workspace/proof/datasets workspace/src --json
+python .sdda/sdda.py scan-secrets --paths workspace/src workspace/.sys/traces workspace/proof/datasets --json
 python .sdda/sdda.py scan-pii --mission {n} --target vectorstore --json
 python .sdda/sdda.py audit-tool-scope --mission {n} --json
 ```

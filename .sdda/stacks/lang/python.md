@@ -102,7 +102,7 @@ markers = [
 | Concept (DOMAIN-MODEL) | Idiome Python imposé | Où |
 |---|---|---|
 | **AGENT** | un package `agents/{agent_slug}/` exposant `build(deps: AgentDeps, bounds: Bounds) -> Runnable` — la classe concrète dépend du framework | `src/{AppName}/agents/` |
-| **PROMPT** (`prompt_ref` + hash) | `LoadedPrompt(text, sha256, path)` chargé au démarrage par `prompts.load_system_prompt(slug)` depuis `workspace/src/prompts/{slug}.system.md`. **Jamais de texte système dans le code.** | `src/{AppName}/prompts.py` |
+| **PROMPT** (`prompt_ref` + hash) | `LoadedPrompt(text, sha256, path)` chargé au démarrage par `prompts.load_system_prompt(slug)` depuis `workspace/src/{App}/prompts/{slug}.system.md`. **Jamais de texte système dans le code.** | `src/{AppName}/prompts.py` |
 | **TOOL** | fonction `async def` typée + `ToolSpec` (pydantic, frozen) portant `name`, `description`, `side_effect_class`, `trust`, `timeout_s`, `retry_policy` ; `input_schema`/`output_schema` dérivés de modèles pydantic | `src/{AppName}/tools/{tool_slug}.py` |
 | **BOUNDS** (P12) | `Bounds(BaseModel, frozen=True)` : `max_iterations`, `max_tool_calls`, `max_delegation_depth`, `timeout_s`, `budget_usd` ; hiérarchie `BoundExceeded(Exception)` → `IterationsExceeded`, `ToolCallsExceeded`, `DelegationDepthExceeded`, `TimeoutExceeded`, `BudgetExceeded` ; `OnBoundExceeded = Literal["fail-explicit","degrade","escalate-human"]` | `src/{AppName}/bounds.py` |
 | **MODEL BINDING** (tier) | `Settings.runtime_tier_map: dict[Tier, str]` — le code manipule `Tier`, jamais un nom de modèle ; la résolution se fait dans `models.resolve(tier) -> ChatModel` | `src/{AppName}/config.py`, `models.py` |
@@ -124,7 +124,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-PROMPTS_DIR = Path(__file__).resolve().parents[3] / "prompts"  # workspace/src/prompts
+PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"   # workspace/src/{AppName}/prompts — AVEC l'application
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,7 +262,7 @@ Les evals (L3+) vivent dans `workspace/proof/`, hors du package — ownership
 | `print(...)` | ruff `T20` | `[LOG_PRINT_FORBIDDEN]` |
 | `eval`, `exec`, `subprocess(shell=True)` | ruff `S` | `[SEC_DANGEROUS_CALL]` |
 | Dépendance non listée dans le `.libs.json` d'une stack active | diff `uv.lock` vs catalogues | `[STACK_LIBRARY_MISSING]` |
-| Écriture dans `workspace/proof/datasets/` ou `workspace/src/prompts/` depuis `src/` | scan d'imports/`open(...)` | `[EVAL_OWNERSHIP_VIOLATION]` |
+| Écriture dans `workspace/proof/datasets/` ou `workspace/src/{App}/prompts/` depuis `src/` | scan d'imports/`open(...)` | `[EVAL_OWNERSHIP_VIOLATION]` |
 | `time.sleep` en code async | ruff `ASYNC` | — |
 | `from x import *` | ruff `F403` | — |
 
@@ -331,9 +331,11 @@ Smoke Timeout : 60 s. Tout échec est bloquant pour le passage en PHASE 4.
 7. **Le lock dérive silencieusement.** `uv add` sans `--frozen` en smoke
    remet à jour le lock : toujours `uv sync --frozen` en L0, `uv lock --upgrade`
    uniquement par une action tracée (mise à jour du `.libs.json` d'abord).
-8. **Chemins relatifs vers `workspace/src/prompts`.** Le calcul `parents[3]` de
-   §3.1 suppose la structure §4 exacte ; si le package est installé ailleurs,
-   passer `SDDA_WORKSPACE_ROOT` via `Settings`, pas en dur.
+8. **Chemins relatifs vers `prompts/`, `skills/`, `rules/`.** Ils vivent DANS le
+   paquet (`Path(__file__).parent`), donc partent avec la roue et le conteneur ;
+   ne jamais les chercher depuis le répertoire courant ni depuis
+   `workspace/` — une application lancée par le runner d'eval n'est pas lancée
+   depuis sa racine. `SDDA_WORKSPACE_ROOT` ne sert qu'aux traces et aux datasets.
 9. **`SecretStr` et logs.** `structlog` sérialise `SecretStr` en `**********` ;
    mais un `.get_secret_value()` dans un log reste un `[SECRET_LEAK]`. Le scan G7
    le voit, autant l'éviter.

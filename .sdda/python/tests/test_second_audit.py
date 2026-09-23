@@ -29,7 +29,7 @@ from sdda_scripts import compute_status, ir_compiler, validate_safety_gate, vali
 def _phase_2_workspace(project: Path) -> Path:
     """L'état réel d'un workspace neuf après les architectes : aucun prompt,
     contrat au gabarit. La fixture livre ses prompts, donc aucun test ne le voyait."""
-    for p in (project / "workspace/src/prompts").glob("*.md"):
+    for p in (project / "workspace/src/SupportAssistant/prompts").glob("*.md"):
         p.unlink()
     for c in (project / "workspace/feats/contracts/agents").glob("*.agent.md"):
         c.write_text(re.sub(r"(Hash\s*:\s*)sha256:[0-9a-f]+", r"\1sha256:…",
@@ -45,7 +45,7 @@ def test_the_ir_compiles_in_phase_2_before_any_prompt_exists(project: Path) -> N
     ir, report = ir_compiler.compile_mission(project, 1)
     assert report.ok, [f.message for f in report.errors]
     assert all("promptHash" not in a for a in ir["agents"])
-    assert all(a["promptRef"].startswith("workspace/src/prompts/") for a in ir["agents"])
+    assert all(a["promptRef"].startswith("workspace/src/SupportAssistant/prompts/") for a in ir["agents"])
     assert ir["compiledFrom"]["promptHashes"] == {}
 
 
@@ -55,7 +55,7 @@ def test_writing_the_prompts_stales_the_ir_so_the_hash_gets_pinned(project: Path
     from sdda_scripts import check_ir_freshness
 
     assert check_ir_freshness.freshness(project, 1)["fresh"] is True
-    (project / "workspace/src/prompts/billing-specialist.system.md").write_text("# prompt\n", encoding="utf-8")
+    (project / "workspace/src/SupportAssistant/prompts/billing-specialist.system.md").write_text("# prompt\n", encoding="utf-8")
     state = check_ir_freshness.freshness(project, 1)
     assert state["fresh"] is False and "promptHashes" in state["moved"]
 

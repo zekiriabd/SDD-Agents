@@ -218,7 +218,7 @@ def agent_of(data: dict[str, Any]) -> str:
     **autorise** : `preflight_ownership`, `preflight_bash_ownership` et
     `preflight_forbidden_reads` laissaient passer toutes les écritures de tous
     les sous-agents. La règle la plus citée de l'architecture — un `dev-agent`
-    ne touche ni `workspace/proof/datasets/` ni `workspace/src/prompts/` — n'était plus
+    ne touche ni `workspace/proof/datasets/` ni `workspace/src/{App}/prompts/` — n'était plus
     appliquée qu'en CI par `audit_ownership`, alors que trois hooks prétendaient
     la tenir au runtime. C'est la forme la plus coûteuse d'enforcer absent :
     indiscernable d'une protection active.

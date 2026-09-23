@@ -134,23 +134,54 @@ def decisions_dir(root: Path) -> Path:
     return feats_dir(root) / "decisions"
 
 
-def prompts_dir(root: Path) -> Path:
-    """Sous `src/` : un prompt système est un actif d'EXÉCUTION.
+def prompts_dir(root: Path, app_name: str) -> Path:
+    """`workspace/src/{App}/prompts/` : un prompt système est un actif d'EXÉCUTION, il part AVEC l'application.
 
-    Rangé au même rang que les specs, il ne part pas avec le code : une
-    application livrée en exécutable ou en conteneur cherchait ses prompts dans
-    un répertoire resté dans le dépôt, et ne les trouvait qu'en développement.
-
-    Ce chemin est le PRÉ-REQUIS du packaging, pas le packaging lui-même : c'est
-    `gen_app_skeleton` qui devra les embarquer dans la distribution. Le dire
-    plutôt que le laisser croire, parce qu'un prompt absent à l'exécution ne
-    produit pas une erreur claire — il produit un agent sans consigne.
+    Il a vécu dans `workspace/src/prompts/`, à côté du répertoire de
+    l'application et non dedans : « sous `src/` » avait été lu comme « avec le
+    code », mais un exécutable ou un conteneur bâti depuis `src/{App}/` partait
+    sans ses prompts — exactement ce que le déplacement hors de `feats/` voulait
+    éviter. Dans le paquet, le chargeur le trouve par un chemin relatif à
+    lui-même, et la roue l'embarque.
 
     Ce que l'ownership protégeait reste protégé : `dev-agent` ne réécrit pas le
-    prompt qu'il implémente. Cela tient à un chemin interdit dans la matrice,
-    pas à un répertoire de premier niveau.
+    prompt qu'il implémente. Cela tient à une zone interdite de la matrice
+    (`workspace/src/*/prompts/**`), pas à un répertoire de premier niveau.
     """
-    return workspace(root) / "src" / "prompts"
+    return app_dir(root, app_name) / "prompts"
+
+
+def skills_dir(root: Path, app_name: str) -> Path:
+    """`workspace/src/{App}/skills/` : un fichier par compétence déclarée au roster.
+
+    Une skill dit ce que l'agent SAIT FAIRE. Son texte détaillé (quand elle
+    s'applique, ce qu'elle produit, ce qui prouve qu'elle a joué) vit ici, un
+    Markdown par slug ; le prompt système de l'agent la cite sous
+    `## Compétences`. Le fragment est la matière, le prompt est l'exécutable
+    hashé. Owner : `dev-prompt`.
+    """
+    return app_dir(root, app_name) / "skills"
+
+
+def rules_dir(root: Path, app_name: str) -> Path:
+    """`workspace/src/{App}/rules/` : un fichier par règle de comportement déclarée au roster.
+
+    Jumelle de la skill : une rule dit ce que l'agent DOIT ou NE DOIT JAMAIS
+    faire. Même mécanique — fragment ici, citation sous `## Règles` du prompt.
+    Owner : `dev-prompt`.
+    """
+    return app_dir(root, app_name) / "rules"
+
+
+def memory_dir(root: Path, app_name: str) -> Path:
+    """`workspace/src/{App}/memory/` : l'implémentation du contrat de mémoire.
+
+    `architect-memory` écrit le contrat (`feats/contracts/memory/`) ; ce module
+    le réalise — fenêtre de conversation, état partagé entre agents, politique
+    PII à l'écriture. Il n'avait aucun owner : le contrat existait, rien ne le
+    devenait. Owner : `dev-orchestration`, qui possède déjà l'état du graphe.
+    """
+    return app_dir(root, app_name) / "memory"
 
 
 def proof_dir(root: Path) -> Path:

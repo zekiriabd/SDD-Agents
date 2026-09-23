@@ -477,7 +477,7 @@
         },
         "promptRef": {
           "type": "string",
-          "pattern": "^workspace/src/prompts/.+\\.system\\.md$"
+          "pattern": "^workspace/src/[^/]+/prompts/.+\\.system\\.md$"
         },
         "promptHash": {
           "$ref": "#/$defs/sha256",

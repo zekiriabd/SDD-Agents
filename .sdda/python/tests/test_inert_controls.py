@@ -66,7 +66,7 @@ def test_a_dev_agent_can_no_longer_write_the_dataset_that_judges_it(project: Pat
 
 def test_a_dev_agent_can_no_longer_rewrite_the_prompt_it_implements(project: Path) -> None:
     payload = {"tool_name": "Write", "agent_type": "dev-agent",
-               "tool_input": {"file_path": str(project / "workspace/src/prompts/billing-specialist.system.md")}}
+               "tool_input": {"file_path": str(project / "workspace/src/SupportAssistant/prompts/billing-specialist.system.md")}}
     assert preflight_ownership.check(project, payload) == _hook.DENY
 
 

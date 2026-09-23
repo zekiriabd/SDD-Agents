@@ -28,7 +28,7 @@ promet **aucune** date, n'ouvre **aucune** réclamation et ne suit **jamais** un
 
 ## 3. Prompt
 
-- Fichier : `workspace/src/prompts/order-tracking-agent.system.md`
+- Fichier : `workspace/src/SupportDesk/prompts/order-tracking-agent.system.md`
 - Hash : `sha256:…`  *(calculé, épinglé aux baselines d'eval — P10)*
 - Rédigé par : `dev-prompt` depuis ce contrat (PHASE 4)
 

@@ -6,7 +6,7 @@ et chaque `Edit`. Le parallélisme des `dev-*` n'est sûr que parce que leurs
 répertoires sont disjoints ; rien au runtime ne l'impose — sinon ce contrôle.
 
 Le cas qui coûte le plus cher n'est pas la collision, qui se voit : c'est le
-`dev-agent` qui retouche `workspace/proof/datasets/` ou `workspace/src/prompts/`,
+`dev-agent` qui retouche `workspace/proof/datasets/` ou `workspace/src/{App}/prompts/`,
 c'est-à-dire qui modifie le jeu qui le juge ou le prompt qu'il implémente. La
 note devient invérifiable, et personne ne s'en aperçoit avant l'acceptation.
 """
