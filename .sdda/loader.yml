@@ -300,7 +300,7 @@ architect-memory:
 # ---------------------------------------------------------------------------
 dev-prompt:
   model_tier: deep
-  budget_bytes: 140000
+  budget_bytes: 200000      # recalibré sur le premier projet réel (était 140000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - .sdda/rules/prompt-authoring.md                # stable — sa règle centrale
     - .sdda/templates/prompt.template.md             # stable
@@ -327,7 +327,7 @@ dev-prompt:
 # ---------------------------------------------------------------------------
 dev-tools:
   model_tier: balanced
-  budget_bytes: 160000
+  budget_bytes: 360000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-tools.md      # stable — stack tranchée
     - workspace/stack/STACK.md                       # semi
@@ -373,7 +373,7 @@ dev-retrieval:
 
 dev-data:
   model_tier: balanced
-  budget_bytes: 140000
+  budget_bytes: 290000      # recalibré sur le premier projet réel (était 140000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-data.md      # stable
     - workspace/stack/STACK.md                       # semi — Stores/Sources inline (## Active Data Sources)
@@ -393,7 +393,7 @@ dev-data:
 
 dev-agent:
   model_tier: deep
-  budget_bytes: 180000
+  budget_bytes: 320000      # recalibré sur le premier projet réel (était 180000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-agent.md     # stable — framework tranché
     - workspace/stack/STACK.md                       # semi
@@ -431,7 +431,7 @@ dev-agent:
 
 dev-orchestration:
   model_tier: deep
-  budget_bytes: 180000
+  budget_bytes: 280000      # recalibré sur le premier projet réel (était 180000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-orchestration.md  # stable
     - workspace/stack/STACK.md                       # semi
@@ -462,7 +462,7 @@ dev-api:
   # par laquelle on entre dans le produit.
   # Le budget doit dire la vérité du coût : le serrer sous le coût réel ne
   # réduit rien, il déplace l'échec au spawn.
-  budget_bytes: 160000
+  budget_bytes: 290000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-api.md   # stable
     - workspace/stack/STACK.md                       # semi
@@ -546,7 +546,7 @@ qa-evals:
 
 qa-tests:
   model_tier: balanced
-  budget_bytes: 140000
+  budget_bytes: 800000      # recalibré sur le premier projet réel (était 140000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile
@@ -569,7 +569,7 @@ qa-tests:
 # ---------------------------------------------------------------------------
 review-spec:
   model_tier: balanced
-  budget_bytes: 160000
+  budget_bytes: 290000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/feats/caps/{n}-*-*.md
     - workspace/proof/suites/**
@@ -592,7 +592,7 @@ review-safety:
 
 review-cost:
   model_tier: fast
-  budget_bytes: 60000
+  budget_bytes: 180000      # recalibré sur le premier projet réel (était 60000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/feats/missions/{n}-*.md                    # le budget déclaré
     - workspace/.sys/.ir/{n}-system.ir.json          # le budget estimé
@@ -625,7 +625,7 @@ review-rag:
 
 review-adversarial:
   model_tier: deep
-  budget_bytes: 160000
+  budget_bytes: 400000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - .sdda/rules/agent-safety.md                    # stable
     - workspace/feats/missions/{n}-*.md                    # le mandat à faire sortir

@@ -8,6 +8,8 @@ part pas.
 """
 from __future__ import annotations
 
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -20,6 +22,27 @@ HOOK = "preflight_agent_budget"
 #: Câblage — lu par `harness_build.py`. Tout spawn : chaque agent a un budget
 #: de contexte dans loader.yml, et c'est avant le spawn qu'il faut le vérifier.
 WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": ()}
+
+
+_MISSION_RE = re.compile(r"\bMISSION\s*:?\s*(\d+)\b")
+
+
+def _mission_and_target(data: dict) -> tuple[str | None, str | None]:
+    """La MISSION et la cible du spawn — du payload s'il les porte, sinon du prompt.
+
+    Le harnais ne transmet que `tool_input.prompt` : il n'y a jamais de clé
+    `mission`. Sans elle, chaque `{n}` de `loader.yml` s'élargissait à TOUTES
+    les missions et le hook mesurait un contexte que l'agent ne lira jamais —
+    il refusait tous les agents de construction au premier projet réel. Le
+    brief assemblé par `spawn-brief` écrit toujours `MISSION : {n}` ; à défaut,
+    `SDDA_MISSION` dans l'environnement.
+    """
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    mission = data.get("mission") or tool_input.get("mission")
+    if not mission:
+        m = _MISSION_RE.search(str(tool_input.get("prompt") or ""))
+        mission = m.group(1) if m else os.environ.get("SDDA_MISSION") or None
+    return (str(mission) if mission else None), (data.get("target") or tool_input.get("target"))
 
 
 def check(root: Path, data: dict) -> int:
@@ -35,8 +58,9 @@ def check(root: Path, data: dict) -> int:
         return ALLOW
 
     report = Report(name="CONTEXT-HOOK", target=str(root))
+    mission, target = _mission_and_target(data)
     resolution = context_pack.resolve_context(root, loader, agent, report=report,
-                                              mission=data.get("mission"), target=data.get("target"))
+                                              mission=mission, target=target)
     if resolution is None:
         return ALLOW
     budget = int(resolution.budget_bytes or 0)
