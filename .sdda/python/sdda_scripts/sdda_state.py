@@ -198,16 +198,28 @@ def phase_index(phase: str) -> int:
 def effective_statuses(run: dict[str, Any]) -> dict[str, str]:
     """Dernier statut connu par phase canonique, le pire d'une phase à étages.
 
-    Une revue dont l'étage C a échoué n'est pas une revue passée, même si son
-    dernier événement enregistré est l'agrégat.
+    Deux règles, et l'ordre compte :
+
+    - **par (sous-)phase nommée, le DERNIER événement gagne.** Une phase rejouée
+      dans le même run — `mission: fail` puis, la MISSION corrigée, `mission:
+      pass` — est une phase passée. Garder le pire des deux rendait toute
+      reprise dans le run impossible : `resume-target` renvoyait pour toujours
+      la phase qu'on venait de réussir.
+    - **entre les étages d'une même phase canonique, le PIRE gagne.** Une revue
+      dont l'étage C a échoué n'est pas une revue passée, même si son dernier
+      événement enregistré est l'agrégat.
     """
     rank = {"pass": 0, "warn": 1, "fail": 2}
-    out: dict[str, str] = {}
+    latest_by_name: dict[str, tuple[str, str]] = {}
     for event in run.get("phases") or []:
-        canonical = canonical_phase(str(event.get("phase") or ""))
+        name = str(event.get("phase") or "")
+        canonical = canonical_phase(name)
         status = str(event.get("status") or "")
         if not canonical or status not in rank:
             continue
+        latest_by_name[name] = (canonical, status)
+    out: dict[str, str] = {}
+    for canonical, status in latest_by_name.values():
         current = out.get(canonical)
         if current is None or rank[status] > rank[current]:
             out[canonical] = status

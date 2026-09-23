@@ -384,6 +384,18 @@ def reconcile_status(root: Path, path: Path, computed: str, report: Report, *, w
     if declared not in RANK:
         report.warn("STATUS_UNBACKED", f"`Status: {declared}` n'est pas un état de LIFECYCLE.md", "", loc)
         return declared
+    if declared == "Blocked" and computed != "Blocked":
+        # Le script a écrit `Blocked` sur une gate rouge ; la gate est repassée
+        # au vert et plus aucun rapport ne l'étaye. `Blocked` ayant le rang le
+        # plus bas, la règle « écraser si le fichier prétend plus haut » ne le
+        # touchait jamais : un artefact débloqué restait `Blocked` à vie dans
+        # son en-tête, et le lecteur humain croyait le fichier plutôt que les
+        # gates. Un état dérivé se corrige dans les deux sens.
+        report.warn("STATUS_UNBACKED", f"`Status: Blocked` déclaré, mais plus aucun rapport de gate ne l'étaye (calculé : `{computed}`)",
+                    ("écrasé par le script" if write else "relancer avec écriture") + " — l'état est un fait dérivé des gates (R1)", loc)
+        if write:
+            path.write_text(markdown_io.replace_header_field(text, "Status", computed), encoding="utf-8", newline="\n")
+        return declared
     if RANK[declared] > RANK.get(computed, -1):
         report.error("STATUS_UNBACKED", f"`Status: {declared}` déclaré, mais les rapports de gate n'étayent que `{computed}`",
                      ("écrasé par le script : " if write else "relancer avec écriture : ") + "l'état est un fait dérivé des gates, jamais une déclaration (R1)", loc)

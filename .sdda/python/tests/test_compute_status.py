@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from conftest import make_project, run_main
-from sdda_lib import paths
+from sdda_lib import markdown_io, paths
 from sdda_lib.errors import Report
 from sdda_lib.gate_reports import write_gate_report
 from sdda_scripts import compute_status, estimate_budget, ir_compiler, validate_cap, validate_ir, validate_mission, validate_topology
@@ -90,6 +90,22 @@ def test_unbacked_status_is_reported_and_overwritten(tmp_path: Path) -> None:
     assert "Status: Draft" in text and "Status: Tested" not in text
     # Une fois écrasé, le second passage est propre.
     assert run_main(compute_status.main, ["--root", str(root)])[0] == 0
+
+
+def test_a_stale_blocked_header_is_cleared_when_gates_turn_green(project: Path) -> None:
+    """`Blocked` écrit sur une gate rouge s'efface quand plus aucun rapport ne l'étaye.
+
+    `Blocked` a le rang le plus bas : la règle « écraser si le fichier prétend
+    plus haut » ne le touchait jamais, et un artefact débloqué restait `Blocked`
+    à vie dans son en-tête.
+    """
+    mission = next((project / "workspace/feats/missions").glob("1-*.md"))
+    text = mission.read_text(encoding="utf-8")
+    mission.write_text(markdown_io.replace_header_field(text, "Status", "Blocked"), encoding="utf-8", newline="\n")
+    code, out = run_main(compute_status.main, ["--root", str(project), "--mission", "1"])
+    assert code == 0, out
+    assert "Status: Blocked" not in mission.read_text(encoding="utf-8")
+    assert "[STATUS_UNBACKED]" in out
 
 
 def test_no_write_keeps_the_file_but_still_reports(tmp_path: Path) -> None:

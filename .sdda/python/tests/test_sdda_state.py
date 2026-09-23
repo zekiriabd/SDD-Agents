@@ -110,6 +110,24 @@ def test_a_failed_sub_stage_makes_the_whole_review_failed(project: Path) -> None
     assert sdda_state.effective_statuses(sdda_state.load_run(project, rid))["review"] == "fail"
 
 
+def test_a_phase_replayed_in_the_same_run_takes_its_latest_status(project: Path) -> None:
+    """`mission: fail` puis, la MISSION corrigée, `mission: pass` : la phase est passée.
+
+    Garder le pire des deux rendait toute reprise dans le run impossible —
+    `resume-target` renvoyait pour toujours la phase qu'on venait de réussir.
+    """
+    rid = _new(project)
+    _set(project, rid, "mission", "fail")
+    _set(project, rid, "mission", "pass")
+    _set(project, rid, "caps", "pass")
+    run = sdda_state.load_run(project, rid)
+    assert sdda_state.effective_statuses(run)["mission"] == "pass"
+    assert sdda_state.resume_target(run) == "topology"
+    # Et l'inverse tient : un pass suivi d'un fail est un fail.
+    _set(project, rid, "caps", "fail")
+    assert sdda_state.effective_statuses(sdda_state.load_run(project, rid))["caps"] == "fail"
+
+
 # ---------------------------------------------------------------------------
 # Reprise
 # ---------------------------------------------------------------------------
