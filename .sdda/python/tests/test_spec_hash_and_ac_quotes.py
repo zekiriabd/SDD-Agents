@@ -66,3 +66,21 @@ def test_a_quoted_threshold_is_an_evaluable_ac() -> None:
                                       "dataset": "workspace/proof/datasets/golden/x.jsonl", "grader": "exact", "runs": "3"})
     problems, _ = validate_cap.ac_problems(ac, None, "normal")
     assert not [p for p in problems if "threshold" in p]
+
+
+def test_a_bullet_written_on_several_lines_keeps_its_continuation() -> None:
+    """`- **Entrées non maîtrisées** : `a`, `b`\n  `c`, `d`` : les quatre, pas deux."""
+    body = ("- **Entrées non maîtrisées** : `message` (client), `claims.description`\n"
+            "  (client), `claims.resolution`\n  (conseiller), `orders.delivery_note`\n"
+            "- **Traitement** : contenu\n")
+    kv = markdown_io.parse_kv_list(body)
+    assert markdown_io.split_code_list(kv["Entrées non maîtrisées"]) == [
+        "message", "claims.description", "claims.resolution", "orders.delivery_note"]
+    assert kv["Traitement"] == "contenu"
+
+
+def test_a_value_starting_with_a_code_span_is_that_span() -> None:
+    assert markdown_io.first_code_span("`workspace/proof/datasets/adversarial/a.jsonl` *(obligatoire — invariant)*") \
+        == "workspace/proof/datasets/adversarial/a.jsonl"
+    assert markdown_io.first_code_span("`regex`") == "regex"
+    assert markdown_io.first_code_span("**`x`**") == "x"
