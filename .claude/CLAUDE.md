@@ -201,6 +201,7 @@ perte.
 | Entrée | Nature | Écrite par | Régénérable |
 |---|---|---|---|
 | `stack/` | configuration — `STACK.md`, seul, versionné | l'humain | non |
+| `assets/` | fichiers statiques déposés (exports, corpus) — la racine des stores `kind: local` ; l'`assets/` de SDD_Pro | l'humain | non |
 | `feats/` | **spécification** — l'ENTRÉE de la génération, **Markdown seul** | humain, PO, architectes | non |
 | `src/` | code généré, prompts et schémas figés compris | les sept `dev-*` (six pour le moteur, `dev-backend` pour la coquille), `qa-tests`, les générateurs | oui |
 | `proof/` | **ce qui juge** — `seed/` fourni par l'humain, le reste dérivé | l'humain (`seed/`), `qa-evals` et les scripts, **jamais** un `dev-*` | non |
@@ -468,10 +469,16 @@ deux derniers est l'erreur la plus fréquente des frameworks concurrents : elle
 rend le budget d'exécution incalculable.
 
 **Les agents déclarent un tier** (`fast` / `balanced` / `deep`), jamais un nom de
-modèle. La résolution tier -> modèle appartient au provider actif
-(`.sdda/providers/*.yaml`, clé `tier_map`). Ajouter un provider ne touche aucun
-agent. Les bornes `tier_floor` / `tier_ceiling` de `agent-bounds.yaml` sont des
-invariants de qualité : le Project Config ne peut pas les relâcher.
+modèle. La résolution tier -> modèle se lit dans `STACK.md` : `## Build Models`
+(`TierMap`) pour la construction, `## Runtime Models` (`RuntimeTierMap`) pour
+l'application — c'est ce que `layered_config.read_runtime_tier_map` et le
+squelette généré consomment. Les fiches `.sdda/providers/*.yaml` sont le
+**catalogue de référence** par fournisseur (identifiants de modèles, tarifs,
+noms de variables) que ces sections recopient ; aucun script ne les lit encore
+à l'exécution 🟡 — ce document l'a longtemps affirmé, et c'était faux sur
+disque. Ajouter un provider ne touche aucun agent. Les bornes `tier_floor` /
+`tier_ceiling` de `agent-bounds.yaml` sont des invariants de qualité : le
+Project Config ne peut pas les relâcher.
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "content_hash": "sha256:ee338c46c60a724942b17f07221d5523158d3e8388fb20a9bf0f3901877d2564",
+  "content_hash": "sha256:797c0b020b4115ca67bc361e65867e842ae8a0761cbf61932b8d418fe43687b3",
   "envelope": {
     "allowed_sources": [
       "orders",
@@ -25,7 +25,7 @@
     "max_records_returned": 50,
     "max_staleness_hours": 87600,
     "query_logging": "full",
-    "read_timeout_ms": 3000,
+    "read_timeout_ms": 500,
     "role": "readonly",
     "schema_check_sample": 500
   },

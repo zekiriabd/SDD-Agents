@@ -78,6 +78,7 @@ same level, and nothing said that `caps/` is reviewed by humans while
 workspace/
 ├── stack/     what you CONFIGURE — STACK.md, alone, versioned (names of variables; values in src/{App}/.env)
 ├── feats/     what you SPECIFY  — Markdown only: briefs · missions · caps · roster + topology · contracts · decisions (ADR)
+├── assets/    what you DROP       — static files (JSON/CSV exports, corpus): the root of `kind: local` stores (SDD_Pro's assets/)
 ├── src/       what gets PRODUCED — the generated application, prompts and frozen schemas included
 ├── proof/     what JUDGES        — seed (your ground truth) · datasets · suites · baselines · calibration
 └── .sys/      internal state and run output — IR, validation, reports, traces (regenerable)
@@ -246,7 +247,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->1140<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->1141<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

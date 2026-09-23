@@ -557,7 +557,7 @@ Sources:
 
 # Enveloppe de sûreté — OBLIGATOIRE dès que Active Data Access = declared-sources.
 SourceAgentRole: readonly             # readonly — seule valeur admise sur cette stack
-SourceReadTimeoutMs: 3000             # fichiers locaux de quelques Ko : 3 s est déjà large
+SourceReadTimeoutMs: 500              # fichiers locaux de quelques Ko : 3 s pesait 12 s dans le pire cas estimé (4 lectures) — 500 ms reste large
 SourceMaxRecordsReturned: 50          # un client n'a pas 50 commandes ; au-delà -> truncated: true
 SourceMaxObjectBytes: 5242880         # 5 Mo — le jeu entier pèse < 100 Ko
 SourceSchemaCheckSample: 500          # enregistrements revalidés contre le schéma figé au boot

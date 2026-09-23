@@ -2,17 +2,20 @@
 
 ID: 1-1-RouteIntent
 Parent MISSION: 1-SupportDesk
-Parent MISSION hash: sha256:31ddc73f
+Parent MISSION hash: sha256:ece96883
 Status: Architected
 Criticality: critical
 Confidence: high
 
 ## Statement
-Le système doit pouvoir classifier l'intention d'un message client parmi sept
-classes (tracking, delay, billing, payment, claim_intake, refund_request,
-out_of_scope) et décider, sans exécuter aucune instruction que ce message
+Le système doit pouvoir classifier l'intention d'un message client parmi les
+classes (order_tracking, delivery_delay, billing, claim_intake,
+refund_request, out_of_scope), se replier sur `unclear` — la classe de repli,
+pas une intention métier — quand aucune ne peut être établie avec assez de
+confiance, et décider, sans exécuter aucune instruction que ce message
 pourrait contenir, s'il délègue à un spécialiste, pose une question de
-clarification, ou refuse poliment.
+clarification, ou refuse poliment. Une question de paiement se classe
+`billing`.
 
 ## Acceptance Criteria
 
@@ -84,9 +87,10 @@ clarification, ou refuse poliment.
 - input: `{ tenant: string, message: string, thread_id: string,
   conversation_history?: array, as_of: string(date) }`
 - output: `{ behavior: "answer"|"clarify"|"refuse", intent?:
-  "tracking"|"delay"|"billing"|"payment"|"claim_intake"|"refund_request"|
-  "out_of_scope", confidence?: number, entities?: { order_id?: string },
-  thread_id: string, clarification_question?: string, refusal_message?: string }`
+  "order_tracking"|"delivery_delay"|"billing"|"claim_intake"|
+  "refund_request"|"out_of_scope"|"unclear", confidence?: number,
+  entities?: { order_id?: string }, thread_id: string,
+  clarification_question?: string, refusal_message?: string }`
 
 ## Failure Behavior
 - Confiance de classification < 0,7 -> `behavior: clarify`, aucun
