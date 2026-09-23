@@ -13,7 +13,7 @@ Décide l'architecture de la MISSION `{n}` en trois temps :
 
 ```
 2.1  architect-topology                         (SEUL — fixe le périmètre)
-       -> workspace/feats/topology/{n}-topology.md + {n}-topology.mmd
+       -> workspace/feats/topology/{n}-topology.md   (graphe Mermaid inclus, §4)
 2.2  architect-tools ∥ architect-rag ∥ architect-data ∥ architect-memory
        -> workspace/feats/contracts/{tools,retrieval,memory}/**   (PARALLÈLE, borné MaxParallel)
 2.9  ir_compiler.py  (script déterministe, 0 token)
@@ -57,18 +57,18 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    CAUSE: [CAP_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/{n}-G1-cap.json vert
    FIX: relancer /sdda-caps {n} (G1 doit être verte : on n'architecture pas des AC non mesurables)
    ```
-   3.bis **Roster déclaré** — si un manifeste existe, il doit être complet
-   **avant** de payer l'architecte :
+   3.bis **Roster déclaré** — si `feats/topology/{n}-roster.md` existe, il doit
+   être complet **avant** de payer l'architecte :
    ```bash
    python .sdda/sdda.py roster validate --mission {n} --if-present
    ```
    Exit 1 → STOP + ERROR (les findings du script, `fichier:$.chemin`) :
    ```
    ERROR: /sdda-topology {n} — roster incomplet
-   CAUSE: [ARCH_ROSTER_PLACEHOLDER] `$.subagents[0].tier` est encore `<à préciser>` — workspace/stack/topology/{n}-roster.yml
+   CAUSE: [ARCH_ROSTER_PLACEHOLDER] `$.subagents[0].tier` est encore `<à préciser>` — workspace/feats/topology/{n}-roster.md
    FIX: l'architecte tranche, puis /sdda-roster {n} --validate ; le framework ne comble aucun trou (P7)
    ```
-   Manifeste absent → WARN `[ARCH_ROSTER_MANIFEST_MISSING]`, continuer : le
+   Roster absent → WARN `[ARCH_ROSTER_MANIFEST_MISSING]`, continuer : le
    repli `## 2. Roster déclaré` reste accepté par G2 (et `/sdda-roster {n}`
    est la forme recommandée).
 4. Lire `## Project Config` : `MaxParallel`, `MaxAgentsWarnAt`,
@@ -131,9 +131,9 @@ des contrats pour des composants qui n'existeront pas.
 Prompt d'invocation :
 ```
 Concevoir la topologie de la MISSION {n}-{MissionName} à partir de ses {C} CAPs.
-Roster DÉCLARÉ : {workspace/stack/topology/{n}-roster.yml (validé) | aucun manifeste — repli ## 2. Roster déclaré}.
-Le recopier tel quel ; ne renommer, n'ajouter ni ne retirer aucun agent (P7).
-Template : .sdda/templates/topology.template.md. Graphe : {n}-topology.mmd (Mermaid).
+Roster DÉCLARÉ : {workspace/feats/topology/{n}-roster.md (validé) | aucun roster — repli ## 2. Roster déclaré}.
+Le recopier tel quel ; ne renommer, n'ajouter ni ne retirer aucun agent (P7). Ne PAS écrire dans {n}-roster.md.
+Template : .sdda/templates/topology.template.md. Graphe : bloc ```mermaid de ## 4 (aucun .mmd).
 Procédure imposée (AGENT-ROSTER.md §2) : partir de UN agent + des outils ; pour chaque
 CAP demander « un outil suffit-il ? » ; n'escalader qu'avec une des 5 raisons closes de P7 ;
 remplir « Alternative plus simple considérée » (vide = WARN [TOPOLOGY_SIMPLICITY_ADVISORY] : l'architecture t'appartient, P7).
@@ -247,7 +247,7 @@ python .sdda/sdda.py ir-compiler --mission {n} \
   --out workspace/.sys/.ir/{n}-system.ir.json
 ```
 
-Entrées : MISSION, CAPs, TOPOLOGY (+ `.mmd`), `contracts/**`, `STACK.md`.
+Entrées : MISSION, CAPs, TOPOLOGY (graphe compris), `contracts/**`, `STACK.md`.
 Sortie : `{n}-system.ir.json` conforme à `.sdda/registry/ir.schema.json`, avec
 `compiledFrom.{missionHash,capHashes,topologyHash,stackHash}`.
 

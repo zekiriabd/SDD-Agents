@@ -2,8 +2,10 @@
 """
 SDD_Agents — bootstrap d'un nouveau projet agentic.
 
-Génère `workspace/STACK.md`, l'arborescence du workspace, et vérifie que
-l'installation tient debout.
+Génère `workspace/stack/STACK.md` (versionné — il ne porte que des NOMS de
+variables), `.env` à la racine (gitignoré — les VALEURS), l'arborescence du
+workspace, et vérifie que l'installation tient debout. Même mécanisme que
+SDD_Pro : la déclaration dans le stack, les secrets dans `.env`.
 
 Usage :
     python bootstrap.py                      # interactif
@@ -95,6 +97,12 @@ class Combo:
     # est donc une fiche réelle, jamais une ligne vide. Toutes les combos le
     # prennent : aucune n'a encore de mesure justifiant un reranker.
     reranker: str = "none"
+    # L'architecture de la COQUILLE (archi/), héritée de SDD_Pro : mvc par
+    # défaut dans les quatre langages. La fiche backend/ n'est activée que par
+    # les combos qui livrent un `backend-api` — c'est la maison HTTP autour de la
+    # surface, et une maison sans service dedans est une fiche lue pour rien.
+    archi: str = "mvc"
+    backend: str = "none"
     deliverable: str = "cli-exe"
     api_framework: str = "none"
     # `none` n'est tenable que si la combo ne touche pas de données : sinon les
@@ -143,6 +151,7 @@ COMBOS: dict[str, Combo] = {
         deliverable="backend-api",
         api_framework="fastapi",
         api_auth="oauth2",
+        backend="python-fastapi",
         tools=["mcp"],
     ),
     "sources": Combo(
@@ -405,13 +414,13 @@ def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str]) -> str:
         "{{ApiFramework}}": combo.api_framework,
         "{{ServingPort}}": "8080",
         "{{DatabaseType}}": combo.database,
-        "{{DbHost}}": secrets.get("DB_HOST", "localhost" if has_db else "n/a"),
-        "{{DbPort}}": secrets.get("DB_PORT", "5432" if has_db else "n/a"),
-        "{{DbName}}": secrets.get("DB_NAME", f"{app_name.lower()}_db" if has_db else "n/a"),
-        "{{DbUser}}": secrets.get("DB_USER", "<à compléter>" if has_db else "n/a"),
-        "{{DbPassword}}": secrets.get("DB_PASSWORD", "<à compléter>" if has_db else "n/a"),
-        "{{LlmApiKey}}": secrets.get("LLM_API_KEY", "<à compléter>"),
+        "{{ArchiPattern}}": combo.archi,
+        "{{BackendActiveLines}}": (f" - .sdda/stacks/backend/{combo.backend}.md" if combo.backend != "none"
+                                   else "# (aucune : DeliverableType != backend-api)"),
+        # Aucune VALEUR de secret ici : STACK.md ne porte que `${NOM}` (le gabarit
+        # les écrit tel quel), et `write_env` range les valeurs dans `.env`.
     }
+    del secrets, has_db  # lus par write_env ; gardés dans la signature pour les appelants
     for placeholder, value in mapping.items():
         text = text.replace(placeholder, value)
 
@@ -465,16 +474,54 @@ def build_context_packs() -> None:
         step(f"⚠  {finding.message}")
 
 
+#: Les variables que le projet attend dès le premier jour. La base n'ajoute les
+#: siennes que si la combo en déclare une : une ligne `DB_PASSWORD=` dans un
+#: projet sans base est une question que personne ne se pose.
+ENV_KEYS_ALWAYS: tuple[str, ...] = ("LLM_API_KEY",)
+ENV_KEYS_DB: tuple[str, ...] = ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD")
+
+
+def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: str = "") -> str:
+    """Le contenu de `.env` : chaque nom attendu, avec sa valeur si elle a été donnée.
+
+    Un `.env` existant est COMPLÉTÉ, jamais réécrit : les clés déjà présentes
+    gardent leur valeur, seules les manquantes sont ajoutées. Écraser le fichier
+    de secrets d'un projet parce qu'on relance le bootstrap serait le bug le
+    plus coûteux de ce script.
+    """
+    present = {line.split("=", 1)[0].strip() for line in existing.splitlines()
+               if "=" in line and not line.lstrip().startswith("#")}
+    defaults = {"DB_HOST": "localhost", "DB_PORT": "5432", "DB_NAME": f"{app_name.lower()}_db"}
+    wanted = list(ENV_KEYS_ALWAYS) + (list(ENV_KEYS_DB) if combo.database != "none" else [])
+    missing = [k for k in wanted if k not in present]
+    if not missing:
+        return existing
+    lines = []
+    if not existing.strip():
+        lines += [
+            "# SDD_Agents — VALEURS des secrets et de la configuration sensible. Gitignoré.",
+            "# workspace/stack/STACK.md (versionné) n'en porte que les noms : `LLM_API_KEY: ${LLM_API_KEY}`.",
+            "# Le code généré lit ces variables par leur NOM (config.py) ; aucune valeur ne voyage ailleurs.",
+        ]
+    for key in missing:
+        lines.append(f"{key}={secrets.get(key, defaults.get(key, ''))}")
+    sep = "" if not existing or existing.endswith("\n") else "\n"
+    return existing + sep + "\n".join(lines) + "\n"
+
+
+def write_env(app_name: str, combo: Combo, secrets: dict[str, str]) -> Path:
+    env_path = ROOT / ".env"
+    existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
+    env_path.write_text(build_env(app_name, combo, secrets, existing), encoding="utf-8")
+    return env_path
+
+
 def write_gitignore() -> None:
-    """STACK.md contient des secrets en clair. Il ne doit jamais partir en commit."""
+    """`.env` porte les valeurs : il ne doit jamais partir en commit. STACK.md, lui, est versionné."""
     gitignore = ROOT / ".gitignore"
     required = [
-        "workspace/stack/STACK.md",
-        "workspace/.sys/traces/",
-        "workspace/src/",
-        "workspace/.sys/",
-        "workspace/.sys/reports/",
         ".env",
+        "workspace/.sys/",
         "__pycache__/",
         "*.pyc",
         ".venv/",
@@ -555,8 +602,8 @@ def interactive() -> tuple[str, Combo, dict[str, str]]:
 
     secrets: dict[str, str] = {}
     say()
-    say("  Secrets — écrits en clair dans workspace/stack/STACK.md, qui est gitignored.")
-    say("  Laisser vide pour compléter plus tard.")
+    say("  Secrets — écrits dans .env à la racine (gitignoré). STACK.md, versionné,")
+    say("  n'en porte que les noms. Laisser vide pour compléter .env plus tard.")
     say()
     key = ask("Clé API du fournisseur de modèles (LLM_API_KEY)", "")
     if key:
@@ -640,7 +687,10 @@ def main() -> int:
         step(f"sauvegarde de l'ancien STACK.md -> {backup.name}")
 
     stack_path.write_text(build_stack_md(app_name, combo, secrets), encoding="utf-8")
-    step("workspace/stack/STACK.md")
+    step("workspace/stack/STACK.md  (versionné — noms de variables seulement)")
+
+    write_env(app_name, combo, secrets)
+    step(".env  (gitignoré — les valeurs ; complété, jamais réécrit)")
 
     write_gitignore()
     build_context_packs()
@@ -661,10 +711,13 @@ def main() -> int:
     say()
     say("  Étapes suivantes")
     say()
-    say("   1. Compléter workspace/stack/STACK.md")
-    say("      — les secrets, et surtout ## Project Config > budget d'exécution :")
+    say("   1. Compléter .env (LLM_API_KEY, DB_* si base) — puis workspace/stack/STACK.md,")
+    say("      surtout ## Project Config > budget d'exécution :")
     say("        CostPerRunTargetUsd / LatencyP95TargetMs n'ont pas de défaut,")
     say("        et la MISSION GATE les exigera.")
+    say("      Vos entrées tiennent en trois choses : STACK.md (choix techniques),")
+    say("      des fichiers Markdown sous workspace/feats/ (la spec), votre vérité")
+    say("      terrain sous workspace/proof/seed/.")
     say()
     say("   2. /sdda-mission « décrivez ce que le système doit accomplir »")
     say("      L'élicitation vous demandera d'où vient la vérité contre laquelle")

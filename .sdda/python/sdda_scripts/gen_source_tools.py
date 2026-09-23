@@ -105,7 +105,7 @@ class Context:
         self.app = str(read_project_section(root).get("AppName") or "App").strip() or "App"
         self.mission = mission or self._detect_mission()
         self.mission_name = self._mission_name()
-        self.src_root = src_root or (paths.workspace(root) / "src" / self.app / "src" / self.app)
+        self.src_root = src_root or paths.app_src_root(root, self.app)
 
     def _detect_mission(self) -> str:
         found = sorted(p.name.split("-", 1)[0] for p in paths.missions_dir(self.root).glob("*-*.md"))
@@ -132,7 +132,9 @@ class Context:
         return self.tools_dir() / f"{source_id}_{kind}.py"
 
     def schema_path(self, source_id: str) -> Path:
-        return self.root / sr.schema_rel_path(source_id)
+        # À côté des wrappers, dans le paquet : c'est là que `schema_guard`
+        # le cherche au démarrage. Suit `src_root` quand il est redirigé.
+        return self.src_root / "data" / "schemas" / f"{source_id}.schema.json"
 
     def envelope_int(self, key: str, default: int) -> int:
         try:
@@ -469,7 +471,7 @@ def render_wrapper(ctx: Context, source_id: str, src: dict[str, Any], schema: di
     header = [
         f"# {BANNER}",
         f"# Source `{source_id}` ({connector} · store `{store_id}`) · confiance : {trust}.",
-        f"# Schéma figé : {sr.schema_rel_path(source_id)}",
+        f"# Schéma figé : {paths.rel(ctx.root, ctx.schema_path(source_id))}",
         "# Éditer ce fichier est [DATA_TOOL_HAND_EDITED] : corriger la DÉCLARATION de la",
         "# source, puis `gen_source_tools.py --write`. Le code et la déclaration ne peuvent",
         "# pas diverger sans que quelqu'un s'en aperçoive — c'est tout l'intérêt.",
@@ -816,8 +818,8 @@ def runtime_dir(root: Path, language: str) -> Path:
 def render_registry(ctx: Context, report: Report) -> dict[str, Any]:
     """`sources.json` — le registre RÉSOLU, seul état que le runtime lit.
 
-    L'application ne parse jamais STACK.md : il est gitignoré, il porte des
-    secrets, et surtout ce qui est résolu est **épinglable** (P10). Deux runs sur
+    L'application ne parse jamais STACK.md : c'est une déclaration de projet, pas
+    une configuration d'exécution, et surtout ce qui est résolu est **épinglable** (P10). Deux runs sur
     deux registres différents ne sont pas comparables, et le pipeline doit
     pouvoir le dire plutôt qu'aligner deux scores incomparables.
     """

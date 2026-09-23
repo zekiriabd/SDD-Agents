@@ -24,8 +24,10 @@ from sdda_lib.jsonschema_mini import SchemaValidator
 from sdda_scripts import gen_source_tools as gst
 from sdda_scripts import ir_compiler
 
-MANIFEST = "workspace/stack/sources/files.sources.yml"
-SCHEMAS = "workspace/feats/contracts/dataaccess/schemas"
+#: La déclaration des sources vit INLINE dans STACK.md (v3 du workspace) ; les
+#: schémas figés partent avec le code, à côté des wrappers qu'ils gardent.
+MANIFEST = "workspace/stack/STACK.md"
+SCHEMAS = "workspace/src/SupportAssistant/src/SupportAssistant/data/schemas"
 TOOLS = "workspace/src/SupportAssistant/src/SupportAssistant/data/tools"
 CONTRACTS = "workspace/feats/contracts/tools"
 META = Path(__file__).resolve().parents[2] / "templates" / "tool-schema.schema.json"
@@ -38,6 +40,14 @@ def sources_project(tmp_path: Path) -> Path:
 
 def classes(report: Report) -> set[str]:
     return {f.cls for f in report.findings}
+
+
+def add_source(project: Path, block: str) -> None:
+    """Ajoute une source sous `Sources:` de `## Active Data Sources` — là où elle se déclare."""
+    path = project / MANIFEST
+    text = path.read_text(encoding="utf-8")
+    assert "\nSources:\n" in text
+    path.write_text(text.replace("\nSources:\n", "\nSources:\n" + block.strip("\n") + "\n", 1), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -349,8 +359,7 @@ def test_csv_source_is_read_and_inferred(sources_project: Path) -> None:
         "0013;Chargeur;19.90;3\n"
         "0014;Housse;12.50;41\n",
         encoding="utf-8")
-    manifest = sources_project / MANIFEST
-    manifest.write_text(manifest.read_text(encoding="utf-8") + """
+    add_source(sources_project, """
   - id: catalog
     connector: file
     store: exports_local
@@ -366,7 +375,7 @@ def test_csv_source_is_read_and_inferred(sources_project: Path) -> None:
       reference. Ne pas utiliser pour la disponibilite reelle en entrepot ni pour les
       tarifs negocies. Les prix sont en euros TTC. as_of porte la date de l'export
       mensuel : le stock a certainement bouge depuis.
-""", encoding="utf-8")
+""")
 
     report = gst.run(sources_project, mode="infer", source="catalog")
     assert report.ok, report.render_text()
@@ -382,8 +391,7 @@ def test_json_array_with_records_path(sources_project: Path) -> None:
     (exports / "snapshot.json").write_text(
         json.dumps({"meta": {"v": 1}, "rows": [{"sku": "A1", "qty": 3}, {"sku": "A2", "qty": 0}]}),
         encoding="utf-8")
-    manifest = sources_project / MANIFEST
-    manifest.write_text(manifest.read_text(encoding="utf-8") + """
+    add_source(sources_project, """
   - id: stock_levels
     connector: file
     store: exports_local
@@ -398,7 +406,7 @@ def test_json_array_with_records_path(sources_project: Path) -> None:
       snapshot nocturne du WMS. Utiliser pour savoir si une reference est annoncee en
       stock. Ne pas utiliser pour promettre une disponibilite : le snapshot date de la
       nuit et as_of le dit. Les quantites sont des unites entieres, jamais des colis.
-""", encoding="utf-8")
+""")
 
     report = gst.run(sources_project, mode="infer", source="stock_levels")
     assert report.ok, report.render_text()

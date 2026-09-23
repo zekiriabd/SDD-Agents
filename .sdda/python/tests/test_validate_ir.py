@@ -44,7 +44,8 @@ def test_cli_writes_g2_ir_report(project: Path) -> None:
     rep = paths.validation_dir(project) / "G2-1-SupportAssistant.ir.json"
     data = json.loads(rep.read_text(encoding="utf-8"))
     assert data["ok"] is True and data["part"] == "ir"
-    assert {"mission", "topology", "topology-mmd", "stack", "ir", "cap:1-1-ClassifyIntent"} <= set(data["pinnedHashes"])
+    assert {"mission", "topology", "stack", "ir", "cap:1-1-ClassifyIntent"} <= set(data["pinnedHashes"])
+    assert "topology-mmd" not in data["pinnedHashes"]      # le graphe est dans `topology`
 
 
 # -- (4) cycles non bornés : bloquant ----------------------------------------------
@@ -330,8 +331,9 @@ def test_reflection_with_two_distinct_agents_is_accepted(ok_ir) -> None:
 
 def test_stale_ir_is_rejected_after_source_edit(ok_ir) -> None:
     root, ir = ok_ir
-    mmd = root / "workspace/feats/topology/1-topology.mmd"
-    mmd.write_text(mmd.read_text(encoding="utf-8") + "  clarify --> classify\n", encoding="utf-8")
+    topo = root / "workspace/feats/topology/1-topology.md"
+    text = topo.read_text(encoding="utf-8")
+    topo.write_text(text.replace("  clarify --> finalize\n", "  clarify --> finalize\n  clarify --> classify\n", 1), encoding="utf-8")
     report = _validate(root, ir)
     assert "IR_STALE" in _classes(report)
 

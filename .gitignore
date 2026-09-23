@@ -1,7 +1,7 @@
 # SDD_Agents — secrets et artefacts générés
-workspace/stack/STACK.md*
+# STACK.md est VERSIONNÉ (il ne porte que des noms de variables) ; les valeurs
+# vivent dans .env. src/ est le livrable : il se versionne comme tout code.
 workspace/traces/
-workspace/src/
 workspace/.sys/
 workspace/evals/reports/
 /.env

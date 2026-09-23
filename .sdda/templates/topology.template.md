@@ -114,7 +114,9 @@ de P7 :
 
 ## 4. Le graphe
 
-Fichier : `workspace/feats/topology/{n}-topology.mmd` (Mermaid).
+> Le bloc ci-dessous EST le graphe : c'est lui que `ir-compiler` lit, et son
+> hash est celui de ce fichier. Aucun fichier `.mmd` à côté — deux artefacts
+> pour un graphe, c'est celui que personne ne relit qui gouverne l'IR.
 
 ```mermaid
 flowchart TD

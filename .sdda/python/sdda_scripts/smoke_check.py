@@ -22,6 +22,11 @@ Ce qu'il vérifie :
     6. `workspace/.sys/workspace.json` porte la version courante
        (`sdda_lib.workspace.WORKSPACE_VERSION`)          [WORKSPACE_VERSION_MISSING]
                                                          [WORKSPACE_VERSION_OUTDATED]
+    7. (v3+) `feats/` ne contient que du Markdown         [FEATS_NOT_MARKDOWN]
+    8. (v3+) `stack/` ne contient que STACK.md (+ manifestes déclarés)
+                                                         [STACK_DIR_UNEXPECTED_FILE]
+    9. (v3+) aucune valeur de secret en clair dans STACK.md — des `${NOM}`,
+       les valeurs dans `.env`                            [STACK_SECRET_IN_CLEAR]
 
 Une ligne activée pour une fiche absente ne charge rien (ARCHITECTURE §2) : la
 détecter ici, avant le premier spawn, coûte cinquante millisecondes ; la
@@ -52,10 +57,12 @@ MIGRATE_CMD = "python .sdda/sdda.py migrate-workspace"
 #: ce script vérifie qu'elle est là. Un répertoire retiré d'ici devient un
 #: fantôme : il se retire dans une migration, pas en silence.
 WORKSPACE_TREE: tuple[str, ...] = (
-    # stack/ — la CONFIGURATION
+    # stack/ — la CONFIGURATION : STACK.md, seul. Versionné ; les valeurs des
+    # secrets vivent dans `.env` à la racine du projet.
     "stack",
-    "stack/sources",
-    # feats/ — la SPÉCIFICATION : ce qu'on écrit et qu'on relit en revue
+    # feats/ — la SPÉCIFICATION : ce qu'on écrit et qu'on relit en revue.
+    # Du MARKDOWN, et rien d'autre (`check_feats_markdown_only`).
+    "feats/briefs",
     "feats/missions",
     "feats/caps",
     "feats/topology",
@@ -63,13 +70,13 @@ WORKSPACE_TREE: tuple[str, ...] = (
     "feats/contracts/tools",
     "feats/contracts/retrieval",
     "feats/contracts/memory",
-    "feats/contracts/dataaccess/schemas",
     "feats/decisions",
-    "feats/briefs",
-    # src/ — le CODE GÉNÉRÉ, prompts compris (un prompt est un actif runtime)
+    # src/ — le CODE GÉNÉRÉ, prompts et schémas figés compris : des actifs runtime
     "src",
     "src/prompts",
-    # proof/ — ce qui JUGE : aucun `dev-*` n'y écrit jamais
+    # proof/ — ce qui JUGE : aucun `dev-*` n'y écrit jamais.
+    # `seed/` est la vérité terrain de l'HUMAIN ; `datasets/` sa dérivation par qa-evals.
+    "proof/seed",
     "proof/datasets/golden",
     "proof/datasets/holdout",
     "proof/datasets/calibration",
@@ -100,6 +107,8 @@ REQUIRED_SECTIONS: tuple[str, ...] = (
     "Active Reranker",
     "Active Data Access",
     "Active Serving Surface",
+    "Active Architecture Pattern",
+    "Active Backend Stack",
     "Active Observability",
     "Active Eval Stack",
 )
@@ -116,6 +125,8 @@ CARDINALITY: dict[str, tuple[int, int | None]] = {
     "Active Reranker": (1, 1),
     "Active Data Access": (1, 1),
     "Active Serving Surface": (1, 1),
+    "Active Architecture Pattern": (1, 1),   # la coquille a UNE architecture (défaut mvc)
+    "Active Backend Stack": (0, 1),          # seulement pour DeliverableType: backend-api
 }
 
 ACTIVE_LINE_RE = re.compile(r"^\s*-\s+(\.sdda/stacks/[\w\-/]+\.md)\s*(?:#.*)?$", re.M)
@@ -179,6 +190,94 @@ def check_tree(root: Path, report: Report) -> list[str]:
     return missing
 
 
+#: Ce qui a le droit de vivre sous `workspace/stack/` à côté de STACK.md : sa
+#: sauvegarde de bootstrap, et les manifestes que STACK.md déclare lui-même.
+_STACK_DIR_ALLOWED = {"STACK.md", "STACK.md.bak", ".gitkeep"}
+_MANIFEST_PATH_RE = re.compile(r"^\s*-\s*(?:\{\s*)?path:\s*([^\s,}]+)", re.M)
+
+#: Un nom de clé qui désigne un secret. La VALEUR, si elle est en clair dans
+#: STACK.md, part en commit : c'est tout ce que `.env` existe pour empêcher.
+_SECRET_NAME_RE = re.compile(r"(KEY|TOKEN|PASSWORD|PASSWD|SECRET)", re.I)
+_SECRET_LINE_RE = re.compile(r"^\s*-\s*([A-Z][A-Z0-9_]*)\s*:\s*(.*?)\s*(?:#.*)?$", re.M)
+_ENV_REF_RE = re.compile(r"^\$\{[A-Z][A-Z0-9_]*\}$")
+
+
+def check_feats_markdown_only(root: Path, report: Report) -> list[str]:
+    """`feats/` est la spécification, et une spécification se relit : du Markdown, seul.
+
+    Un YAML, un JSONL, un `.mmd` posés là sont soit une configuration (-> STACK.md),
+    soit de la vérité terrain (-> `proof/seed/`), soit un actif d'exécution
+    (-> `src/`). La migration sait les ranger ; ce contrôle dit qu'ils sont là.
+    """
+    feats = root / "workspace" / "feats"
+    if not feats.is_dir():
+        return []
+    strays = sorted(
+        p.relative_to(root / "workspace").as_posix()
+        for p in feats.rglob("*")
+        if p.is_file() and p.suffix.lower() != ".md" and p.name != ".gitkeep"
+    )
+    if strays:
+        report.error("FEATS_NOT_MARKDOWN",
+                     f"{len(strays)} fichier(s) non-Markdown sous workspace/feats/ : " + ", ".join(strays[:5]),
+                     f"{MIGRATE_CMD} range roster, graphe, schémas et vérité terrain à leur place ; "
+                     "sinon déplacer à la main (config -> STACK.md, ground truth -> proof/seed/, schémas -> src/)",
+                     "workspace/feats/")
+    return strays
+
+
+def check_stack_dir(root: Path, report: Report, stack_text: str | None) -> list[str]:
+    """`stack/` ne porte que STACK.md — et les manifestes qu'il nomme lui-même."""
+    stack = root / "workspace" / "stack"
+    if not stack.is_dir():
+        return []
+    declared: set[str] = set()
+    if stack_text:
+        body = markdown_io.section_body(stack_text, "Active Data Sources") or ""
+        declared = {m.strip().strip("'\"") for m in _MANIFEST_PATH_RE.findall(body)}
+    strays = sorted(
+        p.relative_to(stack).as_posix()
+        for p in stack.rglob("*")
+        if p.is_file() and p.name not in _STACK_DIR_ALLOWED and p.relative_to(stack).as_posix() not in declared
+    )
+    if strays:
+        report.error("STACK_DIR_UNEXPECTED_FILE",
+                     f"{len(strays)} fichier(s) inattendu(s) sous workspace/stack/ : " + ", ".join(strays[:5]),
+                     f"{MIGRATE_CMD} rapatrie roster et sources dans leurs sections ; la configuration tient dans STACK.md, "
+                     "les valeurs dans .env",
+                     "workspace/stack/")
+    return strays
+
+
+def check_secrets_not_in_clear(stack_text: str | None, report: Report) -> list[str]:
+    """Aucune valeur de secret dans STACK.md : un nom `${VAR}`, ou rien.
+
+    STACK.md est versionné depuis la v3 du workspace. Une clé d'API en clair
+    dans `## Active Secrets` ou un mot de passe dans `## Active Data Access`
+    part donc en commit au premier `git add`. Le contrôle est lexical et
+    volontairement étroit : il ne juge que les clés dont le NOM dit qu'elles
+    sont sensibles, pour ne pas crier sur `DB_HOST: localhost`.
+    """
+    if not stack_text:
+        return []
+    leaks: list[str] = []
+    for title in ("Active Secrets", "Active Data Access"):
+        body = markdown_io.section_body(stack_text, title) or ""
+        for m in _SECRET_LINE_RE.finditer(body):
+            name, value = m.group(1), m.group(2).strip()
+            if not _SECRET_NAME_RE.search(name):
+                continue
+            if not value or _ENV_REF_RE.match(value) or value.startswith("<") or value.lower() in ("n/a", "none", "-"):
+                continue
+            leaks.append(f"{title} > {name}")
+    if leaks:
+        report.error("STACK_SECRET_IN_CLEAR",
+                     f"{len(leaks)} secret(s) en clair dans workspace/stack/STACK.md : " + ", ".join(leaks[:4]),
+                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans .env (gitignoré) — {MIGRATE_CMD} le fait",
+                     "workspace/stack/STACK.md")
+    return leaks
+
+
 def check_version(root: Path, report: Report) -> int | None:
     version = read_workspace_version(root)
     if version is None:
@@ -197,6 +296,15 @@ def run(root: Path) -> Report:
     report.data["stack"] = check_stack(root, report)
     report.data["missingDirs"] = check_tree(root, report)
     report.data["workspaceVersion"] = check_version(root, report)
+    # Les trois règles de la v3, vérifiées et non racontées : feats/ en Markdown
+    # seul, stack/ réduit à STACK.md, aucun secret en clair. Elles ne s'appliquent
+    # qu'à un workspace qui a atteint la version — avant, c'est la migration qui
+    # parle, et deux messages pour le même fait en font un qu'on ne lit pas.
+    if (report.data["workspaceVersion"] or 0) >= 3:
+        stack_text = markdown_io.read_text(stack_path(root)) if stack_path(root).is_file() else None
+        report.data["feats_strays"] = check_feats_markdown_only(root, report)
+        report.data["stack_strays"] = check_stack_dir(root, report, stack_text)
+        report.data["secrets_in_clear"] = check_secrets_not_in_clear(stack_text, report)
     return report
 
 

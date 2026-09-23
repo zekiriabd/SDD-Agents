@@ -73,10 +73,10 @@ Le graphe ci-dessous est compilé dans l'IR ; il n'existe nulle part ailleurs.
 
 ```mermaid
 flowchart TD
-  classify{intent-classifier} -->|intent == 'billing'| billing[billing-specialist]
+  classify{intent-classifier} -.->|intent == 'billing'| billing[billing-specialist]
   classify -->|aucune classe| clarify[clarify_request]
   billing -->|resolved| finalize[compose_answer]
-  billing -->|needs_reclassification| classify
+  billing -.->|needs_reclassification| classify
   clarify --> finalize
 ```
 

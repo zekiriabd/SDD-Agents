@@ -58,7 +58,7 @@ stack distincte (`framework/langsmith.md`), optionnelle.
 - **Project file** : `workspace/src/{AppName}/pyproject.toml`
 - **Smoke** : cf. §6
 - **Visualisation** : `graph.get_graph().draw_mermaid()` → doit être **identique**
-  (modulo mise en forme) à `workspace/feats/topology/{n}-topology.mmd`. Vérifié par
+  (modulo mise en forme) au bloc ```mermaid de `workspace/feats/topology/{n}-topology.md` §4. Vérifié par
   `sdda_scripts/diff_graph_vs_ir.py` (0 token).
 
 <!-- CORE_PACKAGES_START -->
@@ -357,7 +357,7 @@ par un script de déploiement, jamais au démarrage de l'application.
    écrit explicitement (≈ 40 lignes) pour que `max_iterations` et
    `max_tool_calls` soient dans le state.
 10. **Le graphe Mermaid est régénéré**, jamais dessiné à la main :
-    `graph.get_graph().draw_mermaid()` → comparé à `topology/{n}-topology.mmd`.
+    `graph.get_graph().draw_mermaid()` → comparé au bloc ```mermaid de `topology/{n}-topology.md`.
 
 ---
 

@@ -14,7 +14,8 @@
 # comportement voulu : un changement de modèle périme les résultats d'eval.
 #
 # Aucun secret ici : uniquement des NOMS de variables d'environnement. Les
-# valeurs vivent dans workspace/stack/STACK.md (gitignored).
+# valeurs vivent dans `.env` à la racine du projet (gitignoré) ; STACK.md,
+# versionné, n'en porte lui aussi que les noms.
 # ============================================================================
 
 schema: sdda.provider/v1

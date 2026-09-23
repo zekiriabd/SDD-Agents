@@ -41,19 +41,30 @@ def workspace(root: Path) -> Path:
 #: `caps/` et `traces/` côte à côte, que l'un se relit en revue et que l'autre
 #: se supprime sans perte.
 #:
-#:   feats/   la SPÉCIFICATION — missions, caps, topologie, contrats, décisions.
-#:            Éditée par l'humain et les agents de spécification, relue en revue,
+#:   feats/   la SPÉCIFICATION — briefs, missions, caps, topologie, roster,
+#:            contrats, décisions. **Du Markdown, et rien d'autre.** Éditée par
+#:            l'humain et les agents de spécification, relue en revue,
 #:            versionnée. C'est l'ENTRÉE de la génération, jamais sa sortie.
-#:   stack/   la CONFIGURATION technique. Gitignorée : elle porte des secrets.
-#:   src/     le CODE GÉNÉRÉ, prompts compris. Un prompt est un actif
-#:            d'exécution : hors du paquet, l'application livrée part sans lui.
-#:   proof/   ce qui JUGE — jeux, suites, baselines, calibration. Aucun `dev-*`
-#:            n'y écrit jamais. C'est la seule frontière du framework qui ne
-#:            souffre aucune exception : l'agent qui écrit le code ne peut pas
-#:            toucher au jeu qui le note ni à la référence qui mesure sa
-#:            régression.
+#:   stack/   la CONFIGURATION technique : `STACK.md`, seul. Versionné — il ne
+#:            porte que des NOMS de variables ; les valeurs vivent dans `.env`,
+#:            gitignoré, à la racine du projet (même mécanisme que SDD_Pro).
+#:   src/     le CODE GÉNÉRÉ, prompts et schémas figés compris. Un prompt est
+#:            un actif d'exécution : hors du paquet, l'application livrée part
+#:            sans lui. Un schéma figé aussi : c'est contre lui que l'application
+#:            valide sa donnée au démarrage.
+#:   proof/   ce qui JUGE — la vérité terrain fournie par l'humain (`seed/`),
+#:            puis les jeux, suites, baselines, calibration. Aucun `dev-*` n'y
+#:            écrit jamais. C'est la seule frontière du framework qui ne souffre
+#:            aucune exception : l'agent qui écrit le code ne peut pas toucher
+#:            au jeu qui le note ni à la référence qui mesure sa régression.
 #:   .sys/    l'ÉTAT INTERNE et les sorties de run — IR, validation, traces,
 #:            rapports. Intégralement régénérable, donc effaçable.
+#:
+#: L'entrée de l'utilisateur tient donc en trois choses : `STACK.md` (les choix
+#: techniques), des fichiers Markdown sous `feats/` (ce que le système doit
+#: faire), et sa vérité terrain sous `proof/seed/`. Les URL d'API et les
+#: serveurs MCP sont des choix techniques : ils vont dans `STACK.md`, leurs
+#: identifiants dans `.env`.
 FEATS = "feats"
 PROOF = "proof"
 
@@ -72,6 +83,37 @@ def caps_dir(root: Path) -> Path:
 
 def topology_dir(root: Path) -> Path:
     return feats_dir(root) / "topology"
+
+
+def roster_path(root: Path, mission_number: int | str) -> Path:
+    """Le roster déclaré par l'architecte : `feats/topology/{n}-roster.md`.
+
+    Un fichier Markdown dont le premier bloc ```yaml est la déclaration. Il a
+    vécu en `stack/topology/{n}-roster.yml` : un YAML dans la zone de
+    configuration, à côté d'un STACK.md gitignoré. Or le roster n'est pas une
+    configuration, c'est la première décision de la SPÉCIFICATION (P7) — il se
+    relit en revue avec la topologie qu'il commande. `feats/` ne contient que du
+    Markdown, et un YAML dans un bloc clôturé reste lisible par un humain autant
+    que par `yaml_mini`.
+
+    Il appartient à l'HUMAIN : `architect-topology` le lit, ne l'écrit jamais
+    (`loader.yml`). Le voisin `{n}-topology.md` appartient à l'agent. Deux
+    fichiers, deux owners, un même répertoire.
+    """
+    return topology_dir(root) / f"{mission_number}-roster.md"
+
+
+def seed_dir(root: Path) -> Path:
+    """La vérité terrain fournie par l'HUMAIN : `proof/seed/`.
+
+    Scénarios annotés, labels, exemples de référence — tout ce que `po-elicitor`
+    demande sous le nom de « ground truth » et que `qa-evals` étend en golden,
+    holdout et adversarial. Sous `proof/` parce que c'est ce qui JUGE, hors de
+    `datasets/` parce que `datasets/` appartient à `qa-evals` seul : la graine
+    est humaine, sa dérivation est de l'agent, et la frontière entre les deux
+    se lit dans l'arbre. Aucun `dev-*` n'y touche, comme partout sous `proof/`.
+    """
+    return proof_dir(root) / "seed"
 
 
 def contracts_dir(root: Path, kind: str) -> Path:
@@ -157,8 +199,34 @@ def audit_dir(root: Path) -> Path:
     return workspace(root) / ".sys" / ".audit"
 
 
+def stack_dir(root: Path) -> Path:
+    return workspace(root) / "stack"
+
+
 def stack_md_path(root: Path) -> Path:
-    return workspace(root) / "stack" / "STACK.md"
+    return stack_dir(root) / "STACK.md"
+
+
+def env_path(root: Path) -> Path:
+    """`.env` à la racine du projet : les VALEURS des secrets, gitignoré.
+
+    STACK.md n'en porte que les noms (`${LLM_API_KEY}`), et c'est ce qui le
+    rend versionnable. Le même fichier sert aux stores de `declared-sources`
+    (`SourceSecretsFile`) et au code généré (`gen_app_skeleton`, qui n'écrit que
+    des noms dans `config.py`).
+    """
+    return root / ".env"
+
+
+def app_src_root(root: Path, app_name: str) -> Path:
+    """La racine du paquet applicatif généré : `workspace/src/{App}/src/{App}`.
+
+    Convention de la fiche `lang/python.md` (`uv --lib`). Elle vivait en dur
+    dans `gen_source_tools` ; la partager ici évite que le générateur de
+    schémas, celui d'outils et le validateur de sources se disputent l'endroit
+    où l'application cherche ses fichiers au démarrage.
+    """
+    return workspace(root) / "src" / app_name / "src" / app_name
 
 
 def base_config_path(root: Path) -> Path:

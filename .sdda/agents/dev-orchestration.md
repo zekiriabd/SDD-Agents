@@ -38,8 +38,8 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `budget`,
   `agents[]` (`bounds`, `handoff`), `guardrails`.
-- `workspace/feats/topology/{n}-topology.md` et `{n}-topology.mmd` — le dessin que
-  l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.
+- `workspace/feats/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4)
+  que l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.
 - `workspace/feats/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
 - `workspace/feats/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
 - `workspace/stack/STACK.md` — `## Active Agent Framework`, `## Active Orchestration Pattern`,

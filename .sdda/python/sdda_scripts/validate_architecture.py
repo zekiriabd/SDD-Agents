@@ -159,10 +159,11 @@ class Roster:
 
     Deux sources possibles, **jamais les deux à la fois** :
 
-      1. `workspace/stack/topology/{n}-roster.yml` — versionné, déclaré depuis
-         `STACK.md ## Active Agent Topology`. C'est la forme recommandée : la
-         décision d'architecture existe alors AVANT l'artefact de topologie, et
-         se relit sans ouvrir un document de 200 lignes.
+      1. `workspace/feats/topology/{n}-roster.md` — un Markdown dont le premier
+         bloc ```yaml est la déclaration ; écrit par l'HUMAIN, lu par
+         `architect-topology`. C'est la forme recommandée : la décision
+         d'architecture existe alors AVANT l'artefact de topologie, et se relit
+         sans ouvrir un document de 200 lignes.
       2. `## 2. Roster déclaré` de `topology/{n}-topology.md` — le repli, pour
          un projet à un seul agent où le fichier séparé est une cérémonie.
 
@@ -281,45 +282,51 @@ def load_roster(root: Path, mission: int | str | None, topology: Path | None,
         report.error(
             "ARCH_ROSTER_DUPLICATE_SOURCE",
             f"le roster est déclaré deux fois — `{manifest.source}` et `{markdown.source} ## 2. Roster déclaré`",
-            fix="une seule source de vérité : garder le manifeste et retirer la section Markdown. "
+            fix="une seule source de vérité : garder `{n}-roster.md` et retirer la section de la topologie. "
                 "Deux déclarations divergentes, et c'est celle que personne ne relit qui gouverne le code",
             location=manifest.source,
         )
     return manifest if manifest is not None else markdown
 
 
-def _roster_manifest(root: Path, mission: int | str | None, report: Report) -> Roster | None:
-    section = read_stack_section_kv(root, "Active Agent Topology")
-    declared_root = str(section.get("RosterManifestRoot") or "workspace/stack/topology").strip()
-    base = Path(declared_root)
-    manifest_root = base if base.is_absolute() else (root / base)
+def read_roster_yaml(path: Path) -> dict[str, Any]:
+    """La déclaration d'un `{n}-roster.md` : son premier bloc ```yaml, parsé.
 
-    candidates: list[Path] = []
-    listed = section.get("RosterManifests")
-    if isinstance(listed, list):
-        for entry in listed:
-            rel = entry.get("path") if isinstance(entry, dict) else entry
-            if rel:
-                candidates.append(manifest_root / str(rel))
-    if not candidates and mission is not None:
-        candidates = sorted(manifest_root.glob(f"{mission}-roster.y*ml"))
-    if not candidates:
-        candidates = sorted(manifest_root.glob("*-roster.y*ml"))
+    Un `.yml` nu (forme d'avant la v3 du workspace) reste lisible ; la forme
+    écrite est toujours le Markdown. Partagé avec `roster.py`, qui l'importe.
+    """
+    text = markdown_io.read_text(path)
+    if path.suffix.lower() in (".md", ".markdown"):
+        block = markdown_io.first_yaml_block(text)
+        if block is None:
+            raise yaml_mini.YamlMiniError("aucun bloc ```yaml dans le roster Markdown")
+        return yaml_mini.parse_mapping(block)
+    return yaml_mini.parse_mapping(text)
+
+
+def _roster_manifest(root: Path, mission: int | str | None, report: Report) -> Roster | None:
+    """`feats/topology/{n}-roster.md` s'il existe. Une convention, aucune clé de STACK.md.
+
+    Sans numéro de mission, un roster unique dans le répertoire est pris ; deux
+    ou plus, aucun — deviner lequel serait décider à la place de l'architecte.
+    """
+    topo = paths.topology_dir(root)
+    if mission is not None:
+        candidates = [paths.roster_path(root, mission)]
+    else:
+        candidates = sorted(topo.glob("*-roster.md"))
         if len(candidates) > 1:
             candidates = []
 
     for path in candidates:
         if not path.is_file():
-            report.error("ARCH_ROSTER_MANIFEST_MISSING", f"manifeste de roster introuvable ({paths.rel(root, path)})",
-                         fix="créer le fichier depuis `.sdda/templates/roster.manifest.template.yml`, "
-                             "ou retirer la ligne de `RosterManifests`",
-                         location="workspace/stack/STACK.md")
             return None
         try:
-            data = yaml_mini.parse_mapping(markdown_io.read_text(path))
+            data = read_roster_yaml(path)
         except (yaml_mini.YamlMiniError, OSError) as exc:
-            report.error("ARCH_ROSTER_MANIFEST_MALFORMED", f"manifeste `{paths.rel(root, path)}` illisible : {exc}",
-                         fix="corriger la syntaxe du manifeste", location=paths.rel(root, path))
+            report.error("ARCH_ROSTER_MANIFEST_MALFORMED", f"roster `{paths.rel(root, path)}` illisible : {exc}",
+                         fix="corriger le bloc ```yaml du roster (`.sdda/templates/roster.template.md`)",
+                         location=paths.rel(root, path))
             return None
         return Roster.from_manifest(data, paths.rel(root, path))
     return None
@@ -579,9 +586,9 @@ def run(root: Path, mission: int | str | None = None, explain: bool = False) -> 
     if not roster.present:
         report.error(
             "ARCH_ROSTER_MISSING",
-            "aucun roster déclaré — ni manifeste, ni `## 2. Roster déclaré` dans la topologie",
-            fix="écrire `workspace/stack/topology/{n}-roster.yml` depuis "
-                "`.sdda/templates/roster.manifest.template.yml` (recommandé, versionné), ou remplir la "
+            "aucun roster déclaré — ni `feats/topology/{n}-roster.md`, ni `## 2. Roster déclaré` dans la topologie",
+            fix="écrire `workspace/feats/topology/{n}-roster.md` — `python .sdda/sdda.py roster scaffold --mission {n}` "
+                "le pré-remplit (recommandé), ou remplir la "
                 "section `## 2. Roster déclaré` du template de topologie. C'est l'architecte qui déclare "
                 "les agents, leurs rôles et leurs outils — le framework les vérifie, il ne les invente "
                 "pas (P7)",

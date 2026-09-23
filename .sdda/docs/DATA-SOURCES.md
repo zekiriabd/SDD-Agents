@@ -21,7 +21,7 @@ Trois objets, et une règle par objet.
 |---|---|---|
 | **Store** | *où est la donnée, et avec quelles clés ?* | c'est le **seul** endroit qui touche à une authentification, et il n'en porte que le **nom de variable** |
 | **Source** | *qu'est-ce que c'est, et qu'en expose-t-on ?* | elle ne porte ni URL, ni chemin absolu, ni secret — seulement un `store` et un localisateur relatif |
-| **Manifeste** | *où est déclaré tout cela ?* | STACK.md est gitignoré ; les manifestes sont **versionnés**, et ce sont eux que l'on relit en revue |
+| **Déclaration** | *où est déclaré tout cela ?* | inline dans `STACK.md ## Active Data Sources`, **versionné** — il ne porte que des noms de variables, les valeurs sont dans `.env`. Seul manifeste optionnel : un `mcp.json` standard, importé tel quel |
 
 Cette séparation est ce qui permet de déclarer trente sources sans multiplier
 par trente les endroits où une clé d'API peut fuir. Elle est aussi ce qui rend
@@ -99,7 +99,7 @@ un fichier `.env` gitignoré porte sa valeur, et le framework ne lit jamais la
 valeur.**
 
 ```yaml
-# workspace/stack/sources/apis.sources.yml   <- VERSIONNÉ
+# workspace/stack/STACK.md ## Active Data Sources   <- VERSIONNÉ (noms seulement)
 Stores:
   - id: crm_api
     kind: http

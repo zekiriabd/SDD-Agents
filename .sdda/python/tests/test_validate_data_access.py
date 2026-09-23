@@ -17,8 +17,11 @@ from sdda_lib import source_registry as sr
 from sdda_scripts import validate_data_access as vda
 
 STACK = "workspace/stack/STACK.md"
-MANIFEST = "workspace/stack/sources/files.sources.yml"
-MCP_CONFIG = "workspace/stack/sources/mcp.json"
+#: La surface de données se déclare INLINE dans STACK.md (v3). Le seul manifeste
+#: qui subsiste est un `mcp.json` au format standard, à côté de STACK.md.
+MANIFEST = STACK
+MCP_CONFIG = "workspace/stack/mcp.json"
+SCHEMAS = "workspace/src/SupportAssistant/src/SupportAssistant/data/schemas"
 
 
 @pytest.fixture
@@ -66,7 +69,7 @@ def test_three_connectors_are_resolved(sources_project: Path) -> None:
 
 def test_manifests_and_inline_are_merged(sources_project: Path) -> None:
     data = vda.run(sources_project).data
-    assert data["manifests"] == ["files.sources.yml", "mcp.json"]
+    assert data["manifests"] == ["mcp.json"]
     # `internal_crm` ne vient d'aucune déclaration SDD_Agents : il est importé
     # du fichier MCP standard, et n'existe que parce que l'allowlist le garde.
     assert "internal_crm" in data["envelope"]["stores"]
@@ -177,13 +180,13 @@ def test_duplicate_id_across_manifest_and_stack(sources_project: Path) -> None:
 
 
 def test_manifest_outside_root_is_refused(sources_project: Path) -> None:
-    patch(sources_project, STACK, "  - path: files.sources.yml",
-          "  - path: ../../../../../etc/sources.yml")
+    patch(sources_project, STACK, "  - { path: mcp.json, kind: mcp-config }",
+          "  - { path: ../../../../../etc/mcp.json, kind: mcp-config }")
     assert "DATA_MANIFEST_OUTSIDE_ROOT" in errors(sources_project)
 
 
 def test_manifest_missing(sources_project: Path) -> None:
-    (sources_project / MANIFEST).unlink()
+    (sources_project / MCP_CONFIG).unlink()
     assert "DATA_MANIFEST_MISSING" in errors(sources_project)
 
 
@@ -283,7 +286,7 @@ def test_file_larger_than_cap(sources_project: Path) -> None:
 # Schéma figé
 # ---------------------------------------------------------------------------
 def test_frozen_schema_missing(sources_project: Path) -> None:
-    (sources_project / "workspace/feats/contracts/dataaccess/schemas/order_tracking.schema.json").unlink()
+    (sources_project / SCHEMAS / "order_tracking.schema.json").unlink()
     assert "DATA_SOURCE_SCHEMA_MISSING" in errors(sources_project)
 
 
@@ -293,7 +296,7 @@ def test_declared_field_absent_from_frozen_schema(sources_project: Path) -> None
 
 
 def test_frozen_schema_malformed(sources_project: Path) -> None:
-    (sources_project / "workspace/feats/contracts/dataaccess/schemas/crm_customer.schema.json").write_text(
+    (sources_project / SCHEMAS / "crm_customer.schema.json").write_text(
         "{ pas du json", encoding="utf-8")
     assert "DATA_SOURCE_SCHEMA_MALFORMED" in errors(sources_project)
 

@@ -186,8 +186,8 @@ def _pricing(root: Path) -> dict[str, dict[str, float]]:
 def render_app_config(ctx: Context, template: str) -> str:
     """`app_config.json` — ce que l'application lit au démarrage.
 
-    STACK.md n'est jamais lu au runtime : il est gitignoré, il porte des secrets
-    en clair, et surtout **ce qui est résolu est épinglable**. Deux runs sur deux
+    STACK.md n'est jamais lu au runtime : c'est une déclaration de projet, pas
+    une configuration d'exécution, et surtout **ce qui est résolu est épinglable**. Deux runs sur deux
     configurations différentes ne sont pas comparables, et le pipeline doit
     pouvoir le dire.
     """

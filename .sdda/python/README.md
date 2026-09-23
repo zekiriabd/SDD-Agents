@@ -46,7 +46,7 @@ sont vertes ; G8 exige `datasets` **et** `acceptance`.
 
 ### L'IR
 
-`ir_compiler.py` projette MISSION + CAPs + TOPOLOGY (`.md` + `.mmd`) +
+`ir_compiler.py` projette MISSION + CAPs + TOPOLOGY (graphe Mermaid compris) +
 `contracts/**` + `STACK.md` vers un JSON conforme à `registry/ir.schema.json`.
 Il est **déterministe** (clés triées, LF, `compiledAt` conservé tant que le
 contenu ne change pas) et **n'invente rien** : un champ manquant produit

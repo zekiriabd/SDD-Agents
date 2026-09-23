@@ -9,8 +9,8 @@ Rejouer la validation complète de l'IR pour apprendre qu'un hash a bougé rend
 la vérification assez chère pour qu'on finisse par la sauter.
 
 Ce qui est comparé : les empreintes de `compiledFrom` recalculées depuis le
-disque — MISSION, chaque CAP, la topologie (`.md` **et** `.mmd`), `STACK.md`, et
-**chaque contrat**. Un contrat absent de cette liste serait un trou : éditer un
+disque — MISSION, chaque CAP, la topologie (graphe compris : c'est une section du
+`.md`), `STACK.md`, et **chaque contrat**. Un contrat absent de cette liste serait un trou : éditer un
 schéma d'outil laisserait l'IR se déclarer frais tout en décrivant autre chose.
 
 Usage :

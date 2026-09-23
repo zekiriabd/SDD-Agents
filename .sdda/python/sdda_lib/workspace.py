@@ -30,7 +30,13 @@ from sdda_lib import __version__ as _LIB_VERSION
 #: Version courante de l'arborescence `workspace/`. Historique :
 #:   1 — première version datée : tree canonique de `smoke_check.WORKSPACE_TREE`,
 #:       retrait des répertoires fantômes `.sys/.routing`, `.sys/.cache`, `.sys/.reverse`.
-WORKSPACE_VERSION: int = 2
+#:   2 — quatre entrées : feats/ · stack/ · src/ · proof/ · .sys/.
+#:   3 — l'entrée de l'utilisateur tient en trois choses : `STACK.md` versionné
+#:       (secrets dans `.env`), du Markdown seul sous `feats/` (roster en
+#:       `{n}-roster.md`, graphe inline), la vérité terrain sous `proof/seed/`.
+#:       Les schémas figés partent avec le code (`src/{App}/.../data/schemas/`),
+#:       les manifestes de sources rentrent dans STACK.md.
+WORKSPACE_VERSION: int = 3
 
 WORKSPACE_JSON_REL = "workspace/.sys/workspace.json"
 

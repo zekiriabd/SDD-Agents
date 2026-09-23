@@ -1,4 +1,4 @@
-"""Parseur du sous-ensemble Mermaid `flowchart` utilisé par `{n}-topology.mmd`.
+"""Parseur du sous-ensemble Mermaid `flowchart` du bloc ```mermaid de `{n}-topology.md` (§4 Le graphe).
 
 Le graphe d'orchestration est DESSINÉ par le architect-topology (Mermaid) ; le
 compilateur IR le lit ici. Supporté :

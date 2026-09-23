@@ -771,7 +771,7 @@
         "ir-termination-validated",
         "cycles-bounded"
       ],
-      "evalNotes": "Le graphe est dessiné ({n}-topology.mmd) et validé DÉTERMINISTIQUEMENT sur l'IR — atteignabilité, terminaison, cycles bornés. HumanInTheLoopEnabled exige ce pattern (ou un pattern avec checkpointing).",
+      "evalNotes": "Le graphe est dessiné (bloc mermaid de {n}-topology.md §4) et validé DÉTERMINISTIQUEMENT sur l'IR — atteignabilité, terminaison, cycles bornés. HumanInTheLoopEnabled exige ce pattern (ou un pattern avec checkpointing).",
       "docRef": ".sdda/docs/ORCHESTRATION-PATTERNS.md#graph"
     },
     {

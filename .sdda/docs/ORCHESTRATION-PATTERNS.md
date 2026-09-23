@@ -79,8 +79,9 @@ interruption humaine.
 - **Coût** : explicite et calculable — c'est son principal avantage.
 - **Mode d'échec dominant** : la **complexité de conception**. Un graphe à 15
   nœuds qu'on n'a jamais dessiné est ingérable.
-- **Obligations** : le graphe est dessiné (`{n}-topology.mmd`) et validé
-  déterministiquement sur l'IR — atteignabilité, terminaison, cycles bornés.
+- **Obligations** : le graphe est dessiné (bloc ```mermaid de `{n}-topology.md`
+  §4) et validé déterministiquement sur l'IR — atteignabilité, terminaison,
+  cycles bornés.
 
 ### `plan-execute` — plan explicite puis exécution
 Un appel `deep` produit un plan ; des appels `fast` l'exécutent étape par étape.

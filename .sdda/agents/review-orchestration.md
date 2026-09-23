@@ -48,7 +48,7 @@ cycles observés et leur longueur.
 Read **uniquement** :
 - ce rapport et `workspace/.sys/reports/{n}/L5-*.json`, `L7-*.json` ;
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `agents[].bounds`, `agents[].handoff` ;
-- `workspace/feats/topology/{n}-topology.md` et `.mmd` — le dessin, les justifications P7, l'alternative écartée, le budget estimé ;
+- `workspace/feats/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4), les justifications P7, l'alternative écartée, le budget estimé ;
 - `workspace/feats/contracts/agents/{n}-*.agent.md §13` — contrats de handoff ;
 - `workspace/.sys/.validation/reports/cost-latency-{n}.md` **si présent** — la queue qu'il t'a signalée.
 
