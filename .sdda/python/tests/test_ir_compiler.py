@@ -201,6 +201,26 @@ def test_unknown_tool_in_agent_contract_is_a_compile_error(project: Path) -> Non
     assert "[IR_COMPILE_FAILED]" in out and "1-ghost-tool" in out
 
 
+def test_tools_resolve_by_the_name_the_model_calls(project: Path) -> None:
+    """`invoice_lookup` (nom, §1 du contrat) et `invoice-lookup` (id kebab) désignent `1-invoice-lookup`.
+
+    Roster, topologie et CAPs parlent la langue du modèle (`refunds_search`) ;
+    le contrat porte un id kebab dérivé. Ne résoudre que par id rendait
+    `## Allocated To` incompilable sur 21 outils au premier run réel.
+    """
+    contract = project / "workspace/feats/contracts/agents/1-billing-specialist.agent.md"
+    contract.write_text(contract.read_text(encoding="utf-8").replace("| `1-invoice-lookup` |", "| `invoice_lookup` |"),
+                        encoding="utf-8")
+    cap = project / "workspace/feats/caps/1-2-ExplainInvoiceLine.md"
+    cap.write_text(cap.read_text(encoding="utf-8").replace("- tools: `invoice-lookup`,", "- tools: `invoice_lookup`,"),
+                   encoding="utf-8")
+    code, out = run_main(ir_compiler.main, ["--root", str(project), "--mission", "1"])
+    assert code == 0, out
+    ir = ir_compiler.load_ir(paths.ir_path(project, 1))
+    billing = next(a for a in ir["agents"] if a["id"] == "1-billing-specialist")
+    assert "1-invoice-lookup" in billing["tools"] and "1-invoice_lookup" not in billing["tools"]
+
+
 def test_cli_exit_codes_and_json(project: Path) -> None:
     code, out = run_main(ir_compiler.main, ["--root", str(project), "--json", "--compiled-at", FIXED_AT])
     assert code == 0
