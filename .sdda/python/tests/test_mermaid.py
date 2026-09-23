@@ -101,6 +101,24 @@ def test_quoted_labels_lose_their_quotes_but_keep_their_punctuation() -> None:
     assert g.nodes["b"].label == "question ?"
 
 
+def test_a_quoted_edge_label_may_contain_pipes() -> None:
+    """`|"a || b"|` : la seule façon Mermaid d'écrire une condition avec `||`.
+
+    Le libellé s'arrêtait au premier `|` interne, la ligne ne parsait plus, et
+    l'arête de repli d'un routeur disparaissait sans erreur — G2 rendait ensuite
+    « routeur sans arête isFallback » sur une topologie correcte.
+    """
+    g = parse('flowchart TD\n'
+              '  r{router} -->|"confidence < 0.7 || intent == unclear (repli)"| clarify([clarify])\n'
+              '  r -->|"intent == billing"| billing[billing]\n'
+              '  r -->|simple| other[other]\n')
+    by_dst = {e.dst: e.label for e in g.edges}
+    assert by_dst["clarify"] == "confidence < 0.7 || intent == unclear (repli)"
+    assert by_dst["billing"] == "intent == billing"      # les guillemets délimitent, ils ne sont pas la condition
+    assert by_dst["other"] == "simple"
+    assert set(g.nodes) == {"r", "clarify", "billing", "other"}
+
+
 def test_a_node_declared_alone_on_its_line_exists_without_an_edge() -> None:
     g = parse("flowchart TD\n  seul[Nœud isolé]\n")
     assert g.nodes["seul"].label == "Nœud isolé" and g.edges == []

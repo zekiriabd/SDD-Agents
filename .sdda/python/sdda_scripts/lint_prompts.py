@@ -314,6 +314,22 @@ def check_file(root: Path, path: Path, tool_names: set[str],
 # ---------------------------------------------------------------------------
 # 2. Le code — c'est ici que la régression se produit
 # ---------------------------------------------------------------------------
+_DEF_HEADER_RE = re.compile(r"(?:^|\n)\s*(?:async\s+def|def|class)\s+[^\n]*:\s*$")
+_PREAMBLE_RE = re.compile(r"^(?:\s*(?:#[^\n]*\n|from\s+__future__\s+import[^\n]*\n|\s*\n))*\s*$")
+
+
+def _is_docstring(text: str, start: int) -> bool:
+    """Le littéral qui commence à `start` est-il une docstring (module, classe, fonction) ?
+
+    Module : rien avant lui que shebang, commentaires, `from __future__` et
+    lignes vides. Classe / fonction : la ligne précédente est un en-tête `def`
+    ou `class` terminé par `:`. Tout autre littéral, même long et impératif,
+    reste suspect — c'est précisément un prompt dans une f-string.
+    """
+    before = text[:start]
+    return bool(_PREAMBLE_RE.match(before)) or bool(_DEF_HEADER_RE.search(before.rstrip(" \t")))
+
+
 def scan_inline_prompts(root: Path, report: Report) -> int:
     """Un littéral long et impératif hors du module de chargement est un prompt."""
     src = paths.workspace(root) / "src"
@@ -333,6 +349,15 @@ def scan_inline_prompts(root: Path, report: Report) -> int:
         for match in literal_re.finditer(text):
             literal = match.group(1)
             if len(literal) < INLINE_MIN_CHARS or not INSTRUCTION_RE.search(literal):
+                continue
+            if _is_docstring(text, match.start()):
+                # Une docstring de module, de classe ou de fonction est de la
+                # documentation, pas un prompt : le modèle ne la lit jamais.
+                # Sans cette exception, le runtime GÉNÉRÉ par le framework
+                # (`data/formats/__init__.py`, dont la docstring explique en
+                # français impératif pourquoi il ne convertit rien) déclenchait
+                # le hook de fin sur l'agent qui venait de s'arrêter — et qui
+                # n'avait pas écrit ce fichier.
                 continue
             line = text[: match.start()].count("\n") + 1
             report.error(

@@ -67,6 +67,26 @@ def test_a_long_sql_literal_is_not_a_prompt(project: Path) -> None:
     assert "PROMPT_INLINE_FORBIDDEN" not in errors(lp.run(project, mission=1))
 
 
+def test_a_docstring_is_documentation_not_a_prompt(project: Path) -> None:
+    """Le runtime GÉNÉRÉ porte des docstrings longues et impératives (en français) : ce n'est pas un prompt.
+
+    Le hook de fin d'agent le lisait comme tel et bloquait l'agent qui venait de
+    s'arrêter — lequel n'avait pas écrit ce fichier.
+    """
+    doc = ('"""Lecteurs de format — un fichier en entrée, des dictionnaires en sortie.\n\n'
+           "Ils ne font aucune conversion implicite : le schéma figé fait foi, et une\n"
+           "valeur convertie en silence est une donnée fausse. Ne jamais convertir un\n"
+           "identifiant en entier ; toujours citer la source ; refuser toute valeur hors schéma.\n"
+           '"""\n')
+    write(project, "workspace/src/data/formats/__init__.py", doc + "from __future__ import annotations\n")
+    write(project, "workspace/src/data/formats/csv.py",
+          "from __future__ import annotations\n\n\ndef read(path):\n    " + doc.replace("\n", "\n    ") + "    return []\n")
+    assert "PROMPT_INLINE_FORBIDDEN" not in errors(lp.run(project, mission=1))
+    # Le même texte affecté à une variable reste un prompt inline.
+    write(project, "workspace/src/data/formats/bad.py", "SYSTEM = " + doc)
+    assert "PROMPT_INLINE_FORBIDDEN" in errors(lp.run(project, mission=1))
+
+
 def test_the_prompt_loading_module_may_hold_prompt_text(project: Path) -> None:
     write(project, "workspace/src/prompts.py",
           'FALLBACK = """\nTu es un assistant. Réponds en citant la source. Ne jamais inventer.\n'
