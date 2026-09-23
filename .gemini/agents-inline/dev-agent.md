@@ -46,10 +46,10 @@ Read **uniquement** :
   `## Active Observability`.
 - `.sdda/stacks/framework/{fw}.md` + `.libs.json`, `.sdda/stacks/lang/{lang}.md`,
   `.sdda/stacks/guardrails/*.md` actifs.
-- `workspace/src/tools/**`, `workspace/src/retrieval/**`, `workspace/src/data/**` —
+- `workspace/src/{App}/tools/**`, `workspace/src/{App}/retrieval/**`, `workspace/src/{App}/data/**` —
   **en lecture** : les interfaces que tu câbles. TOOL GATE et RETRIEVAL GATE
   doivent être vertes (P5) ; sinon `[TOOL_GATE_NOT_PASSED]` / `[RETRIEVAL_GATE_NOT_PASSED]`, STOP.
-- `workspace/src/agents/{agent-slug}/**` existant — Edit-augment.
+- `workspace/src/{App}/agents/{agent-slug}/**` existant — Edit-augment.
 
 Prompt absent ou hash différent de `promptHash` de l'IR :
 ```
@@ -62,7 +62,7 @@ FIX: recompiler l'IR ou relancer dev-prompt ; ne jamais éditer le prompt depuis
 
 ## STEP 3 — Charger le prompt au runtime, vérifier son hash
 
-`workspace/src/agents/{agent-slug}/` : le prompt est **lu depuis le fichier** au
+`workspace/src/{App}/agents/{agent-slug}/` : le prompt est **lu depuis le fichier** au
 démarrage, son hash recalculé et comparé à celui de l'IR ; écart → échec
 explicite au démarrage, pas un WARN. Le hash est attaché à chaque span LLM de
 cet agent (P10).
@@ -146,7 +146,7 @@ exige les datasets de `qa-evals`.
 - [ ] Sortie validée strictement contre `outputSchema`
 - [ ] Scopes mémoire et schémas de handoff respectés
 - [ ] Spans complets par tour
-- [ ] **Rien écrit hors `workspace/src/agents/{agent-slug}/`** — ni datasets, ni prompts, ni contrats
+- [ ] **Rien écrit hors `workspace/src/{App}/agents/{agent-slug}/`** — ni datasets, ni prompts, ni contrats
 
 ---
 

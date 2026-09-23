@@ -1,6 +1,6 @@
 ---
 name: dev-retrieval
-description: Implémente l'ingestion, le chunking, l'index et le retriever de chaque retrieval contract depuis l'IR et les stacks actives. Écrit uniquement dans workspace/src/retrieval/. Calcule et publie l'indexHash. Ne touche ni aux contrats, ni aux datasets, ni aux prompts.
+description: Implémente l'ingestion, le chunking, l'index et le retriever de chaque retrieval contract depuis l'IR et les stacks actives. Écrit uniquement dans workspace/src/{App}/retrieval/. Calcule et publie l'indexHash. Ne touche ni aux contrats, ni aux datasets, ni aux prompts.
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -55,7 +55,7 @@ Read **uniquement** :
 - `.sdda/stacks/rag/{pattern}.md`, `.sdda/stacks/vectorstore/{store}.md`,
   `.sdda/stacks/embedding/{emb}.md`, `.sdda/stacks/rerank/{reranker}.md`
   + `.libs.json` — idiomes, versions épinglées.
-- `workspace/src/retrieval/**` existant — Edit-augment.
+- `workspace/src/{App}/retrieval/**` existant — Edit-augment.
 
 IR absent → `[IR_NOT_FOUND]`, STOP. Aucun `retrievers[]` → tu rends la main en
 une ligne.
@@ -64,7 +64,7 @@ une ligne.
 
 ## STEP 3 — Ingestion : le chunker est une fonction pure
 
-`workspace/src/retrieval/{index-slug}/ingest/` : loaders par format, chunker,
+`workspace/src/{App}/retrieval/{index-slug}/ingest/` : loaders par format, chunker,
 enrichissement (`contextual` : préfixe de contexte généré **à l'ingestion**,
 amorti), embedding par lots, écriture dans l'index.
 
@@ -80,7 +80,7 @@ se déclenche pas toute seule « quand ça semble vieux ».
 
 ## STEP 4 — Retriever : la stratégie de l'IR, rien d'autre
 
-`workspace/src/retrieval/{index-slug}/retriever/` :
+`workspace/src/{App}/retrieval/{index-slug}/retriever/` :
 - `hybrid` : BM25 + vecteur, fusion RRF aux `binding.hybridWeights` de l'IR.
 - `rerank` si déclaré, sur `RerankTopN`, jamais au-delà.
 - `parent-child` : recherche sur le petit chunk, service du parent.
@@ -111,11 +111,11 @@ ne retrouve pas est une citation inventée.
 
 Après ingestion sur le corpus de référence :
 ```bash
-python .sdda/python/sdda_lib/hashing.py --index workspace/src/retrieval/{index-slug} --manifest
+python .sdda/python/sdda_lib/hashing.py --index workspace/src/{App}/retrieval/{index-slug} --manifest
 ```
 Le manifeste (`indexHash`, config de chunk, `embeddingModel`, nombre de
 documents et de chunks, date) est écrit dans
-`workspace/src/retrieval/{index-slug}/index.manifest.json`. `indexHash` entre
+`workspace/src/{App}/retrieval/{index-slug}/index.manifest.json`. `indexHash` entre
 dans le tuple P10 ; l'IR sera recompilé avec par la commande.
 
 Chaque requête émet un span `retrieval` : requête, filtres appliqués, documents
@@ -137,7 +137,7 @@ le golden set de `qa-evals`.
 - [ ] Résolveur de citation déterministe présent
 - [ ] `index.manifest.json` avec `indexHash` produit
 - [ ] Span `retrieval` avec scores et filtres
-- [ ] Aucun secret ; rien écrit hors `workspace/src/retrieval/`
+- [ ] Aucun secret ; rien écrit hors `workspace/src/{App}/retrieval/`
 
 ---
 

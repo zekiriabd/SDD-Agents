@@ -34,7 +34,7 @@ lecture seule.
 - **Quand** : les besoins sont connus et stables. **Défaut recommandé** en
   production, et de loin.
 - **Contrat** : chaque vue est un artefact versionné dans
-  `workspace/src/data/views/`, avec un commentaire décrivant son intention
+  `workspace/src/{App}/data/views/`, avec un commentaire décrivant son intention
   métier — commentaire qui devient la `description` de l'outil, donc du prompt.
 
 ### `repository-tools` — outils paramétrés, requêtes figées

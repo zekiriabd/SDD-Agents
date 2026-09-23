@@ -1,6 +1,6 @@
 ---
 name: dev-tools
-description: Implémente les outils du système généré depuis l'IR et les tool contracts — schéma, transport, enveloppe de sûreté, erreurs déclarées, bornes. Lit workspace/.sys/.ir/{n}-system.ir.json et les stacks actives ; écrit uniquement dans workspace/src/tools/. Ne touche ni aux contrats, ni aux prompts, ni aux datasets.
+description: Implémente les outils du système généré depuis l'IR et les tool contracts — schéma, transport, enveloppe de sûreté, erreurs déclarées, bornes. Lit workspace/.sys/.ir/{n}-system.ir.json et les stacks actives ; écrit uniquement dans workspace/src/{App}/tools/. Ne touche ni aux contrats, ni aux prompts, ni aux datasets.
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -47,7 +47,7 @@ Read **uniquement** :
 - `.sdda/stacks/lang/{lang}.md`, `.sdda/stacks/framework/{fw}.md` +
   `.libs.json`, `.sdda/stacks/tools/{transport}.md` actifs — idiomes, versions
   épinglées, mapping de couches. **Tu n'inventes ni lib ni version.**
-- `workspace/src/tools/**` existant — mode Edit-augment : tu ne réécris pas ce
+- `workspace/src/{App}/tools/**` existant — mode Edit-augment : tu ne réécris pas ce
   qui existe et fonctionne.
 
 ```
@@ -60,7 +60,7 @@ FIX: franchir la TOPOLOGY GATE (/sdda-topology {n}) ; le code se génère depuis
 
 ## STEP 3 — Un module par outil, le schéma d'abord
 
-Pour chaque outil : `workspace/src/tools/{tool-slug}/` avec la définition
+Pour chaque outil : `workspace/src/{App}/tools/{tool-slug}/` avec la définition
 exposée au modèle (nom, **description recopiée à l'identique** depuis le
 contrat, `input_schema`, `output_schema`) et l'implémentation.
 
@@ -139,7 +139,7 @@ sont écrits par `qa-tests` et exécutés par la commande.
 - [ ] Auth par nom d'env, `AUTH_FAILED` sans contournement ; aucun secret dans le code
 - [ ] Sortie `untrusted` balisée, tronquée, validée
 - [ ] Span de trace par appel, args redigés
-- [ ] Rien écrit hors `workspace/src/tools/`
+- [ ] Rien écrit hors `workspace/src/{App}/tools/`
 
 ---
 

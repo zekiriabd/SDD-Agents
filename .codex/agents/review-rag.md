@@ -43,7 +43,7 @@ Read **uniquement** :
 - `workspace/.sys/reports/{n}/L4-*.json`, `L7-*.json` — `groundedness`,
   `answer_relevance`, `abstention_rate`, **par item**, k runs.
 - `workspace/proof/calibration/*.json` — κ de chaque juge utilisé.
-- `workspace/src/retrieval/*/index.manifest.json` — `indexHash`, config
+- `workspace/src/{App}/retrieval/*/index.manifest.json` — `indexHash`, config
   effective, nombre de chunks.
 - Un échantillon de spans `retrieval` dans `workspace/.sys/traces/runs/` — documents
   retournés et scores.

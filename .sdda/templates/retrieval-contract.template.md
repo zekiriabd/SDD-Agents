@@ -258,7 +258,7 @@ Verdict G4 : <🟢 \| 🟡 \| 🔴> — rapport : `workspace/.sys/reports/retrie
 
 | Niveau | Contenu | Fichier |
 |---|---|---|
-| L1 | chunkers, parseurs, résolution de citations — fonctions pures, LLM mocké | `workspace/src/retrieval/tests/` |
+| L1 | chunkers, parseurs, résolution de citations — fonctions pures, LLM mocké | `workspace/src/{App}/retrieval/tests/` |
 | L3 | golden set §9 contre les seuils §8, **aucun agent** | `workspace/proof/suites/retrieval-{n}-{index-slug}.yaml` |
 | L6 | ingestion bout-en-bout sur la base de test, vrai index | marqué `network` |
 | L8 | empoisonnement, franchissement d'autorisation, PII | suite adversariale |

@@ -37,8 +37,8 @@ Read **uniquement** :
   `## Active Observability`, `## Active Secrets` (**noms**).
 - `workspace/feats/missions/{n}-*.md` — `## Actors` : qui appelle, avec quelle identité.
 - `.sdda/stacks/serving/{surface}.md` + `.libs.json`, `.sdda/stacks/lang/{lang}.md`.
-- `workspace/src/orchestration/**` — **en lecture** : le point d'entrée du run.
-- `workspace/src/serving/**` existant — Edit-augment.
+- `workspace/src/{App}/orchestration/**` — **en lecture** : le point d'entrée du run.
+- `workspace/src/{App}/serving/**` existant — Edit-augment.
 
 IR absent → `[IR_NOT_FOUND]`, STOP.
 
@@ -46,7 +46,7 @@ IR absent → `[IR_NOT_FOUND]`, STOP.
 
 ## STEP 3 — Le point d'entrée : identité d'abord, puis schéma
 
-`workspace/src/serving/` : la surface reçoit une requête, **établit l'identité
+`workspace/src/{App}/serving/` : la surface reçoit une requête, **établit l'identité
 de l'appelant depuis le canal** (token, en-tête, session, utilisateur du bot,
 opérateur du CLI) — jamais depuis un champ du message —, valide l'entrée contre
 `inputSchema`, et appelle le run d'orchestration avec un **contexte d'exécution**
@@ -104,7 +104,7 @@ schéma + `run_id` ; requête sans identité → refus ; run qui lève
 - [ ] Erreurs du run mappées vers la Failure Policy ; aucune stack trace exposée
 - [ ] `run_id` retourné ; trace écrite selon la politique PII
 - [ ] Aucune logique métier, aucun prompt, aucun outil, aucun secret dans `src/serving/`
-- [ ] Rien écrit hors `workspace/src/serving/`
+- [ ] Rien écrit hors `workspace/src/{App}/serving/`
 
 ---
 

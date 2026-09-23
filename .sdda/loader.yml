@@ -499,7 +499,6 @@ dev-backend:
     # racine du projet applicatif (pyproject.toml, package.json, Dockerfile,
     # README.md, .env.example) ; `**/app/**` = composition, config, Domaine.
     - workspace/src/*/*
-    - workspace/src/*/src/*/*                        # racine du paquet (py.typed, __init__, index)
     - workspace/src/**/app/**
   forbidden_writes:
     - workspace/src/*/prompts/**        # [PROMPT_OWNERSHIP_VIOLATION]
@@ -553,7 +552,7 @@ qa-tests:
     - workspace/feats/contracts/tools/{n}-*.tool.md        # volatile
     - workspace/src/**                               # volatile — lecture seule
   writes:
-    - workspace/src/tests/**            # tests TRANSVERSES — la zone propre de qa-tests
+    - workspace/src/*/tests/**          # tests TRANSVERSES — la zone propre de qa-tests
     - workspace/src/**/tests/**         # tests de couche, partagés (cf. shared_writes)                      # territoire test UNIQUEMENT
   forbidden_writes:
     # PAS de `workspace/src/**` ici. Le motif recouvrait entièrement les
