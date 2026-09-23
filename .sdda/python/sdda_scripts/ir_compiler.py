@@ -106,6 +106,7 @@ class CompileContext:
     config: LayeredConfig | None = None
     agent_ids: set[str] = field(default_factory=set)
     tool_ids: set[str] = field(default_factory=set)
+    tool_names: dict[str, str] = field(default_factory=dict)   # nom appelé par le modèle -> id de contrat
     retriever_ids: set[str] = field(default_factory=set)
 
     def fail(self, what: str, fix: str, location: str) -> None:
@@ -115,6 +116,29 @@ class CompileContext:
         """`billing-specialist` -> `1-billing-specialist` (id qualifié par la mission)."""
         s = markdown_io.strip_code(slug)
         return s if re.match(r"^\d+-", s) else f"{self.number}-{s}"
+
+    def canonical_tool(self, slug: str) -> str:
+        """Le contrat d'outil que désigne `slug`, quelle que soit la forme employée.
+
+        Un outil a DEUX identifiants : le NOM que le modèle appelle
+        (`refunds_search`, §1 du contrat, celui que roster, topologie et CAPs
+        emploient) et l'ID de son contrat (`1-refunds-search`, kebab, celui du
+        fichier). `gen_source_tools` dérive le second du premier en remplaçant
+        `_` par `-`. Ne résoudre que par id rendait `## Allocated To` et le §4 des
+        contrats d'agents incompilables dès qu'ils parlaient la langue du
+        modèle — 21 outils sur 21 au premier run réel. Ordre : id exact, puis
+        nom déclaré, puis id kebab dérivé du nom. Non résolu -> l'id qualifié
+        tel quel, et l'appelant émet `sans contrat` comme avant.
+        """
+        s = markdown_io.strip_code(slug)
+        q = self.qualified(s)
+        if q in self.tool_ids:
+            return q
+        by_name = self.tool_names.get(s)
+        if by_name:
+            return by_name
+        alt = self.qualified(s.replace("_", "-"))
+        return alt if alt in self.tool_ids else q
 
 
 # --------------------------------------------------------------------------
@@ -730,8 +754,9 @@ def _resolve_node(ctx: CompileContext, node: mermaid.MermaidNode) -> tuple[str, 
         q = ctx.qualified(candidate)
         if q in ctx.agent_ids:
             return "agent", q
-        if q in ctx.tool_ids:
-            return "tool", q
+        t = ctx.canonical_tool(candidate)
+        if t in ctx.tool_ids:
+            return "tool", t
         if q in ctx.retriever_ids:
             return "retriever", q
     label = node.label.lower()
@@ -864,7 +889,7 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
     for cap in caps:
         loc = f"workspace/feats/caps/{cap.id}.md"
         alloc_agents = sorted({ctx.qualified(a) for a in cap.allocated.get("agents", [])} | set(agents_by_cap.get(cap.id, [])))
-        alloc_tools = sorted({ctx.qualified(t) for t in cap.allocated.get("tools", [])})
+        alloc_tools = sorted({ctx.canonical_tool(t) for t in cap.allocated.get("tools", [])})
         alloc_retr = sorted({ctx.qualified(r) for r in cap.allocated.get("retrievers", [])})
         for kind, ids, known in (("agent", alloc_agents, ctx.agent_ids), ("outil", alloc_tools, ctx.tool_ids), ("retriever", alloc_retr, ctx.retriever_ids)):
             for i in ids:
@@ -1100,8 +1125,12 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         ctx.fail(f"aucun contrat d'agent `workspace/feats/contracts/agents/{number}-*.agent.md`", "la topologie produit au moins un contrat d'agent", str(paths.contracts_dir(root, "agents")))
     ctx.agent_ids = {a["id"] for a in agents}
     ctx.tool_ids = {t["id"] for t in tools}
+    ctx.tool_names = {str(t["name"]): t["id"] for t in tools if t.get("name")}
     ctx.retriever_ids = {r["id"] for r in retrievers}
     for a in agents:
+        # Le §4 d'un contrat d'agent nomme les outils comme le modèle les appelle ;
+        # l'IR les porte par id de contrat (cf. `CompileContext.canonical_tool`).
+        a["tools"] = sorted({ctx.canonical_tool(i) for i in a.get("tools", [])})
         for kind, ids, known in (("outil", a.get("tools", []), ctx.tool_ids), ("retriever", a.get("retrievers", []), ctx.retriever_ids)):
             for i in ids:
                 if i not in known:
