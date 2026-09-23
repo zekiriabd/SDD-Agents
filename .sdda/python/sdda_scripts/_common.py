@@ -20,6 +20,13 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 
 
 def resolve_root(args: argparse.Namespace) -> Path:
+    # Chaque script passe ici juste après `parse_args` : c'est l'endroit qui
+    # garantit que sa sortie est en UTF-8. Huit scripts de gate (validate-*,
+    # ir-compiler, estimate-budget, compute-status) ne l'appelaient pas et
+    # plantaient en `UnicodeEncodeError` sur une console Windows cp1252 en
+    # affichant leur propre rapport — un verdict rendu illisible par un
+    # accent n'est pas un verdict. Idempotent : le rappeler ne coûte rien.
+    ensure_utf8_stdout()
     return (args.root or paths.find_root()).resolve()
 
 
