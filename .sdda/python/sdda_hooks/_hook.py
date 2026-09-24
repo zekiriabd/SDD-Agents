@@ -275,8 +275,11 @@ WORKSPACE_PREFIX = "workspace/"
 
 def unknown_subagent(hook: str, agent: str, rel: str) -> int:
     """Verdict pour un SOUS-AGENT absent de `loader.yml` : refus sous `workspace/`."""
-    normalized = rel.replace("\\", "/").lstrip("./")
-    if not (normalized == WORKSPACE_PREFIX.rstrip("/") or normalized.startswith(WORKSPACE_PREFIX)):
+    from sdda_scripts.audit_ownership import CASE_INSENSITIVE, normalize  # noqa: E402
+
+    normalized = normalize(rel)
+    probe = normalized.casefold() if CASE_INSENSITIVE else normalized
+    if not (probe == WORKSPACE_PREFIX.rstrip("/") or probe.startswith(WORKSPACE_PREFIX)):
         return ALLOW  # hors du workspace : pas notre affaire
     return deny(hook, "OWNERSHIP_AGENT_UNKNOWN",
                 f"`{agent}` n'est dans aucune matrice d'ownership et touche `{normalized}`",
