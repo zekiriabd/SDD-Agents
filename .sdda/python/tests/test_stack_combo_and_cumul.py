@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -27,12 +28,24 @@ HOOKS = PYTHON_DIR / "sdda_hooks"
 SCRIPTS = PYTHON_DIR / "sdda_scripts"
 
 
-def _run(script: Path, argv: list[str], env: dict[str, str] | None = None) -> tuple[int, str]:
+def _run(script: Path, argv: list[str], env: dict[str, str] | None = None,
+         cwd: Path | None = None) -> tuple[int, str]:
     """Exécute en sous-processus : un hook est un exécutable, pas une fonction.
 
     Le tester en import raterait précisément ce qui a cassé — le code de sortie,
     qui est le seul canal par lequel un hook refuse une action.
+
+    **Toujours depuis un bac à sable.** `preflight_force_cumul` trouve sa racine
+    en remontant depuis le répertoire courant, et ÉCRIT l'audit des bypass. Lancé
+    depuis le dépôt, chaque passe de la suite ajoutait une dizaine de faux bypass
+    (`SDDA_BYPASS_NOPE`, raison « test ») au journal du VRAI projet : 1 484
+    lignes, dont aucune n'était un contournement réel. Un journal d'audit qu'on
+    pollue n'est plus relu, et c'est alors le vrai bypass qu'on rate.
     """
+    if cwd is None:
+        sandbox = tempfile.mkdtemp(prefix="sdda-hook-")
+        (Path(sandbox) / "workspace").mkdir()
+        cwd = Path(sandbox)
     environment = dict(os.environ)
     # L'environnement du testeur ne doit pas fuir dans le test : une variable
     # `SDDA_BYPASS_*` posée par ailleurs rendrait le résultat dépendant de la
@@ -44,7 +57,7 @@ def _run(script: Path, argv: list[str], env: dict[str, str] | None = None) -> tu
     proc = subprocess.run(
         [sys.executable, str(script), *argv],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        env=environment, stdin=subprocess.DEVNULL,
+        env=environment, stdin=subprocess.DEVNULL, cwd=cwd,
     )
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
@@ -290,6 +303,13 @@ def test_the_cumul_refusal_is_itself_overridable_and_traced() -> None:
                       "SDDA_ALLOW_FORCE": "1"})
     assert code == 0, out
     assert "cumul autorisé" in out
+
+
+def test_the_audit_goes_to_the_project_it_runs_in_never_elsewhere(tmp_path: Path) -> None:
+    (tmp_path / "workspace").mkdir()
+    code, _ = _run(SCRIPTS / "preflight_force_cumul.py", ["--force"], cwd=tmp_path)
+    assert code == 0
+    assert (tmp_path / "workspace/.sys/.audit/bypasses.jsonl").is_file()
 
 
 def test_a_misspelled_bypass_is_refused_not_ignored() -> None:

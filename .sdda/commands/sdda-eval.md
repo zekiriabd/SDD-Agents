@@ -163,8 +163,10 @@ mesure la complaisance d'un modèle envers un autre.
 ## STEP 5 — Exécution des suites L0 → L7 (script, k runs)
 
 ```bash
+# L2 (G3 part suites) : les tests de contrat pytest de qa-tests, pas des items notés
+python .sdda/sdda.py run-tool-suites --mission {n} --json
 python .sdda/sdda.py eval-runner --mission {n} \
-  --levels ${LEVELS:-L0,L1,L2,L3,L4,L5,L6,L7} --runs ${RUNS:-EvalRuns} \
+  --levels ${LEVELS:-L0,L1,L3,L4,L5,L6,L7} --runs ${RUNS:-EvalRuns} \
   --executor {module}:{Executor} --json \
   > workspace/.sys/.validation/{n}-eval.json
 ```
