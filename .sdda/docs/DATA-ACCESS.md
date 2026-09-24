@@ -1,143 +1,189 @@
-# Accès aux bases de données depuis un agent
+# Database access from an agent
 
-Consommé par `architect-data`. C'est une décision de **sécurité** autant
-que d'architecture : un agent avec du text-to-SQL non contraint sur une base de
-production est un incident qui attend son heure.
+Consumed by `architect-data`. This is a **security** decision as much as an
+architecture one: an agent with unconstrained text-to-SQL on a production
+database is an incident waiting to happen.
 
-> **Si la donnée n'est pas dans une base** — des exports de fichiers, un
-> partage réseau, un stockage objet, une API REST, un serveur MCP — la
-> stratégie est `declared-sources`, et le document de référence est
-> **`DATA-SOURCES.md`**. Les principes sont les mêmes (surface déclarée par un
-> humain, schéma figé, enveloppe bornée, filtrage à la source) ; ce qui change
-> est la frontière à vérifier : une racine et une allowlist d'hôtes plutôt
-> qu'un rôle et une allowlist de schémas.
+> **If the data is not in a database** — file exports, a network share, object
+> storage, a REST API, an MCP server — the strategy is `declared-sources`, and
+> the reference document is **`DATA-SOURCES.md`**. The principles are the same
+> (a surface declared by a human, a frozen schema, a bounded envelope, filtering
+> at the source); what changes is the boundary to check: a root and a host
+> allowlist rather than a role and a schema allowlist.
 >
-> Rappel : si la réponse est dans une base, **ce n'est pas un problème de RAG**.
-> Vectoriser des lignes de table pour ensuite ne pas savoir compter est l'erreur
-> classique. Un agent qui doit répondre « combien de factures impayées ce
-> trimestre ? » a besoin d'une requête, pas d'une similarité cosinus.
+> Reminder: if the answer is in a database, **it is not a RAG problem**.
+> Vectorising table rows only to lose the ability to count is the classic
+> mistake. An agent that must answer "how many unpaid invoices this quarter?"
+> needs a query, not a cosine similarity.
 
 ---
 
-## 1. Les cinq stratégies
+## 1. The five strategies
 
-### `view-per-agent` — une vue SQL dédiée par agent ou par CAP
-L'agent ne voit **que** des vues taillées pour ses besoins, sur un rôle en
-lecture seule.
+**Catalogued does not mean loadable.** The five strategies below are described
+in `registry/patterns.registry.json` and accepted by the IR
+(`dataAccess[].binding.strategy`), but only one has its stack fiche on disk:
+`dataaccess/view-per-agent.md` (`[python]`), next to
+`dataaccess/declared-sources.md` (`[python]`, `DATA-SOURCES.md`) and
+`dataaccess/none.md` (`[*]`). `repository-tools`, `semantic-layer`,
+`text-to-sql` and `graphql` have no fiche: activating one in
+`STACK.md ## Active Data Access` loads nothing, and the `preflight_stack_combo`
+hook refuses the spawn (`[STACK_COMBO_UNLOADABLE]`) rather than let an agent
+invent the missing layer mapping. What follows is the architecture decision,
+valid today for choosing; it is not a promise that every branch can be
+generated.
 
-- **Sûreté : la plus haute.** La surface est définie en SQL, par un humain, et
-  versionnée. Le modèle ne peut pas atteindre ce que la vue n'expose pas.
-- **Coût cognitif pour le modèle : le plus bas.** Une vue bien nommée avec cinq
-  colonnes métier bat n'importe quel schéma de 200 tables.
-- **Coût de maintenance** : une vue par besoin ; le schéma évolue, les vues
-  suivent.
-- **Quand** : les besoins sont connus et stables. **Défaut recommandé** en
-  production, et de loin.
-- **Contrat** : chaque vue est un artefact versionné dans
-  `workspace/src/{App}/data/views/`, avec un commentaire décrivant son intention
-  métier — commentaire qui devient la `description` de l'outil, donc du prompt.
+### `view-per-agent` — a dedicated SQL view per agent or per CAP
+The agent sees **only** views cut to its needs, on a read-only role.
 
-### `repository-tools` — outils paramétrés, requêtes figées
-Le SQL est écrit par des humains et figé dans le code ; l'agent ne fournit que
-des paramètres typés et validés.
+- **Safety: the highest.** The surface is defined in SQL, by a human, and
+  versioned. The model cannot reach what the view does not expose.
+- **Cognitive cost for the model: the lowest.** A well-named view with five
+  business columns beats any 200-table schema.
+- **Maintenance cost**: one view per need; the schema evolves, the views
+  follow.
+- **When**: needs are known and stable. **Recommended default** in production,
+  by far.
+- **Contract**: every view is a versioned artefact in
+  `workspace/src/{App}/data/views/`, with a comment describing its business
+  intent — a comment that becomes the tool's `description`, hence part of the
+  prompt.
 
-- **Sûreté : très haute.** Aucune génération de SQL. Injection impossible par
+### `repository-tools` — parameterised tools, frozen queries
+The SQL is written by humans and frozen in code; the agent only supplies typed,
+validated parameters.
+
+- **Safety: very high.** No SQL generation. Injection impossible by
   construction.
-- **Testabilité : la meilleure.** Chaque outil est une fonction testable en L1 et
-  L2 sans LLM.
-- **Quand** : les opérations sont énumérables (`get_customer_by_id`,
-  `list_unpaid_invoices(period)`). **Le meilleur choix dès qu'il y a écriture.**
-- **Limite** : ne couvre pas l'exploration analytique ouverte.
+- **Testability: the best.** Every tool is a function testable at L1 and L2
+  without an LLM.
+- **When**: operations are enumerable (`get_customer_by_id`,
+  `list_unpaid_invoices(period)`). **The best choice as soon as writes are
+  involved.**
+- **Limit**: does not cover open-ended analytical exploration.
 
-### `semantic-layer` — couche métrique exposée en outil
-L'agent interroge des métriques et dimensions définies (dbt Semantic Layer,
-Cube, LookML), pas des tables.
+### `semantic-layer` — a metrics layer exposed as a tool
+The agent queries defined metrics and dimensions (dbt Semantic Layer, Cube,
+LookML), not tables.
 
-- **Sûreté : haute.** La couche impose les jointures et les agrégations correctes.
-- **Gain propre** : elle élimine la classe d'erreur la plus insidieuse du
-  text-to-SQL — le SQL **syntaxiquement valide et métier-ment faux** (mauvaise
-  jointure, double comptage, filtre de soft-delete oublié).
-- **Quand** : l'organisation possède déjà une couche sémantique. Ne pas en
-  construire une pour un agent.
+- **Safety: high.** The layer enforces correct joins and aggregations.
+- **Specific gain**: it removes the most insidious error class of text-to-SQL —
+  SQL that is **syntactically valid and wrong for the business** (bad join,
+  double counting, forgotten soft-delete filter).
+- **When**: the organisation already owns a semantic layer. Do not build one
+  for an agent.
 
-### `text-to-sql` — génération de SQL par le modèle
-- **Sûreté : la plus basse.** Ne s'envisage que sous **enveloppe complète** :
+### `text-to-sql` — SQL generated by the model
+- **Safety: the lowest.** Only conceivable under a **complete envelope**:
 
-  1. rôle base **en lecture seule**, sur un réplica de préférence ;
-  2. allowlist de schémas et de tables ;
-  3. statements interdits : `DROP`, `TRUNCATE`, `ALTER`, `GRANT`, `CREATE`,
-     `DELETE`, `UPDATE`, `INSERT` ;
-  4. `statement_timeout` serveur (5 s par défaut) ;
-  5. `LIMIT` forcé par réécriture, jamais par confiance dans le modèle ;
-  6. **parsing de l'AST avant exécution** — pas une regex : une regex se contourne ;
-  7. `EXPLAIN` préalable avec refus au-delà d'un coût estimé ;
-  8. journalisation intégrale de toute requête émise ;
-  9. le schéma servi au modèle est **restreint et annoté**, jamais un dump.
+  1. a **read-only** database role, preferably on a replica;
+  2. an allowlist of schemas and tables;
+  3. forbidden statements: `DROP`, `TRUNCATE`, `ALTER`, `GRANT`, `CREATE`,
+     `DELETE`, `UPDATE`, `INSERT`;
+  4. a server-side `statement_timeout` (5 s by default);
+  5. `LIMIT` enforced by rewriting, never by trusting the model;
+  6. **AST parsing before execution** — not a regex: a regex can be bypassed;
+  7. a prior `EXPLAIN`, refused above an estimated cost;
+  8. full logging of every query issued;
+  9. the schema served to the model is **restricted and annotated**, never a dump.
 
-- **Quand** : exploration analytique ouverte, sur des données non sensibles, avec
-  un humain dans la boucle pour les décisions.
-- **À dire au client honnêtement** : la précision du text-to-SQL sur un schéma
-  d'entreprise réel (jointures implicites, colonnes homonymes, soft-delete,
-  conventions historiques) est **très inférieure** aux démonstrations sur des
-  schémas jouets. Le mode d'échec dominant n'est pas l'erreur SQL — c'est la
-  réponse plausible et fausse. `DbAgentRole: full` exige un ADR.
+- **When**: open-ended analytical exploration, on non-sensitive data, with a
+  human in the loop for decisions.
+- **To tell the client honestly**: text-to-SQL accuracy on a real enterprise
+  schema (implicit joins, homonymous columns, soft-delete, historical
+  conventions) is **far below** demos on toy schemas. The dominant failure mode
+  is not the SQL error — it is the plausible, wrong answer.
+  `DbAgentRole: full` requires an ADR.
 
-### `graphql` — un endpoint typé comme outil
-- **Quand** : un GraphQL gouverné existe déjà et porte les autorisations.
-- **Attention** : la profondeur et la complexité des requêtes doivent être
-  plafonnées côté serveur, pas espérées côté agent.
+### `graphql` — a typed endpoint as a tool
+- **When**: a governed GraphQL already exists and carries the authorisations.
+- **Caution**: query depth and complexity must be capped server-side, not hoped
+  for on the agent side.
 
 ---
 
-## 2. Matrice de décision
+## 2. Decision matrix
 
-| Situation | Stratégie |
+| Situation | Strategy |
 |---|---|
-| Besoins connus, lecture, production | **`view-per-agent`** |
-| Opérations énumérables, **écriture impliquée** | **`repository-tools`** |
-| Couche sémantique déjà en place | `semantic-layer` |
-| Exploration analytique ouverte, données non sensibles, humain dans la boucle | `text-to-sql` sous enveloppe |
-| GraphQL gouverné existant | `graphql` |
-| Les données ne sont **pas** dans une base : fichiers, partage réseau, stockage objet, API REST, serveur MCP | **`declared-sources`** → `DATA-SOURCES.md` |
-| Les données sont des documents, pas des lignes | → `RAG-PATTERNS.md` |
-| Les deux | composition : `view-per-agent` **+** RAG documentaire, deux outils distincts |
+| Known needs, read, production | **`view-per-agent`** |
+| Enumerable operations, **writes involved** | **`repository-tools`** |
+| Semantic layer already in place | `semantic-layer` |
+| Open-ended analytical exploration, non-sensitive data, human in the loop | `text-to-sql` under envelope |
+| Existing governed GraphQL | `graphql` |
+| The data is **not** in a database: files, network share, object storage, REST API, MCP server | **`declared-sources`** → `DATA-SOURCES.md` |
+| The data is documents, not rows | → `RAG-PATTERNS.md` |
+| Both | composition: `view-per-agent` **+** document RAG, two distinct tools |
 
 ---
 
-## 3. L'enveloppe de sûreté — obligatoire dès que `DatabaseType != none`
+## 3. The safety envelope — mandatory as soon as `DatabaseType != none`
 
-Déclarée dans `STACK.md ## Active Data Access`, portée dans l'IR
-(`dataAccess[].envelope`), vérifiée par la TOOL GATE et la SAFETY GATE.
+Declared in `STACK.md ## Active Data Access`, carried in the IR
+(`dataAccess[].envelope`), checked by the TOOL GATE and the SAFETY GATE.
 
-| Clé | Défaut | Raison |
+| Key | Default | Reason |
 |---|---|---|
-| `DbAgentRole` | `readonly` | `scoped-write` et `full` exigent un ADR |
-| `DbStatementTimeoutMs` | 5000 | une requête d'agent qui dure est une requête qui a dérapé |
-| `DbMaxRowsReturned` | 500 | protège le budget de tokens autant que la base |
-| `DbAllowedSchemas` | `[public]` | allowlist, jamais denylist |
-| `DbForbiddenStatements` | DDL + DML | vérifié sur l'AST, pas par regex |
-| `DbQueryLogging` | `full` | sans le journal, aucun post-mortem n'est possible |
+| `DbAgentRole` | `readonly` | `scoped-write` and `full` require an accepted ADR |
+| `DbStatementTimeoutMs` | 5000 | an agent query that lasts is a query that has gone off the rails |
+| `DbMaxRowsReturned` | 500 | protects the token budget as much as the database |
+| `DbAllowedSchemas` | `[public]` | allowlist, never denylist |
+| `DbForbiddenStatements` | DDL + DML | checked on the AST, not by regex |
+| `DbQueryLogging` | `full` | without the log, no post-mortem is possible |
 
-**Filtrage par identité** : si les données sont cloisonnées par utilisateur ou
-par tenant, le filtre est appliqué **dans la vue ou dans le paramètre du
-repository**, jamais délégué au modèle. Un filtre post-génération est une fuite
-avec une étape de plus. C'est un finding bloquant de `review-safety`.
+**An ADR only counts if it is accepted and names the decision.** The
+requirement lives in `registry/adr-requirements.yml` (`db-agent-role-write`): an
+ADR covers it only if it carries `Status: Accepted` and a line `Covers:
+DbAgentRole=scoped-write` (or `=full`). Without it, `validate-adr` turns the
+`adr` part of G2 red and `preflight_stack_combo` refuses to spawn the building
+agents (`[ADR_MISSING]`). A `Proposed` ADR authorises nothing: its acceptance is
+what unlocks the implementation.
+
+**The envelope is checked twice, because it can lie in two ways.**
+
+- **Declared** — `python .sdda/sdda.py validate-data-access --mission {n}`
+  confronts STACK.md, the `{n}-data-*` contracts, the disk and the IR, and
+  requires a value for every bound (invariant `db-safety-envelope-present`, G3).
+  The `preflight_db_envelope` hook replays that check when any agent whose code
+  touches data is spawned: an incomplete contract does not get coded.
+- **Implemented** — `python .sdda/sdda.py validate-envelope --mission {n}`, run
+  by `dev-data` at the end of its work, reads `workspace/src/{App}/data/` by
+  static analysis (0 token, nothing imported or executed) and looks, for every
+  `dataAccess[]` entry, for the materialisation of every key: read-only role
+  set, `statement_timeout`, row cap, schema allowlist, an **imported SQL
+  parser** (a guard regex is refused), a query span, the identity filter inside
+  the view, `EXPLAIN` for `text-to-sql`. It also refuses SQL assembled by
+  interpolation (`[DATA_ACCESS_SQL_INTERPOLATED]`), `retry` on a module that
+  writes (`[DATA_ACCESS_RETRY_ON_WRITE]`) and a connection string in clear.
+  Report: `workspace/.sys/.validation/envelope-{n}.json`.
+
+The second check proves **presence**, not effect: finding `statement_timeout`
+in a string does not prove the string runs. The effect is proven by
+`qa-tests`'s L2 tests and the stack smoke. What is absent, however, is proven
+absent — and that was the hole: a contract promising `readonly`, 5,000 ms and
+500 rows went green next to code that opened the usual application connection
+with none of those bounds.
+
+**Identity filtering**: if data is partitioned per user or per tenant, the
+filter is applied **in the view or in the repository parameter**, never
+delegated to the model. A post-generation filter is a leak with one extra step.
+It is a blocking `review-safety` finding.
 
 ---
 
-## 4. Écritures : classes d'effet de bord
+## 4. Writes: side-effect classes
 
-Tout outil d'écriture porte une `side_effect_class` et une `safety_strategy`
-(cf. `DOMAIN-MODEL.md`).
+Every write tool carries a `side_effect_class` and a `safety_strategy`
+(see `DOMAIN-MODEL.md`).
 
-| Classe | Exemple | Stratégie exigée |
+| Class | Example | Required strategy |
 |---|---|---|
-| `read-only` | `list_unpaid_invoices` | aucune |
-| `write-scoped` | `update_ticket_status` | clé d'idempotence + allowlist de transitions |
-| `write-destructive` | `delete_customer_record` | dry-run + confirmation + plafond par run + journal |
-| `external-side-effect` | `send_email`, `create_refund` | idempotence sur clé naturelle + plafond + confirmation au-dessus d'un seuil |
+| `read-only` | `list_unpaid_invoices` | none |
+| `write-scoped` | `update_ticket_status` | idempotency key + transition allowlist |
+| `write-destructive` | `delete_customer_record` | dry-run + confirmation + per-run cap + log |
+| `external-side-effect` | `send_email`, `create_refund` | idempotency on a natural key + cap + confirmation above a threshold |
 
-**Le retry est la piège principal.** Un agent qui réessaie un outil d'écriture
-non idempotent crée trois tickets, envoie trois e-mails, émet trois
-remboursements. La `retry_policy` d'un outil non idempotent doit être
-`no-retry` — ou l'outil doit devenir idempotent.
+**Retry is the main trap.** An agent that retries a non-idempotent write tool
+creates three tickets, sends three e-mails, issues three refunds. The
+`retry_policy` of a non-idempotent tool must be `no-retry` — or the tool must
+become idempotent.
