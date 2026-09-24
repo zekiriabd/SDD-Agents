@@ -306,9 +306,14 @@ PreserveHumanEdits: true              # empreinte du contenu généré ; un fich
 # ═══════════════════════════════════════════════════════════════════════════
 # Combos de stack
 # ═══════════════════════════════════════════════════════════════════════════
-StackComboCheck: strict               # strict | warn
-                                      # une combinaison absente de
-                                      # registry/compatibility.matrix.json bloque.
+StackComboCheck: strict               # strict | warn | off
+                                      # strict : une combinaison absente de
+                                      # registry/compatibility.matrix.json
+                                      # (combos[], signature comboSignatureFields)
+                                      # refuse le spawn -> [STACK_COMBO_UNLISTED].
+                                      # warn : le dit. off : ne regarde pas — et
+                                      # exige un ADR (adr-requirements.yml).
+                                      # Lu par preflight_stack_combo.
                                       # Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1
 
 # ═══════════════════════════════════════════════════════════════════════════
