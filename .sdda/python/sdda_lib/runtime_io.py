@@ -56,7 +56,10 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text, encoding=encoding)
+    # `newline="\n"` : sans lui, Windows traduit chaque `\n` en `\r\n`, et un
+    # ajout à un JSONL réécrit tout le fichier en CRLF — le diff d'un jeu
+    # append-only montre alors toutes les lignes changées, pas celles ajoutées.
+    tmp.write_text(text, encoding=encoding, newline="\n")
     os.replace(tmp, path)
     return path
 
