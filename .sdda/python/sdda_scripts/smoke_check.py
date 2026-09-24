@@ -26,7 +26,12 @@ Ce qu'il vérifie :
     8. (v3+) `stack/` ne contient que STACK.md (+ manifestes déclarés)
                                                          [STACK_DIR_UNEXPECTED_FILE]
     9. (v3+) aucune valeur de secret en clair dans STACK.md — des `${NOM}`,
-       les valeurs dans `workspace/src/{App}/.env`        [STACK_SECRET_IN_CLEAR]
+       les valeurs dans `workspace/assets/.env`, que `install-env` copie
+       vers `workspace/src/{App}/.env`                    [STACK_SECRET_IN_CLEAR]
+   10. les VALEURS de STACK.md tiennent dans leur domaine (types, énumérations,
+       bornes, contraintes entre clés)                    [CONFIG_VALUE_INVALID]
+                                                         [CONFIG_KEY_CONFLICT]
+                                                         [CONFIG_KEY_MISPLACED]
 
 Une ligne activée pour une fiche absente ne charge rien (ARCHITECTURE §2) : la
 détecter ici, avant le premier spawn, coûte cinquante millisecondes ; la
@@ -249,7 +254,7 @@ def check_stack_dir(root: Path, report: Report, stack_text: str | None) -> list[
         report.error("STACK_DIR_UNEXPECTED_FILE",
                      f"{len(strays)} fichier(s) inattendu(s) sous workspace/stack/ : " + ", ".join(strays[:5]),
                      f"{MIGRATE_CMD} rapatrie roster et sources dans leurs sections ; la configuration tient dans STACK.md, "
-                     "les valeurs dans workspace/src/{App}/.env",
+                     "les valeurs dans workspace/assets/.env (copié vers src/{App}/.env par install-env)",
                      "workspace/stack/")
     return strays
 
@@ -278,9 +283,25 @@ def check_secrets_not_in_clear(stack_text: str | None, report: Report) -> list[s
     if leaks:
         report.error("STACK_SECRET_IN_CLEAR",
                      f"{len(leaks)} secret(s) en clair dans workspace/stack/STACK.md : " + ", ".join(leaks[:4]),
-                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans workspace/src/{{App}}/.env (gitignoré) — {MIGRATE_CMD} le fait",
+                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans workspace/assets/.env (gitignoré), "
+                     f"puis `python .sdda/sdda.py install-env` — {MIGRATE_CMD} le fait",
                      "workspace/stack/STACK.md")
     return leaks
+
+
+def check_config(root: Path, report: Report) -> dict[str, int]:
+    """Les VALEURS de STACK.md contre leur domaine — `layered_config.validate_config`.
+
+    Au smoke parce que c'est la première commande après l'amorçage : une
+    `OnBoundExceeded: foo` ou une `CitationMode: requried` n'échoue sinon
+    nulle part, et le premier agent la lit comme une consigne.
+    """
+    from sdda_lib.layered_config import judge_issues, validate_config
+
+    issues = validate_config(root) + judge_issues(root)
+    for issue in issues:
+        (report.error if issue.blocking else report.warn)(issue.cls, issue.message, issue.fix, issue.location)
+    return {"errors": sum(1 for i in issues if i.blocking), "warnings": sum(1 for i in issues if not i.blocking)}
 
 
 def check_version(root: Path, report: Report) -> int | None:
@@ -299,6 +320,8 @@ def check_version(root: Path, report: Report) -> int | None:
 def run(root: Path) -> Report:
     report = Report(name="SMOKE", target=str(root))
     report.data["stack"] = check_stack(root, report)
+    if report.data["stack"].get("present"):
+        report.data["config"] = check_config(root, report)
     report.data["missingDirs"] = check_tree(root, report)
     report.data["workspaceVersion"] = check_version(root, report)
     # Les trois règles de la v3, vérifiées et non racontées : feats/ en Markdown

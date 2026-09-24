@@ -162,8 +162,13 @@ ordre** — la complétude de la déclaration d'abord, sa cohérence ensuite :
 ```bash
 python .sdda/sdda.py validate-packaging    --mission {n}   # qu'est-ce qu'on LIVRE ?
 python .sdda/sdda.py validate-architecture --mission {n}   # P7 : l'architecte a-t-il décidé ?
+python .sdda/sdda.py validate-adr          --mission {n}   # chaque décision qui exige un ADR en a un, accepté
 python .sdda/sdda.py validate-topology     --mission {n} --pre
 ```
+
+`validate-adr` écrit la part `adr` de G2 : `[ADR_MISSING]` / `[ADR_NOT_ACCEPTED]`
+→ STOP + ERROR, rendre la main à l'humain (registre :
+`.sdda/registry/adr-requirements.yml`, `validate-adr --explain`).
 
 `validate_packaging.py` passe **en premier** et c'est délibéré : il ne coûte
 rien, et il tranche la question qui conditionne les autres. Un `ApiFramework`

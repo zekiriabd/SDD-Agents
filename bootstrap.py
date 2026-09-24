@@ -114,132 +114,93 @@ class Combo:
     tools: list[str] = field(default_factory=list)
 
 
-COMBOS: dict[str, Combo] = {
-    "c1": Combo(
-        id="c1",
-        label="Python + LangGraph + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
-        status="design-phase",
-        language="python",
-        frameworks=["langchain", "langgraph"],
-        orchestration="router",
-        rag="hybrid",
-        vectorstore="pgvector",
-        embedding="voyage",
-        dataaccess="view-per-agent",
-        database="PostgreSql",
-        memory="buffer",
-        observability="otel-genai",
-        evalstack="pytest-eval",
-        serving="cli",
-        tools=["mcp"],
-    ),
-    "c1-api": Combo(
-        id="c1-api",
-        label="Idem C1, exposé en API FastAPI + SSE",
-        status="untested",
-        language="python",
-        frameworks=["langchain", "langgraph"],
-        orchestration="router",
-        rag="hybrid",
-        vectorstore="pgvector",
-        embedding="voyage",
-        dataaccess="view-per-agent",
-        database="PostgreSql",
-        memory="buffer",
-        observability="otel-genai",
-        evalstack="pytest-eval",
-        serving="fastapi-sse",
-        deliverable="backend-api",
-        api_framework="fastapi",
-        api_auth="oauth2",
-        backend="python-fastapi",
-        tools=["mcp"],
-    ),
-    "sources": Combo(
-        id="sources",
-        label="Python + LangGraph, sources déclarées (fichiers + API + MCP), sans base",
-        status="untested",
-        language="python",
-        frameworks=["langchain", "langgraph"],
-        orchestration="router",
-        rag="none",
-        vectorstore="none",
-        embedding="none",
-        dataaccess="declared-sources",
-        database="none",
-        memory="buffer",
-        observability="otel-genai",
-        evalstack="pytest-eval",
-        serving="cli",
-        tools=["mcp"],
-    ),
-    "batch": Combo(
-        id="batch",
-        label="Python + LangGraph, traitement par lot (N entrées, reprise, budget par item)",
-        status="untested",
-        language="python",
-        frameworks=["langchain", "langgraph"],
-        orchestration="sequential",
-        rag="none",
-        vectorstore="none",
-        embedding="none",
-        dataaccess="declared-sources",
-        database="none",
-        memory="buffer",
-        observability="otel-genai",
-        evalstack="pytest-eval",
-        serving="batch",
-        deliverable="batch-job",
-        tools=["mcp"],
-    ),
-    # --- `dotnet-api` RETIRÉE le 2026-09-22 -----------------------------------
-    #
-    # Elle déclarait `observability="otel-genai"` et `evalstack="pytest-eval"`
-    # sur `language="csharp"`. Les deux fiches existent, donc l'ancien
-    # `preflight_stack_combo` — qui ne regardait que l'existence du fichier —
-    # la laissait passer. Les deux sont écrites en Python et le disent
-    # (« Suppose `lang/python.md` ») : un bootstrap `--combo dotnet-api`
-    # produisait un STACK.md dont le générateur .NET reçoit du pytest et du
-    # psycopg comme référence d'implémentation.
-    #
-    # `[STACK_LANGUAGE_MISMATCH]` le refuse désormais, et le test
-    # `test_every_combo_is_loadable[dotnet-api]` l'a montré à la première
-    # exécution. Offrir dans le menu une combinaison que la gate du framework
-    # rejette est exactement le faux vert que ce projet existe pour empêcher :
-    # elle sort du catalogue plutôt que de mentir.
-    #
-    # Ce qu'il faut pour la rétablir — rien de plus, rien de moins :
-    #   - `.sdda/stacks/eval/dotnet-test.md`        (xunit.v3 est déjà épinglé
-    #     dans framework/ms-agent-framework.libs.json)
-    #   - une fiche d'observabilité .NET, ou `Languages: python, csharp` sur
-    #     `observability/otel-genai.md` une fois qu'elle porte les deux
-    #     implémentations — les paquets OTel .NET sont déjà épinglés dans
-    #     `serving/aspnet-minimal.libs.json` et `ms-agent-framework.libs.json`.
-    # Le RAG .NET (vectorstore, rag, rerank, dataaccess) reste hors périmètre :
-    # ROADMAP Lot 7.
-    #
-    # `lang/csharp.md`, `framework/ms-agent-framework.md` et
-    # `serving/aspnet-minimal.md` restent activables à la main — c'est la
-    # COMBINAISON préfabriquée qui était incohérente, pas les fiches.
-    # --------------------------------------------------------------------------
-    "minimal": Combo(
-        id="minimal",
-        label="Python + LangChain, agent unique, sans RAG ni base",
-        status="untested",
-        language="python",
-        frameworks=["langchain"],
-        orchestration="single-agent",
-        rag="none",
-        vectorstore="none",
-        embedding="none",
-        dataaccess="none",
-        database="none",
-        memory="buffer",
-        observability="otel-genai",
-        evalstack="pytest-eval",
-        serving="cli",
-    ),
-}
+#: La matrice de compatibilité est LA définition des combinaisons : ce script
+#: en construit son menu, `preflight_stack_combo` y reconnaît la combinaison
+#: activée. Une copie ici avait déjà divergé (C1 : `repository-tools` dans la
+#: matrice, `mcp` ici ; `router + sequential` là-bas, `router` ici) — et c'est
+#: la copie que personne ne relisait qui fabriquait les STACK.md.
+MATRIX = SDDA / "registry" / "compatibility.matrix.json"
+
+
+def combo_from_matrix(entry: dict) -> Combo:
+    """Une entrée de `combos[]` -> `Combo`. `orchestration` y est la liste des
+    patterns racine ADMIS ; le bootstrap active le premier."""
+    orchestration = entry.get("orchestration") or ["single-agent"]
+    if isinstance(orchestration, str):
+        orchestration = [orchestration]
+    return Combo(
+        id=str(entry["bootstrapId"]),
+        label=str(entry.get("label") or entry["id"]),
+        status=str(entry.get("status") or "untested"),
+        language=str(entry["language"]),
+        frameworks=list(entry.get("framework") or []),
+        orchestration=str(orchestration[0]),
+        rag=str(entry.get("rag") or "none"),
+        vectorstore=str(entry.get("vectorstore") or "none"),
+        embedding=str(entry.get("embedding") or "none"),
+        dataaccess=str(entry.get("dataaccess") or "none"),
+        database=str(entry.get("database") or "none"),
+        memory=str(entry.get("memory") or "buffer"),
+        observability=str(entry["observability"]),
+        evalstack=str(entry["eval"]),
+        serving=str(entry["serving"]),
+        reranker=str(entry.get("rerank") or "none"),
+        archi=str(entry.get("archi") or "mvc"),
+        backend=str(entry.get("backend") or "none"),
+        deliverable=str(entry.get("deliverable") or "cli-exe"),
+        api_framework=str(entry.get("apiFramework") or "none"),
+        api_auth=str(entry.get("apiAuth") or "none"),
+        guardrails=list(entry.get("guardrails") or ["injection-detection", "schema-validation"]),
+        tools=list(entry.get("tools") or []),
+    )
+
+
+def load_combos(path: Path = MATRIX) -> dict[str, Combo]:
+    """Les combos offertes par le bootstrap : celles de la matrice qui portent un `bootstrapId`."""
+    import json
+
+    matrix = json.loads(path.read_text(encoding="utf-8-sig"))
+    return {c.id: c for c in (combo_from_matrix(e) for e in matrix.get("combos") or [] if e.get("bootstrapId"))}
+
+
+try:
+    COMBOS: dict[str, Combo] = load_combos()
+except Exception as _exc:  # matrice absente ou illisible : tranché au preflight
+    COMBOS = {}
+    _MATRIX_ERROR: Exception | None = _exc
+else:
+    _MATRIX_ERROR = None
+
+# --- `dotnet-api` RETIRÉE le 2026-09-22 ---------------------------------------
+#
+# Elle déclarait `observability="otel-genai"` et `evalstack="pytest-eval"`
+# sur `language="csharp"`. Les deux fiches existent, donc l'ancien
+# `preflight_stack_combo` — qui ne regardait que l'existence du fichier —
+# la laissait passer. Les deux sont écrites en Python et le disent
+# (« Suppose `lang/python.md` ») : un bootstrap `--combo dotnet-api`
+# produisait un STACK.md dont le générateur .NET reçoit du pytest et du
+# psycopg comme référence d'implémentation.
+#
+# `[STACK_LANGUAGE_MISMATCH]` le refuse désormais, et le test
+# `test_every_combo_is_loadable[dotnet-api]` l'a montré à la première
+# exécution. Offrir dans le menu une combinaison que la gate du framework
+# rejette est exactement le faux vert que ce projet existe pour empêcher :
+# elle sort du catalogue plutôt que de mentir.
+#
+# Ce qu'il faut pour la rétablir — rien de plus, rien de moins :
+#   - `.sdda/stacks/eval/dotnet-test.md`        (xunit.v3 est déjà épinglé
+#     dans framework/ms-agent-framework.libs.json)
+#   - une fiche d'observabilité .NET, ou `Languages: python, csharp` sur
+#     `observability/otel-genai.md` une fois qu'elle porte les deux
+#     implémentations — les paquets OTel .NET sont déjà épinglés dans
+#     `serving/aspnet-minimal.libs.json` et `ms-agent-framework.libs.json`.
+# Le RAG .NET (vectorstore, rag, rerank, dataaccess) reste hors périmètre :
+# ROADMAP Lot 7.
+#
+# `lang/csharp.md`, `framework/ms-agent-framework.md` et
+# `serving/aspnet-minimal.md` restent activables à la main — c'est la
+# COMBINAISON préfabriquée qui était incohérente, pas les fiches.
+# --------------------------------------------------------------------------
 
 STATUS_BADGE = {
     "validated": "🟢 validée de bout en bout",
@@ -357,6 +318,14 @@ def preflight() -> None:
             f"[BOOTSTRAP_TEMPLATE_MISSING] {TEMPLATE} absent",
             "vérifier l'intégrité du dépôt (git status)",
         )
+    if _MATRIX_ERROR is not None or not COMBOS:
+        fail(
+            "catalogue des combinaisons illisible",
+            f"[BOOTSTRAP_MATRIX_UNREADABLE] {MATRIX} : "
+            + (f"{type(_MATRIX_ERROR).__name__}: {_MATRIX_ERROR}" if _MATRIX_ERROR else "aucune combo `bootstrapId`"),
+            "vérifier l'intégrité de .sdda/registry/compatibility.matrix.json (git status) — "
+            "c'est la seule définition des combinaisons",
+        )
     if _FRAMEWORK_IMPORT_ERROR is not None:
         fail(
             "outillage du framework non chargeable",
@@ -396,7 +365,6 @@ def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str]) -> str:
     has_db = combo.database != "none"
     mapping = {
         "{{AppName}}": app_name,
-        "{{SystemName}}": app_name,
         "{{Language}}": combo.language,
         "{{FrameworkActiveLines}}": framework_lines,
         "{{OrchestrationPattern}}": combo.orchestration,
