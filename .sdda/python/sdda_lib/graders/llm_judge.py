@@ -1,11 +1,12 @@
-"""Grader `llm-judge` — la structure d'un jugement LLM, **sans appeler de LLM**.
+"""Grader `llm-judge` — la structure d'un jugement LLM ; l'appel est dans `judge_clients.py`.
 
 Ce module définit tout ce qui entoure l'appel : la grille (liste de critères
-vérifiables, jamais « note de 1 à 10 »), le prompt de jugement, le parsing de
-la réponse attendue, et le statut de calibration. L'appel lui-même est
-délégué à un `JudgeClient` **injecté** — un protocole abstrait qu'un provider
-de la stack implémente. Ce paquet reste stdlib, 0 réseau (P4) ; les tests
-utilisent un client factice.
+vérifiables, jamais « note de 1 à 10 »), le prompt de jugement, le schéma et le
+parsing de la réponse attendue, et le statut de calibration. L'appel lui-même
+est délégué à un `JudgeClient` — injecté par un test, ou construit par le
+runner depuis STACK.md (`JudgeModel`) avec les clients RÉELS de
+`judge_clients.py` (Anthropic, OpenAI, Gemini ; stdlib, `urllib`). Ce module-ci
+n'ouvre aucune connexion : la grille reste testable sans réseau.
 
 Sans client, `score()` lève `[JUDGE_CLIENT_MISSING]` : un juge sans modèle
 n'a rien à dire, et le dire explicitement vaut mieux qu'un score par défaut.
@@ -24,10 +25,13 @@ visible dans le rapport : il informe, il ne décide pas.
 Autres règles du protocole (eval-protocol.md §5) appliquées ici :
 - le juge **voit la référence** (`item["expected"]`) quand elle existe — juger
   sans référence, c'est juger la plausibilité ;
-- le juge **diffère du modèle évalué** quand c'est possible : si
-  `config["evaluated_model_id"]` égale `client.model_id`, le détail le signale
-  (`judge_equals_evaluated`) — on mesure alors la complaisance d'un modèle
-  envers lui-même ;
+- le juge **diffère du modèle évalué** : si `client.model_id` est l'un des
+  modèles évalués — `config["evaluated_model_id"]` (résolu par le runner depuis
+  l'IR et la `RuntimeTierMap`) ou un `gen_ai.request.model` lu dans la trace —
+  le détail le signale (`judge_equals_evaluated`) et, tant que
+  `JudgeMustDifferFromEvaluated` est vrai, le verdict passe **advisory** avec
+  `[JUDGE_EQUALS_EVALUATED]`. Le preflight refuse la configuration ; ceci est
+  la défense en profondeur, pour le modèle qui tourne sans que STACK.md le dise ;
 - P8 : la sortie à juger est présentée comme **donnée**, jamais comme
   instruction — le prompt l'encadre et le dit.
 
@@ -48,6 +52,7 @@ from sdda_lib.graders._base import BaseGrader, GradeResult, as_text, clamp01, co
 CLS_CLIENT_MISSING = "JUDGE_CLIENT_MISSING"
 CLS_RESPONSE_UNPARSEABLE = "JUDGE_RESPONSE_UNPARSEABLE"
 CLS_UNCALIBRATED = "JUDGE_UNCALIBRATED"
+CLS_JUDGE_EQUALS_EVALUATED = "JUDGE_EQUALS_EVALUATED"
 
 DEFAULT_MIN_KAPPA = 0.6
 DEFAULT_MIN_ITEMS = 50
@@ -171,6 +176,31 @@ def _criterion_value(raw: Any) -> float | None:
     return None
 
 
+def response_schema(rubric: Rubric) -> dict[str, Any]:
+    """Le JSON Schema de la réponse attendue, dérivé de la grille.
+
+    Transmis aux fournisseurs qui contraignent la sortie au décodage
+    (`output_config.format`, `response_format`, `responseSchema`) : un juge qui
+    ne PEUT pas sauter un critère n'a pas à être rattrapé par le parsing strict.
+    Le parsing reste strict quand même — une contrainte native mal supportée
+    échoue en silence, et c'est lui qui s'en aperçoit.
+    """
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["criteria", "rationale"],
+        "properties": {
+            "criteria": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [c.id for c in rubric.criteria],
+                "properties": {c.id: {"type": "boolean"} for c in rubric.criteria},
+            },
+            "rationale": {"type": "string"},
+        },
+    }
+
+
 def parse_judge_response(text: str, rubric: Rubric) -> tuple[dict[str, float], str] | None:
     """({critère: valeur ∈ [0,1]}, rationale) ou None si la réponse n'applique pas la grille.
 
@@ -260,8 +290,22 @@ class LlmJudgeGrader(BaseGrader):
 
     @property
     def available(self) -> bool:
-        """Sans client injecté, le juge est enregistré mais indisponible."""
+        """Sans client injecté, le juge est enregistré mais indisponible.
+
+        Le runner, lui, construit un client RÉEL depuis STACK.md
+        (`judge_clients.prepare_config`) et le passe par `config["client"]` :
+        c'est ce chemin qui rend le juge utilisable hors des tests.
+        """
         return self.client is not None
+
+    def grade(self, item: dict, output: Any, trace: Any = None, measures: dict | None = None, config: dict | None = None) -> GradeResult:
+        # La trace est gardée à côté de la sortie : c'est elle qui dit quel
+        # modèle a réellement produit la réponse jugée (D2 — le juge ne doit
+        # pas être ce modèle), quand la configuration ne le sait pas.
+        cfg = dict(config or {})
+        if trace is not None:
+            cfg.setdefault("trace", trace)
+        return super().grade(item, output, trace, measures, cfg)
 
     def score(self, item: dict, output: Any, *, config: dict) -> GradeResult:
         client = config.get("client") or self.client
@@ -269,23 +313,41 @@ class LlmJudgeGrader(BaseGrader):
             raise SddaError(
                 "grader llm-judge sans client de jugement",
                 CLS_CLIENT_MISSING,
-                "injecter un `JudgeClient` (LlmJudgeGrader(client=…) ou config['client']) fourni par le provider de la stack ; ce paquet n'appelle aucun LLM",
+                "déclarer `JudgeModel` sous `## Runtime Models` et exporter sa clé (le runner construit alors le "
+                "client réel, judge_clients.py), ou injecter un `JudgeClient` (LlmJudgeGrader(client=…) / config['client'])",
             )
         rubric = Rubric.from_config(config.get("rubric"))
         status = calibration_status(config)
         prompt = build_prompt(rubric, item, output)
-        response = client.judge(prompt)
+        if getattr(client, "accepts_schema", False):
+            response = client.judge(prompt, schema=response_schema(rubric))
+        else:
+            response = client.judge(prompt)
 
         parsed = parse_judge_response(response, rubric)
         judge_model = getattr(client, "model_id", "?")
+        evaluated = evaluated_models(config)
+        self_judging = judge_model_is_evaluated(judge_model, evaluated)
+        advisory, reason = status.advisory, status.reason
+        if self_judging and bool(config.get("judge_must_differ", True)):
+            # Défense en profondeur de `JudgeMustDifferFromEvaluated` : le
+            # preflight refuse la configuration, mais un exécuteur peut faire
+            # tourner le modèle du juge sans que STACK.md le dise (tier remappé,
+            # repli de fournisseur). Le score reste lisible ; il ne bloque plus.
+            advisory = True
+            reason = (f"[{CLS_JUDGE_EQUALS_EVALUATED}] le juge `{judge_model}` est aussi le modèle évalué "
+                      f"({', '.join(sorted(evaluated))}) — il mesure sa complaisance envers lui-même ; "
+                      "verdict non bloquant (JudgeMustDifferFromEvaluated)"
+                      + (f" ; {status.reason}" if status.reason else ""))
         base_detail: dict[str, Any] = {
             "rubric": {"name": rubric.name, "version": rubric.version, "hash": rubric.hash, "criteria": [c.id for c in rubric.criteria]},
             "judge_model_id": judge_model,
-            "judge_equals_evaluated": bool(config.get("evaluated_model_id")) and config.get("evaluated_model_id") == judge_model,
+            "evaluated_model_ids": sorted(evaluated),
+            "judge_equals_evaluated": self_judging,
             "reference_seen": not is_missing(expected_of(item)),
             "calibration": status.to_dict(),
-            "advisory": status.advisory,
-            "advisory_reason": status.reason,
+            "advisory": advisory,
+            "advisory_reason": reason,
         }
         if parsed is None:
             return GradeResult.failure(
@@ -297,6 +359,44 @@ class LlmJudgeGrader(BaseGrader):
         total_weight = sum(c.weight for c in rubric.criteria)
         score = clamp01(sum(values[c.id] * c.weight for c in rubric.criteria) / total_weight)
         return GradeResult(score=score, detail={**base_detail, "criteria": values, "rationale": rationale})
+
+
+_MODEL_KEYS = ("gen_ai.request.model", "gen_ai.response.model")
+
+
+def evaluated_models(config: dict) -> set[str]:
+    """Les modèles qui ont produit la sortie jugée : déclarés (`evaluated_model_id`) ET lus dans la trace.
+
+    La configuration dit ce qui DEVAIT tourner ; les spans `chat` de la trace
+    disent ce qui a tourné. Les deux comptent : un tier remappé ou un repli de
+    fournisseur fait tourner un modèle que STACK.md ne nomme pas.
+    """
+    out: set[str] = set()
+    declared = config.get("evaluated_model_id")
+    for value in (declared if isinstance(declared, (list, tuple, set)) else [declared]):
+        if isinstance(value, str) and value.strip():
+            out.add(value.strip())
+    spans: list[Any] = []
+    trace = config.get("trace")
+    if isinstance(trace, dict):
+        spans = list(trace.get("spans") or [])
+    elif isinstance(trace, list):
+        spans = trace
+    for span in spans:
+        attrs = span.get("attributes") if isinstance(span, dict) else None
+        if isinstance(attrs, dict):
+            for key in _MODEL_KEYS:
+                if isinstance(attrs.get(key), str) and attrs[key].strip():
+                    out.add(attrs[key].strip())
+    return out
+
+
+def judge_model_is_evaluated(judge_model: str, evaluated: set[str]) -> bool:
+    """Comparaison sur l'identifiant de BASE : `claude-sonnet-5[1m]` est `claude-sonnet-5`."""
+    from sdda_lib.pricing import base_model_id  # noqa: PLC0415 — import local : pricing lit les fiches providers
+
+    base = base_model_id(judge_model)
+    return bool(base) and base in {base_model_id(m) for m in evaluated}
 
 
 GRADER = LlmJudgeGrader()

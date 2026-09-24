@@ -56,6 +56,14 @@ def _isolated_team_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     monkeypatch.delenv("SDDA_BYPASS_BUDGET_ESTIMATE", raising=False)
     monkeypatch.delenv("SDDA_BYPASS_REASON", raising=False)
     monkeypatch.delenv("SOURCE_DATE_EPOCH", raising=False)
+    # Le runner construit un juge RÉEL dès que la clé nommée par la fiche
+    # provider est dans l'environnement : un poste de développeur qui l'exporte
+    # ferait appeler l'API facturée par la suite de tests. Les tests qui veulent
+    # un juge posent leur propre clé factice et un serveur local.
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "OPENAI_API_KEY", "OPENAI_BASE_URL",
+                 "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GEMINI_BASE_URL", "OLLAMA_HOST", "OLLAMA_API_KEY",
+                 "AZURE_OPENAI_API_KEY", "LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

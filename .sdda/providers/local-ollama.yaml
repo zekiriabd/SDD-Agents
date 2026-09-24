@@ -22,6 +22,8 @@ schema: sdda.provider/v1
 name: local-ollama
 endpoint_kind: openai-compat          # Ollama expose /v1 compatible OpenAI (+ API native /api)
 base_url_env: OLLAMA_HOST             # défaut : http://localhost:11434
+default_base_url: http://localhost:11434
+api_prefix: /v1                       # l'API compatible OpenAI vit sous /v1 ; OLLAMA_HOST ne le porte pas
 auth_env: OLLAMA_API_KEY              # OPTIONNEL — inutile en local ; requis derrière un proxy ou Ollama cloud
 
 tier_map:
