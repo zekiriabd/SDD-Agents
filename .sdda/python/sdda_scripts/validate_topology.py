@@ -291,7 +291,8 @@ def validate_topology_text(text: str, *, path: Path | None, root: Path | None, c
     # est l'état nominal, pas une faute — la signaler ferait échouer le
     # post-check à chaque run et apprendrait à l'ignorer. Tout le reste (roster,
     # bornes, handoffs, simplicité) est vérifié dans les deux modes, et la passe
-    # complète rejoue ces deux contrôles avant la compilation de l'IR.
+    # complète rejoue ces deux contrôles avant la compilation de l'IR
+    # (`/sdda-topology` STEP 6) — c'est elle seule qui écrit la part de G2.
     if root is not None and not pre:
         for r in spec.contracts:
             f = markdown_io.strip_code(_col(r, "Fichier"))
@@ -325,8 +326,17 @@ def _paragraph_after(body: str, marker: str) -> str:
 
 
 def validate_topology_file(path: Path, root: Path, config: LayeredConfig | None, *, write_report: bool = True, pre: bool = False) -> Report:
+    """Valide une topologie ; seule la passe COMPLÈTE écrit la part `topology` de G2.
+
+    La passe `--pre` écrivait elle aussi le rapport : une part verte sans que
+    l'existence d'aucun contrat ait été vérifiée. Or `/sdda-topology` ne lançait
+    QUE cette passe — la passe complète, dont ce module dit qu'elle « rejoue ces
+    deux contrôles avant la compilation de l'IR », n'était lancée par personne.
+    G2 pouvait donc être franchie avec un agent sans contrat. Un pré-contrôle
+    informe ; il ne rend pas de verdict de gate.
+    """
     report, spec = validate_topology_text(markdown_io.read_text(path), path=path, root=root, config=config, pre=pre)
-    if write_report and spec.mission_id:
+    if write_report and spec.mission_id and not pre:
         pinned = {"topology": spec.hash}
         mission = load_mission(root, spec.mission_id)
         if mission:
@@ -344,7 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("files", nargs="*", type=Path, help="fichiers topology ; défaut : workspace/pipeline/topology/*-topology.md")
     p.add_argument("--pre", action="store_true",
                    help="passe PRÉ-CONTRATS : tout sauf l'existence des contrats sur disque. "
-                        "C'est l'état nominal juste après architect-topology, avant de payer les architectes")
+                        "C'est l'état nominal juste après architect-topology, avant de payer les architectes. "
+                        "N'écrit aucun rapport de gate : seule la passe complète rend la part `topology` de G2")
     add_common_args(p)
     return p
 

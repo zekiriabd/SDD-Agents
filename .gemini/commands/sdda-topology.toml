@@ -53,7 +53,7 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    Exit ≠ 0 → ERROR :
    ```
    ERROR: /sdda-topology {n} — CAPs non spécifiées
-   CAUSE: [CAP_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/{n}-G1-cap.json vert
+   CAUSE: [CAP_GATE_NOT_PASSED] rapports workspace/.sys/.validation/G1-{n}-{MissionName}.json / G1-{n}-{m}-{Cap}.json absents, rouges ou périmés
    FIX: relancer /sdda-caps {n} (G1 doit être verte : on n'architecture pas des AC non mesurables)
    ```
    3.bis **Roster déclaré** — si `feats/{n}-roster.md` existe, il doit
@@ -157,7 +157,7 @@ ordre** — la complétude de la déclaration d'abord, sa cohérence ensuite :
 ```bash
 python .sdda/sdda.py validate-packaging    --mission {n}   # qu'est-ce qu'on LIVRE ?
 python .sdda/sdda.py validate-architecture --mission {n}   # P7 : l'architecte a-t-il décidé ?
-python .sdda/sdda.py validate-topology     --mission {n} --pre
+python .sdda/sdda.py validate-topology     --mission {n} --pre   # pré-contrôle : aucun rapport de gate
 ```
 
 `validate_packaging.py` passe **en premier** et c'est délibéré : il ne coûte
@@ -241,10 +241,25 @@ mais on ne compile pas un IR depuis des contrats qu'on sait invalides.
 
 ## STEP 6 — PHASE 2.9 : compilation de l'IR (script, 0 token)
 
+D'abord la passe **complète** de la topologie — celle qui vérifie que chaque
+contrat annoncé au §« Contrats produits » et chaque contrat d'agent existe sur
+disque. Jouée ici, après les architectes parallèles et avant l'IR, y compris en
+`--recompile-only` :
+
 ```bash
+python .sdda/sdda.py validate-topology --mission {n}
 python .sdda/sdda.py ir-compiler --mission {n} \
   --out workspace/.sys/.ir/{n}-system.ir.json
 ```
+
+`validate-topology` exit 1 (`[TOPOLOGY_CONTRACT_MISSING]`, `[AGENT_CONTRACT_MISSING]`)
+→ STOP + ERROR : on ne compile pas un IR qui référence un contrat absent.
+
+Seule cette passe écrit la part `topology` de G2. La passe `--pre` du STEP 4
+n'écrit plus rien : elle rendait une part verte sans qu'aucun contrat ait été
+vérifié, et c'était la seule passe que la commande lançait — le code annonçait
+une passe complète « rejouée avant la compilation de l'IR » que personne
+n'exécutait.
 
 Entrées : MISSION, CAPs, TOPOLOGY (graphe compris), `contracts/**`, `STACK.md`.
 Sortie : `{n}-system.ir.json` conforme à `.sdda/registry/ir.schema.json`, avec
@@ -272,8 +287,8 @@ python .sdda/sdda.py estimate-budget --ir workspace/.sys/.ir/{n}-system.ir.json 
 ```
 
 > **Deux fichiers, jamais `>>`.** Concaténer deux documents JSON dans un même
-> fichier ne produit pas un JSON : produit ainsi, `{n}-G2-topology.json` n'était
-> relisible par personne. Ces deux-là ne servent qu'au récap — les rapports de
+> fichier ne produit pas un JSON : produit ainsi, l'ancien `{n}-G2-topology.json`
+> n'était relisible par personne. Ces deux-là ne servent qu'au récap — les rapports de
 > gate qui comptent sont écrits par les scripts eux-mêmes, sous les noms que
 > `gate_reports` sait relire. D'où le suffixe `.recap` : il dit que ces fichiers
 > ne sont pas des rapports de gate, et évite qu'on les prenne pour tels.
@@ -304,7 +319,7 @@ Les 11 contrôles de `AGENTIC-IR.md §4` + budget :
 
 ```
 ERROR: /sdda-topology {n} — TOPOLOGY GATE rouge
-CAUSE: [TOPOLOGY_GATE_FAILED] [UNBOUNDED_LOOP] cycle supervisor→billing→supervisor sans borne ; [BUDGET_EXCEEDED_ESTIMATE] $0.41 estimé > cap $0.25 — rapport workspace/.sys/.validation/{n}-G2-topology.json
+CAUSE: [TOPOLOGY_GATE_FAILED] [UNBOUNDED_LOOP] cycle supervisor→billing→supervisor sans borne ; [BUDGET_EXCEEDED_ESTIMATE] $0.41 estimé > cap $0.25 — rapports workspace/.sys/.validation/G2-{n}-{MissionName}.{topology,ir,budget}.json
 FIX: corriger workspace/pipeline/topology/{n}-topology.md et/ou les contrats, puis /sdda-topology {n} --recompile-only
 ```
 
