@@ -58,3 +58,69 @@ def test_the_template_counts_four_human_inputs() -> None:
     assert "trois fichiers" not in text
     for depot in ("`stack/`", "`feats/`", "`assets/`", "`seed/`"):
         assert depot in text, f"{depot} manque au décompte des entrées humaines"
+
+
+# ---------------------------------------------------------------------------
+# C8 — la matrice compte ce que le disque porte, et le bootstrap la lit
+# ---------------------------------------------------------------------------
+MATRIX = SDDA / "registry" / "compatibility.matrix.json"
+_LANGUAGES_RE = re.compile(r"^Languages:\s*(.+)$", re.M)
+
+
+def _matrix() -> dict:
+    return json.loads(MATRIX.read_text(encoding="utf-8-sig"))
+
+
+def _fiches_by_language() -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for path in sorted((SDDA / "stacks").rglob("*.md")):
+        match = _LANGUAGES_RE.search(path.read_text(encoding="utf-8-sig"))
+        rel = path.relative_to(SDDA / "stacks").as_posix().removesuffix(".md")
+        for lang in ([t.strip() for t in match.group(1).split(",")] if match else ["?"]):
+            out.setdefault("neutral" if lang == "*" else lang, []).append(rel)
+    return out
+
+
+def test_language_coverage_is_the_disk_not_a_prose_counter() -> None:
+    """La prose disait 13 fiches Python et 4 C# quand le disque en portait 15 et 5."""
+    declared = {k: sorted(v["fiches"]) for k, v in _matrix()["languageCoupling"]["coverage"].items()
+                if isinstance(v, dict)}
+    assert declared == {k: sorted(v) for k, v in _fiches_by_language().items()}
+
+
+#: Champ de combo -> répertoire de `stacks/` où sa fiche doit exister.
+COMBO_FIELD_DIRS = {
+    "language": "lang", "framework": "framework", "orchestration": "orchestration", "rag": "rag",
+    "vectorstore": "vectorstore", "embedding": "embedding", "rerank": "rerank", "dataaccess": "dataaccess",
+    "tools": "tools", "memory": "memory", "eval": "eval", "observability": "observability",
+    "serving": "serving", "archi": "archi", "backend": "backend", "guardrails": "guardrails",
+}
+#: `none` n'a de fiche que là où l'absence est une décision documentée.
+NONE_HAS_A_FICHE = {"rag", "rerank", "dataaccess"}
+
+
+@pytest.mark.parametrize("combo", _matrix()["combos"], ids=lambda c: c["id"])
+def test_every_combo_component_has_a_fiche(combo: dict) -> None:
+    """`repository-tools` figurait dans C1 parmi les OUTILS, sans fiche et dans la mauvaise catégorie."""
+    missing = []
+    for field_name, directory in COMBO_FIELD_DIRS.items():
+        values = combo.get(field_name)
+        for value in (values if isinstance(values, list) else [values]):
+            if value in (None, "") or (value == "none" and field_name not in NONE_HAS_A_FICHE):
+                continue
+            if not (SDDA / "stacks" / directory / f"{value}.md").is_file():
+                missing.append(f"{directory}/{value}")
+    assert not missing, f"combo {combo['id']} : composants sans fiche {missing}"
+
+
+def test_bootstrap_offers_exactly_the_matrix_combos() -> None:
+    """Une seule définition : le menu du bootstrap EST la matrice."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import bootstrap as bs
+
+    expected = {c["bootstrapId"] for c in _matrix()["combos"] if c.get("bootstrapId")}
+    assert set(bs.COMBOS) == expected
+    c1 = next(c for c in _matrix()["combos"] if c["id"] == "C1")
+    assert bs.COMBOS["c1"].orchestration == c1["orchestration"][0]
+    assert bs.COMBOS["c1"].tools == c1["tools"]
