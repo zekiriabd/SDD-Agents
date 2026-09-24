@@ -151,8 +151,14 @@ appelé, borne atteinte) sous forme vérifiable par un grader `trajectory` ou
 
 Les attaques réussies que `review-adversarial` déposera dans
 `workspace/.sys/.validation/adversarial-findings/{n}.jsonl` sont promues ici
-**par script** (`promote_adversarial_findings.py`), à ta prochaine invocation
-ou par la commande. Elles deviennent permanentes.
+**par script**, à ta prochaine invocation ou par la commande :
+```bash
+python .sdda/sdda.py promote-adversarial-findings --mission {n} --agent qa-evals
+```
+Chaque attaque réussie devient un item au schéma du jeu, ajouté au fichier que
+lit la suite L8 de l'agent (`trustPosture.injectionSuiteRef`), avec sa
+provenance (`finding_ref`, `run_ids`) ; dédoublonnage par hash, jamais de
+suppression. Elles deviennent permanentes. `--dry-run` montre ce qui serait promu.
 
 ## STEP 7 — Les suites, épinglées
 
