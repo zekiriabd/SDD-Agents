@@ -218,6 +218,12 @@ def expand(root: Path, pattern: str, *, mission: str | None, target: str | None,
     for resolved in resolved_patterns:
         base = base_for(root, resolved)
         if any(ch in resolved for ch in "*?["):
+            # Un `**` FINAL ne rend que des répertoires avant Python 3.13 : `src/**`
+            # ne chargeait aucun fichier en 3.11 (le minimum déclaré), le contexte
+            # arrivait vide et le budget semblait tenu. `**/*` rend les fichiers
+            # à toute profondeur sur toutes les versions.
+            if resolved == "**" or resolved.endswith("/**"):
+                resolved += "/*"
             found = sorted(p for p in base.glob(resolved) if p.is_file())
         else:
             candidate = base / resolved

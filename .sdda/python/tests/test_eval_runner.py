@@ -192,6 +192,9 @@ def test_default_k_follows_cap_criticality(compiled) -> None:
 
 def test_single_run_is_warned_and_refused_in_ci(compiled, monkeypatch: pytest.MonkeyPatch) -> None:
     root, ir, cfg = compiled
+    # En dev local d'abord : la CI (GitHub pose `CI=true`) rendait la première
+    # moitié du test identique à la seconde.
+    monkeypatch.delenv("CI", raising=False)
     report, _ = run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_routing}), runs_override=1, write_report=False, write_gates=False)
     assert "EVAL_SINGLE_RUN_FORBIDDEN" in {f.cls for f in report.warnings} and report.ok
     monkeypatch.setenv("CI", "1")
