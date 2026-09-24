@@ -27,6 +27,11 @@ base_url_env: ANTHROPIC_BASE_URL      # défaut SDK : https://api.anthropic.com
 default_base_url: https://api.anthropic.com   # lu par graders/judge_clients.py si la variable est absente
 auth_env: ANTHROPIC_API_KEY
 
+# SDK que `models.provider_client` importe dans l'application générée ;
+# `gen_app_skeleton` l'épingle dans son pyproject. Version relevée sur PyPI le
+# 2026-09-24, compatible avec `langchain-anthropic` 1.7.2 (anthropic>=0.120,<2).
+runtime_sdk: {package: anthropic, version: "1.8.0"}
+
 tier_map:
   deep: claude-opus-5
   balanced: claude-sonnet-5

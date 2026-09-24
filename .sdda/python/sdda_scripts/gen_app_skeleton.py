@@ -73,6 +73,9 @@ CONFIG_TMPL = "app_config.json.tmpl"
 #: que déduit : le jour où `csharp` aura son squelette, il aura son générateur.
 LANGUAGE = "python"
 
+#: Deux catalogues actifs épinglent le même paquet à deux versions différentes.
+CLS_PIN_CONFLICT = "STACK_LIBRARY_PIN_CONFLICT"
+
 #: Nom logique -> variable d'environnement, par fournisseur. Le NOM voyage
 #: (dans une trace, dans un message d'erreur, c'est même ce qu'on veut y lire) ;
 #: la VALEUR ne quitte jamais `config.py`.
@@ -91,6 +94,32 @@ STARTER_BOUNDS: dict[str, Any] = {
     "max_iterations": 4, "max_tool_calls": 8, "max_delegation_depth": 0,
     "timeout_s": 60.0, "budget_usd": 0.50, "on_bound_exceeded": "fail-explicit",
 }
+
+
+#: Systèmes de build dont un `.libs.json` alimente `pyproject.toml`. Les
+#: catalogues npm, gradle ou dotnet d'une stack active ne concernent pas ce
+#: squelette — `preflight_stack_combo` refuse de toute façon leur coexistence.
+PYTHON_BUILD_SYSTEMS = frozenset({"uv", "pip", "poetry"})
+
+#: Outils d'atelier que les catalogues répètent en `core` pour que chaque stack
+#: soit installable seule (`lang/python.md §1`). Ils vont au groupe `dev` : un
+#: `mypy` dans les dépendances d'exécution partirait dans la roue, et dans
+#: l'image, de chaque application.
+DEV_TOOL_MODULES = frozenset({"ruff", "mypy", "pytest", "pytest-asyncio", "pytest-cov", "pytest-timeout"})
+
+#: Le groupe `dev` minimal, présent même sans catalogue : sans pytest-asyncio,
+#: chaque test `async def` échoue en « async def functions are not natively
+#: supported », ce qui ressemble à une panne du code et n'en est pas une.
+BASE_DEV_DEPENDENCIES: tuple[str, ...] = ("pytest>=8.3", "pytest-asyncio>=0.24")
+
+#: `RuntimeProvider` (STACK.md) -> fiche `.sdda/providers/` qui porte le SDK
+#: importé par `models.provider_client`.
+PROVIDER_SHEETS: dict[str, str] = {
+    "anthropic": "anthropic", "openai": "openai", "azure": "azure-openai",
+    "google": "google", "gemini": "google", "local": "local-ollama",
+}
+
+_STACK_LINE_RE = re.compile(r"^\s*-\s*\.sdda/stacks/([a-z0-9-]+)/([A-Za-z0-9._-]+)\.md\b", re.M)
 
 
 def runtime_dir(root: Path) -> Path:
@@ -185,6 +214,168 @@ def _pricing(root: Path) -> dict[str, dict[str, float]]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Dépendances — dérivées des `.libs.json` des fiches ACTIVES, épinglées
+# ---------------------------------------------------------------------------
+@dataclass
+class Dependencies:
+    """Ce que `pyproject.toml` déclare, et d'où vient chaque ligne."""
+
+    runtime: list[str] = field(default_factory=list)
+    dev: list[str] = field(default_factory=list)
+    sources: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"runtime": list(self.runtime), "dev": list(self.dev), "sources": dict(self.sources)}
+
+
+def package_name(requirement: str) -> str:
+    """`psycopg[binary,pool]==3.2.1` -> `psycopg` (normalisé PEP 503)."""
+    head = re.split(r"[\[=<>!~;\s]", requirement.strip(), maxsplit=1)[0]
+    return re.sub(r"[-_.]+", "-", head).lower()
+
+
+def _extras(module: str) -> set[str]:
+    m = re.search(r"\[([^\]]*)\]", module)
+    return {e.strip() for e in m.group(1).split(",") if e.strip()} if m else set()
+
+
+def _stack_text(root: Path) -> str:
+    """STACK.md sans ses commentaires : un `# gpt-4` en marge ne doit pas installer un SDK."""
+    stack = paths.stack_md_path(root)
+    if not stack.is_file():
+        return ""
+    lines = []
+    for line in markdown_io.read_text(stack).split("\n"):
+        if line.lstrip().startswith("#") and not line.lstrip().startswith("## "):
+            continue
+        lines.append(re.split(r"\s#\s", line, maxsplit=1)[0])
+    return "\n".join(lines)
+
+
+def active_libs_catalogs(root: Path) -> list[Path]:
+    """Les `.libs.json` des fiches ACTIVES de STACK.md (toutes sections), dans l'ordre du fichier."""
+    sdda = root / ".sdda" if (root / ".sdda" / "stacks").is_dir() else paths.FRAMEWORK_SDDA_DIR
+    out: list[Path] = []
+    for category, name in _STACK_LINE_RE.findall(_stack_text(root)):
+        catalog = sdda / "stacks" / category / f"{name}.libs.json"
+        if catalog.is_file() and catalog not in out:
+            out.append(catalog)
+    return out
+
+
+def _provider_sdk(root: Path, provider: str) -> tuple[str, str, str] | None:
+    """(paquet, version, fiche) du SDK que `models.provider_client` importe pour ce fournisseur."""
+    sheet_name = PROVIDER_SHEETS.get(provider.lower())
+    if not sheet_name:
+        return None
+    sdda = root / ".sdda" if (root / ".sdda" / "providers").is_dir() else paths.FRAMEWORK_SDDA_DIR
+    sheet = sdda / "providers" / f"{sheet_name}.yaml"
+    if not sheet.is_file():
+        return None
+    from sdda_lib import yaml_mini  # noqa: PLC0415
+
+    sdk = yaml_mini.parse_mapping(markdown_io.read_text(sheet)).get("runtime_sdk")
+    if not isinstance(sdk, dict) or not sdk.get("package") or not sdk.get("version"):
+        return None
+    return str(sdk["package"]), str(sdk["version"]), f"providers/{sheet.name}"
+
+
+def resolve_dependencies(ctx: Context, report: Report) -> Dependencies:
+    """Les dépendances du projet, DÉRIVÉES : aucune n'est écrite à la main.
+
+    Sources, dans cet ordre : `core` puis `dev` puis les `onDemand` dont un
+    déclencheur figure dans STACK.md (hors commentaires), de chaque
+    `.libs.json` actif ; puis le SDK du fournisseur runtime, lu dans sa fiche
+    (`runtime_sdk`). Tout est épinglé `==` sur la version du catalogue — qui
+    est la seule à faire foi (`libs-catalog.schema.json`).
+
+    Deux catalogues peuvent citer le même paquet (le socle `pydantic`,
+    `structlog`… est répété pour que chaque stack s'installe seule) : c'est
+    légitime à version égale, et les extras s'unissent. À versions
+    différentes, c'est `[STACK_LIBRARY_PIN_CONFLICT]` — choisir l'une en
+    silence, c'est livrer une combinaison que personne n'a résolue.
+
+    Le résultat est TRIÉ par nom : deux régénérations rendent les mêmes octets.
+    """
+    deps = Dependencies()
+    pinned: dict[str, tuple[str, set[str], str, str]] = {}   # nom -> (version, extras, groupe, source)
+    stack = _stack_text(ctx.root)
+
+    def add(module: str, version: str, group: str, source: str) -> None:
+        name = package_name(module)
+        group = "dev" if name in DEV_TOOL_MODULES or name.startswith("pytest") else group
+        if name in pinned:
+            prev_version, extras, prev_group, prev_source = pinned[name]
+            if prev_version != version:
+                report.error(
+                    CLS_PIN_CONFLICT,
+                    f"`{name}` épinglé {prev_version} par {prev_source} et {version} par {source}",
+                    fix="aligner les deux catalogues sur une version résolue CONJOINTEMENT "
+                        "(`uv pip compile` sur l'union) — le squelette ne choisit pas à leur place",
+                    location=source)
+                return
+            extras |= _extras(module)
+            pinned[name] = (version, extras, "runtime" if "runtime" in (prev_group, group) else "dev", prev_source)
+            return
+        pinned[name] = (version, _extras(module), group, source)
+
+    for catalog_path in active_libs_catalogs(ctx.root):
+        rel = paths.rel(ctx.root, catalog_path) if catalog_path.is_relative_to(ctx.root) else \
+            f".sdda/stacks/{catalog_path.parent.name}/{catalog_path.name}"
+        try:
+            catalog = json.loads(markdown_io.read_text(catalog_path))
+        except ValueError as exc:
+            report.error("STACK_LIBRARY_MISSING", f"`{rel}` illisible ({exc})",
+                         fix="corriger le JSON du catalogue", location=rel)
+            continue
+        if str(catalog.get("buildSystem") or "uv") not in PYTHON_BUILD_SYSTEMS:
+            continue
+        versions = catalog.get("versions") or {}
+        entries = [(e, "runtime") for e in catalog.get("core") or []] + \
+                  [(e, "dev") for e in catalog.get("dev") or []]
+        for entry in catalog.get("onDemand") or []:
+            triggers = [str(t) for t in entry.get("triggers") or []]
+            if any(re.search(t, stack) for t in triggers):
+                entries.append((entry, "runtime"))
+        for entry, group in entries:
+            module, ref = str(entry.get("module") or ""), str(entry.get("ref") or entry.get("module") or "")
+            version = versions.get(ref)
+            if not module or not version:
+                report.error("STACK_LIBRARY_MISSING",
+                             f"`{rel}` : `{module or '?'}` sans version épinglée (`versions.{ref}`)",
+                             fix="toute `ref` de `core`/`dev`/`onDemand` doit exister dans `versions`",
+                             location=rel)
+                continue
+            add(module, str(version), group, rel)
+
+    sdk = _provider_sdk(ctx.root, ctx.provider)
+    if sdk is not None:
+        add(sdk[0], sdk[1], "runtime", sdk[2])
+
+    for name in sorted(pinned):
+        version, extras, group, source = pinned[name]
+        requirement = f"{name}{'[' + ','.join(sorted(extras)) + ']' if extras else ''}=={version}"
+        (deps.runtime if group == "runtime" else deps.dev).append(requirement)
+        deps.sources[name] = source
+    base_dev = [r for r in BASE_DEV_DEPENDENCIES if package_name(r) not in pinned]
+    deps.dev = sorted(deps.dev + base_dev, key=package_name)
+    return deps
+
+
+def _toml_list(items: list[str], *, multiline: bool) -> str:
+    if not items:
+        return "[]"
+    if not multiline:
+        return "[" + ", ".join(json.dumps(i) for i in items) + "]"
+    return "[\n" + "".join(f"  {json.dumps(i)},\n" for i in items) + "]"
+
+
+def render_pyproject(template: str, deps: Dependencies) -> str:
+    return (template.replace("{Dependencies}", _toml_list(deps.runtime, multiline=True))
+                    .replace("{DevDependencies}", _toml_list(deps.dev, multiline=False)))
+
+
 def render_app_config(ctx: Context, template: str) -> str:
     """`app_config.json` — ce que l'application lit au démarrage.
 
@@ -230,8 +421,9 @@ def _json(payload: Any) -> str:
     return text.replace("\n", "\n  ")
 
 
-def plan(ctx: Context, report: Report) -> list[tuple[Path, str]]:
+def plan(ctx: Context, report: Report, deps: Dependencies | None = None) -> list[tuple[Path, str]]:
     """(cible, contenu) pour chaque fichier du squelette. Trié, donc reproductible."""
+    deps = deps if deps is not None else resolve_dependencies(ctx, report)
     source = runtime_dir(ctx.root) / APP_DIR
     if not source.is_dir():
         report.error(
@@ -247,7 +439,7 @@ def plan(ctx: Context, report: Report) -> list[tuple[Path, str]]:
         relative = path.relative_to(source)
         text = markdown_io.read_text(path)
         if path.name == PYPROJECT_TMPL:
-            targets.append((ctx.project_dir / "pyproject.toml", _subst(text, ctx)))
+            targets.append((ctx.project_dir / "pyproject.toml", _subst(render_pyproject(text, deps), ctx)))
         elif path.name == CONFIG_TMPL:
             targets.append((ctx.src_root / "app_config.json",
                             _subst(render_app_config(ctx, text), ctx)))
@@ -268,21 +460,48 @@ def _subst(text: str, ctx: Context) -> str:
 # ---------------------------------------------------------------------------
 # Écriture
 # ---------------------------------------------------------------------------
-_DEPENDENCIES_RE = re.compile(r"^dependencies = \[(?:[^\]]|\n)*?\]$", re.M)
+#: La liste `dependencies = [...]` d'un pyproject, entrées entre guillemets —
+#: un extra (`psycopg[binary,pool]`) contient `]`, qu'un `[^\]]*` couperait.
+_DEPENDENCIES_RE = re.compile(r'^dependencies = \[(?:\s*"[^"]*",?)*\s*\]$', re.M)
+_QUOTED_RE = re.compile(r'"([^"]*)"')
+
+
+def _declared_dependencies(text: str) -> list[str]:
+    match = _DEPENDENCIES_RE.search(text)
+    return _QUOTED_RE.findall(match.group(0)) if match else []
+
+
+def merge_dependencies(generated: list[str], existing: list[str]) -> list[str]:
+    """Les épinglages DÉRIVÉS, plus ce que le projet a ajouté lui-même (`uv add`).
+
+    Un paquet que le squelette dérive est réécrit à la version du catalogue ;
+    un paquet que le squelette ne connaît pas est conservé tel quel. Trier par
+    nom rend la liste reproductible quel que soit l'ordre des ajouts.
+    """
+    names = {package_name(r) for r in generated}
+    kept = [r for r in existing if package_name(r) not in names]
+    return sorted(generated + kept, key=package_name)
 
 
 def _comparable(target: Path, text: str) -> str:
-    """Ce que `--check` compare. Pour `pyproject.toml`, tout SAUF `dependencies`.
+    """Ce que `--check` compare à l'octet. Pour `pyproject.toml`, tout SAUF `dependencies`.
 
-    La liste de dépendances est remplie par `uv add` depuis les `.libs.json`
-    des stacks actives (`lang/python.md §2.1`) : le squelette l'écrit vide, et
-    l'exiger vide faisait de chaque projet correctement installé un projet
-    « dérivé ». Le reste du fichier (identité, point d'entrée, layout) reste
-    comparé à l'octet.
+    La liste de dépendances est jugée à part (`_missing_pins`) : elle doit
+    CONTENIR chaque épinglage dérivé des `.libs.json` actifs, et peut porter
+    en plus ce que le projet a ajouté par `uv add`. L'exiger égale à l'octet
+    ferait de chaque ajout légitime une « dérive » ; ne pas la juger du tout
+    laissait `dependencies = []` passer au vert — un projet qui ne s'installe pas.
     """
     if target.name != "pyproject.toml":
         return text
     return _DEPENDENCIES_RE.sub("dependencies = []", text)
+
+
+def _missing_pins(target: Path, current: str, rendered: str) -> list[str]:
+    if target.name != "pyproject.toml":
+        return []
+    have = set(_declared_dependencies(current))
+    return [r for r in _declared_dependencies(rendered) if r not in have]
 
 
 def _declared_secret_names(root: Path) -> set[str]:
@@ -295,23 +514,28 @@ def _declared_secret_names(root: Path) -> set[str]:
 
 
 def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
-    targets = plan(ctx, report)
+    deps = resolve_dependencies(ctx, report)
+    targets = plan(ctx, report, deps)
     written: list[str] = []
     drifted: list[str] = []
     missing: list[str] = []
+    missing_pins: list[str] = []
 
     for target, content in targets:
         rel = paths.rel(ctx.root, target)
         exists = target.is_file()
-        same = exists and _comparable(target, markdown_io.read_text(target)) == _comparable(target, content)
+        current = markdown_io.read_text(target) if exists else ""
+        pins_absent = _missing_pins(target, current, content) if exists else []
+        same = exists and _comparable(target, current) == _comparable(target, content) and not pins_absent
+        if exists and target.name == "pyproject.toml":
+            # Les ajouts du projet (`uv add`) survivent à la régénération ;
+            # les épinglages dérivés sont réécrits à la version du catalogue.
+            merged = merge_dependencies(deps.runtime, _declared_dependencies(current))
+            content = _DEPENDENCIES_RE.sub(lambda _m: "dependencies = " + _toml_list(merged, multiline=True),
+                                           content, count=1)
+        missing_pins.extend(pins_absent)
         if write:
             if not same:
-                if exists and target.name == "pyproject.toml":
-                    # La liste `dependencies` appartient à `uv add` : la
-                    # régénération réécrit tout le reste, jamais elle.
-                    current = _DEPENDENCIES_RE.search(markdown_io.read_text(target))
-                    if current:
-                        content = _DEPENDENCIES_RE.sub(lambda _m: current.group(0), content, count=1)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(content, encoding="utf-8")
                 written.append(rel)
@@ -322,6 +546,8 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
 
     if missing or drifted:
         detail = ", ".join((missing + drifted)[:4]) + (" …" if len(missing) + len(drifted) > 4 else "")
+        if missing_pins and not write:
+            detail += f" ; pyproject sans les épinglages {missing_pins[:4]}{' …' if len(missing_pins) > 4 else ''}"
         report.error(
             "APP_SKELETON_STALE",
             f"{len(missing)} fichier(s) absent(s) et {len(drifted)} divergent(s) : {detail}",
@@ -336,6 +562,7 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
         "srcRoot": paths.rel(ctx.root, ctx.src_root),
         "planned": [paths.rel(ctx.root, t) for t, _ in targets],
         "written": written, "drifted": drifted, "missing": missing,
+        "dependencies": deps.to_dict(), "missingPins": [] if write else missing_pins,
     }
 
 
