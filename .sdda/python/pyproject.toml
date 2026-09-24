@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
+# >= 77 : `license` en expression SPDX (PEP 639) plutôt qu'en table `{ text }`.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,12 +9,17 @@ version = "0.1.0"
 description = "SDD_Agents — outillage déterministe (0 token, 0 réseau) : compilateur d'IR, gates, machine à états"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+# Le texte de la licence est `LICENSE` à la RACINE du dépôt. setuptools refuse
+# un `license-files` hors du répertoire du projet (`../../LICENSE`) : le
+# workflow `release.yml` copie donc `LICENSE` ici avant `python -m build`, et le
+# motif par défaut (`LICEN[CS]E*`) l'embarque dans la wheel et le sdist. La
+# copie locale est gitignorée — une seule source.
+license = "MIT"
 # Le moteur est stdlib uniquement : pas de PyYAML, pas de jsonschema, pas de client HTTP (P4).
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11"]
 
 [project.scripts]
 # Le point d'entrée unique : `sdda {sous-commande}` couvre les 60 scripts, et
@@ -42,3 +48,71 @@ include = ["sdda_lib*", "sdda_scripts*", "sdda_admin*", "sdda_hooks*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+# ---------------------------------------------------------------------------
+# Qualité — job CI `lint`. Posée pour passer sur le code TEL QU'IL EST : elle
+# arrête une régression, elle ne demande pas de réécriture.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+# Les fixtures contiennent volontairement du code défectueux : c'est leur objet.
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+# Erreurs réelles seulement : syntaxe (E9), comparaisons invalides (F63),
+# instructions mal placées (F7), noms non définis (F82). F401 (import inutilisé)
+# et F841 (variable inutilisée) sont ÉCARTÉS : 33 occurrences dans le code
+# actuel, et les corriger en masse pendant que d'autres lots éditent ces
+# fichiers produirait des conflits pour un gain nul à l'exécution.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.ruff.lint.per-file-ignores]
+# Deux F821 RÉELS, laissés en baseline plutôt que masqués globalement — chaque
+# ligne est un bug connu, à corriger dans le lot qui possède le fichier, puis à
+# retirer d'ici :
+#   compute_status.py:139 — `app_name` n'est pas défini : la branche `prompt:`
+#     lève NameError dès qu'une clé d'empreinte de prompt est évaluée.
+#   lint_prompts.py:429   — `{App}` dans une f-string : NameError au moment de
+#     construire le FIX de [PROMPT_MISSING] (il faut `{{App}}`).
+"sdda_scripts/compute_status.py" = ["F821"]
+"sdda_scripts/lint_prompts.py" = ["F821"]
+
+[tool.mypy]
+# Non strict, sur `sdda_lib` : la bibliothèque partagée par tous les scripts.
+# Étendre `files` à un paquet quand il passe, jamais l'inverse.
+python_version = "3.11"
+files = ["sdda_lib"]
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false
+
+# Baseline : les erreurs du code actuel, désactivées par module ET par code —
+# une nouvelle classe d'erreur dans ces modules reste détectée.
+[[tool.mypy.overrides]]
+# `int | None` comparé et réaffecté en float (lignes ~154-157).
+module = "sdda_lib.layered_config"
+disable_error_code = ["assignment", "operator"]
+
+[[tool.mypy.overrides]]
+# `calls` redéfini dans la même fonction (lignes ~125 et ~142).
+module = "sdda_lib.graders.trajectory"
+disable_error_code = ["no-redef"]
+
+[[tool.mypy.overrides]]
+# Registre des graders : union de classes concrètes contre le protocole `Grader`.
+module = "sdda_lib.graders"
+disable_error_code = ["misc"]
+
+[tool.coverage.run]
+# Par nom de paquet, pour que la mesure ne dépende pas du répertoire courant
+# (la CI lance pytest depuis la racine du dépôt).
+source_pkgs = ["sdda_lib", "sdda_scripts", "sdda_admin", "sdda_hooks", "sdda_cli"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+# Plancher = couverture mesurée le 2026-09-24, arrondie à l'inférieur. Il ne
+# doit que monter ; les scripts lancés en sous-processus par les tests ne sont
+# pas comptés, d'où un chiffre inférieur à la couverture réelle.
+fail_under = 81
+show_missing = false
+skip_covered = true

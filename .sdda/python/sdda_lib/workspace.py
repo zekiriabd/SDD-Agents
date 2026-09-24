@@ -70,6 +70,8 @@ def framework_version() -> str:
         if isinstance(version, str) and version:
             return version
     except Exception:
+        # Ignorable : une installation par wheel n'embarque pas pyproject.toml,
+        # et `_LIB_VERSION` est alors la source prévue par la docstring.
         pass
     return _LIB_VERSION
 

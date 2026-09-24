@@ -66,6 +66,57 @@ They are rewritten for agentic systems, not copied: no ORM, no entity, the
 Nothing here is *validated*: `frameworkStatus: design-phase`, and every
 component is `untested` until a measured run has taken place (Lot 6).
 
+### Which harness runs the build
+
+| Harness | Status | Blocking gates at runtime |
+|---|---|---|
+| **Claude Code** | **supported** — the reference harness | yes — hooks in `.claude/settings.json` refuse the tool call |
+| **Codex CLI** | **experimental** — compiled to `.codex/`, never validated by a conformance run | **no** — deferred to CI and the deterministic scripts |
+| **Gemini CLI** | **experimental** — compiled to `.gemini/`, same reserve | **no** — same |
+
+Under Codex or Gemini CLI nothing stops an out-of-ownership write or an agent
+wired before its TOOL GATE at the moment it happens; CI catches it later. The
+spawn wrapper those harnesses would need is planned, not written. The root
+`AGENTS.md` and `GEMINI.md` are generated pointers to the facades — they are
+what Codex and Gemini CLI actually read. Details:
+[MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md).
+
+---
+
+## Quickstart
+
+> **Design phase.** `frameworkStatus: design-phase` in
+> [`registry/compatibility.matrix.json`](.sdda/registry/compatibility.matrix.json):
+> **no stack combination has been validated end to end**, C1 included. The steps
+> below run the pipeline; they do not promise a green verdict. Harness: Claude
+> Code (Codex and Gemini CLI are experimental, see above).
+
+1. **Clone** — Python 3.11+ only, nothing to install:
+   `git clone https://github.com/zekiriabd/SDD-Agents.git && cd SDD-Agents`
+2. **Bootstrap** — `python bootstrap.py` (interactive), or
+   `python bootstrap.py --combo c1 --app-name SupportDesk --auto`. It writes
+   `workspace/stack/STACK.md`, `workspace/assets/.env` and the workspace tree,
+   then runs a smoke check. No LLM call.
+3. **Fill `workspace/stack/STACK.md`** — above all `## Project Config`:
+   `CostPerRunTargetUsd` and `LatencyP95TargetMs` have no default and the
+   MISSION GATE requires them. Names of variables only, never a secret value.
+4. **Secrets** — put the values in `workspace/assets/.env` (`LLM_API_KEY`,
+   `DB_*` if a database), then `python .sdda/sdda.py install-env` copies them
+   into the generated application. No agent ever reads either file.
+5. **Your inputs** — the brief as `workspace/feats/1-{Name}.md` (Markdown only),
+   your data under `workspace/assets/`, your ground truth (annotated scenarios,
+   labels) under `workspace/seed/`.
+6. **Open Claude Code at the repository root**, then elicit MISSION 1 from the
+   brief: `/sdda-mission {Name} --from-brief workspace/feats/1-{Name}.md`. Every
+   `<à préciser>` left open blocks G0 — answer it, or edit the MISSION.
+7. **Run the pipeline** — `/sdda-full 1`. It stops cleanly on any decision that
+   belongs to you, first of all the roster: `/sdda-roster 1` writes a pre-filled
+   `workspace/feats/1-roster.md`, you complete it, then `/sdda-full 1 --resume`.
+8. **Read the state** — `/sdda-status 1` (add `--gates` for the check-by-check
+   detail). The state is derived from gate reports, never declared.
+
+`/sdda-help` says what to do next from the derived state.
+
 ---
 
 ## Where your work lives — the workspace
@@ -255,7 +306,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->1166<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->1170<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable
@@ -409,7 +460,7 @@ inert.** A full source-by-source audit, then every finding fixed. What it found:
 - five controls declared themselves active and never ran: the ownership hooks
   read the sub-agent identity in the wrong payload slot (every sub-agent write
   was allowed); the spawn hooks matched `Task` only, never `Agent`; the facades
-  carried `model_tier` but no `model:` (all 22 agents inherited the parent
+  carried `model_tier` but no `model:` (every agent inherited the parent
   model); `MaxCostPerRun` had no writer feeding the cumulative cost; the
   `build_loop` bounds lived only in the prompt they were meant to bound;
 - hook commands were relative to the current directory: one `cd` disarmed all
@@ -441,3 +492,10 @@ Remaining: the six generator agents and their stacks (Lot 4), then review
 measured by a real run. C1 is the MVP target, in `design-phase`. Announcing
 anything else would be precisely the false green this framework exists to
 prevent.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). The same terms cover the framework sources under
+`.sdda/` and the `sdda` Python package built from `.sdda/python/`.

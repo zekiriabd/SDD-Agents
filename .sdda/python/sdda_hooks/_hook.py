@@ -67,6 +67,9 @@ for _stream in (sys.stderr, sys.stdout):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     except Exception:
+        # Ignorable : un flux remplacé (tests, tube) n'a pas `reconfigure`. Le
+        # signaler sur stderr — le flux même qui vient d'échouer — ajouterait
+        # du bruit au refus que le modèle doit lire, sans rien corriger.
         pass
 
 #: Codes de sortie. `2` est la valeur que Claude Code interprète comme un refus.

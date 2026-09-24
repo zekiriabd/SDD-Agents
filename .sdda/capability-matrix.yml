@@ -7,7 +7,10 @@
 #
 # Valeurs : native | emulated | ci_fallback | unsupported
 #   native      = fourni par le harnais lui-même
-#   emulated    = dégradation contrôlée via wrapper (spawn_agent.py, inline statique)
+#   emulated    = dégradation contrôlée via wrapper ou inline statique. Le
+#                 wrapper de spawn (`spawn_agent`) est PLANIFIÉ, pas encore
+#                 écrit : aujourd'hui, `emulated` sur `subagent_spawn` veut dire
+#                 « l'humain ou le harnais lance le sous-processus lui-même ».
 #   ci_fallback = reporté au CI-time / aux scripts déterministes
 #   unsupported = absent, aucune émulation prévue — DOIT être documenté dans le rapport
 #
@@ -124,6 +127,9 @@ harnesses:
       structured_output: native
     memory_file: AGENTS.md
     impact: |
+      EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
+      Codex CLI lit `AGENTS.md` à la racine : harness_build y écrit un pointeur
+      vers `.codex/AGENTS.md`.
       PERD : l'application des gates AU MOMENT de l'action. Les invariants
       tool-gate-before-agent-wiring et retrieval-gate-before-agent deviennent des
       contrôles pre-exec du wrapper + un gate CI. Conséquence assumée et à dire
@@ -145,6 +151,9 @@ harnesses:
       structured_output: emulated     # à mesurer au premier run de conformance
     memory_file: GEMINI.md
     impact: |
+      EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
+      Gemini CLI lit `GEMINI.md` à la racine : harness_build y écrit un
+      pointeur vers `.gemini/GEMINI.md`.
       Idem codex pour les hooks. `structured_output: emulated` est le point à
       surveiller : les rapports d'eval et les verdicts de gate sont du JSON, et
       un parsing défensif est un coût réel. À requalifier après mesure — pas
@@ -180,3 +189,7 @@ impact_report_policy: |
 
   Un harnais ne peut pas être annoncé au niveau A sans un run de conformance
   mesuré. `status: planned` signifie « compilable », jamais « validé ».
+
+  Dit aux utilisateurs (README, MULTI-HARNESS.md, AGENTS.md / GEMINI.md racine) :
+  Claude Code est SUPPORTÉ ; un harnais `planned` est EXPÉRIMENTAL, sans gate
+  bloquante au runtime.

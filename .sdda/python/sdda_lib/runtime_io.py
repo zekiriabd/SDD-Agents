@@ -77,6 +77,8 @@ def ensure_utf8_stdout() -> None:
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
         except Exception:
+            # Ignorable, et voulu (cf. docstring) : un tampon de test ou un
+            # tube n'a pas `reconfigure`, et le flux garde alors son encodage.
             pass
 
 
