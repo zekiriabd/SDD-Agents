@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
+# >= 77 : `license` en expression SPDX (PEP 639) plutôt qu'en table `{ text }`.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +9,12 @@ version = "0.1.0"
 description = "SDD_Agents — outillage déterministe (0 token, 0 réseau) : compilateur d'IR, gates, machine à états"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+# Le texte de la licence est `LICENSE` à la RACINE du dépôt. setuptools refuse
+# un `license-files` hors du répertoire du projet (`../../LICENSE`) : le
+# workflow `release.yml` copie donc `LICENSE` ici avant `python -m build`, et le
+# motif par défaut (`LICEN[CS]E*`) l'embarque dans la wheel et le sdist. La
+# copie locale est gitignorée — une seule source.
+license = "MIT"
 # Le moteur est stdlib uniquement : pas de PyYAML, pas de jsonschema, pas de client HTTP (P4).
 dependencies = []
 

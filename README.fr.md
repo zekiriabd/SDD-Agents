@@ -447,3 +447,11 @@ revue (Lot 5). Ordre et raisons : [ROADMAP.md](.sdda/docs/ROADMAP.md).
 encore été mesurée par un run réel. C1 est la cible du MVP, en `design-phase`.
 Annoncer autre chose serait précisément le faux vert que ce framework existe
 pour empêcher.
+
+---
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE). Les mêmes termes couvrent les sources du
+framework sous `.sdda/` et le paquet Python `sdda` construit depuis
+`.sdda/python/`.
