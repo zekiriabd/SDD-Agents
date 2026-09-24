@@ -83,6 +83,42 @@ what Codex and Gemini CLI actually read. Details:
 
 ---
 
+## Quickstart
+
+> **Design phase.** `frameworkStatus: design-phase` in
+> [`registry/compatibility.matrix.json`](.sdda/registry/compatibility.matrix.json):
+> **no stack combination has been validated end to end**, C1 included. The steps
+> below run the pipeline; they do not promise a green verdict. Harness: Claude
+> Code (Codex and Gemini CLI are experimental, see above).
+
+1. **Clone** — Python 3.11+ only, nothing to install:
+   `git clone https://github.com/zekiriabd/SDD-Agents.git && cd SDD-Agents`
+2. **Bootstrap** — `python bootstrap.py` (interactive), or
+   `python bootstrap.py --combo c1 --app-name SupportDesk --auto`. It writes
+   `workspace/stack/STACK.md`, `workspace/assets/.env` and the workspace tree,
+   then runs a smoke check. No LLM call.
+3. **Fill `workspace/stack/STACK.md`** — above all `## Project Config`:
+   `CostPerRunTargetUsd` and `LatencyP95TargetMs` have no default and the
+   MISSION GATE requires them. Names of variables only, never a secret value.
+4. **Secrets** — put the values in `workspace/assets/.env` (`LLM_API_KEY`,
+   `DB_*` if a database), then `python .sdda/sdda.py install-env` copies them
+   into the generated application. No agent ever reads either file.
+5. **Your inputs** — the brief as `workspace/feats/1-{Name}.md` (Markdown only),
+   your data under `workspace/assets/`, your ground truth (annotated scenarios,
+   labels) under `workspace/seed/`.
+6. **Open Claude Code at the repository root**, then elicit MISSION 1 from the
+   brief: `/sdda-mission {Name} --from-brief workspace/feats/1-{Name}.md`. Every
+   `<à préciser>` left open blocks G0 — answer it, or edit the MISSION.
+7. **Run the pipeline** — `/sdda-full 1`. It stops cleanly on any decision that
+   belongs to you, first of all the roster: `/sdda-roster 1` writes a pre-filled
+   `workspace/feats/1-roster.md`, you complete it, then `/sdda-full 1 --resume`.
+8. **Read the state** — `/sdda-status 1` (add `--gates` for the check-by-check
+   detail). The state is derived from gate reports, never declared.
+
+`/sdda-help` says what to do next from the derived state.
+
+---
+
 ## Where your work lives — the workspace
 
 What you provide sits at the root; what the framework produces sits under
