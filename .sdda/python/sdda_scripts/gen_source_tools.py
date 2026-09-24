@@ -62,28 +62,48 @@ PY_TYPES = {
     "object": "dict[str, Any]", "array": "list[Any]", "null": "None",
 }
 
-#: Erreurs déclarées par type d'outil : code -> (signification, comportement attendu).
+#: Erreurs que le runtime LÈVE, par type d'outil : code -> (signification, comportement).
+#:
+#: Uniquement ce que `data/envelope.py` lève vraiment. La table déclarait aussi
+#: `NOT_FOUND`, `SOURCE_STALE` et `TOO_MANY_RECORDS`, que le runtime ne lève
+#: pas : il les REND (`record: null`, `stale: true`, `truncated: true`). Chaque
+#: contrat promettait donc trois erreurs impossibles ; `qa-evals` écrivait leurs
+#: cas, `qa-tests` les marquait `xfail`, et G3 les tenait pour des défauts.
+_UNAVAILABLE = ("SOURCE_UNAVAILABLE", ("source illisible (fichier réécrit, hôte injoignable)", "un seul retry, puis échec explicite"))
+_TIMEOUT = ("TIMEOUT", ("budget de lecture dépassé", "échec explicite, jamais un résultat partiel muet"))
+_INVALID = ("INVALID_FILTER", ("filtre sur un champ non exposé, valeur hors domaine, ou identité de l'appelant absente",
+                               "corriger le filtre, ne pas contourner par un autre outil ; sans identité, s'arrêter"))
 DECLARED_ERRORS: dict[str, dict[str, tuple[str, str]]] = {
+    "lookup": dict([_UNAVAILABLE, _TIMEOUT]),
+    "search": dict([_INVALID, _UNAVAILABLE, _TIMEOUT]),
+    "count": dict([_INVALID, _UNAVAILABLE, _TIMEOUT]),
+}
+
+#: États RENDUS dans la sortie — pas des erreurs, mais des cas que l'agent doit
+#: traiter et que les tests doivent couvrir : champ de sortie -> (quand, comportement).
+SIGNALED_STATES: dict[str, dict[str, tuple[str, str]]] = {
     "lookup": {
-        "NOT_FOUND": ("aucun enregistrement pour cette clé", "le dire à l'utilisateur, ne pas réessayer"),
-        "SOURCE_STALE": ("l'instantané dépasse max_staleness_hours", "répondre en signalant explicitement la date de la donnée"),
-        "SOURCE_UNAVAILABLE": ("source illisible (fichier réécrit, hôte injoignable)", "un seul retry, puis échec explicite"),
-        "TIMEOUT": ("budget de lecture dépassé", "échec explicite, jamais un résultat partiel muet"),
+        "record: null": ("clé inconnue, ou enregistrement d'un autre appelant (indiscernables)",
+                         "le dire à l'utilisateur, ne pas réessayer avec une variante"),
+        "stale: true": ("l'instantané dépasse max_staleness_hours", "répondre en signalant explicitement la date `as_of`"),
     },
     "search": {
-        "TOO_MANY_RECORDS": ("plus d'enregistrements que le plafond", "affiner les filtres avant de répondre, ne jamais conclure sur le tronqué"),
-        "INVALID_FILTER": ("filtre sur un champ non exposé, ou valeur hors domaine", "corriger le filtre, ne pas contourner par un autre outil"),
-        "SOURCE_STALE": ("l'instantané dépasse max_staleness_hours", "répondre en signalant explicitement la date de la donnée"),
-        "SOURCE_UNAVAILABLE": ("source illisible (fichier réécrit, hôte injoignable)", "un seul retry, puis échec explicite"),
-        "TIMEOUT": ("budget de lecture dépassé", "échec explicite, jamais un résultat partiel muet"),
+        "records: []": ("aucun enregistrement ne correspond", "le dire ; ne pas élargir les filtres sans le signaler"),
+        "truncated: true": ("plafond atteint, le total réel est supérieur", "affiner les filtres avant de conclure ; compter avec l'outil `count`"),
+        "stale: true": ("l'instantané dépasse max_staleness_hours", "répondre en signalant explicitement la date `as_of`"),
     },
     "count": {
-        "INVALID_FILTER": ("filtre sur un champ non exposé, ou valeur hors domaine", "corriger le filtre, ne pas contourner par un autre outil"),
-        "SOURCE_STALE": ("l'instantané dépasse max_staleness_hours", "répondre en signalant explicitement la date de la donnée"),
-        "SOURCE_UNAVAILABLE": ("source illisible (fichier réécrit, hôte injoignable)", "un seul retry, puis échec explicite"),
-        "TIMEOUT": ("budget de lecture dépassé", "échec explicite, jamais un résultat partiel muet"),
+        "stale: true": ("l'instantané dépasse max_staleness_hours", "répondre en signalant explicitement la date `as_of`"),
     },
 }
+
+
+def declared_errors(kind: str, src: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """Une lecture par clé ne lève `INVALID_FILTER` que si la source exige une identité."""
+    errors = dict(DECLARED_ERRORS[kind])
+    if kind == "lookup" and src.get("required_filter"):
+        errors = {_INVALID[0]: _INVALID[1], **errors}
+    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +664,11 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
 
     rows = "\n".join(
         f"| `{code}` | {meaning} | {behavior} |"
-        for code, (meaning, behavior) in DECLARED_ERRORS[kind].items()
+        for code, (meaning, behavior) in declared_errors(kind, src).items()
+    )
+    states = "\n".join(
+        f"| `{field}` | {when} | {behavior} |"
+        for field, (when, behavior) in SIGNALED_STATES[kind].items()
     )
     body = [
         f"# TOOL CONTRACT: {contract_id}",
@@ -694,6 +718,12 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
         "|---|---|---|",
         rows,
         "",
+        "### 4.1 États signalés — rendus, jamais levés",
+        "",
+        "| Sortie | Quand | Comportement attendu de l'agent |",
+        "|---|---|---|",
+        states,
+        "",
         "## 5. Bornes techniques",
         "",
         "| | |",
@@ -742,7 +772,8 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
 
 
 def _test_checklist(kind: str, src: dict[str, Any]) -> list[str]:
-    items = ["happy path"] + [f"erreur `{code}`" for code in DECLARED_ERRORS[kind]]
+    items = ["happy path"] + [f"erreur `{code}`" for code in declared_errors(kind, src)]
+    items += [f"état `{field}`" for field in SIGNALED_STATES[kind] if field != "truncated: true"]
     items.append("`as_of` présent dans chaque réponse, y compris vide")
     if kind == "search":
         items.append(f"plafond atteint -> `truncated: true` (lecture de maxRows+1)")
@@ -935,7 +966,7 @@ def render_tool_specs(ctx: Context, report: Report, only: str | None) -> dict[st
             "rate_limit_rpm": int(store.get("rate_limit_rpm") or 600),
             "retry_policy": "exponential:2",
             "max_response_bytes": max_rows * 1024 if kind == "search" else 65536,
-            "errors": sorted(DECLARED_ERRORS[kind]),
+            "errors": sorted(declared_errors(kind, src)),
             "tool_schema_hash": "sha256:" + hashlib.sha256(pinned.encode()).hexdigest(),
         })
     return {"version": 1, "tools": sorted(tools, key=lambda e: e["id"])}

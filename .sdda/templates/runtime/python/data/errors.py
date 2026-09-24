@@ -26,14 +26,6 @@ class DataAccessError(Exception):
                 "source": self.source, "detail": self.detail}
 
 
-class NotFound(DataAccessError):
-    """Aucun enregistrement pour cette clé. L'agent le dit, il ne réessaie pas."""
-    code = "NOT_FOUND"
-
-
-class TooManyRecords(DataAccessError):
-    """Plus d'enregistrements que le plafond, sur une opération qui exige l'exhaustivité."""
-    code = "TOO_MANY_RECORDS"
 
 
 class InvalidFilter(DataAccessError):
@@ -45,19 +37,6 @@ class InvalidFilter(DataAccessError):
     code = "INVALID_FILTER"
 
 
-class SourceStale(DataAccessError):
-    """L'instantané dépasse `max_staleness_hours`.
-
-    Une ERREUR et non un avertissement : répondre sur des données périmées sans
-    le signaler est une régression silencieuse, et c'est le piège n°1 de cette
-    stack.
-    """
-    code = "SOURCE_STALE"
-
-    def __init__(self, message: str, *, source: str = "", as_of: str = "", age_hours: float = 0.0):
-        super().__init__(message, source=source, detail=f"as_of={as_of}, âge={age_hours:.1f}h")
-        self.as_of = as_of
-        self.age_hours = age_hours
 
 
 class SourceUnavailable(DataAccessError):

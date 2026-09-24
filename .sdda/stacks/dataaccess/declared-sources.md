@@ -613,7 +613,7 @@ workspace/src/{AppName}/tests/data/
 ├── test_secrets_by_name.py     # L0 : aucune valeur de secret dans STACK.md ni dans un manifeste ; toute var citée existe dans .env
 ├── test_schema_frozen.py       # L0 : chaque source a son schéma figé ; aucun champ non déclaré n'est exposé
 ├── test_envelope.py            # L2 : frontière de racine ; symlink refusé ; egress hors allowlist refusé ; LIMIT+1 -> truncated ; timeout ; staleness
-└── test_{source_id}.py         # L2 : happy, introuvable, filtre invalide, TOO_MANY_RECORDS, champ free_text enveloppé
+└── test_{source_id}.py         # L2 : happy, chaque erreur LEVÉE (§4), chaque état RENDU (§4.1 : record null, truncated, stale), free_text enveloppé
 ```
 
 Les données elles-mêmes ne sont **pas** dans `workspace/src/` : ce sont des
