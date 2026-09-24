@@ -10,25 +10,32 @@ agent.
 ## 1. La machine à états
 
 ```
-   Draft ──G0──► Specified ──G1──► Architected ──G2──► Planned
-                                                          │
-                                                          │ G3 · G4
-                                                          ▼
-                                                     Implemented
-                                                          │ G5
-                                                          ▼
-                                                       Tested
-                                                          │ G6 · G7
-                                                          ▼
-                                                      Evaluated
-                                                          │ G8
-                                                          ▼
-                                                       Approved
+   Draft ──G0 · G1──► Specified ──G2──► Architected ──(revue de plan)──► Planned
+                                                                          │
+                                                                          │ G3 · G4
+                                                                          ▼
+                                                                     Implemented
+                                                                          │ G5
+                                                                          ▼
+                                                                       Tested
+                                                                          │ G6 · G7
+                                                                          ▼
+                                                                      Evaluated
+                                                                          │ G8
+                                                                          ▼
+                                                                       Approved
 
    Depuis tout état non terminal :  ──► Blocked   (gate rouge, cause [CLASS] portée)
                                     ──► Deferred
                                     ──► Cancelled
 ```
+
+Une étiquette d'arête nomme la gate qui **donne** l'état d'arrivée — celle du
+tableau ci-dessous et de `compute_status.py`. Le schéma les décalait d'un cran
+(`Specified ──G1──► Architected`) : il plaçait `Architected` après G1, là où le
+tableau et le code l'accordent à G2. `Planned` n'a pas de gate numérotée : la
+revue de plan est conditionnelle, et son absence fait sauter le niveau
+(`OPTIONAL_LEVELS`).
 
 **Aucun saut d'état.** `Draft -> Implemented` est refusé même avec un flag : le
 bypass existe au niveau d'une gate donnée (audit-loggué), pas au niveau de la

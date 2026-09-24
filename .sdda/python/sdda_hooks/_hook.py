@@ -280,7 +280,7 @@ def unknown_subagent(hook: str, agent: str, rel: str) -> int:
         return ALLOW  # hors du workspace : pas notre affaire
     return deny(hook, "OWNERSHIP_AGENT_UNKNOWN",
                 f"`{agent}` n'est dans aucune matrice d'ownership et touche `{normalized}`",
-                "un sous-agent qui écrit ou lit sous workspace/ est l'un des 22 agents de loader.yml, "
+                "un sous-agent qui écrit ou lit sous workspace/ est l'un des agents déclarés dans loader.yml, "
                 "lancé sous son propre nom — un `general-purpose` à qui l'on dit « tu es dev-agent » "
                 "n'a ni ses droits, ni ses interdits, donc aucun des deux ne s'applique")
 

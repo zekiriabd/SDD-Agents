@@ -263,18 +263,8 @@ qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
 vérifie, il ne la prend pas.
 
   /sdda-roster {n} --validate   dit quels trous restent
+  /sdda-roster {n}              (ré)écrit un gabarit pré-rempli depuis la MISSION et les CAPs
   /sdda-full {n} --resume       reprend ici une fois le manifeste complet
-```
-
-```
-⏸ /sdda-full {n} — arrêt sur une décision qui vous appartient
-
-Le roster est la décision d'architecture agentic : combien d'agents, lesquels,
-qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
-vérifie, il ne la prend pas.
-
-  /sdda-roster {n}            écrit un gabarit pré-rempli, puis le vérifie
-  /sdda-full {n} --resume     reprend ici une fois le manifeste complet
 ```
 
 **Pourquoi ce STEP existe.** `architect-topology` matérialise un roster
@@ -302,7 +292,7 @@ Garde `should-skip-step topology`. Exécuter `/sdda-topology {n}`.
 ```
 🟡 /sdda-full {n} — arrêt sur gate {Gk} jaune ({raison courte})
 
-Rapport : workspace/.sys/.validation/{n}-G{k}-{gate}.json
+Rapport : workspace/.sys/.validation/G{k}-{n}-{MissionName}[.{part}].json   (G1/G5 : aussi un par CAP, G3 : un par outil)
   {détail : coût estimé $0.07 > cible $0.05 (cap $0.25) | CAP 1-2 variance 18% > 15% | …}
 
 Le jaune est une information, pas une indécision : le prochain run peut ne pas passer.

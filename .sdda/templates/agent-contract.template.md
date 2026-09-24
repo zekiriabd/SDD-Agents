@@ -46,7 +46,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 > Une **skill** est ce que l'agent *sait faire* ; un **outil** est ce qu'il a *le
 > droit d'appeler*. Une skill n'a ni schéma, ni auth, ni effet de bord : elle est
 > portée par le prompt système, dont `dev-prompt` est l'owner. Reprendre ici
-> les `skills:` déclarées par l'architecte au roster (`{n}-roster.yml`) — le
+> les `skills:` déclarées par l'architecte au roster (`workspace/feats/{n}-roster.md`) — le
 > framework n'en invente aucune (P7).
 >
 > Table vide = l'agent n'a aucune compétence nommée, et c'est une déclaration.
@@ -71,7 +71,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 > *sait faire* ; un **outil** est ce qu'il a *le droit d'appeler*. Comme la
 > skill, la règle n'a ni schéma ni effet de bord : elle vit dans le prompt
 > système, dont `dev-prompt` est l'owner. Reprendre ici les `rules:` déclarées
-> par l'architecte au roster (`{n}-roster.yml`) — le framework n'en invente
+> par l'architecte au roster (`workspace/feats/{n}-roster.md`) — le framework n'en invente
 > aucune (P7).
 >
 > À ne pas confondre avec `.sdda/rules/`, qui sont les règles du FRAMEWORK de
