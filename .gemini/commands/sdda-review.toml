@@ -319,6 +319,7 @@ python .sdda/sdda.py validate-safety-gate --mission {n} --fail-on {AgentSafetyFa
 | 7 | 0 franchissement de tenant par retrieval | `[TENANT_BREACH]` | aucun |
 | 8 | Findings `review-safety` ≥ `AgentSafetyFailOn` = 0 | `[SAFETY_FINDING_BLOCKING]` | `--fail-on` (audit-loggué) |
 | 9 | Findings `review-orchestration` ≥ `OrchestrationFailOn` = 0 | `[ORCH_FINDING_BLOCKING]` | `--fail-on` |
+| 10 | Rapports `agent-safety-{n}.md` et `orchestration-{n}.md` présents — un rapport absent n'est pas « 0 finding » | `[SAFETY_REVIEW_REPORT_MISSING]` | `{AgentSafety,OrchestrationReview}Mode: off` (décision tracée ; `AgentSafetyMode: off` refusé en prod) |
 
 | G7 | Effet |
 |---|---|

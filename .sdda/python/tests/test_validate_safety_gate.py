@@ -56,12 +56,22 @@ def errors(project: Path, **kw) -> list[str]:
     return [f.cls for f in run(project, **kw).errors]
 
 
+def clean_reviews(project: Path) -> Path:
+    """Les deux rapports de l'étage B que la gate exige, lus et sans finding.
+
+    Sous le nom accepté de plus BASSE priorité : un test qui écrit un rapport
+    sous un autre nom accepté le voit lu en premier."""
+    reviewer_report(project, "review-safety", ["Aucun finding."], name="1-review-safety.md")
+    reviewer_report(project, "review-orchestration", ["Aucun finding."], name="1-review-orchestration.md")
+    return project
+
+
 @pytest.fixture
 def green_project(project: Path) -> Path:
-    """Un projet dont les deux parts obligatoires de G7 sont vertes."""
+    """Un projet dont les deux parts obligatoires de G7 sont vertes et l'étage B rendu."""
     green_part(project, "suites")
     green_part(project, "adversarial")
-    return project
+    return clean_reviews(project)
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +95,7 @@ def test_default_thresholds_come_from_the_base_config(green_project: Path) -> No
 # Les parts : absence de preuve n'est pas preuve
 # ---------------------------------------------------------------------------
 def test_absent_parts_are_not_green_parts(project: Path) -> None:
-    report = run(project)
+    report = run(clean_reviews(project))
     assert not report.ok
     assert [f.cls for f in report.errors] == ["SAFETY_GATE_FAILED", "SAFETY_GATE_FAILED"]
     messages = " ".join(f.message for f in report.errors)
@@ -93,6 +103,7 @@ def test_absent_parts_are_not_green_parts(project: Path) -> None:
 
 
 def test_one_missing_part_is_enough_to_fail(project: Path) -> None:
+    clean_reviews(project)
     green_part(project, "suites")
     report = run(project)
     assert [f.cls for f in report.errors] == ["SAFETY_GATE_FAILED"]
@@ -138,13 +149,13 @@ def test_a_stack_wide_scan_counts_for_every_mission(green_project: Path) -> None
 def test_parts_written_under_the_bare_mission_number_are_seen(project: Path) -> None:
     green_part(project, "suites", artifact="1")
     green_part(project, "adversarial", artifact="1")
-    assert run(project).ok
+    assert run(clean_reviews(project)).ok
 
 
 def test_parts_of_another_mission_are_ignored(project: Path) -> None:
     green_part(project, "suites", artifact="2-Autre")
     green_part(project, "adversarial", artifact="2-Autre")
-    assert errors(project) == ["SAFETY_GATE_FAILED", "SAFETY_GATE_FAILED"]
+    assert errors(clean_reviews(project)) == ["SAFETY_GATE_FAILED", "SAFETY_GATE_FAILED"]
 
 
 def test_the_verdict_part_is_never_an_input(green_project: Path) -> None:
@@ -233,9 +244,28 @@ def test_every_accepted_reviewer_report_name_is_found(green_project: Path, name:
     assert errors(green_project) == ["SAFETY_FINDING_BLOCKING"]
 
 
-def test_no_reports_dir_means_no_reviewer_finding(green_project: Path) -> None:
-    assert vsg.reviewer_findings(green_project, MISSION) == {}
-    assert run(green_project).ok
+def test_no_reports_dir_means_no_reviewer_report_and_that_is_an_error(project: Path) -> None:
+    """Un rapport ABSENT valait 0 finding : un étage B qui n'avait pas tourné
+    rendait un vert. L'absence est dite, et elle bloque."""
+    green_part(project, "suites")
+    green_part(project, "adversarial")
+    assert vsg.reviewer_findings(project, MISSION) == {}
+    report = run(project)
+    assert [f.cls for f in report.errors] == [vsg.CLS_REVIEW_REPORT_MISSING] * 2
+    assert "agent-safety-1.md" in report.errors[0].message
+
+
+def test_a_reviewer_switched_off_is_not_required(project: Path) -> None:
+    green_part(project, "suites")
+    green_part(project, "adversarial")
+    reviewer_report(project, "review-safety", ["Aucun finding."], name="agent-safety-1.md")
+    patch_config(project, "OrchestrationReviewMode: off")
+    assert run(project).ok
+
+
+def test_an_empty_report_is_read_not_missing(green_project: Path) -> None:
+    found = vsg.reviewer_findings(green_project, MISSION)
+    assert found == {"review-safety": [], "review-orchestration": []}
 
 
 def test_reviewer_findings_are_grouped_by_reviewer(green_project: Path) -> None:
@@ -277,7 +307,7 @@ def test_cli_exits_one_and_still_writes_a_red_verdict(project: Path) -> None:
     assert json.loads(out)["ok"] is False
     written = json.loads(report_path(project, "G7", MISSION, part="verdict").read_text(encoding="utf-8"))
     assert written["ok"] is False
-    assert {e["class"] for e in written["errors"]} == {"SAFETY_GATE_FAILED"}
+    assert {e["class"] for e in written["errors"]} == {"SAFETY_GATE_FAILED", vsg.CLS_REVIEW_REPORT_MISSING}
 
 
 def test_cli_text_mode_renders_the_class_and_the_verdict(project: Path) -> None:
@@ -317,6 +347,7 @@ def test_cli_a_never_bypassed_class_defeats_fail_on(green_project: Path) -> None
 def test_a_second_run_is_not_fed_by_its_own_red_verdict(project: Path) -> None:
     """Rouge, puis correction, puis vert : le verdict précédent ne pèse pas."""
     assert run_main(vsg.main, ["--root", str(project), "--mission", "1", "--json"])[0] == 1
+    clean_reviews(project)
     green_part(project, "suites")
     green_part(project, "adversarial")
     code, out = run_main(vsg.main, ["--root", str(project), "--mission", "1", "--json"])
