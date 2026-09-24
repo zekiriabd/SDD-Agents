@@ -20,13 +20,33 @@ A release is cut by pushing a `v*` tag whose version equals
   and `pyproject.toml` declares the SPDX expression `MIT`.
 - `CHANGELOG.md`, a tag-triggered release workflow (wheel + sdist attached to a
   GitHub Release, no PyPI upload) and Dependabot for GitHub Actions and pip.
+- CI `lint` job: `ruff` on real errors only (`E9`, `F63`, `F7`, `F82`) and
+  non-strict `mypy` on `sdda_lib`; configuration and per-module baselines in
+  `.sdda/python/pyproject.toml`.
+- Coverage report in CI with a floor at the measured coverage, rounded down
+  (81 %, measured 81.77 % on 2026-09-24; scripts run as subprocesses by the
+  tests are not counted).
 
 ### Changed
 
 - CI actions are pinned by commit SHA, and CI exports `SDDA_HOOKS_STRICT=1`
   (no effect until the hooks read it).
 
+- The `except Exception: pass` blocks that swallowed an error silently now say
+  why the error is ignorable.
+
 ### Known debt
+
+- Two real `F821` (undefined name) bugs are baselined in the ruff config, not
+  fixed: `sdda_scripts/compute_status.py` (`app_name` on the `prompt:` hash
+  branch) and `sdda_scripts/lint_prompts.py` (`{App}` inside an f-string in
+  the `[PROMPT_MISSING]` fix). Both raise `NameError` when reached.
+- `F401` / `F841` are not enforced (33 occurrences), and seven `mypy` errors in
+  `sdda_lib` are disabled per module and per error code.
+- Seven modules exceed 800 lines and should be split: `ir_compiler.py` (1319),
+  `gen_source_tools.py` (1216), `framework_smoke.py` (1055),
+  `validate_data_access.py` (1042), `migrate_workspace.py` (1030),
+  `sdda_state.py` (907), `context_pack.py` (862).
 
 - Framework documentation under `.sdda/docs/` is still largely French-only;
   the English/French twin convention (`.sdda/docs/README.md`) is applied to the
