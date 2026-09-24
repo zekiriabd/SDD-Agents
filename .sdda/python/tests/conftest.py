@@ -7,6 +7,7 @@ doit jamais bouger sous les tests.
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import sys
 from contextlib import redirect_stderr, redirect_stdout
@@ -32,14 +33,28 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     _WORKSPACE_BEFORE.update(_workspace_guard.snapshot())
 
 
+def _gha_error(title: str, message: str) -> None:
+    """Annotation GitHub Actions : lisible dans l'onglet Checks ET par l'API publique,
+    là où le journal brut exige un jeton — un échec de CI se lit sans rien télécharger."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        flat = message.replace("%", "%25").replace("\r", "").replace("\n", "%0A")[:4000]
+        sys.stdout.write(f"\n::error title={title}::{flat}\n")
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    if report.failed:
+        _gha_error(f"{report.when} failed", f"{report.nodeid}\n{report.longreprtext[-3000:]}")
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     changes = _workspace_guard.diff(_WORKSPACE_BEFORE, _workspace_guard.snapshot())
     if changes:
-        sys.stderr.write(
-            "\nERREUR : la suite de tests a modifié le workspace RÉEL "
-            f"({_workspace_guard.REAL_WORKSPACE}) :\n  " + "\n  ".join(changes[:20])
-            + "\nUn test travaille sur `make_project(tmp_path)` et lance ses sous-processus avec "
-              "`--root`/`cwd` vers un bac à sable.\n")
+        message = ("la suite de tests a modifié le workspace RÉEL "
+                   f"({_workspace_guard.REAL_WORKSPACE}) :\n  " + "\n  ".join(changes[:20])
+                   + "\nUn test travaille sur `make_project(tmp_path)` et lance ses sous-processus avec "
+                     "`--root`/`cwd` vers un bac à sable.")
+        sys.stderr.write("\nERREUR : " + message + "\n")
+        _gha_error("workspace guard", message)
         session.exitstatus = 1
 
 
