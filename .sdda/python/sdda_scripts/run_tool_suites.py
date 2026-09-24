@@ -41,7 +41,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, paths  # noqa: E402
+from sdda_lib import hashing, markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import app_name  # noqa: E402
@@ -67,9 +67,16 @@ class ToolOutcome:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
-    import yaml  # dépendance déjà requise par les suites
+    """Une suite L2, lue par `yaml_mini` — jamais par PyYAML.
 
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    L'outillage est stdlib seul (`pyproject.toml` n'en déclare aucune
+    dépendance). L'import de PyYAML qui vivait ici supposait PyYAML « déjà requis
+    par les suites » : il l'était sur la machine du développeur, pas sur un
+    clone nu. Là, l'ImportError tombait dans le `except` de `find_suites`, qui
+    la prenait pour une suite illisible — toutes les suites disparaissaient, et
+    G3 rendait « aucune suite déclarée » au lieu de dire qu'il ne savait pas lire.
+    """
+    data = yaml_mini.parse(markdown_io.read_text(path))
     return data if isinstance(data, dict) else {}
 
 
