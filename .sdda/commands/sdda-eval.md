@@ -153,9 +153,16 @@ ultérieure change le hash et périme les résultats (R2).
 Pour chaque grader `llm-judge` des suites :
 
 ```bash
-python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json \
-  > workspace/pipeline/calibration/{g}.json
+python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json
 ```
+
+Le script écrit lui-même la part `calibration` de G5
+(`workspace/.sys/.validation/G5-{n}.calibration.json`, rattachée à chaque CAP de
+la MISSION) : rouge, elle bloque G5. La sortie `--json` n'est **jamais**
+redirigée vers `workspace/pipeline/calibration/{g}.json` — ce fichier est
+l'ENTRÉE du script (le `judgeCalibrationRef` de la suite, qui pointe les labels
+humains) ; l'écraser par le rapport effaçait la référence aux labels à la
+première exécution.
 
 | Résultat | Effet |
 |---|---|
