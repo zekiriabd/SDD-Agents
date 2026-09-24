@@ -6,6 +6,7 @@ Date: {YYYY-MM-DD}
 Deciders: <rôles, pas des noms — ex. Tech Lead, architect-topology (proposition), humain (arbitrage)>
 Supersedes: <ADR-… | NONE>
 Superseded by: <ADR-… | NONE>
+Covers: <Clé=valeur, … — ex. DbAgentRole=scoped-write, VectorStoreConnection.TlsVerify=false, orchestration=network>
 
 > **Un arbitrage qui contredit un principe de PHILOSOPHY.md exige un ADR, pas
 > un commit.** Un ADR n'est pas une justification après coup : il est écrit
@@ -14,6 +15,13 @@ Superseded by: <ADR-… | NONE>
 >
 > Identifiant : `ADR-{timestamp}-{slug}` (DOMAIN-MODEL.md §5), stable, jamais
 > renuméroté. Fichier : `workspace/pipeline/decisions/ADR-{timestamp}-{slug}.md`.
+>
+> **`Covers:` est ce qui rend l'ADR opposable.** `validate-adr` (part `adr` de
+> G2) ne tient une exigence pour couverte que si un ADR `Status: Accepted` la
+> NOMME ici — clé ET valeur, `Clé=valeur`, séparées par des virgules. Citer la
+> clé dans la prose ne suffit pas : un ADR qui écrit « false » quelque part ne
+> couvre pas toutes les décisions booléennes du projet. Un ADR `Proposed`
+> n'autorise rien. Liste des décisions : `python .sdda/sdda.py validate-adr --explain`.
 
 ---
 
@@ -99,14 +107,19 @@ Superseded by: <ADR-… | NONE>
 
 ---
 
-## Décisions qui EXIGENT un ADR (liste non exhaustive, tirée des documents du framework)
+## Décisions qui EXIGENT un ADR
+
+La liste MACHINE est `.sdda/registry/adr-requirements.yml` : c'est elle que
+`validate-adr` applique (G2, bloquant) et que `/sdda-status` affiche en tâche
+humaine. Elle couvre notamment `ApiContractFirst=false`, `ApiAuthMode=none` sur
+une surface réseau, `DbAgentRole=scoped-write|full`, `MemoryPIIPolicy=allow`,
+`TracePIIPolicy=raw`, `VectorStoreConnection.TlsVerify=false`,
+`StackComboCheck=off` et `orchestration=network`.
+
+Restent hors registre, parce qu'aucun script ne sait les constater — elles
+exigent un ADR tout autant :
 
 | Décision | Source |
 |---|---|
-| Activer le pattern `network` — l'ADR doit démontrer qu'aucun `graph` ne convient | ORCHESTRATION-PATTERNS.md |
-| `DbAgentRole: scoped-write` ou `full` | DATA-ACCESS.md §3, INVARIANTS `db-safety-envelope-present` |
-| `MemoryPIIPolicy: allow` | INVARIANTS `pii-not-in-vector-store`, STACK.md |
-| `TracePIIPolicy: raw` | STACK.md ## Active Observability |
 | Choix du pattern racine hors `single-agent` (quand la TOPOLOGY seule ne suffit pas) | topology.template.md §9 |
-| Stratégie d'accès base en écriture | topology.template.md §9 |
 | Contredire un principe de PHILOSOPHY.md | PHILOSOPHY.md, préambule |
