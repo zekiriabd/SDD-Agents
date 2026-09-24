@@ -39,10 +39,13 @@ Read **uniquement** :
   `embeddingModel`, `hybridWeights`, `rerank`). Plus `agents[].retrievers`.
 - `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif de
   chunking, config retenue, règle de diagnostic, filtrage par identité.
-- `workspace/.sys/reports/{n}/L3-*.json` — retrieval **sans agent** : `recall@k`,
-  `nDCG@k`, `context_precision`, `citation_resolve_rate`, **par requête**.
-- `workspace/.sys/reports/{n}/L4-*.json`, `L7-*.json` — `groundedness`,
-  `answer_relevance`, `abstention_rate`, **par item**, k runs.
+- `workspace/.sys/reports/retrieval-{n}-*.json` (écrits par `run-retrieval-eval`,
+  L3) — retrieval **sans agent** : `recall@k`, `nDCG@k`, `context_precision`,
+  `citation_resolve_rate`, **par requête**.
+- `workspace/.sys/reports/{n}-*.json` (écrits par `eval-runner`), suites `L4` et
+  `L7` — `groundedness`, `answer_relevance`, `abstention_rate`, **par item**,
+  k runs. Il n'existe pas de rapport `groundedness-*` séparé : la groundedness
+  est une suite comme les autres, dans le rapport de son run.
 - `workspace/pipeline/calibration/*.json` — κ de chaque juge utilisé.
 - `workspace/src/{App}/retrieval/*/index.manifest.json` — `indexHash`, config
   effective, nombre de chunks.

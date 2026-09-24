@@ -231,3 +231,31 @@ def test_the_topology_command_runs_the_full_pass_before_compiling_the_ir() -> No
     step6 = text[text.index("## STEP 6"):text.index("## STEP 7")]
     full = step6.index("validate-topology --mission {n}\n")
     assert full < step6.index("ir-compiler --mission {n}")
+
+
+# ---------------------------------------------------------------------------
+# A11 — ce que `loader.yml` ouvre est ce qui est réellement produit, au bon moment
+# ---------------------------------------------------------------------------
+def _reads(agent: str) -> list[str]:
+    from sdda_lib import yaml_mini
+
+    loader = yaml_mini.parse((Path(__file__).resolve().parents[2] / "loader.yml").read_text(encoding="utf-8"))
+    return [str(r) for r in loader[agent].get("reads") or []]
+
+
+def test_reviewers_read_what_is_produced_before_them() -> None:
+    safety = _reads("review-safety")
+    assert not any("reports/adversarial-" in r for r in safety), "écrit au STEP 6, APRÈS l'étage B"
+    assert "workspace/.sys/.validation/G7-*.json" in safety
+    orch = _reads("review-orchestration")
+    assert "workspace/.sys/.validation/trajectories-{n}.json" in orch
+    assert not any("trajectory-" in r or "cost-latency" in r for r in orch)
+    assert not any("groundedness-" in r for r in _reads("review-rag"))
+    adversarial = _reads("review-adversarial")
+    assert "workspace/.sys/.ir/{n}-system.ir.json" in adversarial
+    assert any("prompts" in r for r in adversarial)
+
+
+def test_producers_inputs_are_opened() -> None:
+    assert "workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl" in _reads("qa-evals")
+    assert "workspace/pipeline/contracts/tools/{n}-data-*.tool.md" in _reads("dev-data")
