@@ -1,6 +1,0 @@
-{
-  "grader": "groundedness",
-  "items": 52,
-  "kappa": 0.71,
-  "labelsRef": "workspace/proof/datasets/calibration/groundedness-v1.jsonl"
-}

@@ -41,7 +41,7 @@ elicitation MCP — non utilisés dans le MVP et **refusés** par le client gén
 | **SDK** | `mcp` (Python SDK officiel) **1.2x.x** — pin exact dans le `.libs.json` du framework actif (capability `mcp-tools`) ; `langchain-mcp-adapters` 0.2.x **optionnel** (cf. §5.6) |
 | **Langage** | Python 3.12 (`lang/python.md`) |
 | **Déclaration** | `STACK.md ## Active Tools & Integrations → MCPServers[]` : `name`, `transport`, `command` \| `url`, `auth_env`, `trust`, `tools_allowlist` |
-| **Contrat par outil** | `workspace/feats/contracts/tools/{n}-{server}-{tool}.tool.md` — **un par outil allowlisté**, avant tout câblage (TOOL GATE) |
+| **Contrat par outil** | `workspace/pipeline/contracts/tools/{n}-{server}-{tool}.tool.md` — **un par outil allowlisté**, avant tout câblage (TOOL GATE) |
 
 ### 2.1 Transports
 
@@ -119,7 +119,7 @@ async def call_untrusted(session: ClientSession, name: str, args: dict, *, contr
 
 La sortie enveloppée va dans un `ToolMessage`, jamais dans le système. Tout
 agent qui consomme un outil `untrusted` porte la suite d'injection
-`workspace/proof/datasets/adversarial/{agent}.jsonl` avec des cas **« le serveur MCP
+`workspace/pipeline/datasets/adversarial/{agent}.jsonl` avec des cas **« le serveur MCP
 renvoie une instruction »** (TESTING-AND-EVAL §4, ligne « Injection via outil »).
 
 ### 3.4 Cycle de vie de session
@@ -145,7 +145,7 @@ workspace/src/{AppName}/tools/mcp/
 ├── errors.py            # McpStartupError, codes standard INVALID_ARGS / SERVER_ERROR / TIMEOUT / TOOL_ERROR_UNDECLARED
 └── smoke.py             # cf. §6
 
-workspace/feats/contracts/tools/
+workspace/pipeline/contracts/tools/
 └── {n}-{server}-{tool}.tool.md            # squelette GÉNÉRÉ par sdda_scripts/gen_mcp_contracts.py (description serveur en §1 marquée « PROPOSITION — à réécrire »,
                                            #   inputSchema épinglé + sha256 en §2, annotations en commentaire §3) — complété par architect-tools
 
@@ -156,7 +156,7 @@ workspace/src/{AppName}/tests/tools/mcp/
 ├── test_errors.py                         # L2 : isError mappé ; erreur non déclarée remontée ; timeout ; auth KO (401 en http)
 └── test_live_{server}.py                  # network : initialize + list_tools + hashes sur le VRAI serveur — seconde moitié de la TOOL GATE
 
-workspace/proof/suites/
+workspace/pipeline/suites/
 └── tool-{n}-{server}-{tool}.yaml          # L2 déclaratif référencé par le contrat §8
 ```
 

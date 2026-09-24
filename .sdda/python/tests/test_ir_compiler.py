@@ -157,15 +157,15 @@ def test_dotted_edge_is_a_free_edge(tmp_path: Path) -> None:
 def test_suites_are_derived_from_cap_acs_and_injection_suites(project: Path) -> None:
     ir, _ = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
     suites = {s["id"]: s for s in ir["evaluation"]["suites"]}
-    assert suites["1-2-groundedness"]["judgeCalibrationRef"] == "workspace/proof/calibration/groundedness.json"
+    assert suites["1-2-groundedness"]["judgeCalibrationRef"] == "workspace/pipeline/calibration/groundedness.json"
     assert suites["1-1-routing_accuracy"]["runs"] == 5 and suites["1-1-routing_accuracy"]["threshold"] == 0.95
     assert suites["1-billing-specialist-injection"]["level"] == "L8"
-    assert ir["evaluation"]["holdout"] == "workspace/proof/datasets/holdout/mission-1-v1.jsonl"
+    assert ir["evaluation"]["holdout"] == "workspace/pipeline/datasets/holdout/mission-1-v1.jsonl"
     assert ir["traceability"]["1-2-ExplainInvoiceLine"]["implementedBy"]["tools"] == ["1-invoice-lookup", "1-zendesk-create-ticket"]
 
 
 def test_missing_bound_is_a_compile_error_not_a_default(project: Path) -> None:
-    contract = project / "workspace/feats/contracts/agents/1-billing-specialist.agent.md"
+    contract = project / "workspace/pipeline/contracts/agents/1-billing-specialist.agent.md"
     text = contract.read_text(encoding="utf-8").replace("| `max_tool_calls` | 10 | fail-explicit |\n", "")
     contract.write_text(text, encoding="utf-8")
     with pytest.raises(ir_compiler.CompileError) as exc:
@@ -193,7 +193,7 @@ def test_missing_prompt_and_no_pinned_hash_leaves_the_agent_unpinned_not_uncompi
 
 
 def test_unknown_tool_in_agent_contract_is_a_compile_error(project: Path) -> None:
-    contract = project / "workspace/feats/contracts/agents/1-billing-specialist.agent.md"
+    contract = project / "workspace/pipeline/contracts/agents/1-billing-specialist.agent.md"
     text = contract.read_text(encoding="utf-8").replace("| `1-invoice-lookup` |", "| `1-ghost-tool` |")
     contract.write_text(text, encoding="utf-8")
     code, out = run_main(ir_compiler.main, ["--root", str(project), "--mission", "1"])
@@ -208,10 +208,10 @@ def test_tools_resolve_by_the_name_the_model_calls(project: Path) -> None:
     le contrat porte un id kebab dérivé. Ne résoudre que par id rendait
     `## Allocated To` incompilable sur 21 outils au premier run réel.
     """
-    contract = project / "workspace/feats/contracts/agents/1-billing-specialist.agent.md"
+    contract = project / "workspace/pipeline/contracts/agents/1-billing-specialist.agent.md"
     contract.write_text(contract.read_text(encoding="utf-8").replace("| `1-invoice-lookup` |", "| `invoice_lookup` |"),
                         encoding="utf-8")
-    cap = project / "workspace/feats/caps/1-2-ExplainInvoiceLine.md"
+    cap = project / "workspace/pipeline/caps/1-2-ExplainInvoiceLine.md"
     cap.write_text(cap.read_text(encoding="utf-8").replace("- tools: `invoice-lookup`,", "- tools: `invoice_lookup`,"),
                    encoding="utf-8")
     code, out = run_main(ir_compiler.main, ["--root", str(project), "--mission", "1"])
@@ -223,13 +223,13 @@ def test_tools_resolve_by_the_name_the_model_calls(project: Path) -> None:
 
 def test_system_level_suites_written_by_qa_evals_enter_the_ir(project: Path) -> None:
     """L5 / L7 ne naissent d'aucune CAP : sans cette projection, G6 n'avait aucune exécution possible."""
-    suites = project / "workspace/proof/suites"
+    suites = project / "workspace/pipeline/suites"
     suites.mkdir(parents=True, exist_ok=True)
     (suites / "1-trajectory.yaml").write_text(
-        'id: "1-trajectory"\nlevel: "L5"\ndataset: "workspace/proof/datasets/golden/x.jsonl"\n'
+        'id: "1-trajectory"\nlevel: "L5"\ndataset: "workspace/pipeline/datasets/golden/x.jsonl"\n'
         'grader: "trajectory"\nthreshold: 1.0\nruns: 3\n', encoding="utf-8")
     (suites / "1-mission.yaml").write_text(
-        'id: "1-mission"\nlevel: "L7"\ndataset: "workspace/proof/datasets/golden/x.jsonl"\n'
+        'id: "1-mission"\nlevel: "L7"\ndataset: "workspace/pipeline/datasets/golden/x.jsonl"\n'
         'grader: "cost"\nthreshold: 0.03\nruns: 3\n', encoding="utf-8")
     (suites / "1-broken.yaml").write_text('id: "1-broken"\nlevel: "L7"\ngrader: "cost"\n', encoding="utf-8")
     (suites / "1-1-routing.yaml").write_text('id: "1-1-routing"\nlevel: "L4"\ngrader: "exact"\n', encoding="utf-8")

@@ -21,7 +21,7 @@ from sdda_scripts import eval_runner, ir_compiler, validate_tool_contract, valid
 # validate-topology --pre : après l'architecte, avant les contrats
 # ---------------------------------------------------------------------------
 def test_pre_mode_does_not_demand_contracts_that_the_phase_has_not_written(project: Path) -> None:
-    for contract in (project / "workspace/feats/contracts/agents").glob("*.agent.md"):
+    for contract in (project / "workspace/pipeline/contracts/agents").glob("*.agent.md"):
         contract.unlink()
 
     code, out = run_main(validate_topology.main,
@@ -36,7 +36,7 @@ def test_pre_mode_does_not_demand_contracts_that_the_phase_has_not_written(proje
 
 def test_pre_mode_still_judges_everything_the_markdown_carries(project: Path) -> None:
     """`--pre` retire deux contrôles, pas la gate."""
-    topo = project / "workspace/feats/topology/1-topology.md"
+    topo = project / "workspace/pipeline/topology/1-topology.md"
     topo.write_text(topo.read_text(encoding="utf-8").replace("MISSION: 1-SupportAssistant", "MISSION:"),
                     encoding="utf-8")
     code, out = run_main(validate_topology.main,
@@ -58,7 +58,7 @@ def test_static_mode_validates_the_markdown_contracts_with_no_ir(project: Path) 
 
 
 def test_static_mode_catches_a_faulty_contract_before_the_ir_is_paid_for(project: Path) -> None:
-    contract = next((project / "workspace/feats/contracts/tools").glob("1-zendesk*.tool.md"))
+    contract = next((project / "workspace/pipeline/contracts/tools").glob("1-zendesk*.tool.md"))
     text = contract.read_text(encoding="utf-8")
     assert "external-side-effect" in text
     contract.write_text(text.replace("external-side-effect", "write-destructive"), encoding="utf-8")
@@ -106,9 +106,9 @@ def test_isolated_tells_the_executor_so_the_report_says_how_it_was_measured() ->
     ir = {
         "missionId": "1-X",
         "evaluation": {"suites": [{"id": "s", "level": "L4", "agentRef": "1-a",
-                                   "dataset": "workspace/proof/datasets/golden/g.jsonl",
+                                   "dataset": "workspace/pipeline/datasets/golden/g.jsonl",
                                    "grader": "exact", "threshold": 1.0, "runs": 1}],
-                       "baselineRef": "workspace/proof/baselines/1-system.json"},
+                       "baselineRef": "workspace/pipeline/baselines/1-system.json"},
     }
     filters = eval_runner.Filters(isolated=True)
     assert filters.accepts(ir["evaluation"]["suites"][0])
@@ -130,11 +130,11 @@ def test_parallel_measurement_gives_the_same_result_as_serial(project: Path, tmp
     l'ordonnanceur ne serait pas comparable d'un run à l'autre (P10)."""
     from sdda_lib.layered_config import LayeredConfig
 
-    dataset = project / "workspace/proof/datasets/golden/parallel-v1.jsonl"
+    dataset = project / "workspace/pipeline/datasets/golden/parallel-v1.jsonl"
     dataset.write_text("".join(
         f'{{"id": "i{k}", "input": "q{k}", "expected": "r{k}"}}\n' for k in range(12)), encoding="utf-8")
 
-    suite = {"id": "s", "level": "L4", "dataset": "workspace/proof/datasets/golden/parallel-v1.jsonl",
+    suite = {"id": "s", "level": "L4", "dataset": "workspace/pipeline/datasets/golden/parallel-v1.jsonl",
              "grader": "exact", "threshold": 1.0, "runs": 2}
 
     def measure(max_parallel: int):

@@ -52,7 +52,7 @@ Il est **déterministe** (clés triées, LF, `compiledAt` conservé tant que le
 contenu ne change pas) et **n'invente rien** : un champ manquant produit
 `[IR_COMPILE_FAILED]` avec `fichier:section`. Les seules dérivations sont des
 conventions listées dans l'en-tête du script (id de suite `{n}-{m}-{metric}`,
-calibration par défaut `workspace/proof/calibration/{metric}.json`, suite
+calibration par défaut `workspace/pipeline/calibration/{metric}.json`, suite
 d'injection `{agent}-injection`, arête Mermaid pointillée `-.->` = arête qui ne
 compte pas comme hop).
 

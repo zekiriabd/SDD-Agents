@@ -1,7 +1,7 @@
 """L'ordre du pipeline : le holdout naît après l'IR, et il doit être mesuré.
 
 Ces tests couvrent le défaut le plus coûteux trouvé à l'audit : `ir_compiler`
-exigeait `workspace/proof/datasets/holdout/mission-{n}-*.jsonl` pour compiler, alors
+exigeait `workspace/pipeline/datasets/holdout/mission-{n}-*.jsonl` pour compiler, alors
 que ce jeu est produit en PHASE 6a, après la compilation de PHASE 2 — et que
 `qa-evals` lit l'IR pour savoir quoi produire. La boucle se fermait sur
 elle-même : aucune MISSION neuve ne franchissait G2, donc aucune n'atteignait la
@@ -24,7 +24,7 @@ from sdda_scripts import ir_compiler, validate_datasets, validate_ir, validate_m
 
 
 def _holdouts(root: Path) -> list[Path]:
-    return sorted((root / "workspace/proof/datasets/holdout").glob("*.jsonl"))
+    return sorted((root / "workspace/pipeline/datasets/holdout").glob("*.jsonl"))
 
 
 def _drop_holdout(root: Path) -> None:
@@ -46,7 +46,7 @@ def test_ir_compiles_without_holdout_because_phase_2_precedes_phase_6a(project: 
 def test_the_holdout_makes_the_acceptance_suite_appear(project: Path) -> None:
     ir, report = ir_compiler.compile_mission(project, 1)
     assert report.ok
-    assert ir["evaluation"]["holdout"] == "workspace/proof/datasets/holdout/mission-1-v1.jsonl"
+    assert ir["evaluation"]["holdout"] == "workspace/pipeline/datasets/holdout/mission-1-v1.jsonl"
 
     l9 = [s for s in ir["evaluation"]["suites"] if s["level"] == "L9"]
     assert len(l9) == 1, "une seule suite d'acceptation par mission"
@@ -71,7 +71,7 @@ def test_the_holdout_is_a_compiled_source_so_its_arrival_stales_the_ir(project: 
     assert check_ir_freshness.freshness(project, 1)["fresh"] is True
 
     # PHASE 6a : qa-evals écrit le jeu de verdict.
-    (project / "workspace/proof/datasets/holdout/mission-1-v1.jsonl").write_text(
+    (project / "workspace/pipeline/datasets/holdout/mission-1-v1.jsonl").write_text(
         '{"id": "h1", "input": "x", "expected": "y"}\n', encoding="utf-8")
 
     state = check_ir_freshness.freshness(project, 1)
@@ -81,7 +81,7 @@ def test_the_holdout_is_a_compiled_source_so_its_arrival_stales_the_ir(project: 
 
 def test_a_second_holdout_is_still_refused(project: Path) -> None:
     """Deux jeux de verdict, c'est choisir le verdict après coup."""
-    (project / "workspace/proof/datasets/holdout/mission-1-v2.jsonl").write_text(
+    (project / "workspace/pipeline/datasets/holdout/mission-1-v2.jsonl").write_text(
         '{"id": "h9", "input": "x", "expected": "y"}\n', encoding="utf-8")
     with pytest.raises(ir_compiler.CompileError) as exc:
         ir_compiler.compile_mission(project, 1)
@@ -89,7 +89,7 @@ def test_a_second_holdout_is_still_refused(project: Path) -> None:
 
 
 def test_an_unknown_goal_grader_is_refused_not_guessed(project: Path) -> None:
-    mission = next((project / "workspace/feats/missions").glob("1-*.md"))
+    mission = next((project / "workspace/pipeline/missions").glob("1-*.md"))
     mission.write_text(mission.read_text(encoding="utf-8").replace("- Grader: exact", "- Grader: vibes"),
                        encoding="utf-8")
     with pytest.raises(ir_compiler.CompileError) as exc:
@@ -144,7 +144,7 @@ def test_an_unknown_required_kind_is_named_not_ignored(project: Path) -> None:
 # G0 : l'objectif chiffré dit COMBIEN, le grader dit COMMENT
 # ---------------------------------------------------------------------------
 def test_a_mission_without_a_grader_warns_but_stays_valid(project: Path) -> None:
-    mission = next((project / "workspace/feats/missions").glob("1-*.md"))
+    mission = next((project / "workspace/pipeline/missions").glob("1-*.md"))
     mission.write_text(mission.read_text(encoding="utf-8").replace("\n- Grader: exact", ""), encoding="utf-8")
     code, out = run_main(validate_mission.main, ["--root", str(project), "--mission", "1", "--no-report"])
     assert code == 0, "G0 ne bloque pas : la mesure de l'objectif se déclare, elle ne s'improvise pas ici"

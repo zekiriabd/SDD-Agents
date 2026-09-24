@@ -75,7 +75,7 @@
     {
       "module": "xunit.v3",
       "ref": "xunit.v3",
-      "rationale": "Runner L0→L2. Les evals L3+ vivent dans workspace/proof/, hors du projet de test — ownership qa-evals, jamais dev-*.",
+      "rationale": "Runner L0→L2. Les evals L3+ vivent dans workspace/pipeline/, hors du projet de test — ownership qa-evals, jamais dev-*.",
       "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests package xunit.v3 --version 4.0.1"
     },
     {

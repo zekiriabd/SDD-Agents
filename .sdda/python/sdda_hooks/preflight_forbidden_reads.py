@@ -78,17 +78,25 @@ def check(root: Path, data: dict) -> int:
     else:
         rel = "."
 
+    if ao.is_secret_file(rel) and scope in ("file", "content"):
+        return deny(HOOK, "SECRET_READ_FORBIDDEN",
+                    f"`{agent}` a voulu lire `{rel}` — un fichier de secrets n'est lu par aucun agent",
+                    "les NOMS des variables sont dans STACK.md ; la copie vers src/{App}/.env est faite "
+                    "par `python .sdda/sdda.py install-env`, sans LLM")
+
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
-        # Sous-agent hors matrice : il ne lit pas `proof/`. Le reste du
-        # workspace lui reste lisible — un `Explore` lancé par l'utilisateur
-        # doit pouvoir chercher dans les specs. Ce qu'il ne doit jamais voir est
-        # le jeu de verdict : un agent blanchi qui lit le holdout est exactement
-        # « optimiser contre le jeu qui rend le verdict », par un autre chemin.
-        proof = "workspace/proof"
+        # Sous-agent hors matrice : il ne lit pas les jeux (`pipeline/datasets/`).
+        # Le reste du workspace lui reste lisible — un `Explore` lancé par
+        # l'utilisateur doit pouvoir chercher dans les specs. Ce qu'il ne doit
+        # jamais voir est le jeu de verdict : un agent blanchi qui lit le holdout
+        # est exactement « optimiser contre le jeu qui rend le verdict », par un
+        # autre chemin.
+        proof = "workspace/pipeline/datasets"
         normalized = rel.replace("\\", "/").lstrip("./")
-        if normalized == proof or normalized.startswith(proof + "/") or normalized in (".", "workspace"):
-            return unknown_subagent(HOOK, agent, normalized if normalized not in (".", "workspace") else proof)
+        ancestors = (".", "workspace", "workspace/pipeline")
+        if normalized == proof or normalized.startswith(proof + "/") or normalized in ancestors:
+            return unknown_subagent(HOOK, agent, normalized if normalized not in ancestors else proof)
         return ALLOW
     if not ao.forbidden_reads_of(loader, agent):
         return ALLOW

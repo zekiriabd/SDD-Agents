@@ -41,15 +41,15 @@ Read :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (`tools`, `trustPosture`,
   `refusalPolicy`, `bounds`), `tools[]` (`sideEffectClass`, `safetyStrategy`,
   `trust`), `dataAccess[].envelope`, `orchestration.edges`, `guardrails`.
-- `workspace/feats/missions/{n}-*.md ## Trust Boundaries` et `## Actors` — la liste
+- `workspace/pipeline/missions/{n}-*.md ## Trust Boundaries` et `## Actors` — la liste
   déclarée des sources non maîtrisées et le cloisonnement.
-- `workspace/feats/contracts/**`, `workspace/src/{App}/prompts/*.system.md`,
+- `workspace/pipeline/contracts/**`, `workspace/src/{App}/prompts/*.system.md`,
   `workspace/src/**` (hors tests), `workspace/.sys/traces/runs/*.jsonl` (échantillon),
-  `workspace/proof/datasets/adversarial/*.jsonl` (couverture, pas contenu du holdout).
+  `workspace/pipeline/datasets/adversarial/*.jsonl` (couverture, pas contenu du holdout).
 
 Exécute (0 token) et lis les rapports :
 ```bash
-python .sdda/sdda.py scan-secrets --paths workspace/src workspace/.sys/traces workspace/proof/datasets
+python .sdda/sdda.py scan-secrets --paths workspace/src workspace/.sys/traces workspace/pipeline/datasets
 python .sdda/sdda.py scan-pii --mission {n} --target vectorstore
 python .sdda/sdda.py audit-tool-scope --ir workspace/.sys/.ir/{n}-system.ir.json --src workspace/src
 ```

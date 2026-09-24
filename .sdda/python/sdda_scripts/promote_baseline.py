@@ -18,7 +18,7 @@ Ce qu'il refuse :
 (R5) et signalé WARN [EVAL_PROMOTION_FORCED]. Il ne fait pas disparaître le
 verdict rouge de la baseline : celui-ci y est écrit tel quel.
 
-Écriture atomique (temporaire + rename) dans `workspace/proof/baselines/{n}-system.json`.
+Écriture atomique (temporaire + rename) dans `workspace/pipeline/baselines/{n}-system.json`.
 Les suites non promues conservent leur baseline précédente.
 
 Usage :

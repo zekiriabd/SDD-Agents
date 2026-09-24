@@ -25,10 +25,10 @@ variance, budget estimé vs mesuré, bypasses actifs, résultats périmés.
 ## STEP 1 — Portée
 
 `{n}` fourni → mode mono-MISSION ; sinon multi (toutes les
-`workspace/feats/missions/*.md`). Si aucune MISSION :
+`workspace/pipeline/missions/*.md`). Si aucune MISSION :
 
 ```
-Aucune MISSION dans workspace/feats/missions/. Lancer /sdda-mission {Name} pour démarrer.
+Aucune MISSION dans workspace/pipeline/missions/. Lancer /sdda-mission {Name} pour démarrer.
 ```
 STOP.
 
@@ -100,11 +100,11 @@ Total : {M} MISSION(s) · {C} CAPs · {A} Approved · {B} Blocked · {S} résult
 
 Tâches humaines : 3 (2 bloquantes)
   ⚠️ [roster  ] MISSION 2 — Compléter le roster (4 `<à préciser>`)
-       → éditer workspace/feats/topology/2-roster.md, puis roster validate --mission 2
+       → éditer workspace/feats/2-roster.md, puis roster validate --mission 2
   ⚠️ [findings] MISSION 1 — Assumer ou corriger le jaune G5 sur `1-2-ExplainInvoiceLine`
        → corriger puis relancer la gate G5 ; ou l'assumer nominativement par --force
      [labels  ] MISSION 1 — Labelliser 12 item(s) pour le juge `groundedness`
-       → écrire des paires {id, human, judge} dans workspace/proof/datasets/calibration/groundedness-v1.jsonl
+       → écrire des paires {id, human, judge} dans workspace/pipeline/datasets/calibration/groundedness-v1.jsonl
 ```
 
 Le bloc `Tâches humaines` est la sortie texte de `human_tasks.py`, reprise
@@ -137,7 +137,7 @@ MISSION 1-SupportAssistant                                        Evaluated  �
 
   Tâches humaines : 1 (0 bloquante)
      [labels  ] Labelliser 12 item(s) pour le juge `groundedness`
-       → écrire des paires {id, human, judge} dans workspace/proof/datasets/calibration/groundedness-v1.jsonl
+       → écrire des paires {id, human, judge} dans workspace/pipeline/datasets/calibration/groundedness-v1.jsonl
 ```
 
 Cas à flagger explicitement (`⚠️`) :

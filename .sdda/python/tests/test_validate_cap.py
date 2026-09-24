@@ -25,8 +25,8 @@ def test_prose_ac_is_rejected(tmp_path: Path) -> None:
 
 
 def test_ac_missing_one_field_is_rejected(project: Path) -> None:
-    cap = project / "workspace/feats/caps/1-1-ClassifyIntent.md"
-    text = cap.read_text(encoding="utf-8").replace("  - dataset: workspace/proof/datasets/golden/routing-v1.jsonl\n", "")
+    cap = project / "workspace/pipeline/caps/1-1-ClassifyIntent.md"
+    text = cap.read_text(encoding="utf-8").replace("  - dataset: workspace/pipeline/datasets/golden/routing-v1.jsonl\n", "")
     cap.write_text(text, encoding="utf-8")
     code, out = run_main(validate_cap.main, ["--root", str(project), "--no-report", str(cap)])
     assert code == 1

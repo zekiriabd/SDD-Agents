@@ -61,23 +61,23 @@ TREE_V1: tuple[str, ...] = (
 
 #: Ce qu'un utilisateur avait écrit, et où on doit le retrouver après la montée.
 CONTENT_V1: tuple[tuple[str, str], ...] = (
-    ("missions/1-Demo.md", "feats/missions/1-Demo.md"),
-    ("caps/1-1-Classify.md", "feats/caps/1-1-Classify.md"),
-    ("topology/1-topology.md", "feats/topology/1-topology.md"),
-    ("contracts/agents/1-router.agent.md", "feats/contracts/agents/1-router.agent.md"),
+    ("missions/1-Demo.md", "pipeline/missions/1-Demo.md"),
+    ("caps/1-1-Classify.md", "pipeline/caps/1-1-Classify.md"),
+    ("topology/1-topology.md", "pipeline/topology/1-topology.md"),
+    ("contracts/agents/1-router.agent.md", "pipeline/contracts/agents/1-router.agent.md"),
     ("prompts/router.system.md", "src/Projet/prompts/router.system.md"),
-    ("datasets/golden/g-v1.jsonl", "proof/datasets/golden/g-v1.jsonl"),
-    ("datasets/holdout/mission-1-v1.jsonl", "proof/datasets/holdout/mission-1-v1.jsonl"),
-    ("evals/suites/s.yaml", "proof/suites/s.yaml"),
-    ("evals/baselines/1-system.json", "proof/baselines/1-system.json"),
-    ("evals/calibration/groundedness.json", "proof/calibration/groundedness.json"),
+    ("datasets/golden/g-v1.jsonl", "pipeline/datasets/golden/g-v1.jsonl"),
+    ("datasets/holdout/mission-1-v1.jsonl", "pipeline/datasets/holdout/mission-1-v1.jsonl"),
+    ("evals/suites/s.yaml", "pipeline/suites/s.yaml"),
+    ("evals/baselines/1-system.json", "pipeline/baselines/1-system.json"),
+    ("evals/calibration/groundedness.json", "pipeline/calibration/groundedness.json"),
     ("evals/reports/1-run.json", ".sys/reports/1-run.json"),
     ("traces/runs/run-1.jsonl", ".sys/traces/runs/run-1.jsonl"),
-    ("docs/adr/ADR-depuis-docs.md", "feats/decisions/ADR-depuis-docs.md"),
-    (".sys/.context/adrs/ADR-depuis-sys.md", "feats/decisions/ADR-depuis-sys.md"),
+    ("docs/adr/ADR-depuis-docs.md", "pipeline/decisions/ADR-depuis-docs.md"),
+    (".sys/.context/adrs/ADR-depuis-sys.md", "pipeline/decisions/ADR-depuis-sys.md"),
 )
 
-MISSING_DIR = "proof/calibration"     # un répertoire attendu qu'un vieux bootstrap ne créait pas
+MISSING_DIR = "pipeline/calibration"     # un répertoire attendu qu'un vieux bootstrap ne créait pas
 
 
 @pytest.fixture
@@ -191,7 +191,7 @@ def test_the_two_adr_locations_are_merged_into_one(v1_with_content: Path) -> Non
     """La question « cet ADR a-t-il été écrit ? » avait deux réponses possibles."""
     root = v1_with_content
     assert run_main(migrate_workspace.main, ["--root", str(root)])[0] == 0
-    decisions = sorted(p.name for p in (root / "workspace/feats/decisions").glob("ADR-*.md"))
+    decisions = sorted(p.name for p in (root / "workspace/pipeline/decisions").glob("ADR-*.md"))
     assert decisions == ["ADR-depuis-docs.md", "ADR-depuis-sys.md"]
     assert not (root / "workspace/.sys/.context/adrs").exists()
     assert not (root / "workspace/docs/adr").exists()
@@ -417,7 +417,7 @@ def test_v3_gitignore_versions_stack_md_and_ignores_env(v2_with_content: Path) -
 def test_v3_roster_becomes_markdown_in_feats(v2_with_content: Path) -> None:
     root = v2_with_content
     _migrate(root)
-    roster_md = root / "workspace/feats/topology/1-roster.md"
+    roster_md = root / "workspace/feats/1-roster.md"
     assert roster_md.is_file() and not (root / "workspace/stack/topology").exists()
     from sdda_scripts.validate_architecture import read_roster_yaml
     data = read_roster_yaml(roster_md)
@@ -429,10 +429,10 @@ def test_v3_roster_becomes_markdown_in_feats(v2_with_content: Path) -> None:
 def test_v3_graph_is_inlined_in_the_topology(v2_with_content: Path) -> None:
     root = v2_with_content
     _migrate(root)
-    topo = (root / "workspace/feats/topology/1-topology.md").read_text(encoding="utf-8")
+    topo = (root / "workspace/pipeline/topology/1-topology.md").read_text(encoding="utf-8")
     assert "classify{intent-classifier} -->|billing|" in topo and "ancien --> graphe" not in topo
     assert "1-topology.mmd" not in topo
-    assert not (root / "workspace/feats/topology/1-topology.mmd").exists()
+    assert not (root / "workspace/pipeline/topology/1-topology.mmd").exists()
 
 
 def test_v3_frozen_schemas_travel_with_the_code(v2_with_content: Path) -> None:
@@ -440,7 +440,7 @@ def test_v3_frozen_schemas_travel_with_the_code(v2_with_content: Path) -> None:
     _migrate(root)
     # Layout plat (v4) : le paquet est `workspace/src/{App}/`, sans `src/{App}/` intermédiaire.
     moved = root / "workspace/src/Projet/data/schemas/order_tracking.schema.json"
-    assert moved.is_file() and not (root / "workspace/feats/contracts/dataaccess").exists()
+    assert moved.is_file() and not (root / "workspace/pipeline/contracts/dataaccess").exists()
     assert not (root / "workspace/src/Projet/src").exists()
 
 
@@ -488,9 +488,9 @@ def test_v3_source_manifests_are_inlined_in_stack_md(v2_with_content: Path) -> N
 def test_v3_ground_truth_moves_to_proof_seed(v2_with_content: Path) -> None:
     root = v2_with_content
     _migrate(root)
-    assert (root / "workspace/proof/seed/1-Demo.scenarios.jsonl").is_file()
-    assert (root / "workspace/feats/briefs/1-Demo.md").is_file()
-    assert not (root / "workspace/feats/briefs/1-Demo.scenarios.jsonl").exists()
+    assert (root / "workspace/seed/1-Demo.scenarios.jsonl").is_file()
+    assert (root / "workspace/feats/1-Demo.md").is_file()
+    assert not (root / "workspace/feats/1-Demo.scenarios.jsonl").exists()
 
 
 def test_v3_workspace_passes_the_smoke_and_its_three_new_rules(v2_with_content: Path) -> None:
@@ -499,7 +499,7 @@ def test_v3_workspace_passes_the_smoke_and_its_three_new_rules(v2_with_content: 
     code, out = run_main(smoke_check.main, ["--root", str(root), "--json"])
     assert code == 0, out
     # Et les trois règles crient si on les viole après coup.
-    (root / "workspace/feats/briefs/notes.yml").write_text("x: 1\n", encoding="utf-8")
+    (root / "workspace/feats/notes.yml").write_text("x: 1\n", encoding="utf-8")
     (root / "workspace/stack/extra.yml").write_text("x: 1\n", encoding="utf-8")
     stack = root / "workspace/stack/STACK.md"
     stack.write_text(stack.read_text(encoding="utf-8").replace("${LLM_API_KEY}", "sk-live-en-clair"), encoding="utf-8")

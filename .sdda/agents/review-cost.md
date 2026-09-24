@@ -61,9 +61,9 @@ Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `budget` (`costPerRunTargetUsd`,
   `costPerRunHardCapUsd`, `latencyP95TargetMs`, `tokenCeilingPerRun`),
   `orchestration.maxHops`, `agents[].bounds.budgetUsd`, `agents[].modelTier` ;
-- `workspace/feats/topology/{n}-topology.md §4` — le budget **estimé** en G2 (nominal, pire cas) ;
+- `workspace/pipeline/topology/{n}-topology.md §4` — le budget **estimé** en G2 (nominal, pire cas) ;
 - `workspace/.sys/reports/{n}/L7-*.json` — coût et latence mesurés par l'ORCH GATE ;
-- `workspace/feats/caps/{n}-*-*.md` — `criticality` et, si présent, la valeur métier
+- `workspace/pipeline/caps/{n}-*-*.md` — `criticality` et, si présent, la valeur métier
   déclarée d'une CAP.
 
 Traces absentes ou insuffisantes (< 30 runs ou < `EvalRuns` × items du golden) :

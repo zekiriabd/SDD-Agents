@@ -143,10 +143,10 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
         for p in sorted(paths.datasets_dir(root, kind).glob("*.jsonl")):
             datasets[paths.rel(root, p)] = load_dataset(root, p, kind)
     if not datasets:
-        report.error("GOLDEN_SET_MISSING", "aucun dataset sous workspace/proof/datasets/{golden,holdout,calibration,adversarial}/", "l'qa-evals produit les jeux avant toute eval", str(paths.datasets_dir(root)))
+        report.error("GOLDEN_SET_MISSING", "aucun dataset sous workspace/pipeline/datasets/{golden,holdout,calibration,adversarial}/", "l'qa-evals produit les jeux avant toute eval", str(paths.datasets_dir(root)))
     for kind in required_kinds:
         if not any(d.kind == kind for d in datasets.values()):
-            report.error("GOLDEN_SET_MISSING", f"aucun jeu `{kind}` sous workspace/proof/datasets/{kind}/",
+            report.error("GOLDEN_SET_MISSING", f"aucun jeu `{kind}` sous workspace/pipeline/datasets/{kind}/",
                          f"produire le jeu `{kind}` via qa-evals (`/sdda-eval {{n}} --datasets-only`) : "
                          "il est exigé par la phase en cours, pas par principe",
                          str(paths.datasets_dir(root, kind)))
@@ -219,15 +219,15 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
         candidates = sorted(paths.datasets_dir(root, "holdout").glob(f"mission-{n}-*.jsonl"))
         if not candidates:
             report.error("HOLDOUT_SET_MISSING",
-                         f"mission {n} : aucun holdout `workspace/proof/datasets/holdout/mission-{n}-*.jsonl`",
+                         f"mission {n} : aucun holdout `workspace/pipeline/datasets/holdout/mission-{n}-*.jsonl`",
                          "produire le jeu de verdict (qa-evals) : sans lui G8 n'a rien à mesurer, "
                          "et un objectif qu'on ne mesure que sur le jeu d'ajustement n'est pas mesuré",
-                         "workspace/proof/datasets/holdout/")
+                         "workspace/pipeline/datasets/holdout/")
         elif len(candidates) > 1:
             report.error("HOLDOUT_SET_MISSING",
                          f"mission {n} : {len(candidates)} holdouts candidats ({[p.name for p in candidates]})",
                          "un seul `mission-{n}-v*.jsonl` par mission — deux jeux de verdict, c'est choisir "
-                         "le verdict après coup", "workspace/proof/datasets/holdout/")
+                         "le verdict après coup", "workspace/pipeline/datasets/holdout/")
 
     # Références depuis les CAPs et les contrats d'agents ----------------------------------
     numbers = [mission] if mission is not None else mission_numbers(root)
@@ -239,10 +239,10 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
                 ds_ref = ac.fields.get("dataset", "").strip()
                 if not ds_ref or markdown_io.is_placeholder(ds_ref):
                     continue
-                if ds_ref.startswith("workspace/proof/datasets/holdout/"):
-                    report.error("AC_DATASET_IS_HOLDOUT", f"{cap.id} {ac.id} itère sur le holdout `{ds_ref}`", "pointer un jeu golden : le holdout rend le verdict (G8)", f"workspace/feats/caps/{cap.id}.md")
+                if ds_ref.startswith("workspace/pipeline/datasets/holdout/"):
+                    report.error("AC_DATASET_IS_HOLDOUT", f"{cap.id} {ac.id} itère sur le holdout `{ds_ref}`", "pointer un jeu golden : le holdout rend le verdict (G8)", f"workspace/pipeline/caps/{cap.id}.md")
                 if ds_ref not in datasets:
-                    report.error("EVAL_DATASET_MISSING", f"{cap.id} {ac.id} : dataset `{ds_ref}` introuvable", "produire le jeu (qa-evals) ou corriger le chemin", f"workspace/feats/caps/{cap.id}.md")
+                    report.error("EVAL_DATASET_MISSING", f"{cap.id} {ac.id} : dataset `{ds_ref}` introuvable", "produire le jeu (qa-evals) ou corriger le chemin", f"workspace/pipeline/caps/{cap.id}.md")
                 else:
                     pins[f"dataset:{ds_ref}"] = datasets[ds_ref].hash
         for p in sorted(paths.contracts_dir(root, "agents").glob(f"{n}-*.agent.md")):

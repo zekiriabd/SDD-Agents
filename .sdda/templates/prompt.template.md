@@ -1,7 +1,7 @@
 <!--
   PROMPT SYSTÈME GÉNÉRÉ — NE PAS ÉDITER À LA MAIN
   ─────────────────────────────────────────────────────────────────────────
-  agent-contract : workspace/feats/contracts/agents/{n}-{agent-slug}.agent.md
+  agent-contract : workspace/pipeline/contracts/agents/{n}-{agent-slug}.agent.md
   contract-hash  : sha256:{contract-hash}
   generated-by   : dev-prompt (owner exclusif de workspace/src/{App}/prompts/ — ARCHITECTURE §7)
   generated-at   : {YYYY-MM-DDTHH:MM}

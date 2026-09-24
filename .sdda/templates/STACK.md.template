@@ -4,7 +4,7 @@
 # Lu par TOUS les agents SDD_Agents à CHAQUE invocation.
 # `workspace/stack/STACK.md` est VERSIONNÉ : c'est l'un des trois fichiers
 # que l'utilisateur écrit (avec ses specs Markdown sous feats/ et sa vérité
-# terrain sous proof/seed/). Ce `.template` en est le squelette.
+# terrain sous seed/). Ce `.template` en est le squelette.
 #
 # ============================================================================
 # CONTRAT DE PROPAGATION DES SECRETS
@@ -341,7 +341,7 @@ IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
 # modèle, orchestrateur, relations, bornes.
 #
 # Le roster est une SPÉCIFICATION, pas une configuration : il vit dans
-# `workspace/feats/topology/{n}-roster.md` — un Markdown dont le premier bloc
+# `workspace/feats/{n}-roster.md` — un Markdown dont le premier bloc
 # ```yaml est la déclaration, relu en revue à côté de la topologie qu'il
 # commande. Écrit par l'HUMAIN ; `architect-topology` le lit, ne l'écrit jamais.
 #   python .sdda/sdda.py roster scaffold --mission {n}    # le pré-remplit
@@ -349,7 +349,7 @@ IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
 # Gabarit : .sdda/templates/roster.template.md
 #
 # Repli accepté pour un projet mono-agent : la section `## 2. Roster déclaré`
-# de workspace/feats/topology/{n}-topology.md. Jamais les deux — une seule source
+# de workspace/pipeline/topology/{n}-topology.md. Jamais les deux — une seule source
 # de vérité, sinon c'est celle que personne ne relit qui gouverne le code.
 #
 # Ce que le pattern actif EXIGE du roster :
@@ -475,7 +475,7 @@ SourceQueryLogging: full              # chaque lecture d'un agent est tracée
 
 ## Active Tools & Integrations
 # Chaque outil déclaré ici DOIT avoir un contrat dans
-# workspace/feats/contracts/tools/ avant d'être câblé à un agent (TOOL GATE).
+# workspace/pipeline/contracts/tools/ avant d'être câblé à un agent (TOOL GATE).
 # Les outils d'accès aux données ne se déclarent PAS ici : ils sont générés
 # depuis `## Active Data Access` (une vue SQL ou une source déclarée produit
 # son outil et son contrat).
@@ -511,7 +511,7 @@ ExternalAPIs:
 #    side_effect_class: write-scoped   # read-only | write-scoped | write-destructive | external-side-effect
 #    rate_limit_rpm: 60
 #    idempotency: header               # header | natural-key | none
-#    contract: workspace/feats/contracts/tools/1-zendesk-create-ticket.tool.md
+#    contract: workspace/pipeline/contracts/tools/1-zendesk-create-ticket.tool.md
 
 
 ## Active Memory Strategy
@@ -568,7 +568,7 @@ CostTrackingEnabled: true
 GoldenSetMinItems: 50
 HoldoutSetMinItems: 30
 AdversarialSetMinItems: 25
-BaselineStorage: workspace/proof/baselines/
+BaselineStorage: workspace/pipeline/baselines/
 
 
 ## Active Serving Surface

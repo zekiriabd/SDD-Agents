@@ -3,7 +3,7 @@
 SDD_Agents — bootstrap d'un nouveau projet agentic.
 
 Génère `workspace/stack/STACK.md` (versionné — il ne porte que des NOMS de
-variables), `workspace/src/{App}/.env` (gitignoré — les VALEURS, avec
+variables), `workspace/assets/.env` (gitignoré — les VALEURS, copiées vers `src/{App}/.env`, avec
 l'application qui les consomme), l'arborescence du workspace, et vérifie que
 l'installation tient debout. Même mécanisme que SDD_Pro : la déclaration dans
 le stack, les secrets dans le `.env` du livrable.
@@ -501,8 +501,9 @@ def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: st
     if not existing.strip():
         lines += [
             "# SDD_Agents — VALEURS des secrets et de la configuration sensible. Gitignoré.",
-            "# Ce fichier appartient à L'APPLICATION (Runtime Models) : c'est elle qui consomme la clé,",
-            "# et elle part d'ici en exécutable ou en conteneur. Le harnais de construction ne le lit jamais.",
+            "# Déposé ici, dans assets/, avec vos autres entrées ; `python .sdda/sdda.py install-env`",
+            "# le copie vers workspace/src/{App}/.env, d'où l'APPLICATION part (Runtime Models).",
+            "# Aucun agent ne le lit, le harnais de construction compris.",
             "# workspace/stack/STACK.md (versionné) n'en porte que les noms : `LLM_API_KEY: ${LLM_API_KEY}`.",
             "# Le code généré lit ces variables par leur NOM (config.py) ; aucune valeur ne voyage ailleurs.",
         ]
@@ -513,13 +514,20 @@ def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: st
 
 
 def write_env(app_name: str, combo: Combo, secrets: dict[str, str]) -> Path:
-    """`workspace/src/{App}/.env` — avec le livrable, jamais à la racine du dépôt (`sdda_lib.paths.env_path`)."""
-    from sdda_lib import paths  # import tardif : sys.path est complété après les constantes
+    """`workspace/assets/.env` — la source humaine ; `install-env` la copie vers `src/{App}/.env`.
 
-    env_path = paths.env_path(ROOT, app_name)
+    L'humain dépose ses entrées à la racine du workspace (`stack/`, `feats/`,
+    `assets/`, `seed/`), jamais dans l'arbre généré. La copie est immédiate,
+    pour qu'un projet amorcé ait tout de suite le `.env` que lit son application.
+    """
+    from sdda_lib import paths  # import tardif : sys.path est complété après les constantes
+    from sdda_scripts import install_env
+
+    env_path = paths.env_source_path(ROOT)
     env_path.parent.mkdir(parents=True, exist_ok=True)
     existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
     env_path.write_text(build_env(app_name, combo, secrets, existing), encoding="utf-8")
+    install_env.run(ROOT, write=True, require=False)
     return env_path
 
 
@@ -536,6 +544,7 @@ def write_gitignore() -> None:
         "!workspace/**/.gitkeep",
         "!workspace/stack/STACK.md",
         "workspace/**/.env",
+        "workspace/**/.env.*",
         "/.env",
         "__pycache__/",
         "*.pyc",
@@ -617,9 +626,9 @@ def interactive() -> tuple[str, Combo, dict[str, str]]:
 
     secrets: dict[str, str] = {}
     say()
-    say("  Secrets — écrits dans workspace/src/{App}/.env (gitignoré, avec l'application")
-    say("  qui les consomme). STACK.md, versionné, n'en porte que les noms. Laisser vide")
-    say("  pour compléter le .env plus tard.")
+    say("  Secrets — écrits dans workspace/assets/.env (gitignoré), puis copiés vers")
+    say("  workspace/src/{App}/.env pour l'application. STACK.md, versionné, n'en porte")
+    say("  que les noms. Laisser vide pour compléter le .env plus tard.")
     say()
     key = ask("Clé API du fournisseur de modèles (LLM_API_KEY)", "")
     if key:
@@ -706,7 +715,7 @@ def main() -> int:
     step("workspace/stack/STACK.md  (versionné — noms de variables seulement)")
 
     write_env(app_name, combo, secrets)
-    step(f"workspace/src/{app_name}/.env  (gitignoré — les valeurs ; complété, jamais réécrit)")
+    step(f"workspace/assets/.env -> workspace/src/{app_name}/.env  (gitignoré — les valeurs ; complété, jamais réécrit)")
 
     write_gitignore()
     build_context_packs()
@@ -727,13 +736,15 @@ def main() -> int:
     say()
     say("  Étapes suivantes")
     say()
-    say(f"   1. Compléter workspace/src/{app_name}/.env (LLM_API_KEY, DB_* si base) — puis workspace/stack/STACK.md,")
+    say(f"   1. Compléter workspace/assets/.env (LLM_API_KEY, DB_* si base), puis `python .sdda/sdda.py install-env`,")
+    say("      et workspace/stack/STACK.md,")
     say("      surtout ## Project Config > budget d'exécution :")
     say("        CostPerRunTargetUsd / LatencyP95TargetMs n'ont pas de défaut,")
     say("        et la MISSION GATE les exigera.")
-    say("      Vos entrées tiennent en trois choses : STACK.md (choix techniques),")
-    say("      des fichiers Markdown sous workspace/feats/ (la spec), votre vérité")
-    say("      terrain sous workspace/proof/seed/.")
+    say("      Vos entrées tiennent en quatre dépôts : STACK.md (choix techniques),")
+    say("      vos specs Markdown sous workspace/feats/ (brief, puis roster), vos")
+    say("      données et .env sous workspace/assets/, votre vérité terrain sous")
+    say("      workspace/seed/. Tout le reste est produit sous workspace/pipeline/.")
     say()
     say("   2. /sdda-mission « décrivez ce que le système doit accomplir »")
     say("      L'élicitation vous demandera d'où vient la vérité contre laquelle")

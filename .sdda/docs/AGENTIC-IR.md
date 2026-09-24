@@ -119,7 +119,7 @@ Schéma canonique : `.sdda/registry/ir.schema.json`. Structure :
       "authEnv": "ZENDESK_TOKEN",
       "timeoutSec": 10,
       "trust": "trusted",
-      "contractTestsRef": "workspace/proof/suites/tool-1-zendesk-create-ticket.yaml"
+      "contractTestsRef": "workspace/pipeline/suites/tool-1-zendesk-create-ticket.yaml"
     }
   ],
 
@@ -165,12 +165,12 @@ Schéma canonique : `.sdda/registry/ir.schema.json`. Structure :
   "evaluation": {
     "suites": [
       { "id": "1-2-groundedness", "level": "L4", "capRef": "1-2-ExplainInvoiceLine",
-        "dataset": "workspace/proof/datasets/golden/billing-v1.jsonl",
-        "grader": "llm-judge", "judgeCalibrationRef": "workspace/proof/calibration/groundedness.json",
+        "dataset": "workspace/pipeline/datasets/golden/billing-v1.jsonl",
+        "grader": "llm-judge", "judgeCalibrationRef": "workspace/pipeline/calibration/groundedness.json",
         "threshold": 0.85, "runs": 3 }
     ],
-    "holdout": "workspace/proof/datasets/holdout/mission-1-v1.jsonl",
-    "baselineRef": "workspace/proof/baselines/1-system.json"
+    "holdout": "workspace/pipeline/datasets/holdout/mission-1-v1.jsonl",
+    "baselineRef": "workspace/pipeline/baselines/1-system.json"
   },
 
   "traceability": {

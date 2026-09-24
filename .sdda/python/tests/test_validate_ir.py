@@ -192,13 +192,13 @@ def test_llm_judge_without_calibration_ref_is_rejected(ok_ir) -> None:
 
 def test_llm_judge_with_unresolvable_calibration_is_rejected(ok_ir) -> None:
     root, ir = ok_ir
-    (root / "workspace/proof/calibration/groundedness.json").unlink()
+    (root / "workspace/pipeline/calibration/groundedness.json").unlink()
     assert "JUDGE_UNCALIBRATED" in _classes(_validate(root, ir))
 
 
 def test_llm_judge_below_kappa_is_rejected(ok_ir) -> None:
     root, ir = ok_ir
-    cal = root / "workspace/proof/calibration/groundedness.json"
+    cal = root / "workspace/pipeline/calibration/groundedness.json"
     cal.write_text(json.dumps({"grader": "groundedness", "items": 52, "kappa": 0.41}), encoding="utf-8")
     assert "JUDGE_UNCALIBRATED" in _classes(_validate(root, ir))
 
@@ -214,7 +214,7 @@ def test_advisory_llm_judge_needs_no_calibration(ok_ir) -> None:
 
 def test_suite_iterating_on_holdout_is_rejected(ok_ir) -> None:
     root, ir = ok_ir
-    ir["evaluation"]["suites"][0]["dataset"] = "workspace/proof/datasets/holdout/mission-1-v1.jsonl"
+    ir["evaluation"]["suites"][0]["dataset"] = "workspace/pipeline/datasets/holdout/mission-1-v1.jsonl"
     assert "AC_DATASET_IS_HOLDOUT" in _classes(_validate(root, ir))
 
 
@@ -352,7 +352,7 @@ def test_reflection_with_two_distinct_agents_is_accepted(ok_ir) -> None:
 
 def test_stale_ir_is_rejected_after_source_edit(ok_ir) -> None:
     root, ir = ok_ir
-    topo = root / "workspace/feats/topology/1-topology.md"
+    topo = root / "workspace/pipeline/topology/1-topology.md"
     text = topo.read_text(encoding="utf-8")
     topo.write_text(text.replace("  clarify --> finalize\n", "  clarify --> finalize\n  clarify --> classify\n", 1), encoding="utf-8")
     report = _validate(root, ir)

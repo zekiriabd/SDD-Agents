@@ -5,7 +5,7 @@
 > avec quels outils, quelles skills, quelles règles et quel tier. Le framework
 > le vérifie et l'implémente ; il n'en décide aucune ligne.
 >
-> Emplacement : `workspace/feats/topology/{n}-roster.md`. Le premier bloc
+> Emplacement : `workspace/feats/{n}-roster.md`. Le premier bloc
 > `yaml` clôturé ci-dessous EST la déclaration ; la prose autour est pour le
 > relecteur. `feats/` ne contient que du Markdown, et le roster est la
 > première ligne de la spécification — pas une configuration : il se relit en
@@ -65,7 +65,7 @@ subagents:
 
 # ---------------------------------------------------------------------------
 # L'allocation — chaque CAP de la MISSION est portée par EXACTEMENT un agent.
-# Les identifiants sont ceux de workspace/feats/caps/{n}-{m}-{Name}.md.
+# Les identifiants sont ceux de workspace/pipeline/caps/{n}-{m}-{Name}.md.
 # ---------------------------------------------------------------------------
 allocation:
   - cap: 1-1-ClassifyIntent

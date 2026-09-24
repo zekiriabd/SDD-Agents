@@ -6,7 +6,8 @@
 #   2. ré-inclure les RÉPERTOIRES (sinon git ne descend pas dedans)
 #   3. ré-inclure les .gitkeep (ils matérialisent l'arbre vide attendu par smoke-check)
 #   4. ré-inclure le SEUL fichier STACK.md — versionné, il ne porte que des NOMS
-#      de variables ; les valeurs vivent dans workspace/src/{App}/.env
+#      de variables ; les valeurs vivent dans workspace/assets/.env, copiées
+#      vers workspace/src/{App}/.env par `install-env`
 # La ré-inclusion porte sur des FICHIERS nommés, jamais sur un répertoire : un
 # `!workspace/stack/**` ré-inclurait un .env égaré à côté.
 workspace/**
@@ -16,6 +17,7 @@ workspace/**
 
 # Défense en profondeur : aucun .env, nulle part, jamais.
 workspace/**/.env
+workspace/**/.env.*
 /.env
 
 __pycache__/

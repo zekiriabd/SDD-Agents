@@ -16,7 +16,7 @@ from sdda_lib import paths
 from sdda_scripts import ir_compiler, run_retrieval_eval
 from sdda_scripts.run_retrieval_eval import ReplayExecutor
 
-GOLDEN = "workspace/proof/datasets/golden/contracts-index-v1.jsonl"
+GOLDEN = "workspace/pipeline/datasets/golden/contracts-index-v1.jsonl"
 
 
 def _golden_items(n: int = 6) -> list[dict]:

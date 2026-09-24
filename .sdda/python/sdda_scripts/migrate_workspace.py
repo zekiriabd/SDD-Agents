@@ -204,9 +204,26 @@ class Context:
         self.emptied.add(old)
         if self.dry_run:
             return True
+        self._merge_dir(src, dst, old, new)
+        return True
+
+    def _merge_dir(self, src: Path, dst: Path, old: str, new: str) -> None:
+        """Fusionne `src` dans `dst`, récursivement ; seuls deux FICHIERS homonymes sont une collision.
+
+        Le déplacement était superficiel : `feats/contracts/` arrivait sur un
+        `pipeline/contracts/agents/` qu'une migration antérieure avait créé VIDE,
+        et chaque sous-répertoire était déclaré « en collision » — le contenu
+        restait à l'ancienne place, et la migration échouait sur un répertoire
+        fantôme qu'elle venait elle-même de remplir. Deux répertoires qui se
+        rencontrent se fusionnent ; deux versions d'un même fichier, elles, ne
+        se tranchent pas à la place de l'humain.
+        """
         dst.mkdir(parents=True, exist_ok=True)
-        for item in entries:
+        for item in [e for e in src.iterdir() if e.name != ".gitkeep"]:
             target = dst / item.name
+            if item.is_dir() and target.is_dir():
+                self._merge_dir(item, target, f"{old}/{item.name}", f"{new}/{item.name}")
+                continue
             if target.exists():
                 self.report.warn("WORKSPACE_MIGRATION_COLLISION",
                                  f"`workspace/{new}/{item.name}` existe déjà : l'original reste en place",
@@ -216,7 +233,6 @@ class Context:
             shutil.move(str(item), str(target))
         if not [e for e in src.iterdir() if e.name != ".gitkeep"]:
             shutil.rmtree(src)
-        return True
 
     def write_version(self, version: int) -> None:
         self._log("write", WORKSPACE_JSON_REL.removeprefix("workspace/"), f"workspaceVersion={version}")
@@ -251,6 +267,20 @@ TREE_V1: tuple[str, ...] = (
     "src", "docs",
     ".sys/.ir", ".sys/.context/adrs", ".sys/.context/packs",
     ".sys/.state", ".sys/.validation", ".sys/.audit",
+)
+
+
+#: L'arborescence telle qu'elle était en v4 ET en v5, figée en dur : les
+#: migrations 4 et 5 créaient `WORKSPACE_TREE` — donc, depuis la v6, l'arbre
+#: `pipeline/` avant même que la v6 n'y déplace quoi que ce soit.
+TREE_V5: tuple[str, ...] = (
+    "stack", "assets", "feats/briefs", "feats/missions", "feats/caps", "feats/topology",
+    "feats/contracts/agents", "feats/contracts/tools", "feats/contracts/retrieval", "feats/contracts/memory",
+    "feats/decisions", "src", "proof/seed",
+    "proof/datasets/golden", "proof/datasets/holdout", "proof/datasets/calibration", "proof/datasets/adversarial",
+    "proof/suites", "proof/baselines", "proof/calibration",
+    ".sys/.ir", ".sys/.context/packs", ".sys/.state", ".sys/.validation", ".sys/.audit",
+    ".sys/reports", ".sys/traces/runs",
 )
 
 
@@ -768,7 +798,7 @@ def v4_flatten_app(ctx: Context) -> None:
 def migrate_to_v4(ctx: Context) -> None:
     """v3 -> v4 : layout plat de l'application (`workspace/src/{App}/` est le paquet)."""
     v4_flatten_app(ctx)
-    for rel in WORKSPACE_TREE:
+    for rel in TREE_V5:
         ctx.mkdir(rel)
 
 
@@ -804,6 +834,106 @@ def v5_prompts_into_app(ctx: Context) -> None:
 def migrate_to_v5(ctx: Context) -> None:
     """v4 -> v5 : prompts, skills, rules et memory DANS l'application."""
     v5_prompts_into_app(ctx)
+    for rel in TREE_V5:
+        ctx.mkdir(rel)
+
+
+#: Les réécritures de chemins de la v6, dans l'ordre : le roster avant la
+#: topologie qui le contenait, le brief avant `feats/` en général.
+V6_PATH_RULES: tuple[tuple["re.Pattern[str]", str], ...] = (
+    (re.compile(r"feats/topology/(\{n\}|\{N\}|\{mission\}|\d+|\*)-roster"), r"feats/\1-roster"),
+    (re.compile(r"feats/briefs/"), "feats/"),
+    (re.compile(r"feats/(missions|caps|topology|contracts|decisions)\b"), r"pipeline/\1"),
+    (re.compile(r"proof/seed\b"), "seed"),
+    (re.compile(r"proof/(datasets|suites|baselines|calibration|fixtures)\b"), r"pipeline/\1"),
+)
+_V6_TEXT_SUFFIXES = {".md", ".yml", ".yaml", ".json", ".jsonl", ".py", ".toml", ".txt", ".csv"}
+_V6_SKIP_DIRS = {".venv", "venv", "__pycache__", "node_modules", ".sys", "build", "dist"}
+
+
+def v6_rewrite_paths(text: str) -> str:
+    for rx, rep in V6_PATH_RULES:
+        text = rx.sub(rep, text)
+    return text
+
+
+def _rmtree_if_only_gitkeeps(ctx: Context, rel: str) -> None:
+    """Retire un ancien répertoire resté VIDE (des `.gitkeep`, rien d'autre), sous-arbre compris.
+
+    `move` laisse en place un répertoire vide (« rien à déplacer ») : c'est juste
+    tant qu'il fait partie de l'arbre. En v6, `proof/suites/` vide n'en fait
+    plus partie, et son `.gitkeep` suffisait à rendre `proof/` « non vide ».
+    """
+    target = ctx.workspace / rel
+    if not target.is_dir():
+        return
+    if any(p.is_file() and p.name != ".gitkeep" for p in target.rglob("*")):
+        return
+    ctx._log("rmdir", rel, "vide (seulement des .gitkeep)")
+    ctx.emptied.add(rel)
+    if not ctx.dry_run:
+        shutil.rmtree(target)
+
+
+def v6_split_human_from_pipeline(ctx: Context) -> None:
+    """Ce que l'humain fournit à la racine, ce que le framework produit sous `pipeline/`.
+
+    v5 : `feats/` mêlait le brief et le roster de l'humain aux MISSION, CAPs et
+    contrats des agents ; `proof/` mêlait sa vérité terrain aux jeux de qa-evals.
+    L'humain ne savait pas quoi remplir. v6 : `feats/` (brief, roster), `seed/`,
+    `assets/` (données et `.env`), `stack/` — et `pipeline/` pour tout le reste.
+    """
+    ws = ctx.workspace
+    # 1. Le roster sort de la topologie AVANT que la topologie ne parte.
+    topo = ws / "feats" / "topology"
+    for roster in sorted(topo.glob("*-roster.md")) if topo.is_dir() else []:
+        ctx.move_file(f"feats/topology/{roster.name}", f"feats/{roster.name}")
+    # 2. Le brief remonte à la racine de feats/.
+    briefs = ws / "feats" / "briefs"
+    for brief in sorted(briefs.iterdir()) if briefs.is_dir() else []:
+        if brief.is_file() and brief.name != ".gitkeep":
+            ctx.move_file(f"feats/briefs/{brief.name}", f"feats/{brief.name}")
+    ctx.rmdir_if_empty("feats/briefs", "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+    # 3. Ce que le pipeline produit rejoint pipeline/.
+    for sub in ("missions", "caps", "topology", "contracts", "decisions"):
+        ctx.move(f"feats/{sub}", f"pipeline/{sub}")
+        _rmtree_if_only_gitkeeps(ctx, f"feats/{sub}")
+    ctx.move("proof/seed", "seed")
+    _rmtree_if_only_gitkeeps(ctx, "proof/seed")
+    for sub in ("datasets", "suites", "baselines", "calibration", "fixtures"):
+        ctx.move(f"proof/{sub}", f"pipeline/{sub}")
+        _rmtree_if_only_gitkeeps(ctx, f"proof/{sub}")
+    ctx.rmdir_if_empty("proof", "WORKSPACE_GHOST_DIR_NOT_EMPTY")
+    # 4. Les références aux anciens chemins suivent — sinon une AC pointe un
+    #    dataset qui n'est plus là, et un contrat un prompt introuvable.
+    if not ctx.dry_run:
+        for top in ("feats", "pipeline", "seed", "stack", "src"):
+            base = ws / top
+            for f in sorted(base.rglob("*")) if base.is_dir() else []:
+                if (not f.is_file() or f.suffix.lower() not in _V6_TEXT_SUFFIXES or f.name.startswith(".env")
+                        or any(part in _V6_SKIP_DIRS for part in f.relative_to(ws).parts)):
+                    continue
+                try:
+                    text = f.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                new = v6_rewrite_paths(text)
+                if new != text:
+                    ctx.write_text(f.relative_to(ws).as_posix(), new, "chemins v6 (feats/ humain, pipeline/ généré)")
+    # 5. Le `.env` de l'application a désormais sa SOURCE dans assets/.
+    app = str(read_project_section(ctx.root).get("AppName") or "").strip()
+    runtime_env = ws / "src" / app / ".env" if app else None
+    source_env = ws / "assets" / ".env"
+    if runtime_env is not None and runtime_env.is_file() and not source_env.exists():
+        ctx._log("copy", f"src/{app}/.env", "-> assets/.env (la source humaine ; install-env recopie)")
+        if not ctx.dry_run:
+            source_env.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(runtime_env, source_env)
+
+
+def migrate_to_v6(ctx: Context) -> None:
+    """v5 -> v6 : entrées humaines à la racine (feats, assets, seed, stack), le reste sous pipeline/."""
+    v6_split_human_from_pipeline(ctx)
     for rel in WORKSPACE_TREE:
         ctx.mkdir(rel)
 
@@ -827,6 +957,8 @@ MIGRATIONS: tuple[Migration, ...] = (
                  "plus de src/{App}/src/{App}/", migrate_to_v4),
     Migration(5, "prompts, skills, rules et memory DANS l'application (src/{App}/prompts/ …) — "
                  "plus de src/prompts/ à côté", migrate_to_v5),
+    Migration(6, "ce que l'humain fournit à la racine (stack/ · feats/ brief+roster · assets/ données+.env · seed/) — "
+                 "tout ce que le framework produit sous pipeline/", migrate_to_v6),
 )
 
 

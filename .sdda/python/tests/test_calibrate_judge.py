@@ -21,8 +21,8 @@ from sdda_scripts import ir_compiler
 FIXED_AT = "2026-09-20T10:00:00Z"
 SUITE = "1-2-groundedness"
 STACK = "workspace/stack/STACK.md"
-CALIBRATION = "workspace/proof/calibration/groundedness.json"
-LABELS = "workspace/proof/datasets/calibration/groundedness-v1.jsonl"
+CALIBRATION = "workspace/pipeline/calibration/groundedness.json"
+LABELS = "workspace/pipeline/datasets/calibration/groundedness-v1.jsonl"
 
 
 @pytest.fixture

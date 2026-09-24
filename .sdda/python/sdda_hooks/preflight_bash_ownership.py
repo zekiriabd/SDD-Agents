@@ -2,7 +2,7 @@
 """Le trou `Bash` de la matrice d'ownership — fermé sur les canaux ordinaires.
 
 `preflight_ownership` s'exécute sur `Write` et `Edit`. Un agent qui écrit
-`echo … > workspace/proof/datasets/golden/x.jsonl` ou `rm workspace/src/{App}/prompts/a.system.md`
+`echo … > workspace/pipeline/datasets/golden/x.jsonl` ou `rm workspace/src/{App}/prompts/a.system.md`
 ne passe par aucun des deux : la matrice était contournable par le shell, et
 c'est par là qu'un `dev-agent` peut retoucher le jeu qui le juge sans qu'aucun
 hook ne le voie.
@@ -92,8 +92,8 @@ def _tokens(fragment: str) -> list[str]:
     """Découpe shell d'un fragment de commande.
 
     `shlex` en mode POSIX traite `\\` comme un caractère d'échappement :
-    `echo x > C:\\Users\\me\\workspace\\proof\\datasets\\g.jsonl` sortait le jeton
-    `C:Usersmeworkspaceproofdatasetsg.jsonl` — plus un chemin, donc plus rien de
+    `echo x > C:\\Users\\me\\workspace\\pipeline\\datasets\\g.jsonl` sortait le jeton
+    `C:Usersmeworkspacepipelinedatasetsg.jsonl` — plus un chemin, donc plus rien de
     régi, donc ALLOW. Tout chemin absolu tapé à la façon de Windows échappait au
     hook, alors que c'est la forme que le harnais lui-même emploie. On bascule
     les séparateurs en `/` avant la découpe quand la commande en contient : la
@@ -233,6 +233,12 @@ def check(root: Path, data: dict) -> int:
 
     from sdda_lib.errors import Report  # noqa: E402  (import tardif : coût de démarrage du hook)
     from sdda_scripts import audit_ownership as ao  # noqa: E402
+
+    for path, _scope in reads:
+        if ao.is_secret_file(str(path)):
+            return deny(HOOK, "SECRET_READ_FORBIDDEN",
+                        f"via Bash — `{agent}` a voulu lire `{path}` : un fichier de secrets n'est lu par aucun agent",
+                        "`python .sdda/sdda.py install-env` copie assets/.env vers src/{App}/.env, sans LLM")
 
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):

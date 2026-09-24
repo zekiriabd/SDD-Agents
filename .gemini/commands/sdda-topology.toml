@@ -12,9 +12,9 @@ Décide l'architecture de la MISSION `{n}` en trois temps :
 
 ```
 2.1  architect-topology                         (SEUL — fixe le périmètre)
-       -> workspace/feats/topology/{n}-topology.md   (graphe Mermaid inclus, §4)
+       -> workspace/pipeline/topology/{n}-topology.md   (graphe Mermaid inclus, §4)
 2.2  architect-tools ∥ architect-rag ∥ architect-data ∥ architect-memory
-       -> workspace/feats/contracts/{tools,retrieval,memory}/**   (PARALLÈLE, borné MaxParallel)
+       -> workspace/pipeline/contracts/{tools,retrieval,memory}/**   (PARALLÈLE, borné MaxParallel)
 2.9  ir_compiler.py  (script déterministe, 0 token)
        -> workspace/.sys/.ir/{n}-system.ir.json
      [TOPOLOGY GATE]  validate_packaging.py (le livrable est-il réalisable ?)
@@ -56,7 +56,7 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    CAUSE: [CAP_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/{n}-G1-cap.json vert
    FIX: relancer /sdda-caps {n} (G1 doit être verte : on n'architecture pas des AC non mesurables)
    ```
-   3.bis **Roster déclaré** — si `feats/topology/{n}-roster.md` existe, il doit
+   3.bis **Roster déclaré** — si `feats/{n}-roster.md` existe, il doit
    être complet **avant** de payer l'architecte :
    ```bash
    python .sdda/sdda.py roster validate --mission {n} --if-present
@@ -64,7 +64,7 @@ Si non numérique → ERROR `[INVALID_ARG]` (format 3 lignes, cf. `/sdda-caps`).
    Exit 1 → STOP + ERROR (les findings du script, `fichier:$.chemin`) :
    ```
    ERROR: /sdda-topology {n} — roster incomplet
-   CAUSE: [ARCH_ROSTER_PLACEHOLDER] `$.subagents[0].tier` est encore `<à préciser>` — workspace/feats/topology/{n}-roster.md
+   CAUSE: [ARCH_ROSTER_PLACEHOLDER] `$.subagents[0].tier` est encore `<à préciser>` — workspace/feats/{n}-roster.md
    FIX: l'architecte tranche, puis /sdda-roster {n} --validate ; le framework ne comble aucun trou (P7)
    ```
    Roster absent → WARN `[ARCH_ROSTER_MANIFEST_MISSING]`, continuer : le
@@ -100,13 +100,13 @@ Si `--recompile-only` → aller directement à STEP 6.
 
 ## STEP 3 — Idempotence
 
-Glob `workspace/feats/topology/{n}-topology.md`. Si présent ET `MISSION hash` ==
+Glob `workspace/pipeline/topology/{n}-topology.md`. Si présent ET `MISSION hash` ==
 hash courant ET tous les `Parent MISSION hash` des CAPs sont à jour → proposer
 le court-circuit :
 
 ```
 ⊘ /sdda-topology {n}: topologie à jour (hash MISSION/CAPs inchangés).
-  Recompilation IR + G2 seulement. Pour forcer la re-conception : supprimer workspace/feats/topology/{n}-*.
+  Recompilation IR + G2 seulement. Pour forcer la re-conception : supprimer workspace/pipeline/topology/{n}-*.
 ```
 
 → STEP 6. Sinon → STEP 4.
@@ -120,7 +120,7 @@ Agent : `architect-topology` (`.sdda/agents/architect-topology.md`). Tier
 d'`agent-bounds.yaml`, non surchargeables par le Project Config ; aucun agent
 n'a de plancher `deep`, sinon le mode `dynamic` serait une décoration). Owner
 exclusif de
-`workspace/feats/topology/{n}-*`.
+`workspace/pipeline/topology/{n}-*`.
 
 Il s'exécute **seul et avant** les quatre architectes de contrats : c'est lui
 qui fixe le périmètre (quels agents, quels outils, quels retrievers, quelle
@@ -130,7 +130,7 @@ des contrats pour des composants qui n'existeront pas.
 Prompt d'invocation :
 ```
 Concevoir la topologie de la MISSION {n}-{MissionName} à partir de ses {C} CAPs.
-Roster DÉCLARÉ : {workspace/feats/topology/{n}-roster.md (validé) | aucun roster — repli ## 2. Roster déclaré}.
+Roster DÉCLARÉ : {workspace/feats/{n}-roster.md (validé) | aucun roster — repli ## 2. Roster déclaré}.
 Le recopier tel quel ; ne renommer, n'ajouter ni ne retirer aucun agent (P7). Ne PAS écrire dans {n}-roster.md.
 Template : .sdda/templates/topology.template.md. Graphe : bloc ```mermaid de ## 4 (aucun .mmd).
 Procédure imposée (AGENT-ROSTER.md §2) : partir de UN agent + des outils ; pour chaque
@@ -141,8 +141,8 @@ Bornes minimales par agent : MaxIterations={…} MaxToolCalls={…} MaxDelegatio
 AgentTimeoutSec={…} OnBoundExceeded={…}. Patterns autorisés : {## Active Orchestration}.
 MaxAgentsWarnAt={…}. Ne nommer AUCUNE API de framework. Choisir des TIERS, jamais des modèles.
 Remplir ## Allocated To de chaque CAP (agents / tools / retrievers) — seul droit d'écriture
-hors workspace/feats/topology/, mode Edit-section exclusif.
-Écrire pour chaque agent du produit un contrat workspace/feats/contracts/agents/{n}-{agent}.agent.md
+hors workspace/pipeline/topology/, mode Edit-section exclusif.
+Écrire pour chaque agent du produit un contrat workspace/pipeline/contracts/agents/{n}-{agent}.agent.md
 (template agent-contract.template.md) — SANS prompt (owner dev-prompt, PHASE 4).
 Reporter au §5 Skills les `skills:` déclarées par l'architecte au roster, telles quelles : une
 skill dit ce que l'agent SAIT FAIRE, un outil ce qu'il a LE DROIT D'APPELER — ne jamais convertir
@@ -176,7 +176,7 @@ phases plus loin — après avoir payé les contrats, les prompts et les agents.
 ```
 ERROR: /sdda-topology {n} — spécification incomplète pour l'architecture choisie
 CAUSE: [ARCH_SPEC_INCOMPLETE] `orchestration/supervisor` exige au moins 2 subagent(s) déclaré(s), 1 trouvé(s)
-FIX: compléter `## 2. Roster déclaré` dans workspace/feats/topology/{n}-topology.md —
+FIX: compléter `## 2. Roster déclaré` dans workspace/pipeline/topology/{n}-topology.md —
      c'est l'ARCHITECTE qui déclare les agents, leurs rôles et leurs outils.
      Le framework ne les invente pas (PHILOSOPHY P7).
      Ce que le pattern actif exige : validate_architecture.py --explain
@@ -193,10 +193,10 @@ Construire le `BATCH` depuis la topologie et `STACK.md` :
 
 | Condition | Agent ajouté | Écrit dans | Tier |
 |---|---|---|:-:|
-| ≥ 1 outil alloué | `architect-tools` | `workspace/feats/contracts/tools/{n}-{tool}.tool.md` | balanced |
-| `## Active RAG` ≠ `none` ET ≥ 1 retriever alloué | `architect-rag` | `workspace/feats/contracts/retrieval/{n}-{index}.retrieval.md` | **deep** |
-| `## Active Data Access` ≠ `none` | `architect-data` | `workspace/feats/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
-| `## Active Memory` ≠ `none` | `architect-memory` | `workspace/feats/contracts/memory/{n}-memory.md` | balanced |
+| ≥ 1 outil alloué | `architect-tools` | `workspace/pipeline/contracts/tools/{n}-{tool}.tool.md` | balanced |
+| `## Active RAG` ≠ `none` ET ≥ 1 retriever alloué | `architect-rag` | `workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md` | **deep** |
+| `## Active Data Access` ≠ `none` | `architect-data` | `workspace/pipeline/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
+| `## Active Memory` ≠ `none` | `architect-memory` | `workspace/pipeline/contracts/memory/{n}-memory.md` | balanced |
 
 Agents absents du `BATCH` → ligne `⊘ {agent}: skipped ({raison})`.
 
@@ -210,7 +210,7 @@ vérifiés par `audit_ownership.py` en post-step.
 
 Prompt commun (adapté par agent) :
 ```
-MISSION {n}-{MissionName}. Topologie : workspace/feats/topology/{n}-topology.md (périmètre CLOS —
+MISSION {n}-{MissionName}. Topologie : workspace/pipeline/topology/{n}-topology.md (périmètre CLOS —
 ne créer aucun composant absent de l'allocation). Template : .sdda/templates/{x}-contract.template.md.
 Neutralité framework (P11). Tout outil déclare sideEffectClass ∈ {read-only, write-scoped,
 write-destructive, external-side-effect} et une safetyStrategy si non read-only (P8).
@@ -305,7 +305,7 @@ Les 11 contrôles de `AGENTIC-IR.md §4` + budget :
 ```
 ERROR: /sdda-topology {n} — TOPOLOGY GATE rouge
 CAUSE: [TOPOLOGY_GATE_FAILED] [UNBOUNDED_LOOP] cycle supervisor→billing→supervisor sans borne ; [BUDGET_EXCEEDED_ESTIMATE] $0.41 estimé > cap $0.25 — rapport workspace/.sys/.validation/{n}-G2-topology.json
-FIX: corriger workspace/feats/topology/{n}-topology.md et/ou les contrats, puis /sdda-topology {n} --recompile-only
+FIX: corriger workspace/pipeline/topology/{n}-topology.md et/ou les contrats, puis /sdda-topology {n} --recompile-only
 ```
 
 **Bypass** (INVARIANTS `budget-estimated-before-code`) : `SDDA_BYPASS_BUDGET_ESTIMATE=1`

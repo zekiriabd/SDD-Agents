@@ -15,7 +15,7 @@ SECTION = "## 6. Contrats produits"
 
 
 def _append_row(project: Path, row: str) -> None:
-    topo = project / "workspace/feats/topology/1-topology.md"
+    topo = project / "workspace/pipeline/topology/1-topology.md"
     text = topo.read_text(encoding="utf-8")
     head, _, tail = text.partition(SECTION)
     table_end = tail.index("\n\n", tail.index("|---"))

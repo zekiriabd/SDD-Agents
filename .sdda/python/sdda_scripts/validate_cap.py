@@ -7,7 +7,7 @@ le hash de la MISSION parente, la traçabilité montante (chaque BR/AC de la
 MISSION couvert par >= 1 CAP, sinon `[TRACEABILITY_GAP]`) et la granularité.
 
 Usage :
-    python .sdda/sdda.py validate-cap workspace/feats/caps/1-2-ExplainInvoiceLine.md [--json]
+    python .sdda/sdda.py validate-cap workspace/pipeline/caps/1-2-ExplainInvoiceLine.md [--json]
     python .sdda/sdda.py validate-cap            # toutes les CAPs, traçabilité par mission
 
 Rapports : `G1-{capId}.json` par CAP, `G1-{missionId}.json` pour la traçabilité.
@@ -140,8 +140,8 @@ def ac_problems(ac: AcSpec, config: LayeredConfig | None, criticality: str) -> t
         problems.append(f"threshold `{f['threshold']}` n'est pas un seuil chiffré (ex. `>= 0.85`)")
     if "grader" not in missing and f["grader"].strip().lower() not in GRADERS:
         problems.append(f"grader `{f['grader']}` hors de la liste close {list(GRADERS)}")
-    if "dataset" not in missing and not f["dataset"].strip().startswith("workspace/proof/datasets/"):
-        problems.append(f"dataset `{f['dataset']}` doit être un chemin sous workspace/proof/datasets/")
+    if "dataset" not in missing and not f["dataset"].strip().startswith("workspace/pipeline/datasets/"):
+        problems.append(f"dataset `{f['dataset']}` doit être un chemin sous workspace/pipeline/datasets/")
     if "runs" not in missing:
         runs = ac.runs
         if runs is None or runs < 1:
@@ -153,7 +153,7 @@ def ac_problems(ac: AcSpec, config: LayeredConfig | None, criticality: str) -> t
             if runs < required:
                 warnings.append(f"runs={runs} < {key}={required} : un run vert n'est pas une preuve (P3)")
     if f.get("grader", "").strip().lower() == "llm-judge" and markdown_io.is_placeholder(f.get("calibration")):
-        warnings.append("grader llm-judge sans `calibration:` déclarée — le compilateur utilisera workspace/proof/calibration/{metric}.json (P9)")
+        warnings.append("grader llm-judge sans `calibration:` déclarée — le compilateur utilisera workspace/pipeline/calibration/{metric}.json (P9)")
     return problems, warnings
 
 
@@ -183,7 +183,7 @@ def validate_cap_text(text: str, *, path: Path | None, root: Path | None, config
     if not spec.parent_mission or markdown_io.is_placeholder(spec.parent_mission):
         report.error("CAP_PARENT_MISSING", "`Parent MISSION:` absent", "référencer l'id de la MISSION parente", loc)
     elif root is not None and mission is None:
-        report.error("CAP_PARENT_MISSING", f"MISSION parente `{spec.parent_mission}` introuvable dans workspace/feats/missions/", "corriger `Parent MISSION:` ou créer la MISSION", loc)
+        report.error("CAP_PARENT_MISSING", f"MISSION parente `{spec.parent_mission}` introuvable dans workspace/pipeline/missions/", "corriger `Parent MISSION:` ou créer la MISSION", loc)
     if mission is not None:
         if spec.number and mission.number != spec.number:
             report.error("CAP_PARENT_MISSING", f"l'id `{spec.id}` n'appartient pas à la MISSION {mission.number}", "le préfixe de la CAP doit être le numéro de sa MISSION", loc)
@@ -207,12 +207,12 @@ def validate_cap_text(text: str, *, path: Path | None, root: Path | None, config
             problems, warns = ac_problems(ac, config, spec.criticality)
             for p in problems:
                 report.error("AC_NOT_EVALUABLE", f"{ac.id} : {p}",
-                             "réécrire l'AC : `metric`, `threshold` (ex. `>= 0.85`), `dataset` (workspace/proof/datasets/…), `grader` (liste close), `runs` (>= 3, 5 si critical)", loc)
+                             "réécrire l'AC : `metric`, `threshold` (ex. `>= 0.85`), `dataset` (workspace/pipeline/datasets/…), `grader` (liste close), `runs` (>= 3, 5 si critical)", loc)
             for w in warns:
                 cls = "CAP_RUNS_INSUFFICIENT" if w.startswith("runs=") else "JUDGE_CALIBRATION_UNDECLARED"
                 report.warn(cls, f"{ac.id} : {w}", "", loc)
             ds = ac.fields.get("dataset", "")
-            if root is not None and ds.startswith("workspace/proof/datasets/") and not paths.resolve_rel(root, ds).is_file():
+            if root is not None and ds.startswith("workspace/pipeline/datasets/") and not paths.resolve_rel(root, ds).is_file():
                 report.warn("EVAL_DATASET_NOT_FOUND", f"{ac.id} : dataset `{ds}` absent sur disque (attendu avant G5)", "", loc)
 
     # Covers -----------------------------------------------------------------------------
@@ -239,13 +239,13 @@ def validate_traceability(mission: MissionSpec, caps: list[CapSpec], config: Lay
     gaps = [i for i in mission.items if i not in covered]
     if gaps:
         report.error("TRACEABILITY_GAP", f"MISSION {mission.id} : {gaps} couvert(s) par aucune CAP",
-                     "ajouter l'élément au `## Covers` d'une CAP existante, ou créer la CAP qui le porte", f"workspace/feats/missions/{mission.id}.md")
+                     "ajouter l'élément au `## Covers` d'une CAP existante, ou créer la CAP qui le porte", f"workspace/pipeline/missions/{mission.id}.md")
     n = len(caps)
     hard = config.get_int("CapGranularityHardCap", 15) if config else 15
     warn_at = config.get_int("CapGranularityWarnAt", 8) if config else 8
     if n > hard:
         report.error("CAP_GRANULARITY_EXCEEDED", f"{n} CAPs pour la MISSION {mission.id} (> CapGranularityHardCap={hard})",
-                     "regrouper ou scinder la MISSION", f"workspace/feats/caps/{mission.number}-*.md")
+                     "regrouper ou scinder la MISSION", f"workspace/pipeline/caps/{mission.number}-*.md")
     elif n > warn_at:
         report.warn("CAP_GRANULARITY_HIGH", f"{n} CAPs pour la MISSION {mission.id} (> CapGranularityWarnAt={warn_at})", "", "")
     report.data = {"missionId": mission.id, "capCount": n, "coverage": dict(sorted(covered.items()))}
@@ -292,7 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     # connaissent qu'un numéro, jamais un chemin. Le positionnel reste pour
     # l'usage manuel et pour les tests.
     p.add_argument("--mission", type=int, default=None, help="numéro de MISSION ; restreint aux fichiers de cette MISSION")
-    p.add_argument("files", nargs="*", type=Path, help="fichiers CAP ; défaut : workspace/feats/caps/*.md")
+    p.add_argument("files", nargs="*", type=Path, help="fichiers CAP ; défaut : workspace/pipeline/caps/*.md")
     add_common_args(p)
     return p
 
@@ -309,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.caps_dir(root).glob("*.md"))
     if not files:
-        combined.error("CAP_INCOMPLETE", "aucune CAP trouvée", "créer workspace/feats/caps/{n}-{m}-{Name}.md depuis le template", str(paths.caps_dir(root)))
+        combined.error("CAP_INCOMPLETE", "aucune CAP trouvée", "créer workspace/pipeline/caps/{n}-{m}-{Name}.md depuis le template", str(paths.caps_dir(root)))
     combined.extend(validate_caps(root, files, config, write_report=not args.no_report))
     return finish(combined, args)
 

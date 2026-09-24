@@ -18,7 +18,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 
 | CAP | AC couverts | Évaluée par |
 |---|---|---|
-| {n}-{m}-… | AC-1, AC-2 | `workspace/proof/suites/…` |
+| {n}-{m}-… | AC-1, AC-2 | `workspace/pipeline/suites/…` |
 
 > Un agent qui ne sert aucune CAP est `[AGENT_SERVES_NO_CAP]` — il a été ajouté
 > « pour la structure ».
@@ -131,7 +131,7 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 - **Entrées non maîtrisées** : <ex. `user_message`, `retrieved_documents`,
   sortie du serveur MCP `web-fetch`>
 - **Traitement** : contenu, jamais instruction (P8)
-- **Suite d'injection** : `workspace/proof/datasets/adversarial/{agent-slug}.jsonl`
+- **Suite d'injection** : `workspace/pipeline/datasets/adversarial/{agent-slug}.jsonl`
   *(obligatoire dès qu'une entrée est non maîtrisée — invariant
   `injection-suite-mandatory`)*
 

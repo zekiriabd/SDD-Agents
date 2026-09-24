@@ -29,7 +29,7 @@ from sdda_scripts import ir_compiler
 MANIFEST = "workspace/stack/STACK.md"
 SCHEMAS = "workspace/src/SupportAssistant/data/schemas"
 TOOLS = "workspace/src/SupportAssistant/data/tools"
-CONTRACTS = "workspace/feats/contracts/tools"
+CONTRACTS = "workspace/pipeline/contracts/tools"
 META = Path(__file__).resolve().parents[2] / "templates" / "tool-schema.schema.json"
 
 
@@ -502,6 +502,6 @@ def test_bad_encoding_is_an_error_not_a_silent_replacement(sources_project: Path
 
 
 def test_mission_must_be_decidable(sources_project: Path) -> None:
-    for path in (sources_project / "workspace/feats/missions").glob("*.md"):
+    for path in (sources_project / "workspace/pipeline/missions").glob("*.md"):
         path.unlink()
     assert "MISSION_AMBIGUOUS" in classes(gst.run(sources_project, mode="check"))

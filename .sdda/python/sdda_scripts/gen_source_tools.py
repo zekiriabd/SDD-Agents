@@ -757,7 +757,7 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
         "",
         "## 8. Tests de contrat (L2)",
         "",
-        f"Fichier : `workspace/proof/suites/tool-{contract_id}.yaml`",
+        f"Fichier : `workspace/pipeline/suites/tool-{contract_id}.yaml`",
         "",
     ])
     body.extend(f"- [ ] {item}" for item in _test_checklist(kind, src))
@@ -1194,7 +1194,7 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
     if not ctx.mission:
         report.error(
             "MISSION_AMBIGUOUS",
-            "numéro de mission indécidable (zéro ou plusieurs missions dans workspace/feats/missions/)",
+            "numéro de mission indécidable (zéro ou plusieurs missions dans workspace/pipeline/missions/)",
             fix="passer `--mission {n}` — il nomme les contrats générés",
         )
         return report

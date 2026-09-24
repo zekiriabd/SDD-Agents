@@ -604,10 +604,10 @@ workspace/src/{AppName}/data/
 └── tools/
     └── {source_id}_{lookup|search|count}.py   # GÉNÉRÉ — Input/Record/Output + fonction outil
 
-workspace/feats/contracts/dataaccess/
+workspace/pipeline/contracts/dataaccess/
 └── schemas/{source_id}.schema.json            # SCHÉMA FIGÉ — inféré une fois, relu, versionné, fait foi
 
-workspace/feats/contracts/tools/
+workspace/pipeline/contracts/tools/
 └── {n}-{source-id}-{lookup|search|count}.tool.md  # squelette GÉNÉRÉ UNE FOIS, complété à la main
 
 workspace/src/{AppName}/tests/data/
@@ -620,7 +620,7 @@ workspace/src/{AppName}/tests/data/
 
 Les données elles-mêmes ne sont **pas** dans `workspace/src/` : ce sont des
 données d'exploitation, pas du code. Elles vivent là où le store les déclare, et
-un échantillon anonymisé vit dans `workspace/proof/datasets/` pour les tests. La
+un échantillon anonymisé vit dans `workspace/pipeline/datasets/` pour les tests. La
 **déclaration**, elle, est versionnée avec STACK.md : c'est la trace revue de la
 surface de données. Les **schémas figés** partent avec le code, dans le paquet.
 

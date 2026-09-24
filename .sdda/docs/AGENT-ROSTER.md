@@ -114,7 +114,7 @@ Il **n'écrit pas** de prompt, **ne choisit pas** de modèle (il choisit un tier
 
 ### `qa-evals` — celui sans qui rien n'est prouvé
 
-Le seul autorisé à écrire dans `workspace/proof/datasets/`. Produit :
+Le seul autorisé à écrire dans `workspace/pipeline/datasets/`. Produit :
 
 - **golden set** (ajustement) et **holdout** (verdict), disjoints, vérifiés par hash ;
 - **set de calibration** : ≥ 50 items labellisés humainement, pour valider chaque

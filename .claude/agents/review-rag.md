@@ -41,13 +41,13 @@ Read **uniquement** :
   (`pattern`, `topK`, `gateThresholds`, `indexHash`, `citationMode`) et, quand
   le diagnostic descend jusqu'aux composants, `binding` (`chunk`, `store`,
   `embeddingModel`, `hybridWeights`, `rerank`). Plus `agents[].retrievers`.
-- `workspace/feats/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif de
+- `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif de
   chunking, config retenue, règle de diagnostic, filtrage par identité.
 - `workspace/.sys/reports/{n}/L3-*.json` — retrieval **sans agent** : `recall@k`,
   `nDCG@k`, `context_precision`, `citation_resolve_rate`, **par requête**.
 - `workspace/.sys/reports/{n}/L4-*.json`, `L7-*.json` — `groundedness`,
   `answer_relevance`, `abstention_rate`, **par item**, k runs.
-- `workspace/proof/calibration/*.json` — κ de chaque juge utilisé.
+- `workspace/pipeline/calibration/*.json` — κ de chaque juge utilisé.
 - `workspace/src/{App}/retrieval/*/index.manifest.json` — `indexHash`, config
   effective, nombre de chunks.
 - Un échantillon de spans `retrieval` dans `workspace/.sys/traces/runs/` — documents

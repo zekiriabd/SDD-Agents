@@ -45,7 +45,7 @@ def check(root: Path, data: dict) -> int:
     # répertoire disparu, n'y trouvait rien, concluait « aucun rapport de
     # calibration » et AUTORISAIT. Un juge bloquant non calibré serait passé,
     # et le message de sortie aurait dit que tout allait bien.
-    cal_dir = paths.proof_dir(root) / "calibration"
+    cal_dir = paths.calibration_dir(root)
     reports = list(cal_dir.glob("*.json")) if cal_dir.is_dir() else []
     if not reports:
         return allow("aucun rapport de calibration — les juges restent en `advisory` jusqu'à mesure")

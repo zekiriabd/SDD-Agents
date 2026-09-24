@@ -30,15 +30,15 @@ demo-architect:
   reads:
     - workspace/.sys/.context/packs/demo-architect.md
     - workspace/stack/STACK.md
-    - workspace/feats/missions/{n}-*.md
-    - workspace/feats/caps/{n}-*-*.md
+    - workspace/pipeline/missions/{n}-*.md
+    - workspace/pipeline/caps/{n}-*-*.md
   pack_sources:
     - .sdda/docs/pattern-a.md
     - .sdda/docs/pattern-b.md
   pack_policy: |
     Tranché par rôle : il choisit, il n'implémente pas.
   writes:
-    - workspace/feats/topology/{n}-topology.md
+    - workspace/pipeline/topology/{n}-topology.md
 
 tiny-agent:
   model_tier: fast
@@ -133,7 +133,7 @@ def test_a_pattern_matching_nothing_is_reported_not_silently_dropped(project: Pa
     context_pack.main(["build", "--agent", "demo-architect", "--root", str(project)])
     code, payload = _json(project, ["resolve", "--agent", "demo-architect", "--mission", "9"])
     assert code == 0  # ce n'est pas bloquant : c'est un avertissement, mais il existe
-    assert "workspace/feats/missions/{n}-*.md" in payload["data"]["missing"]
+    assert "workspace/pipeline/missions/{n}-*.md" in payload["data"]["missing"]
     assert any(w["class"] == "CONFIG_UNKNOWN_KEY" for w in payload["warnings"])
 
 

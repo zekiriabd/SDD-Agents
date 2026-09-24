@@ -16,7 +16,7 @@ Scope: exécution des **évaluations** (L3 → L9) dans `pytest`, sans framework
 premier nativement ; il ne sait pas faire le second : il n'a pas de notion de
 « k exécutions dont on rapporte la variance », ni de verdict à trois couleurs,
 ni de dépendance à un tuple de hashes. Cette stack **ajoute** ces notions à
-`pytest` par un plugin local (`workspace/proof/conftest.py` +
+`pytest` par un plugin local (`workspace/pipeline/conftest.py` +
 `sdda_eval` dans `.sdda/python/`) plutôt que d'adopter un framework d'eval
 tiers, pour trois raisons :
 
@@ -46,9 +46,9 @@ les traces de `observability/*.md`).
 - **Stack ID** : `eval-pytest-eval`
 - **Langage** : Python 3.12 (`lang/python.md`)
 - **Runner** : `pytest` 9.0.x + `pytest-asyncio` + `pytest-xdist` + `pytest-timeout`
-- **Plugin local** : `workspace/proof/conftest.py` (options, fixtures, hooks de rapport) s'appuyant sur `sdda_eval` (`.sdda/python/sdda_lib/sdda_eval/` : stats, graders déterministes, verdict, épinglage, rapport)
+- **Plugin local** : `workspace/pipeline/conftest.py` (options, fixtures, hooks de rapport) s'appuyant sur `sdda_eval` (`.sdda/python/sdda_lib/sdda_eval/` : stats, graders déterministes, verdict, épinglage, rapport)
 - **Paramètres STACK.md** : `EvalRuns: 3`, `EvalVarianceWarnPct: 15`, `JudgeCalibrationMinKappa: 0.6`, `JudgeCalibrationMinItems: 50`, `HoldoutDisjointCheck: strict`, `RegressionTolerancePct: 3`, `GoldenSetMinItems: 50`, `HoldoutSetMinItems: 30`, `AdversarialSetMinItems: 25`, `BaselineStorage`
-- **Ownership** : `workspace/proof/**` et `workspace/proof/datasets/**` → `qa-evals` ; `workspace/proof/baselines/**` → **script uniquement** ; `dev-*` exécutent, n'éditent pas
+- **Ownership** : `workspace/pipeline/{datasets,suites,calibration,fixtures,rubrics}/**` → `qa-evals` ; `workspace/pipeline/baselines/**` → **script uniquement** ; `dev-*` exécutent, n'éditent pas
 
 <!-- CORE_PACKAGES_START -->
 ```bash
@@ -115,17 +115,17 @@ lignes de Python pur dans `sdda_eval.stats`, testées en L1.
 
 | Concept (DOMAIN-MODEL) | Idiome | Notes |
 |---|---|---|
-| **EVAL SUITE** `{n}-{m}-{grader}` | un fichier `workspace/proof/suites/{n}-{m}-{grader}.yaml` | collecté par `test_suites.py` en un **item pytest par ligne de dataset** (id `suite::item_id`) |
+| **EVAL SUITE** `{n}-{m}-{grader}` | un fichier `workspace/pipeline/suites/{n}-{m}-{grader}.yaml` | collecté par `test_suites.py` en un **item pytest par ligne de dataset** (id `suite::item_id`) |
 | **EVALUATION** `(dataset, grader, seuil, k)` → `(score, variance, verdict)` | fixture `eval_runner(suite, item)` qui exécute k fois, agrège, écrit le résultat, et **fait échouer le test si verdict = rouge** | jaune = test **passe** avec `record_property("verdict", "yellow")` ; le verdict de session (§3.5) le remonte |
 | **k runs** (P3) | `for k in range(runs)` **dans un même item**, séquentiel, sans cache | `runs = 5` si `criticality: critical` ou marqueur `critical`, sinon `EvalRuns` ; `--eval-runs` peut **augmenter**, jamais baisser |
 | **GRADER** | `sdda_eval.graders.{exact,regex,schema,numeric_tolerance,semantic_similarity,llm_judge,trajectory,cost,latency}` — protocole `grade(expected, actual, ctx) -> float ∈ [0,1]` | déterministes en Python pur ; `llm_judge` appelle `JudgeModel` **≠** modèle évalué ; `trajectory`/`cost`/`latency` lisent la **trace JSONL** du run, pas la réponse |
-| **DATASET** | `workspace/proof/datasets/{golden\|holdout\|calibration\|adversarial}/*.jsonl` ; une ligne = `{id, input, expected, tags[], criticality?}` validée par `golden-set.schema.json` | chargé en lecture seule ; **hash du fichier** dans le tuple |
-| **BASELINE** (P10) | `workspace/proof/baselines/{suite}.json` : `{pin: PinTuple, score_mean, score_stddev, pass_rate, recorded_at, run_id}` | écrit **uniquement** par `sdda_scripts.baseline_promote` (action tracée) ; jamais par un test |
+| **DATASET** | `workspace/pipeline/datasets/{golden\|holdout\|calibration\|adversarial}/*.jsonl` ; une ligne = `{id, input, expected, tags[], criticality?}` validée par `golden-set.schema.json` | chargé en lecture seule ; **hash du fichier** dans le tuple |
+| **BASELINE** (P10) | `workspace/pipeline/baselines/{suite}.json` : `{pin: PinTuple, score_mean, score_stddev, pass_rate, recorded_at, run_id}` | écrit **uniquement** par `sdda_scripts.baseline_promote` (action tracée) ; jamais par un test |
 | **Tuple d'épinglage** | `PinTuple(prompt_hash, model_id, retrieval_index_hash, tool_schema_hash, dataset_hash)` calculé par la fixture `pin` au début de session | dans chaque rapport ; `pin != baseline.pin` → `[EVAL_BASELINE_STALE]` : la comparaison de régression est **refusée**, pas approximée |
 | **Verdict** | `sdda_eval.verdict(mean, stddev, pass_rate, threshold, variance_warn_pct)` → `green \| yellow \| red` | table §3.4 ; rouge = `pytest.fail` ; jaune = pass + propriété ; le **verdict de session** est le pire des items |
-| **Calibration** (P9) | fixture `calibrated_judge(grader_id)` : lit `workspace/proof/calibration/{grader}.json`, vérifie `n ≥ JudgeCalibrationMinItems` et `kappa ≥ JudgeCalibrationMinKappa` ; sinon le juge passe en **`advisory`** (score rapporté, **verdict non bloquant**) et l'item est marqué `xfail(strict=False)` avec `[JUDGE_NOT_CALIBRATED]` | un juge non calibré ne bloque pas et ne valide pas |
+| **Calibration** (P9) | fixture `calibrated_judge(grader_id)` : lit `workspace/pipeline/calibration/{grader}.json`, vérifie `n ≥ JudgeCalibrationMinItems` et `kappa ≥ JudgeCalibrationMinKappa` ; sinon le juge passe en **`advisory`** (score rapporté, **verdict non bloquant**) et l'item est marqué `xfail(strict=False)` avec `[JUDGE_NOT_CALIBRATED]` | un juge non calibré ne bloque pas et ne valide pas |
 | **Holdout disjoint** | test L0 `test_datasets_disjoint.py` : `set(hash(item.input)) golden ∩ holdout == ∅` | `strict` → échec de collection ; `warn` → propriété |
-| **Isolement L4** | fixtures `mocked_tools` (réponses depuis `workspace/proof/fixtures/tools/*.jsonl`) et `frozen_retrieval` (résultats figés par `query_hash`) | l'agent seul ; la variation est attribuable |
+| **Isolement L4** | fixtures `mocked_tools` (réponses depuis `workspace/pipeline/fixtures/tools/*.jsonl`) et `frozen_retrieval` (résultats figés par `query_hash`) | l'agent seul ; la variation est attribuable |
 | **L7 bout-en-bout** | invocation de la surface CLI (`serving/cli.md`) : `uv run {AppName} run --json …` via `subprocess`, lecture des `RunEvent` et du code de sortie | ce qu'on mesure est ce qu'on livre |
 | **L8 adversarial** | suite avec `expected.outcome ∈ {refused, unchanged_behavior, tool_not_called}` et grader `trajectory` ; **exit code 4 attendu** | toute attaque réussie devient un item permanent |
 | **Coût de l'eval** | fixture `eval_budget` : somme `sdda.cost.usd` des traces ; `--eval-max-cost-usd` → arrêt de session `[EVAL_BUDGET_EXCEEDED]` | l'eval elle-même a un budget |
@@ -134,22 +134,22 @@ lignes de Python pur dans `sdda_eval.stats`, testées en L1.
 ### 3.1 Suite déclarative
 
 ```yaml
-# workspace/proof/suites/1-2-groundedness.yaml
+# workspace/pipeline/suites/1-2-groundedness.yaml
 id: 1-2-groundedness
 level: L4
 cap: 1-2-ExplainInvoiceLine
 agent: 1-billing-specialist
-dataset: workspace/proof/datasets/golden/billing-v1.jsonl
+dataset: workspace/pipeline/datasets/golden/billing-v1.jsonl
 grader:
   id: llm-judge
-  rubric: workspace/proof/rubrics/groundedness.md          # grille versionnée
-  calibration: workspace/proof/calibration/groundedness.json
+  rubric: workspace/pipeline/rubrics/groundedness.md          # grille versionnée
+  calibration: workspace/pipeline/calibration/groundedness.json
 threshold: 0.85
 runs: 3                        # 5 si critical
 isolation:
   tools: mocked                # mocked | live
   retrieval: frozen            # frozen | live
-  fixtures: workspace/proof/fixtures/1-billing-specialist/
+  fixtures: workspace/pipeline/fixtures/1-billing-specialist/
 timeout_s: 90
 tags_filter: []                # exécuter un sous-ensemble par tag
 ```
@@ -160,11 +160,11 @@ erreur de collection (`[EVAL_SUITE_INVALID]`), pas un test qui échoue.
 ### 3.2 Le runner — un item, k runs
 
 ```python
-# workspace/proof/test_suites.py — générique, ne change pas par mission
+# workspace/pipeline/test_suites.py — générique, ne change pas par mission
 import pytest
 from sdda_eval import load_suites, verdict, stats
 
-SUITES = load_suites("workspace/proof/suites")
+SUITES = load_suites("workspace/pipeline/suites")
 
 def pytest_generate_tests(metafunc):
     if "suite_item" in metafunc.fixturenames:
@@ -227,7 +227,7 @@ session :
   ],
   "aggregate": {"mean": 0.88, "stddev": 0.05, "pass_rate_items": 0.93, "verdict": "yellow", "cost_usd_total": 2.14, "duration_s": 412},
   "by_tag": {"factual": {"mean": 0.91, "n": 40}, "identifier": {"mean": 0.79, "n": 12}},
-  "baseline": {"path": "workspace/proof/baselines/1-2-groundedness.json", "comparable": true, "delta_mean": -0.012, "regression": false},
+  "baseline": {"path": "workspace/pipeline/baselines/1-2-groundedness.json", "comparable": true, "delta_mean": -0.012, "regression": false},
   "judge": {"id": "llm-judge", "model_id": "…", "calibration_kappa": 0.71, "calibration_n": 62, "mode": "blocking"},
   "recorded_at": "2026-09-20T15:02:11Z", "session_run_id": "…", "semconv_version": "0.61b0"
 }
@@ -241,7 +241,7 @@ session :
 ## 4. Structure de fichiers générée
 
 ```
-workspace/proof/
+workspace/pipeline/
 ├── conftest.py                 # plugin local : options --eval-*, fixtures pin / eval_runner / report / eval_budget / calibrated_judge / mocked_tools / frozen_retrieval,
 │                               #   hooks : collection (schema suites, disjonction golden/holdout, interdiction rerun sur eval), sessionfinish (rapport, verdict)
 ├── pytest.ini                  # markers, asyncio_mode=auto, timeout, -p no:randomly, addopts = -p no:cacheprovider pour eval

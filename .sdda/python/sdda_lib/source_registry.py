@@ -577,7 +577,7 @@ def allowed_keys(source: dict[str, Any]) -> frozenset[str]:
 def schema_rel_path(source_id: str, app_name: str) -> str:
     """Le schéma figé d'une source : `workspace/src/{App}/data/schemas/{id}.schema.json`.
 
-    Il vivait sous `feats/contracts/dataaccess/schemas/`. Or ce n'est ni une
+    Il vivait sous `pipeline/contracts/dataaccess/schemas/`. Or ce n'est ni une
     spécification ni du Markdown : c'est le fichier contre lequel l'application
     valide sa donnée au démarrage (`schema_guard.py`, `[DATA_SOURCE_SCHEMA_DRIFT]`).
     Un actif d'exécution qui reste dans la zone des specs ne part pas avec le

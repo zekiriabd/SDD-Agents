@@ -77,7 +77,7 @@ def _item_input(item: Mapping[str, Any]) -> str:
 def mocked_toolset(fixtures: Path | Mapping[str, Any] | None) -> DictToolset:
     """Des outils qui répondent depuis des fixtures, sans réseau ni base.
 
-    Les fixtures viennent de `workspace/proof/fixtures/tools/*.jsonl`, une ligne
+    Les fixtures viennent de `workspace/pipeline/fixtures/tools/*.jsonl`, une ligne
     par réponse : `{"tool": "…", "result": …}`. Un outil sans fixture ne rend pas
     une réponse vide — il rend une ERREUR déclarée. Une réponse vide se
     confondrait avec « l'outil n'a rien trouvé », et l'agent répondrait

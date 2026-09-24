@@ -41,13 +41,13 @@ est donné. Sinon `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement**, pour chaque agent du périmètre :
-- `workspace/feats/contracts/agents/{n}-{agent-slug}.agent.md` — ta spécification.
-- `workspace/feats/contracts/tools/{n}-*.tool.md` des outils listés au §4 du contrat —
+- `workspace/pipeline/contracts/agents/{n}-{agent-slug}.agent.md` — ta spécification.
+- `workspace/pipeline/contracts/tools/{n}-*.tool.md` des outils listés au §4 du contrat —
   pour connaître leurs `description` et erreurs ; tu ne les réécris pas.
-- `workspace/feats/contracts/retrieval/{n}-*.retrieval.md` des retrievers du §7 — mode de citation.
+- `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` des retrievers du §7 — mode de citation.
 - `workspace/.sys/.ir/{n}-system.ir.json` — l'entrée `agents[]` de cet agent :
   outils réellement câblés, `trustPosture`, `refusalPolicy`, `bounds`.
-- `workspace/feats/missions/{n}-*.md` — `## Failure Policy`, `## Business Rules`.
+- `workspace/pipeline/missions/{n}-*.md` — `## Failure Policy`, `## Business Rules`.
 - `workspace/stack/STACK.md` — `## Runtime Models` (tier de l'agent),
   `## Project Config` `PromptMaxTokens`, `CitationMode`.
 - `.sdda/rules/prompt-authoring.md`, `.sdda/digests/error-classification.dev-prompt.md`.

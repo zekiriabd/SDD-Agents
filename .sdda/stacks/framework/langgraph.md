@@ -58,7 +58,7 @@ stack distincte (`framework/langsmith.md`), optionnelle.
 - **Project file** : `workspace/src/{AppName}/pyproject.toml`
 - **Smoke** : cf. §6
 - **Visualisation** : `graph.get_graph().draw_mermaid()` → doit être **identique**
-  (modulo mise en forme) au bloc ```mermaid de `workspace/feats/topology/{n}-topology.md` §4. Vérifié par
+  (modulo mise en forme) au bloc ```mermaid de `workspace/pipeline/topology/{n}-topology.md` §4. Vérifié par
   `sdda_scripts/diff_graph_vs_ir.py` (0 token).
 
 <!-- CORE_PACKAGES_START -->
@@ -433,4 +433,4 @@ Smoke Timeout : 60 s. Si `checkpointing: true` en prod, un second smoke marqué
 13. **Fuite de framework dans les contrats.** Un `architect-tools` qui écrit
     « le ToolNode appelle… » viole P11 ; `validate_ir.py` (règle 10) et le lint
     des contrats grep `StateGraph|ToolNode|add_node|interrupt\(` dans
-    `workspace/feats/contracts/**` → `[CONTRACT_FRAMEWORK_LEAK]`.
+    `workspace/pipeline/contracts/**` → `[CONTRACT_FRAMEWORK_LEAK]`.

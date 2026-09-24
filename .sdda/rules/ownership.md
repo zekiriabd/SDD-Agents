@@ -2,13 +2,13 @@
 # Règle path-scoped : injectée au contact des artefacts arbitrés ci-dessous.
 # Portée volontairement étroite — la matrice n'intéresse que ceux qui écrivent.
 paths:
-  - "workspace/feats/missions/**"
-  - "workspace/feats/caps/**"
-  - "workspace/feats/topology/**"
-  - "workspace/feats/contracts/**"
+  - "workspace/pipeline/missions/**"
+  - "workspace/pipeline/caps/**"
+  - "workspace/pipeline/topology/**"
+  - "workspace/pipeline/contracts/**"
   - "workspace/src/{App}/prompts/**"
-  - "workspace/proof/datasets/**"
-  - "workspace/proof/**"
+  - "workspace/pipeline/datasets/**"
+  - "workspace/pipeline/**"
   - "workspace/src/**"
   - "workspace/.sys/.context/**"
 ---
@@ -32,19 +32,21 @@ ne peut plus rien conclure.
 | Chemin | Owner exclusif | Mode | Phase |
 |---|---|---|---|
 | `workspace/stack/STACK.md` | **humain (Tech Lead)** | édition manuelle — aucun agent n'écrit ; versionné, noms de variables seulement | — |
-| `workspace/src/{App}/.env` | **humain** | les valeurs des secrets du RUNTIME — gitignoré, avec l'application qui les consomme ; lu par aucun agent, le harnais de construction compris | — |
-| `workspace/feats/briefs/*.md` | **humain** | ce qu'il dépose : specs, matière d'une MISSION | — |
-| `workspace/feats/topology/{n}-roster.md` | **humain (architecte)** | la décision d'architecture (P7) — `architect-topology` la lit, ne l'écrit jamais | — |
-| `workspace/proof/seed/**` | **humain** | la vérité terrain — `qa-evals` la lit et en dérive `datasets/`, jamais l'inverse | — |
-| `workspace/feats/missions/{n}-*.md` | `po-elicitor` | Create puis append-only | 0 |
-| `workspace/feats/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) | 1 |
-| `workspace/feats/caps/**` champ `Allocated To` | `architect-topology` | **Edit narrow** (ce champ seul) | 2 |
-| `workspace/feats/topology/{n}-topology.md` | `architect-topology` | Create exclusif — graphe Mermaid inclus (§4) ; **pas** `{n}-roster.md`, même répertoire, autre owner | 2 |
-| `workspace/feats/contracts/agents/*` | `architect-topology` (squelette) → `dev-prompt` (§Prompt: ref + hash) | Sérialisé par section | 2, 4 |
-| `workspace/feats/contracts/tools/{n}-*.tool.md` | `architect-tools` | Create exclusif | 2 |
-| `workspace/feats/contracts/tools/{n}-data-*.tool.md` | `architect-data` | Create exclusif — **préfixe `data-` réservé**, namespace disjoint | 2 |
-| `workspace/feats/contracts/retrieval/*` | `architect-rag` | Create exclusif | 2 |
-| `workspace/feats/contracts/memory/*` | `architect-memory` | Create exclusif | 2 |
+| `workspace/assets/.env` | **humain** | les VALEURS des secrets du RUNTIME — gitignoré ; lu par aucun agent, le harnais de construction compris (`[SECRET_READ_FORBIDDEN]`) | — |
+| `workspace/src/{App}/.env` | script `install-env` | copie de `assets/.env`, avec l'application qui la consomme ; lue par aucun agent | 3, 6 |
+| `workspace/assets/**` | **humain** | les données déposées — racine des stores `kind: local` ; lues par `architect-data` et les générateurs, écrites par aucun agent | — |
+| `workspace/feats/{n}-{Name}.md` | **humain** | le brief : ce qu'il dépose, matière d'une MISSION | — |
+| `workspace/feats/{n}-roster.md` | **humain (architecte)** | la décision d'architecture (P7) — `architect-topology` la lit, ne l'écrit jamais | — |
+| `workspace/seed/**` | **humain** | la vérité terrain — `qa-evals` la lit et en dérive `datasets/`, jamais l'inverse | — |
+| `workspace/pipeline/missions/{n}-*.md` | `po-elicitor` | Create puis append-only | 0 |
+| `workspace/pipeline/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) | 1 |
+| `workspace/pipeline/caps/**` champ `Allocated To` | `architect-topology` | **Edit narrow** (ce champ seul) | 2 |
+| `workspace/pipeline/topology/{n}-topology.md` | `architect-topology` | Create exclusif — graphe Mermaid inclus (§4) ; le roster qu'il matérialise est dans `feats/`, chez l'humain | 2 |
+| `workspace/pipeline/contracts/agents/*` | `architect-topology` (squelette) → `dev-prompt` (§Prompt: ref + hash) | Sérialisé par section | 2, 4 |
+| `workspace/pipeline/contracts/tools/{n}-*.tool.md` | `architect-tools` | Create exclusif | 2 |
+| `workspace/pipeline/contracts/tools/{n}-data-*.tool.md` | `architect-data` | Create exclusif — **préfixe `data-` réservé**, namespace disjoint | 2 |
+| `workspace/pipeline/contracts/retrieval/*` | `architect-rag` | Create exclusif | 2 |
+| `workspace/pipeline/contracts/memory/*` | `architect-memory` | Create exclusif | 2 |
 | `workspace/.sys/.ir/*.ir.json` | **script `ir_compiler.py` uniquement** | régénéré, jamais édité | 2.9 |
 | `workspace/src/{App}/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif — l'EXÉCUTABLE hashé, dans l'application | 4 |
 | `workspace/src/{App}/skills/{skill}.md` | `dev-prompt` | Create + Edit exclusif — un fragment par compétence déclarée au roster ; la matière du prompt, cité sous `## Compétences` | 4 |
@@ -60,11 +62,11 @@ ne peut plus rien conclure.
 | `workspace/src/**/app/**` (composition, config, Domaine) | `dev-backend` | Create + Edit exclusif — **rien du moteur** : aucun droit sur agents/, tools/, orchestration/, retrieval/, data/, serving/ | 3, 5 |
 | `workspace/src/{App}/tests/**` (transverses) | `qa-tests` | Create/Edit exclusif — **jamais le code de production** | 6 |
 | `workspace/src/**/{couche}/tests/**` | le `dev-*` de la couche | Create/Edit — ses propres tests de contrat | 3-5 |
-| `workspace/proof/datasets/**` | `qa-evals` | Create exclusif | 6 |
-| `workspace/proof/suites/**` | `qa-evals` | Create exclusif | 6 |
-| `workspace/proof/baselines/**` | **script déterministe uniquement** | write atomique + lock | 6, 9 |
+| `workspace/pipeline/datasets/**` | `qa-evals` | Create exclusif | 6 |
+| `workspace/pipeline/suites/**` | `qa-evals` | Create exclusif | 6 |
+| `workspace/pipeline/baselines/**` | **script déterministe uniquement** | write atomique + lock | 6, 9 |
 | `workspace/.sys/reports/**` | `eval_runner.py` | Create (horodaté) | 6 |
-| `workspace/proof/calibration/**` | `qa-evals` + **humain** (les labels) | Sérialisé | 6 |
+| `workspace/pipeline/calibration/**` | `qa-evals` + **humain** (les labels) | Sérialisé | 6 |
 | `workspace/.sys/traces/**` | runtime + hooks | Append-only | tout |
 
 > **Le `**` de `workspace/src/**/{couche}/**` compte.** La profondeur du chemin
@@ -77,7 +79,7 @@ ne peut plus rien conclure.
 > d'un projet à arborescence plate, et un enforcer qui dit l'inverse de la
 > vérité est pire qu'aucun enforcer.
 | `workspace/.sys/.context/constitution.md` | **séquentiel** : `po-elicitor` (§1-§3) → `po-capabilities` (§3 acteurs) → `architect-topology` (§4 architecture) | Append-only par section | 0, 1, 2 |
-| `workspace/feats/decisions/ADR-*.md` | `architect-topology`, `architect-data` | Numérotation atomique par horodatage | 2 |
+| `workspace/pipeline/decisions/ADR-*.md` | `architect-topology`, `architect-data` | Numérotation atomique par horodatage | 2 |
 | `workspace/.sys/.validation/**` | scripts de gate | Create exclusif | tout |
 | `workspace/.sys/.audit/**` | hooks framework | Append-only | tout |
 
@@ -88,7 +90,7 @@ ne peut plus rien conclure.
 Elles ne sont pas du confort de parallélisme : ce sont des garde-fous
 épistémiques. Sans elles, le pipeline se félicite lui-même.
 
-### 2.1 Seul `qa-evals` écrit dans `workspace/proof/datasets/`
+### 2.1 Seul `qa-evals` écrit dans `workspace/pipeline/datasets/`
 
 **L'agent qui écrit le code ne peut pas modifier le jeu qui le juge.**
 
@@ -103,7 +105,7 @@ Violation → `[DATASET_OWNERSHIP_VIOLATION]`, bloquant, sans bypass.
 découvre des attaques réussies qui doivent devenir des items permanents — mais
 il ne les écrit pas lui-même. Il dépose ses trouvailles dans
 `workspace/.sys/.validation/adversarial-findings/{n}.jsonl`, et un **script
-déterministe** les promeut dans `workspace/proof/datasets/adversarial/`.
+déterministe** les promeut dans `workspace/pipeline/datasets/adversarial/`.
 
 Le détour coûte une étape et préserve un invariant sans trou : « seul
 `qa-evals` écrit dans `datasets/` » se vérifie mécaniquement, alors qu'une
@@ -139,7 +141,7 @@ effet de bord — aucune gate ne peut l'exécuter pour la juger. Sans cette
 symétrie, une skill déclarée au roster disparaissait silencieusement à la
 compilation de l'IR, et personne ne l'implémentait jamais.
 
-### 2.3 Aucun agent n'écrit dans `workspace/proof/baselines/`
+### 2.3 Aucun agent n'écrit dans `workspace/pipeline/baselines/`
 
 Une baseline se déplace par une **action explicite et tracée**
 (`BaselinePromotionPolicy: explicit`), jamais par écrasement. Sinon la dérive
@@ -208,6 +210,6 @@ Un terme de glossaire contredit se signale, il ne s'écrase pas.
 | Chemin | Pourquoi |
 |---|---|
 | `workspace/stack/STACK.md` | c'est la décision de l'opérateur. Un agent qui édite la config qui le contraint n'est plus contraint. |
-| `workspace/proof/calibration/*.labels.json` | les labels sont **humains**. Un juge calibré contre des labels générés par un LLM n'est pas calibré. |
+| `workspace/pipeline/calibration/*.labels.json` | les labels sont **humains**. Un juge calibré contre des labels générés par un LLM n'est pas calibré. |
 | `workspace/.sys/traces/**` en écriture manuelle | les traces sont des faits émis par le runtime. |
 | `.sdda/**` | le framework ne se modifie pas lui-même pendant un run. |

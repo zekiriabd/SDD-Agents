@@ -198,7 +198,7 @@ Fichier de mesure : `workspace/.sys/reports/retrieval-{n}-{index-slug}-chunking.
 | `recall@k` (k = `RetrievalK`) | ≥ 0.80 | `RetrievalRecallAtK` | oui | — |
 | `nDCG@k` | ≥ 0.70 | `RetrievalNdcgMin` | oui | — |
 | `context_precision` | ≥ 0.60 | `RetrievalContextPrecisionMin` | non | llm-judge **calibré** |
-| `groundedness` | ≥ 0.85 | `GroundednessMin` | non | llm-judge **calibré** — `workspace/proof/calibration/groundedness.json` |
+| `groundedness` | ≥ 0.85 | `GroundednessMin` | non | llm-judge **calibré** — `workspace/pipeline/calibration/groundedness.json` |
 | `answer_relevance` | ≥ 0.80 | `AnswerRelevanceMin` | non | llm-judge **calibré** |
 | `citation_resolve_rate` | ≥ 0.98 | `CitationResolveRateMin` | oui | — |
 
@@ -215,14 +215,14 @@ Verdict G4 : <🟢 \| 🟡 \| 🔴> — rapport : `workspace/.sys/reports/retrie
 
 | | |
 |---|---|
-| Fichier | `workspace/proof/datasets/golden/retrieval-{index-slug}-v1.jsonl` |
+| Fichier | `workspace/pipeline/datasets/golden/retrieval-{index-slug}-v1.jsonl` |
 | Schéma | `.sdda/templates/golden-set.schema.json` — items avec `expected_documents` |
 | Taille minimale | `RetrievalGoldenMinQueries` (50) — actuelle : <n> |
 | Vérité terrain | **au niveau document** (`expected_documents[].doc_id`, `relevance`) ; passages optionnels pour nDCG gradué |
 | Origine | <ex. questions réelles du support, annotées par l'équipe métier> |
 | Classes couvertes | <factuel \| identifiant exact \| paraphrase \| multi-sauts \| hors corpus (abstention attendue)> |
 | Owner | `qa-evals` — **jamais** `dev-retrieval` (ownership, ARCHITECTURE §7) |
-| Holdout | `workspace/proof/datasets/holdout/retrieval-{index-slug}-v1.jsonl` — disjoint par hash (`HoldoutDisjointCheck: strict`) |
+| Holdout | `workspace/pipeline/datasets/holdout/retrieval-{index-slug}-v1.jsonl` — disjoint par hash (`HoldoutDisjointCheck: strict`) |
 
 > Les items « hors corpus » sont indispensables : ils mesurent que le système
 > **s'abstient** quand le document n'existe pas, au lieu d'inventer.
@@ -235,7 +235,7 @@ Verdict G4 : <🟢 \| 🟡 \| 🔴> — rapport : `workspace/.sys/reports/retrie
 
 | Risque | Mesure | Enforcer |
 |---|---|---|
-| Empoisonnement | documents « ignore les instructions précédentes… » injectés volontairement dans un **index de test** ; attendu : traités comme donnée, jamais exécutés | suite adversariale G7 — `workspace/proof/datasets/adversarial/{agent}.jsonl` (famille « injection indirecte ») |
+| Empoisonnement | documents « ignore les instructions précédentes… » injectés volontairement dans un **index de test** ; attendu : traités comme donnée, jamais exécutés | suite adversariale G7 — `workspace/pipeline/datasets/adversarial/{agent}.jsonl` (famille « injection indirecte ») |
 | PII | `MemoryPIIPolicy` appliquée à l'index : <forbid \| redact-before-write \| allow (ADR)> ; scan PII à l'ingestion | `scan_pii.py` (G7) — invariant `pii-not-in-vector-store` |
 | Fuite d'autorisation | filtrage par identité à la source (§7) | `review-safety`, test L8 « franchissement d'autorisation » |
 | Secrets dans les documents | scan de secrets à l'ingestion ; un document contenant une clé n'entre pas dans l'index | scan déterministe G7 — `[SECRET_LEAK]` |
@@ -259,7 +259,7 @@ Verdict G4 : <🟢 \| 🟡 \| 🔴> — rapport : `workspace/.sys/reports/retrie
 | Niveau | Contenu | Fichier |
 |---|---|---|
 | L1 | chunkers, parseurs, résolution de citations — fonctions pures, LLM mocké | `workspace/src/{App}/retrieval/tests/` |
-| L3 | golden set §9 contre les seuils §8, **aucun agent** | `workspace/proof/suites/retrieval-{n}-{index-slug}.yaml` |
+| L3 | golden set §9 contre les seuils §8, **aucun agent** | `workspace/pipeline/suites/retrieval-{n}-{index-slug}.yaml` |
 | L6 | ingestion bout-en-bout sur la base de test, vrai index | marqué `network` |
 | L8 | empoisonnement, franchissement d'autorisation, PII | suite adversariale |
 

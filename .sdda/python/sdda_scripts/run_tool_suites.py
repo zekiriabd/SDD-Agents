@@ -6,7 +6,7 @@ Pourquoi un script à part, et pas `eval-runner --level L2`
 Une suite d'outil n'est pas un jeu d'items qu'on note : c'est une liste de CAS
 (happy path, chaque erreur déclarée, timeout, cloisonnement de tenant) dont
 certains exigent une source dégradée — une copie périmée, indisponible, lente.
-`qa-evals` déclare ces cas dans `proof/suites/tool-{n}-{outil}.yaml` ; `qa-tests`
+`qa-evals` déclare ces cas dans `pipeline/suites/tool-{n}-{outil}.yaml` ; `qa-tests`
 les joue en `pytest` sous `src/{App}/**/tests/`, en relisant la suite. Le runner
 d'eval, lui, charge des items JSONL depuis `dataset:` — ici un export brut
 (`assets/orders.json`). Il ne trouvait donc rien à jouer, et la part `suites`
@@ -76,7 +76,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 def find_suites(root: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
     """toolRef -> (fichier, suite) pour les suites L2."""
     out: dict[str, tuple[Path, dict[str, Any]]] = {}
-    suites_dir = paths.resolve_rel(root, "workspace/proof/suites")
+    suites_dir = paths.resolve_rel(root, "workspace/pipeline/suites")
     for path in sorted(suites_dir.glob("*.yaml")) if suites_dir.is_dir() else []:
         try:
             suite = _load_yaml(path)
@@ -197,7 +197,7 @@ def run(root: Path, ir_file: Path, report: Report, *, only: set[str], write: boo
         sub = Report(name="G3.suites", target=tid)
         found = suites.get(tid)
         if not found:
-            sub.error("TOOL_CONTRACT_FAILED", f"`{tid}` : aucune suite {LEVEL} (`toolRef: {tid}`) sous proof/suites/",
+            sub.error("TOOL_CONTRACT_FAILED", f"`{tid}` : aucune suite {LEVEL} (`toolRef: {tid}`) sous pipeline/suites/",
                       "qa-evals déclare la suite de contrat de chaque outil câblé", tid)
         else:
             outcome.suite, suite = found

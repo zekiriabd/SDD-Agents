@@ -13,7 +13,7 @@ import pytest
 from sdda_lib import markdown_io
 from sdda_lib.mermaid import MermaidEdge, parse
 
-_TOPOLOGY = Path(__file__).resolve().parent / "fixtures/project_ok/workspace/feats/topology/1-topology.md"
+_TOPOLOGY = Path(__file__).resolve().parent / "fixtures/project_ok/workspace/pipeline/topology/1-topology.md"
 
 
 class _Fixture:

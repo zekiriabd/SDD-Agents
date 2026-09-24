@@ -18,8 +18,8 @@ from sdda_scripts import validate_architecture as va
 
 #: Le roster vit dans `feats/` — la spécification —, en Markdown, à côté de la
 #: topologie qu'il commande. Deux fichiers, deux owners : l'humain et l'agent.
-MANIFEST = "workspace/feats/topology/1-roster.md"
-TOPOLOGY = "workspace/feats/topology/1-topology.md"
+MANIFEST = "workspace/feats/1-roster.md"
+TOPOLOGY = "workspace/pipeline/topology/1-topology.md"
 STACK = "workspace/stack/STACK.md"
 
 COMPLETE = """\
@@ -174,7 +174,7 @@ def test_force_reason_can_come_from_the_environment(project: Path, monkeypatch) 
 def test_scaffold_without_a_mission_is_an_error(project: Path) -> None:
     code, out = run_main(roster.main, ["scaffold", "--root", str(project), "--mission", "7", "--json"])
     assert code == 1 and "MISSION_NOT_FOUND" in out
-    assert not (project / "workspace/feats/topology/7-roster.md").exists()
+    assert not (project / "workspace/feats/7-roster.md").exists()
 
 
 def test_the_roster_location_is_a_convention_not_a_stack_key(project: Path) -> None:

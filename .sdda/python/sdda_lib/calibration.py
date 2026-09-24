@@ -247,7 +247,7 @@ def load_calibration_set(path: Path) -> CalibrationSet | None:
     **Résumé + labels séparés** — le fichier porte le verdict, les paires
     vivent ailleurs (utile quand elles contiennent des PII) :
         {"grader": "groundedness", "items": 52, "kappa": 0.71,
-         "labelsRef": "workspace/proof/datasets/calibration/groundedness-v1.jsonl"}
+         "labelsRef": "workspace/pipeline/datasets/calibration/groundedness-v1.jsonl"}
 
     Si `labelsRef` est résolvable, l'accord est **recalculé** et c'est cette
     valeur qui fait foi. Sinon le résumé est accepté, marqué `declared_only`.

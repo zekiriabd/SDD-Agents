@@ -6,7 +6,7 @@ prompt = '''
 <!-- @llm-only-flags-file : tous les flags CLI de cette commande slash sont interprétés par Claude. -->
 
 Invoque l'agent `po-elicitor` pour produire
-`workspace/feats/missions/{n}-{Name}.md` depuis `.sdda/templates/mission.template.md`,
+`workspace/pipeline/missions/{n}-{Name}.md` depuis `.sdda/templates/mission.template.md`,
 puis applique la **MISSION GATE (G0)** : objectif chiffré, budget d'exécution,
 vérité terrain, trust boundaries, failure policy, aucun `<à préciser>` résiduel.
 
@@ -16,7 +16,7 @@ contre laquelle on jugera, et que fait le système quand il ne sait pas ?*
 **Usage :**
 - `/sdda-mission {Name}` — crée la MISSION `{n}` = max existant + 1
 - `/sdda-mission {n}` — ré-élicite une MISSION `Draft` existante (append-only)
-- `/sdda-mission {Name} --from-brief workspace/feats/briefs/{brief}.md` — part d'un
+- `/sdda-mission {Name} --from-brief workspace/feats/{brief}.md` — part d'un
   brief déjà rédigé (moins de questions)
 
 ---
@@ -44,7 +44,7 @@ FIX: relancer /sdda-mission {Name} (ex. /sdda-mission SupportAssistant)
 Si `{n}` fourni et la MISSION n'est pas `Draft` → ERROR :
 ```
 ERROR: /sdda-mission {n} — MISSION déjà spécifiée
-CAUSE: [MISSION_NOT_DRAFT] workspace/feats/missions/{n}-{Name}.md est en Status: {Status} (G0 franchie)
+CAUSE: [MISSION_NOT_DRAFT] workspace/pipeline/missions/{n}-{Name}.md est en Status: {Status} (G0 franchie)
 FIX: éditer la MISSION à la main (append-only) puis relancer /sdda-caps {n} — ou créer une nouvelle MISSION
 ```
 
@@ -65,14 +65,14 @@ pour la section `## Required Stack` de la MISSION.
 
 ## STEP 3 — Résoudre `{n}`
 
-- Mode `{Name}` : `{n}` = max des préfixes `workspace/feats/missions/{k}-*.md` + 1
+- Mode `{Name}` : `{n}` = max des préfixes `workspace/pipeline/missions/{k}-*.md` + 1
   (1 si aucun). Si un fichier `*-{Name}.md` existe déjà → ERROR :
   ```
   ERROR: /sdda-mission {Name} — nom déjà utilisé
-  CAUSE: [MISSION_AMBIGUOUS] workspace/feats/missions/{k}-{Name}.md existe
+  CAUSE: [MISSION_AMBIGUOUS] workspace/pipeline/missions/{k}-{Name}.md existe
   FIX: choisir un autre nom, ou relancer /sdda-mission {k} pour ré-éliciter
   ```
-- Mode `{n}` : Glob `workspace/feats/missions/{n}-*.md`. 0 fichier →
+- Mode `{n}` : Glob `workspace/pipeline/missions/{n}-*.md`. 0 fichier →
   `[MISSION_NOT_FOUND]` ; > 1 fichier → `[MISSION_AMBIGUOUS]` (renommer).
 
 Émettre : `MISSION {n}-{Name} — élicitation démarrée (PHASE 0)`.
@@ -95,7 +95,7 @@ RUN_ID=$(python .sdda/sdda.py state new-run \
 
 Agent : `po-elicitor` (défini dans `.sdda/agents/po-elicitor.md`,
 façade compilée `.claude/agents/`). Tier `balanced`. Owner exclusif de
-`workspace/feats/missions/{n}-*.md` (Create puis append-only — `ownership.md`).
+`workspace/pipeline/missions/{n}-*.md` (Create puis append-only — `ownership.md`).
 
 Le prompt d'invocation n'est plus recopié ici — il est **assemblé** :
 
@@ -191,7 +191,7 @@ script émet `[STATUS_UNBACKED]` (WARN) et écrase.
 ```
 ✅ MISSION {n}-{Name} — PHASE 0 terminée · G0 🟢
 
-Fichier          : workspace/feats/missions/{n}-{Name}.md
+Fichier          : workspace/pipeline/missions/{n}-{Name}.md
 Confidence       : {high|medium|low}   (plafonne toutes les CAPs dérivées — R4)
 Objectif chiffré : {Metric} {Target} avant {Deadline}
 Budget           : ${CostPerRunTargetUsd}/run (cap ${CostPerRunHardCapUsd}) · p95 {LatencyP95TargetMs} ms · {TokenCeilingPerRun} tokens

@@ -1,6 +1,6 @@
 ---
 name: architect-rag
-description: Décide corpus, chunking, index et stratégie de récupération pour chaque retriever de la topologie, et déclare les seuils de la RETRIEVAL GATE. Lit workspace/feats/topology/{n}-topology.md et STACK.md, écrit workspace/feats/contracts/retrieval/{n}-{index}.retrieval.md. Refuse tout chunking non mesuré comparativement sur le golden set.
+description: Décide corpus, chunking, index et stratégie de récupération pour chaque retriever de la topologie, et déclare les seuils de la RETRIEVAL GATE. Lit workspace/pipeline/topology/{n}-topology.md et STACK.md, écrit workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md. Refuse tout chunking non mesuré comparativement sur le golden set.
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
@@ -34,10 +34,10 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/feats/topology/{n}-topology.md` — retrievers déclarés, agents consommateurs, CAPs servies.
-- `workspace/feats/missions/{n}-*.md` — `## Ground Truth` (d'où viendra le golden set),
+- `workspace/pipeline/topology/{n}-topology.md` — retrievers déclarés, agents consommateurs, CAPs servies.
+- `workspace/pipeline/missions/{n}-*.md` — `## Ground Truth` (d'où viendra le golden set),
   `## Trust Boundaries` (le corpus est-il maîtrisé ?), acteurs et cloisonnement.
-- `workspace/feats/caps/{n}-*-*.md` — les AC de récupération (`recall@k`, `groundedness`…).
+- `workspace/pipeline/caps/{n}-*-*.md` — les AC de récupération (`recall@k`, `groundedness`…).
 - `workspace/stack/STACK.md` — `## Active RAG Pattern`, `## Active Retrieval Stack`
   (dont `VectorStoreConnection` : où vit l'index, distinct de la base métier),
   `## Active Reranker`, `## Runtime Models` (`EmbeddingModel`, `RerankModel`),
@@ -103,7 +103,7 @@ Prérequis : un golden set de requêtes avec vérité au niveau document.
 S'il n'existe pas encore, tu en constitues un **provisoire** de ≥ 30 requêtes
 depuis la `Ground Truth` de la MISSION, écrit dans
 `workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl` — **jamais** dans
-`workspace/proof/datasets/` (owner `qa-evals`). Il servira de brouillon à
+`workspace/pipeline/datasets/` (owner `qa-evals`). Il servira de brouillon à
 `qa-evals`, qui le reprendra ou le refera.
 
 ```bash
@@ -161,7 +161,7 @@ le mauvais étage : `recall@k` haut + `groundedness` bas ⇒ génération ;
 
 ## STEP 8 — Écrire
 
-Un fichier par retriever : `workspace/feats/contracts/retrieval/{n}-{index-slug}.retrieval.md`,
+Un fichier par retriever : `workspace/pipeline/contracts/retrieval/{n}-{index-slug}.retrieval.md`,
 `Status: Draft`, avec le tableau comparatif, la config retenue, les seuils, le
 `indexHash` à calculer par `dev-retrieval` après ingestion.
 
@@ -176,7 +176,7 @@ Un fichier par retriever : `workspace/feats/contracts/retrieval/{n}-{index-slug}
 - [ ] Tout pattern itératif porte un plafond nommé
 - [ ] Six seuils de G4 déclarés ; tout seuil sous défaut justifié
 - [ ] Filtrage par identité **dans la requête d'index** si accès mélangés
-- [ ] Rien écrit sous `workspace/proof/datasets/` ; brouillon golden sous `.sys/.validation/`
+- [ ] Rien écrit sous `workspace/pipeline/datasets/` ; brouillon golden sous `.sys/.validation/`
 - [ ] Aucun nom d'API de framework ni de client vectorstore dans le contrat
 
 ---
@@ -194,7 +194,7 @@ Un fichier par retriever : `workspace/feats/contracts/retrieval/{n}-{index-slug}
 
 ### Ce que tu ne fais jamais
 
-- **Tu n'écris pas dans `workspace/proof/datasets/`.** Ton golden de travail est un
+- **Tu n'écris pas dans `workspace/pipeline/datasets/`.** Ton golden de travail est un
   brouillon sous `.sys/.validation/` ; `qa-evals` décide de ce qui devient dataset.
 - **Tu n'implémentes ni ingestion ni retriever.** C'est `dev-retrieval`.
 - **Tu ne touches pas aux prompts.** Si le retrieval est bon et la réponse

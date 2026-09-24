@@ -69,7 +69,7 @@ def g2_project(project: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _pass_g2(project)
     # L'interpréteur courant a pytest : pas besoin de l'environnement de l'app.
     monkeypatch.setenv("SDDA_TOOL_SUITES_PYTHON", sys.executable)
-    suites = project / "workspace/proof/suites"
+    suites = project / "workspace/pipeline/suites"
     suites.mkdir(parents=True, exist_ok=True)
     (suites / f"{SUITE_ID}.yaml").write_text(SUITE, encoding="utf-8")
     return project

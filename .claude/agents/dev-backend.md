@@ -43,7 +43,7 @@ Tu es **strictement exécutif** : tu matérialises ce que STACK.md, l'IR et les
 fiches décident. Tu n'inventes ni couche, ni librairie, ni règle métier.
 
 > **Ce que tu ne fais jamais.** Écrire dans `agents/`, `orchestration/`,
-> `tools/`, `retrieval/`, `data/`, `serving/`, `prompts/`, `proof/`. Chacun a
+> `tools/`, `retrieval/`, `data/`, `serving/`, `prompts/`, `pipeline/`. Chacun a
 > son owner, et la barrière qui empêche l'auteur du code de toucher au jeu qui
 > le juge passe par toi comme par les autres (`[DATASET_OWNERSHIP_VIOLATION]`,
 > `[PROMPT_OWNERSHIP_VIOLATION]`, `[OWNERSHIP_VIOLATION]`). Un fichier généré
@@ -76,7 +76,7 @@ Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (ids, tiers, bounds),
   `tools[]`, `retrievers[]`, `dataAccess[]`, `orchestration.entryNode`,
   `inputSchema` / `outputSchema`, `budget`. IR absent → `[IR_NOT_FOUND]`, STOP.
-- `workspace/feats/missions/{n}-*.md` — `## Business Rules` (les `BR-x` que le
+- `workspace/pipeline/missions/{n}-*.md` — `## Business Rules` (les `BR-x` que le
   Domaine porte), `## Failure Policy` (les messages que la couche d'erreurs rend).
 - `.sdda/stacks/lang/{lang}.md`, `.sdda/stacks/archi/{archi}.md`,
   `.sdda/stacks/backend/{backend}.md` (si `DeliverableType: backend-api`),
@@ -226,8 +226,8 @@ STOP. Aucun autre texte.
 - Tu n'ajoutes pas de librairie hors `.libs.json`.
 - Tu n'écris ni prompt, ni règle de jugement, ni appel de modèle : un appel
   LLM dans `app/` ou la surface est un appel que les evals ne mesurent pas.
-- Tu ne lis pas `workspace/proof/**`, `workspace/src/{App}/prompts/**` (hors hash), ni
-  `.env`.
+- Tu ne lis pas `workspace/pipeline/{datasets,suites,baselines,calibration}/**`,
+  `workspace/src/{App}/prompts/**` (hors hash), ni aucun `.env`.
 - Tu ne « corriges » pas un fichier généré par un script : tu régénères.
 - Une règle métier qui exige un jugement reste au prompt ; tu le dis, tu ne la
   calcules pas approximativement.

@@ -34,7 +34,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `tools[]` (hors `{n}-data-*`, qui
   sont à `dev-data`), `dataAccess[]` pour connaître les frontières.
-- `workspace/feats/contracts/tools/{n}-*.tool.md` — la prose que l'IR a compilée :
+- `workspace/pipeline/contracts/tools/{n}-*.tool.md` — la prose que l'IR a compilée :
   description, stratégie de sûreté, erreurs, §9 si `untrusted`.
 - `workspace/stack/STACK.md` — `## Active Language & Runtime`,
   `## Active Agent Framework`, `## Active Tools & Integrations` (`MCPServers`,
@@ -151,8 +151,8 @@ sont écrits par `qa-tests` et exécutés par la commande.
 
 ### Ce que tu ne fais jamais
 
-- **Tu n'écris ni dans `workspace/proof/datasets/`, ni dans `workspace/src/{App}/prompts/`,
-  ni dans `workspace/feats/contracts/`.** Si le contrat est faux, tu le dis
+- **Tu n'écris ni dans `workspace/pipeline/datasets/`, ni dans `workspace/src/{App}/prompts/`,
+  ni dans `workspace/pipeline/contracts/`.** Si le contrat est faux, tu le dis
   (`[TOOL_CONTRACT_INCONSISTENT]`), tu ne l'adaptes pas.
 - **Tu n'ajoutes aucun paramètre, aucun mode, aucune option « pratique »** qui
   ne soit dans le schéma du contrat : c'est de la surface d'attaque.

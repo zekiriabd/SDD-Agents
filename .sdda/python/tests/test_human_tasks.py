@@ -47,7 +47,7 @@ def test_no_roster_at_all_is_a_blocking_task_of_the_architect(project: Path) -> 
     (found,) = only(tasks(project), "roster")
     assert found["blocking"] is True and found["mission"] == 1
     assert "/sdda-roster 1" in found["how"] and "P7" in found["why"]
-    assert found["ref"].endswith("feats/topology/1-roster.md")
+    assert found["ref"].endswith("feats/1-roster.md")
 
 
 def test_a_scaffolded_manifest_asks_to_fill_each_hole(project: Path) -> None:
@@ -98,7 +98,7 @@ def test_enough_human_labels_on_disk_close_the_task(project: Path) -> None:
     from sdda_scripts import ir_compiler
 
     ir_compiler.compile_to_file(project, 1)
-    labels = project / "workspace/proof/datasets/calibration/groundedness-v1.jsonl"
+    labels = project / "workspace/pipeline/datasets/calibration/groundedness-v1.jsonl"
     labels.parent.mkdir(parents=True, exist_ok=True)
     labels.write_text("".join(json.dumps({"id": f"c{i}", "human": 1, "judge": 1}) + "\n" for i in range(50)), encoding="utf-8")
     assert only(tasks(project), "labels") == []
@@ -117,7 +117,7 @@ def test_a_permissive_memory_pii_policy_requires_an_adr_until_one_names_it(proje
     assert found["blocking"] is False and "MemoryPIIPolicy" in found["title"]
     assert "pii-not-in-vector-store" in found["why"]
 
-    adr_dir = project / "workspace/feats/decisions"
+    adr_dir = project / "workspace/pipeline/decisions"
     adr_dir.mkdir(parents=True, exist_ok=True)
     (adr_dir / "ADR-20260922T1000-memory-pii.md").write_text("# ADR\n\nMemoryPIIPolicy: allow — base légale…\n", encoding="utf-8")
     assert only(tasks(project), "adr") == []
@@ -125,7 +125,7 @@ def test_a_permissive_memory_pii_policy_requires_an_adr_until_one_names_it(proje
 
 def test_an_adr_written_in_docs_adr_also_counts(project: Path) -> None:
     patch(project, STACK, "MemoryPIIPolicy: redact-before-write", "MemoryPIIPolicy: allow")
-    adr_dir = project / "workspace/feats/decisions"
+    adr_dir = project / "workspace/pipeline/decisions"
     adr_dir.mkdir(parents=True, exist_ok=True)
     (adr_dir / "ADR-0001-memory.md").write_text("La politique `MemoryPIIPolicy` passe à allow parce que…\n", encoding="utf-8")
     assert only(tasks(project), "adr") == []
