@@ -199,10 +199,12 @@ dans cet ordre de préférence :
    `disjoint-by-layer`…) : les CAPs (phase 1 puis `Allocated To` en phase 2),
    les tests par couche.
 
-Ce qui est partagé — les schémas communs, les types, la configuration — est
-créé **avant** la phase parallèle, par `dev-orchestration` en pré-passe, puis
-gelé en lecture seule (**first-write wins + lock**). Un `dev-agent` qui a besoin
-d'un type absent ne le crée pas : il le signale.
+Ce qui est partagé — les schémas communs, les types, l'interface mémoire — est
+créé **avant** la phase parallèle, par `dev-orchestration` en pré-passe
+(`/sdda-build` STEP 4.0 : `shared/**` et `memory/interface.*`), puis GELÉ :
+l'audit de chaque phase suivante (`audit-ownership --since-snapshot --frozen …`)
+refuse qu'il ait bougé (`[OWNERSHIP_FROZEN_ZONE_CHANGED]`). Un `dev-agent` qui a
+besoin d'un type absent ne le crée pas : il le signale.
 
 ```
 ERROR: agent dev-agent — type partagé manquant

@@ -452,6 +452,8 @@ dev-agent:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
     - workspace/src/*/prompts/{agent}.system.md            # volatile — lecture seule
+    - workspace/src/*/shared/**                            # semi — types partagés, gelés par la pré-passe 4.0
+    - workspace/src/*/memory/interface.*                   # semi — interface mémoire, gelée par la pré-passe 4.0
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -504,7 +506,11 @@ dev-orchestration:
   writes:
     - workspace/src/**/orchestration/**
     - workspace/src/**/memory/**                        # l'implémentation du contrat de mémoire : une mémoire est un état qui survit au tour
-    - workspace/src/**/shared/**                        # pré-passe : types partagés, puis gelés
+    - workspace/src/**/shared/**                        # pré-passe (/sdda-build 4.0) : types partagés, puis gelés
+    # `memory/**` : l'INTERFACE (`memory/interface.*`) en pré-passe 4.0, gelée
+    # pendant les phases 4 et 5 ; l'implémentation en phase 5, derrière elle.
+    # Sans la pré-passe, dev-agent (phase 4) implémentait ses `memoryScopes`
+    # contre une mémoire écrite APRÈS lui (phase 5).
   forbidden_writes:
     - workspace/pipeline/datasets/**
     - workspace/src/*/{prompts,skills,rules}/**

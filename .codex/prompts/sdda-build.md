@@ -17,7 +17,8 @@ une gate par couche** (PHILOSOPHY P5) :
 ```
 PHASE 3   SOCLE           dev-tools ∥ dev-retrieval ∥ dev-data            (parallèle, MaxParallel)
                           [TOOL GATE G3]  [RETRIEVAL GATE G4]
-PHASE 4   PROMPTS+AGENTS  dev-prompt (seul)  →  dev-agent × N   (1 instance / agent, parallèle)
+PHASE 4   PROMPTS+AGENTS  dev-orchestration --prepass (shared/ + memory/interface, gelés)
+                          →  dev-prompt (seul)  →  dev-agent × N   (1 instance / agent, parallèle)
                           [AGENT GATE G5]
 PHASE 5   ORCHESTRATION   dev-orchestration  →  dev-api
                           [ORCH GATE G6]
@@ -296,7 +297,49 @@ FIX: revoir le contrat de retrieval (chunking, hybridWeights, topK, rerank) via 
 
 ---
 
-## STEP 4 — PHASE 4 : prompts puis agents
+## STEP 4 — PHASE 4 : pré-passe, prompts, puis agents
+
+### 4.0 — `dev-orchestration --prepass` (SEUL — barrière de la phase 4)
+
+Agent : `dev-orchestration` (`.sdda/agents/dev-orchestration.md`, mode
+pré-passe). Tier **`deep`**. Il pose ce que les instances de `dev-agent`
+partagent, AVANT qu'elles partent en parallèle : les types partagés
+(`workspace/src/{App}/shared/`, états de handoff et schémas croisés) et
+l'**interface** mémoire (`workspace/src/{App}/memory/interface.{ext}`, une
+opération par scope du contrat de mémoire). L'implémentation de la mémoire
+vient en phase 5, derrière cette interface.
+
+Sans elle, `dev-agent` implémentait ses `memoryScopes` contre une mémoire que
+`dev-orchestration` n'écrirait qu'APRÈS lui, et chaque instance inventait ses
+propres types de handoff : la pré-passe annoncée par la matrice (`shared/**`)
+n'était ordonnancée nulle part.
+
+```bash
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 4.0
+```
+
+Prompt d'invocation :
+```
+SDDA-PREPASS
+MISSION {n} — pré-passe. IR : workspace/.sys/.ir/{n}-system.ir.json. Contrats : agents §13
+(handoffs), workspace/pipeline/contracts/memory/{n}-memory.md. Écrire UNIQUEMENT
+workspace/src/{App}/shared/ (types, aucune logique) et workspace/src/{App}/memory/interface.{ext}
+(signatures par scope, aucune implémentation). Rien sous orchestration/. Une ligne de confirmation.
+```
+
+Post-step :
+```bash
+python .sdda/sdda.py audit-ownership --mission {n} --phase 4.0 --since-snapshot \
+  --frozen 'workspace/src/**/orchestration/**'
+```
+
+Exit ≠ 0 → `--restore`, STOP : **la phase 4 dépend de cette sortie**. Les
+zones posées ici sont ensuite GELÉES — `shared/**` et `memory/**` pendant la
+phase 4 (4.2), `shared/**` et `memory/interface.*` pendant la phase 5 (5.1) —
+et l'audit de chaque phase le vérifie sur le disque
+(`[OWNERSHIP_FROZEN_ZONE_CHANGED]`). Un type manquant découvert par un
+`dev-agent` est `[SHARED_TYPE_MISSING]` : la pré-passe se rejoue, puis les
+agents qui en dépendent.
 
 ### 4.1 — `dev-prompt` (SEUL — barrière)
 
@@ -377,7 +420,8 @@ Implémenter l'agent {agent} de la MISSION {n}. IR : agents[{agent}] (bornes, ou
 schémas, trustPosture, refusalPolicy). Prompt : workspace/src/{App}/prompts/{agent}.system.md — CHARGÉ AU
 RUNTIME par chemin, jamais copié dans le code (P1, [PROMPT_INLINE_DETECTED]). Stack : {framework}.md.
 Bornes obligatoires : maxIterations, maxToolCalls, maxDelegationDepth, timeoutSec, budgetUsd +
-onBoundExceeded implémenté (P12). Tests L1 avec LLM mocké. Interdiction absolue d'écrire sous
+onBoundExceeded implémenté (P12). Types partagés et mémoire : importer workspace/src/{App}/shared/
+et memory/interface.{ext} (gelés par la pré-passe 4.0), ne rien y écrire. Tests L1 avec LLM mocké. Interdiction absolue d'écrire sous
 workspace/pipeline/datasets/ et workspace/src/{App}/prompts/ ([OWNERSHIP_VIOLATION]).
 ```
 
@@ -521,11 +565,12 @@ post-step après 5.2bis :
 
 ```bash
 python .sdda/sdda.py audit-ownership --mission {n} --phase 5 --since-snapshot \
-  --frozen 'workspace/src/**/shared/**'
+  --frozen 'workspace/src/**/shared/**' --frozen 'workspace/src/**/memory/interface.*'
 ```
 
-— les types partagés gelés par la pré-passe (4.0) ne bougent plus : les agents
-de la phase 4 ont été construits contre eux. Puis `preflight_agent_bounds.py`
+— les types partagés et l'interface mémoire gelés par la pré-passe (4.0) ne
+bougent plus : les agents de la phase 4 ont été construits contre eux ; la
+mémoire s'implémente DERRIÈRE l'interface. Puis `preflight_agent_bounds.py`
 (bornes du graphe), et la vérification que le graphe codé est **isomorphe** à
 l'IR :
 
