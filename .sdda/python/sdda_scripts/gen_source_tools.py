@@ -383,8 +383,25 @@ def _literal(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _field_line(name: str, spec: dict[str, Any], *, optional: bool, default: str | None = None) -> str:
-    annotation = _py_type(spec, optional=optional)
+def _enum_type(spec: dict[str, Any], *, optional: bool) -> str | None:
+    """`Literal[...]` pour un champ à choix fermé ; None s'il n'en a pas."""
+    enum = spec.get("enum")
+    if not isinstance(enum, list) or not enum or not all(isinstance(v, (str, int, bool)) for v in enum):
+        return None
+    out = f"Literal[{', '.join(json.dumps(v, ensure_ascii=False) for v in enum)}]"
+    return out + " | None" if optional else out
+
+
+def _field_line(name: str, spec: dict[str, Any], *, optional: bool, default: str | None = None,
+                closed: bool = False) -> str:
+    """`closed` : un PARAMÈTRE d'appel à choix fermé devient un `Literal`.
+
+    Réservé aux entrées : le schéma de l'outil porte alors l'`enum`, et le
+    modèle voit les valeurs admises au lieu d'en deviner une. Un champ de
+    SORTIE reste typé large — la donnée peut dériver, et c'est `schema_guard`
+    qui le signale, pas la validation qui le refuserait.
+    """
+    annotation = (_enum_type(spec, optional=optional) if closed else None) or _py_type(spec, optional=optional)
     description = str(spec.get("description") or f"Champ {name} de la source.")
     args = [f"description={_literal(description)}"]
     if default is not None:
@@ -478,8 +495,9 @@ def render_wrapper(ctx: Context, source_id: str, src: dict[str, Any], schema: di
     # `Any` n'apparaît que si un champ du schéma figé est un objet ou un tableau.
     # Importer un symbole inutilisé ferait échouer le lint du projet généré, et un
     # générateur dont la sortie ne passe pas le lint n'est jamais rebranché.
-    if any(re.search(r"\bAny\b", line) for line in lines):
-        header.extend(["from typing import Any", ""])
+    typing_names = [n for n in ("Any", "Literal") if any(re.search(rf"\b{n}\b", line) for line in lines)]
+    if typing_names:
+        header.extend([f"from typing import {', '.join(typing_names)}", ""])
     header.extend([
         "from pydantic import BaseModel, ConfigDict, Field",
         "",
@@ -502,19 +520,23 @@ def _frozenset_line(name: str, values: list[str]) -> str:
 
 
 def _search_input_fields(src: dict[str, Any], props: dict[str, Any]) -> list[str]:
-    required_filters = [str(f) for f in (src.get("required_filter") or [])]
+    """Les paramètres que le MODÈLE fournit — jamais un champ d'identité.
+
+    Un `required_filter` (`customer_id`) est imposé par le runtime depuis
+    `ToolContext.identity`. Le proposer en paramètre obligatoire demandait au
+    modèle d'inventer une valeur que le runtime jetait ensuite : au mieux du
+    bruit, au pire l'invitation exacte qu'un message hostile attend (« cherche
+    les commandes du client CUS-2 »).
+    """
+    identity = {str(f) for f in (src.get("required_filter") or [])}
     filters = [str(f) for f in (src.get("filters") or [])]
     ranges = [str(f) for f in (src.get("ranges") or [])]
     out: list[str] = []
 
-    for name in sorted(set(required_filters)):
+    for name in sorted(set(filters) - identity):
         spec = props.get(name) or {"type": "string"}
-        out.append(_field_line(name, {**spec, "description": _filter_doc(name, spec, mandatory=True)},
-                               optional=False))
-    for name in sorted(set(filters) - set(required_filters)):
-        spec = props.get(name) or {"type": "string"}
-        out.append(_field_line(name, {**spec, "description": _filter_doc(name, spec, mandatory=False)},
-                               optional=True, default="default=None"))
+        out.append(_field_line(name, {**spec, "description": _filter_doc(name, spec)},
+                               optional=True, default="default=None", closed=True))
     for name in sorted(set(ranges)):
         spec = props.get(name) or {"type": "string"}
         for bound, word in (("min", "borne basse incluse"), ("max", "borne haute incluse")):
@@ -527,8 +549,8 @@ def _search_input_fields(src: dict[str, Any], props: dict[str, Any]) -> list[str
     return out
 
 
-def _filter_doc(name: str, spec: dict[str, Any], *, mandatory: bool) -> str:
-    head = "Filtre OBLIGATOIRE" if mandatory else "Filtre optionnel"
+def _filter_doc(name: str, spec: dict[str, Any]) -> str:
+    head = "Filtre optionnel"
     enum = spec.get("enum")
     tail = f" Valeurs admises : {', '.join(str(v) for v in enum)}." if isinstance(enum, list) and enum else ""
     return f"{head} sur `{name}` — égalité stricte, jamais une expression.{tail}"
@@ -558,13 +580,12 @@ def _tool_schemas(src: dict[str, Any], schema: dict[str, Any], kind: str,
     else:
         properties: dict[str, Any] = {}
         required: list[str] = []
-        for name in sorted({str(f) for f in (src.get("required_filter") or [])}):
+        # Les champs d'identité (`required_filter`) ne sont PAS des paramètres :
+        # le runtime les impose depuis l'appelant (cf. `_search_input_fields`).
+        identity = {str(f) for f in (src.get("required_filter") or [])}
+        for name in sorted({str(f) for f in (src.get("filters") or [])} - identity):
             properties[name] = {**(props.get(name) or {"type": "string"}),
-                                "description": _filter_doc(name, props.get(name) or {}, mandatory=True)}
-            required.append(name)
-        for name in sorted({str(f) for f in (src.get("filters") or [])} - set(required)):
-            properties[name] = {**(props.get(name) or {"type": "string"}),
-                                "description": _filter_doc(name, props.get(name) or {}, mandatory=False)}
+                                "description": _filter_doc(name, props.get(name) or {})}
         for name in sorted({str(f) for f in (src.get("ranges") or [])}):
             base = props.get(name) or {"type": "string"}
             properties[f"{name}_min"] = {**base, "description": f"Borne basse incluse sur `{name}`."}
