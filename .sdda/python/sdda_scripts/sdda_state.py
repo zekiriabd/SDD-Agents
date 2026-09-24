@@ -21,7 +21,8 @@ Sur disque, sous `workspace/.sys/.state/` :
 
 Sous-commandes (les 9 appelants du pipeline) :
 
-    new-run --mission 1 --command /sdda-build --tags force,resume
+    new-run --mission 1 --command /sdda-build --tags force
+    new-run --mission 1 --command /sdda-full --resume      # lié au run repris (`resumedFrom`)
     get-run --mission 1 --latest
     resume-target --run-id RID
     should-skip-step --target build_agents --current caps      # exit 0 = SKIP, 1 = RUN
@@ -175,9 +176,60 @@ def all_runs(root: Path) -> list[dict[str, Any]]:
     return [r for r in (load_run(root, rid) for rid in seen) if r]
 
 
-def latest_run(root: Path, mission: str | None = None) -> dict[str, Any] | None:
-    runs = [r for r in all_runs(root) if mission is None or str(r.get("mission")) == str(mission)]
+def latest_run(root: Path, mission: str | None = None, *, exclude: str | None = None) -> dict[str, Any] | None:
+    runs = [r for r in all_runs(root)
+            if (mission is None or str(r.get("mission")) == str(mission)) and str(r.get("runId")) != str(exclude)]
     return runs[-1] if runs else None
+
+
+# ---------------------------------------------------------------------------
+# Lignée — ce qu'une reprise hérite du run qu'elle reprend
+# ---------------------------------------------------------------------------
+def lineage(root: Path, run: dict[str, Any]) -> list[dict[str, Any]]:
+    """Le run et ceux qu'il reprend, du plus ancien au plus récent (`resumedFrom`).
+
+    `/sdda-full --resume` ouvrait un run NEUF, puis lisait `get-run --latest`
+    — c'est-à-dire le run vide qu'il venait de créer. `resume-target` rendait
+    donc `mission`, et la reprise repartait de zéro ; les items `pass` du run
+    interrompu étaient invisibles (`should-skip-item` ne voyait rien), et le
+    compteur `BuildLoopMaxIter` repartait à 0 à chaque reprise : une boucle
+    qu'on relance par `--resume` n'était plus bornée du tout.
+
+    Un run de reprise porte désormais `resumedFrom`, et ce qu'on en lit pour
+    décider (phases, items, coûts de boucle) est la concaténation de sa
+    lignée. Un cycle — un fichier édité à la main — est coupé au premier
+    identifiant déjà vu : mieux vaut une lignée courte qu'une boucle infinie.
+    """
+    chain: list[dict[str, Any]] = [run]
+    seen = {str(run.get("runId"))}
+    parent = run.get("resumedFrom")
+    while parent and str(parent) not in seen:
+        seen.add(str(parent))
+        previous = load_run(root, str(parent))
+        if previous is None:
+            break
+        chain.append(previous)
+        parent = previous.get("resumedFrom")
+    return list(reversed(chain))
+
+
+def merged_run(root: Path, run: dict[str, Any]) -> dict[str, Any]:
+    """Vue de décision d'un run : ses événements précédés de ceux de sa lignée.
+
+    L'ordre chronologique est conservé (le plus ancien d'abord), donc les
+    règles « le dernier événement gagne » de `effective_statuses` et
+    `item_statuses` s'appliquent telles quelles à travers les reprises. Le
+    cumul `costUsd` n'est PAS fusionné : `MaxCostPerRun` plafonne le run
+    courant, et la facture de chaque run reste la sienne.
+    """
+    chain = lineage(root, run)
+    if len(chain) == 1:
+        return run
+    merged = dict(run)
+    for key in ("phases", "items", "costs"):
+        merged[key] = [e for r in chain for e in (r.get(key) or [])]
+    merged["lineage"] = [str(r.get("runId")) for r in chain]
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +316,8 @@ def make_run_id(mission: str, *, at: _dt.datetime | None = None, entropy: str | 
     return f"{stamp}-m{slug}-{suffix}"
 
 
-def new_run(root: Path, *, mission: str, command: str, tags: list[str], run_id: str | None = None) -> dict[str, Any]:
+def new_run(root: Path, *, mission: str, command: str, tags: list[str], run_id: str | None = None,
+            resumed_from: str | None = None) -> dict[str, Any]:
     rid = run_id or make_run_id(mission)
     run = {
         "runId": rid,
@@ -276,8 +329,11 @@ def new_run(root: Path, *, mission: str, command: str, tags: list[str], run_id: 
         "status": "running",
         "phases": [],
     }
+    if resumed_from:
+        run["resumedFrom"] = str(resumed_from)
     _write_json(run_path(root, rid), run)
-    _append_journal(root, {"event": "new-run", "at": run["startedAt"], "runId": rid, "mission": str(mission), "command": command, "tags": tags})
+    _append_journal(root, {"event": "new-run", "at": run["startedAt"], "runId": rid, "mission": str(mission),
+                           "command": command, "tags": tags, **({"resumedFrom": str(resumed_from)} if resumed_from else {})})
     return run
 
 
@@ -292,8 +348,9 @@ def set_phase(root: Path, run_id: str, *, phase: str, status: str, payload: dict
     return run
 
 
-def add_cost(root: Path, run_id: str, *, usd: float, label: str = "") -> dict[str, Any]:
-    """Ajoute une dépense de CONSTRUCTION au cumul du run.
+def add_cost(root: Path, run_id: str, *, usd: float, label: str = "",
+             phase: str | None = None, item: str | None = None) -> dict[str, Any]:
+    """Ajoute une dépense de CONSTRUCTION au cumul du run — et, si nommé, à l'item qui l'a coûtée.
 
     Sans cette primitive, personne n'écrivait jamais de coût : `MaxCostPerRun`
     était lu par un hook qui trouvait toujours 0,00 $ et autorisait toujours.
@@ -303,15 +360,23 @@ def add_cost(root: Path, run_id: str, *, usd: float, label: str = "") -> dict[st
     Le cumul est porté par le run (`costUsd`), pas par une phase : c'est le run
     qui est plafonné, et une phase relancée ne doit pas effacer ce que les
     précédentes ont coûté.
+
+    `phase` / `item` rattachent AUSSI la dépense à une boucle de correction
+    (`costs[]`) : c'est ce que `BuildLoopMaxCostUsd` plafonne. Sans
+    rattachement, la dépense compte pour le run, jamais pour une boucle —
+    elle n'appartient à aucune.
     """
     run = load_run(root, run_id)
     if run is None:
         raise KeyError(run_id)
     amount = max(0.0, float(usd))
     run["costUsd"] = round(float(run.get("costUsd") or 0.0) + amount, 6)
+    if item:
+        run.setdefault("costs", []).append({"phase": phase, "item": item, "usd": amount, "label": label, "at": now_iso()})
     _write_json(run_path(root, run_id), run)
     _append_journal(root, {"event": "add-cost", "runId": run_id, "usd": amount,
-                           "label": label, "cumulativeUsd": run["costUsd"], "at": now_iso()})
+                           "label": label, "cumulativeUsd": run["costUsd"], "at": now_iso(),
+                           **({"phase": phase, "item": item} if item else {})})
     return run
 
 
@@ -359,16 +424,36 @@ def item_statuses(run: dict[str, Any], phase: str) -> dict[str, dict[str, Any]]:
     return out
 
 
-def item_attempts(run: dict[str, Any], phase: str, item: str) -> int:
-    """Nombre de tentatives déjà enregistrées pour cet item, verdicts compris."""
+def item_attempts(run: dict[str, Any], phase: str, item: str, inputs_hash: str | None = None) -> int:
+    """Nombre de tentatives déjà enregistrées pour cet item, verdicts compris.
+
+    Avec `inputs_hash`, seules comptent les tentatives faites sur CES entrées :
+    c'est la définition de « relancer à l'identique ». Un contrat ou un prompt
+    corrigé change le hash, donc ouvre une boucle neuve — ce que le message de
+    `BUILD_LOOP_EXHAUSTED` promettait sans que rien ne le fasse.
+    """
     canonical = canonical_phase(phase)
     return sum(1 for e in (run.get("items") or [])
                if canonical_phase(str(e.get("phase") or "")) == canonical
-               and str(e.get("item") or "") == item)
+               and str(e.get("item") or "") == item
+               and (not inputs_hash or str(e.get("inputsHash") or "") == str(inputs_hash)))
+
+
+def loop_cost(run: dict[str, Any], phase: str, item: str) -> float:
+    """Ce que la boucle de correction de CET item a coûté (dépenses rattachées, `costs[]`).
+
+    Une dépense rattachée à l'item sans phase (un span `build-trace` sans
+    `--phase`) compte : l'item seul suffit à la désigner, et l'ignorer ferait
+    sortir de la borne exactement la dépense qu'on a oublié de qualifier.
+    """
+    canonical = canonical_phase(phase)
+    return round(sum(float(e.get("usd") or 0.0) for e in (run.get("costs") or [])
+                     if str(e.get("item") or "") == item
+                     and (not e.get("phase") or canonical_phase(str(e.get("phase"))) == canonical)), 6)
 
 
 def should_retry_item(run: dict[str, Any], phase: str, item: str, *,
-                      max_iter: int, max_cost_usd: float) -> tuple[bool, str, str]:
+                      max_iter: int, max_cost_usd: float, inputs_hash: str | None = None) -> tuple[bool, str, str]:
     """(rejouer ?, classe, raison) — la boucle `build_loop`, appliquée.
 
     `BuildLoopMaxIter` et `BuildLoopMaxCostUsd` existaient dans `config.base.yml`
@@ -381,19 +466,29 @@ def should_retry_item(run: dict[str, Any], phase: str, item: str, *,
     Trois conditions d'arrêt, dans l'ordre de `budget-and-loop.md §6` : succès,
     itérations épuisées, budget épuisé. Le succès est traité par l'appelant
     (`should_skip_item`), les deux autres ici.
+
+    **Le budget est celui de la BOUCLE, pas du run.** `BuildLoopMaxCostUsd`
+    était comparé au cumul du run entier : passé $15 de construction — ce qu'un
+    `/sdda-full` atteint en PHASE 4 sans qu'aucune boucle ne s'emballe — plus
+    aucun item ne pouvait être retenté, même à sa première correction. Et
+    inversement, une boucle réellement emballée sur un item restait invisible
+    tant que le run n'avait pas dépensé $15 ailleurs. `MaxCostPerRun` plafonne
+    le run ; cette borne plafonne ce qu'un item a coûté à force d'être repris,
+    reprises `--resume` comprises (le `run` reçu est la vue fusionnée de la
+    lignée, `merged_run`).
     """
-    attempts = item_attempts(run, phase, item)
+    attempts = item_attempts(run, phase, item, inputs_hash)
     if attempts >= max_iter:
         return False, "BUILD_LOOP_EXHAUSTED", (
-            f"`{item}` : {attempts} tentative(s) pour un plafond BuildLoopMaxIter={max_iter}. "
+            f"`{item}` : {attempts} tentative(s) sur les mêmes entrées pour un plafond BuildLoopMaxIter={max_iter}. "
             "Relancer à l'identique achète le même échec : corriger la cause (contrat, prompt, "
-            "borne) fait repartir le compteur d'un run neuf")
-    spent = float(run.get("costUsd") or 0.0)
+            "borne) change le hash d'entrées et ouvre une boucle neuve")
+    spent = loop_cost(run, phase, item)
     if max_cost_usd > 0 and spent >= max_cost_usd:
         return False, "BUILD_LOOP_BUDGET_EXHAUSTED", (
-            f"`{item}` : ${spent:.2f} cumulés sur le run pour un plafond BuildLoopMaxCostUsd="
-            f"${max_cost_usd:.2f}")
-    return True, "", f"{attempts} tentative(s) sur {max_iter}"
+            f"`{item}` : ${spent:.2f} dépensés par la boucle de correction de cet item "
+            f"(reprises comprises) pour un plafond BuildLoopMaxCostUsd=${max_cost_usd:.2f}")
+    return True, "", f"{attempts} tentative(s) sur {max_iter} · boucle ${spent:.2f}/{max_cost_usd:.2f}"
 
 
 def should_skip_item(run: dict[str, Any], phase: str, item: str, inputs_hash: str | None) -> tuple[bool, str]:
@@ -564,9 +659,13 @@ def bypasses_of(root: Path, run: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def run_summary(root: Path, run: dict[str, Any]) -> dict[str, Any]:
+    own = run
+    run = merged_run(root, run)       # ce qu'une reprise hérite : phases, items
     statuses = effective_statuses(run)
-    bypasses = bypasses_of(root, run)
+    bypasses = bypasses_of(root, own)
     return {
+        "resumedFrom": own.get("resumedFrom"),
+        "lineage": run.get("lineage") or [own.get("runId")],
         "runId": run.get("runId"),
         "mission": run.get("mission"),
         "command": run.get("command"),
@@ -610,6 +709,9 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("--command", required=True, help="la commande qui ouvre le run, ex. /sdda-build")
     new.add_argument("--tags", default="", help="tags séparés par des virgules (force, resume, from-phase=…)")
     new.add_argument("--run-id", default=None, help="identifiant imposé (reprise d'un run externe, tests)")
+    new.add_argument("--resume", action="store_true",
+                     help="reprendre le dernier run de la MISSION : lu AVANT de créer le nouveau, lié par `resumedFrom`")
+    new.add_argument("--resume-from", default=None, help="reprendre ce run précis (lié par `resumedFrom`)")
     add_common_args(new)
 
     get = sub.add_parser("get-run", help="écrire l'identifiant du dernier run sur stdout")
@@ -638,6 +740,8 @@ def build_parser() -> argparse.ArgumentParser:
     cost.add_argument("--run-id", default=None, help="défaut : $SDDA_RUN_ID")
     cost.add_argument("--usd", required=True, type=float, help="montant en USD (>= 0)")
     cost.add_argument("--label", default="", help="ce qui a été payé, ex. `dev-agent billing`")
+    cost.add_argument("--phase", default=None, help="phase de la boucle de correction à laquelle la dépense appartient")
+    cost.add_argument("--item", default=None, help="item de cette boucle (BuildLoopMaxCostUsd le plafonne)")
     add_common_args(cost)
 
     end = sub.add_parser("end-run", help="clore un run")
@@ -674,6 +778,8 @@ def build_parser() -> argparse.ArgumentParser:
     retry.add_argument("--item", required=True)
     retry.add_argument("--max-iter", type=int, default=None, help="défaut : BuildLoopMaxIter du Project Config")
     retry.add_argument("--max-cost-usd", type=float, default=None, help="défaut : BuildLoopMaxCostUsd")
+    retry.add_argument("--inputs-hash", default=None,
+                       help="hash courant des entrées : seules les tentatives sur CES entrées comptent pour BuildLoopMaxIter")
     add_common_args(retry)
 
     done = sub.add_parser("done-items", help="écrire les items `pass` d'une phase, un par ligne")
@@ -722,7 +828,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "new-run":
         tags = [t.strip() for t in str(args.tags or "").replace(" ", ",").split(",") if t.strip()]
-        run = new_run(root, mission=str(args.mission), command=slash_command(args.command), tags=tags, run_id=args.run_id)
+        resumed_from = args.resume_from
+        if args.resume and not resumed_from:
+            # Lu AVANT la création : après, le « dernier run » serait celui-ci,
+            # vide — et la reprise repartirait de la PHASE 0.
+            previous = latest_run(root, str(args.mission))
+            if previous is None:
+                report.error("STATE_RUN_NOT_FOUND", f"--resume : aucun run antérieur pour la MISSION {args.mission}",
+                             "lancer sans --resume : il n'y a rien à reprendre", str(paths.state_dir(root)))
+                return _fail(report, args)
+            resumed_from = str(previous["runId"])
+        if resumed_from and load_run(root, str(resumed_from)) is None:
+            report.error("STATE_RUN_NOT_FOUND", f"--resume-from `{resumed_from}` introuvable",
+                         "passer un runId existant (sdda_state.py status --all)", str(resumed_from))
+            return _fail(report, args)
+        if resumed_from and "resume" not in tags:
+            tags.append("resume")
+        run = new_run(root, mission=str(args.mission), command=slash_command(args.command), tags=tags,
+                      run_id=args.run_id, resumed_from=resumed_from)
         print(json.dumps(run_summary(root, run), indent=2, ensure_ascii=False, sort_keys=True) if args.json else run["runId"])
         return 0
 
@@ -742,7 +865,7 @@ def main(argv: list[str] | None = None) -> int:
             report.error("STATE_RUN_NOT_FOUND", f"run `{rid or '(aucun)'}` introuvable — impossible de dire où reprendre",
                          "vérifier --run-id / $SDDA_RUN_ID, ou lancer le pipeline sans --resume", rid or str(paths.state_dir(root)))
             return _fail(report, args)
-        target = resume_target(run)
+        target = resume_target(merged_run(root, run))
         print(json.dumps({"runId": run["runId"], "resumeTarget": target, "phases": run_summary(root, run)["phases"]},
                          indent=2, ensure_ascii=False, sort_keys=True) if args.json else target)
         return 0
@@ -750,7 +873,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "add-cost":
         rid = _resolve_run_id(args, root)
         try:
-            run = add_cost(root, str(rid), usd=args.usd, label=args.label)
+            run = add_cost(root, str(rid), usd=args.usd, label=args.label, phase=args.phase, item=args.item)
         except KeyError:
             report.error("STATE_RUN_NOT_FOUND", f"run `{rid}` introuvable",
                          "vérifier --run-id / $SDDA_RUN_ID", str(rid))
@@ -816,6 +939,9 @@ def main(argv: list[str] | None = None) -> int:
             report.error("STATE_PHASE_NOT_ITEMIZED", f"phase `{args.phase}` sans items : la reprise y reste au niveau de la phase",
                          f"phases à items : {', '.join(ITEMIZED_PHASES)}", args.phase)
             return _fail(report, args)
+        # Les décisions (sauter, retenter, lister) se prennent sur la lignée ;
+        # l'écriture (`set-item`) va au run courant seul.
+        view = merged_run(root, run)
 
         if args.cmd == "set-item":
             payload: dict[str, Any] = {}
@@ -837,8 +963,9 @@ def main(argv: list[str] | None = None) -> int:
             max_iter = args.max_iter if args.max_iter is not None else (config.get_int("BuildLoopMaxIter", 3) if config else 3)
             max_cost = args.max_cost_usd if args.max_cost_usd is not None else (
                 config.get_float("BuildLoopMaxCostUsd", 15.0) if config else 15.0)
-            allowed, cls, why = should_retry_item(run, args.phase, args.item,
-                                                  max_iter=max_iter, max_cost_usd=max_cost)
+            allowed, cls, why = should_retry_item(view, args.phase, args.item,
+                                                  max_iter=max_iter, max_cost_usd=max_cost,
+                                                  inputs_hash=args.inputs_hash)
             if not allowed:
                 report.error(cls, why,
                              "corriger la CAUSE avant de relancer — la boucle s'arrête à la première des "
@@ -853,7 +980,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.cmd == "should-skip-item":
-            skip, why = should_skip_item(run, args.phase, args.item, args.inputs_hash)
+            skip, why = should_skip_item(view, args.phase, args.item, args.inputs_hash)
             if args.json:
                 print(json.dumps({"runId": run["runId"], "phase": args.phase, "item": args.item, "skip": skip, "reason": why},
                                  ensure_ascii=False, sort_keys=True))
@@ -861,7 +988,7 @@ def main(argv: list[str] | None = None) -> int:
                 sys.stderr.write(f"[state] {args.phase}/{args.item} : {'SKIP' if skip else 'RUN'} — {why}\n")
             return 0 if skip else 1
 
-        statuses = item_statuses(run, args.phase)
+        statuses = item_statuses(view, args.phase)
         passed = sorted(item for item, v in statuses.items() if v["status"] == "pass")
         if args.json:
             print(json.dumps({"runId": run["runId"], "phase": args.phase, "done": passed,
