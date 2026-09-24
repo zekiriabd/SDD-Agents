@@ -58,6 +58,33 @@ def _target_and_scope(data: dict) -> tuple[str, str]:
     return "", ""
 
 
+_SECRET_PROBES = (".env", ".env.local", ".env.production", ".env.development")
+
+
+def _glob_targets_secret(glob: str) -> bool:
+    """Le filtre `glob` d'un Grep désigne-t-il un fichier de secrets ?"""
+    import fnmatch
+
+    last = glob.replace("\\", "/").rsplit("/", 1)[-1]
+    alternatives = [last]
+    if "{" in last and "}" in last:
+        head, _, rest = last.partition("{")
+        inner, _, tail = rest.partition("}")
+        alternatives = [head + alt + tail for alt in inner.split(",")]
+    # Seul un filtre qui nomme un fichier CACHÉ le vise : ripgrep saute les
+    # fichiers cachés tant qu'on ne les lui désigne pas, et `glob: "*"` ne le
+    # fait pas. Refuser `*` bloquerait toute recherche filtrée.
+    return any(alt.startswith(".") and fnmatch.fnmatch(probe, alt.casefold())
+               for alt in alternatives for probe in _SECRET_PROBES)
+
+
+def _deny_secret(agent: str, rel: str) -> int:
+    return deny(HOOK, "SECRET_READ_FORBIDDEN",
+                f"`{agent}` a voulu lire `{rel}` — un fichier de secrets n'est lu par aucun agent",
+                "les NOMS des variables sont dans STACK.md ; la copie vers src/{App}/.env est faite "
+                "par `python .sdda/sdda.py install-env`, sans LLM")
+
+
 def check(root: Path, data: dict) -> int:
     agent = agent_of(data)
     if not agent:
@@ -70,19 +97,26 @@ def check(root: Path, data: dict) -> int:
     from sdda_lib.errors import Report  # noqa: E402  (import tardif : coût de démarrage du hook)
     from sdda_scripts import audit_ownership as ao  # noqa: E402
 
-    if target != ".":
-        try:
-            rel = Path(str(target)).resolve().relative_to(root).as_posix()
-        except ValueError:
-            rel = str(target).replace("\\", "/")
-    else:
-        rel = "."
+    # Même normalisation que les hooks d'écriture : `..` résolu, `/g/…` de Git
+    # Bash, casse du système de fichiers. `Path.resolve().relative_to(root)`
+    # échouait sur une casse différente de la racine, et le chemin brut qui
+    # restait ne matchait plus aucun interdit.
+    cwd = data.get("cwd")
+    rel = "." if target == "." else ao.relative_to_root(root, str(target), cwd)
+    real = None if target == "." else ao.real_relative_to_root(root, str(target), cwd)
 
-    if ao.is_secret_file(rel) and scope in ("file", "content"):
-        return deny(HOOK, "SECRET_READ_FORBIDDEN",
-                    f"`{agent}` a voulu lire `{rel}` — un fichier de secrets n'est lu par aucun agent",
-                    "les NOMS des variables sont dans STACK.md ; la copie vers src/{App}/.env est faite "
-                    "par `python .sdda/sdda.py install-env`, sans LLM")
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    if scope in ("file", "content"):
+        for candidate in (rel, real):
+            if candidate and ao.is_secret_file(candidate):
+                return _deny_secret(agent, candidate)
+    if scope == "content":
+        # Un `Grep` qui VISE un fichier de secrets par son filtre (`glob: .env*`)
+        # le lit, quelle que soit sa racine : ripgrep saute les fichiers cachés
+        # par défaut, pas ceux qu'on lui nomme.
+        glob = str(tool_input.get("glob") or "")
+        if glob and _glob_targets_secret(glob):
+            return _deny_secret(agent, f"{rel} (glob {glob})")
 
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
@@ -93,7 +127,7 @@ def check(root: Path, data: dict) -> int:
         # est exactement « optimiser contre le jeu qui rend le verdict », par un
         # autre chemin.
         proof = "workspace/pipeline/datasets"
-        normalized = rel.replace("\\", "/").lstrip("./")
+        normalized = ao.normalize(rel)
         ancestors = (".", "workspace", "workspace/pipeline")
         if normalized == proof or normalized.startswith(proof + "/") or normalized in ancestors:
             return unknown_subagent(HOOK, agent, normalized if normalized not in ancestors else proof)
@@ -102,7 +136,7 @@ def check(root: Path, data: dict) -> int:
         return ALLOW
 
     report = Report(name="READS-HOOK", target=str(root))
-    if ao.check_read(loader, agent, rel, report, scope=scope):
+    if all(ao.check_read(loader, agent, c, report, scope=scope) for c in (rel, real) if c):
         return ALLOW
 
     first = report.errors[0] if report.errors else None

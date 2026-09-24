@@ -378,8 +378,54 @@ def is_secret_file(path: str) -> bool:
     CONSTRUCTION paie ses tokens avec son propre compte : il n'a aucune raison
     de voir la clé du RUNTIME, et `install-env` la copie sans LLM.
     """
-    name = str(path).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    return _secret_name(str(path).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1])
+
+
+def _secret_name(name: str) -> bool:
+    """Le NOM désigne-t-il un fichier de secrets, tel que le système de fichiers le lira ?
+
+    La comparaison était sensible à la casse : `.ENV` passait, alors que sous
+    Windows et macOS c'est le même fichier. Trois autres graphies ouvrent le
+    même fichier sous Windows et sont normalisées ici : les points et espaces
+    finaux (`.env.`, `.env `), et le flux de données NTFS (`.env::$DATA`,
+    `.env:x`). Ce qui n'est PAS couvert, et qu'il faut dire : le nom court 8.3
+    (`ENV~1`), et un lien dont le nom ne dit rien — le second est rattrapé par
+    la lecture du chemin résolu (`real_relative_to_root`), le premier non.
+    """
+    name = name.split(":", 1)[0] if ":" in name else name   # flux NTFS
+    name = name.rstrip(" .").casefold()
+    if not name:
+        return False
     return name == ".env" or (name.startswith(".env.") and name not in _ENV_TEMPLATES)
+
+
+#: Où vivent les fichiers de secrets d'un workspace — pour savoir si une
+#: recherche récursive dans un répertoire rend le contenu de l'un d'eux.
+SECRET_LOCATIONS = ("workspace/assets/.env*", "workspace/src/*/.env*", ".env*")
+
+
+def secret_files(root: Path) -> list[str]:
+    """Les fichiers de secrets EXISTANTS aux emplacements connus (chemins relatifs)."""
+    out: list[str] = []
+    for pattern in SECRET_LOCATIONS:
+        try:
+            for p in Path(root).glob(pattern):
+                if p.is_file() and is_secret_file(p.name):
+                    out.append(p.relative_to(root).as_posix())
+        except OSError:
+            continue
+    return sorted(set(out))
+
+
+def secrets_under(root: Path, directory: str) -> list[str]:
+    """Les fichiers de secrets qu'une lecture RÉCURSIVE de `directory` rendrait."""
+    d = normalize(directory)
+    fold = (lambda s: s.casefold()) if CASE_INSENSITIVE else (lambda s: s)
+    out = []
+    for secret in secret_files(root):
+        if d == "." or fold(secret).startswith(fold(d).rstrip("/") + "/"):
+            out.append(secret)
+    return out
 
 
 def forbidden_reads_of(loader: dict[str, Any], agent: str) -> list[str]:
