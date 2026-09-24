@@ -165,7 +165,7 @@ SourceReadTimeoutMs: 5000                     # budget de lecture d'UN appel d'o
 SourceMaxRecordsReturned: 200                 # on lit maxRows+1 -> truncated: true
 SourceMaxObjectBytes: 52428800                # 50 Mo — fichier ou réponse d'API
 SourceSchemaCheckSample: 500                  # enregistrements revalidés au boot
-SourceMaxStalenessHours: 24                   # au-delà -> SOURCE_STALE, pas un log
+SourceMaxStalenessHours: 24                   # au-delà -> stale: true + as_of, pas un log
 SourceForbiddenOps: [WRITE, DELETE, EXEC, SYMLINK_FOLLOW, UNDECLARED_EGRESS]
 SourceAllowedStores:  [ops_share, crm_api, internal_crm_mcp]
 SourceAllowedSources: [order_tracking, crm_customer, crm_contract]
@@ -471,9 +471,11 @@ index[source_id] = {
 rejouée sur des fichiers modifiés n'est pas la même eval, et le pipeline doit le
 savoir plutôt que de comparer deux scores incomparables.
 
-La fraîcheur est une **erreur déclarée**, pas un log : au-delà de
+La fraîcheur est un **état rendu**, pas un log ni une exception : au-delà de
 `max_staleness_hours` (ou de `SourceMaxStalenessHours` à défaut), l'outil
-renvoie `SOURCE_STALE`, et l'agent doit le dire à l'utilisateur.
+sert la donnée avec `stale: true` et sa date `as_of`, et l'agent doit le dire
+à l'utilisateur. Lever une erreur privait l'agent de la donnée ET de sa date :
+il ne pouvait plus rien dire d'exact.
 
 ### 3.10 Les outils générés
 
@@ -647,9 +649,9 @@ surface de données. Les **schémas figés** partent avec le code, dans le paque
 6. **`as_of` dans chaque réponse.** Un export, une page d'API en cache et un
    appel MCP sont des instantanés ; l'omettre produit des réponses fausses et
    confiantes sur les questions temporelles.
-7. **La fraîcheur est une erreur, pas un log.** Au-delà de
-   `max_staleness_hours`, l'outil renvoie `SOURCE_STALE` (erreur déclarée,
-   testée en L2). Répondre sur des données périmées sans le signaler est une
+7. **La fraîcheur est dite, jamais tue.** Au-delà de `max_staleness_hours`,
+   l'outil rend `stale: true` avec `as_of` (état déclaré au §4.1 du contrat,
+   testé en L2). Répondre sur des données périmées sans le signaler est une
    régression silencieuse.
 8. **Filtres = égalité, `IN`, ou plage sur champ déclaré.** Pas de `LIKE`, pas
    d'expression, pas de prédicat libre, et **jamais** un fragment de requête
@@ -704,7 +706,7 @@ uv run python -m {AppName}.data.envelope --ping
 #   5. tentative de lecture de ../../STACK.md                   -> doit échouer [DATA_SOURCE_PATH_ESCAPE]
 #   6. tentative d'appel d'un hôte hors allowlist               -> doit échouer [DATA_EGRESS_UNDECLARED]
 #   7. tentative d'ouverture en écriture d'un fichier source    -> doit échouer
-#   8. source dont l'instantané > max_staleness_hours           -> SOURCE_STALE, pas une exception
+#   8. source dont l'instantané > max_staleness_hours           -> stale: true, servie et datée
 #   9. exit 0
 
 uv run pytest tests/data -q

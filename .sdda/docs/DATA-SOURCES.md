@@ -147,7 +147,7 @@ transposition, terme à terme, de l'enveloppe DB.
 | `SourceAllowedStores` | allowlist d'`id` | importer un fichier MCP ne câble rien à lui seul |
 | `SourceEgressAllowlist` | allowlist d'**hôtes** | vide = aucune sortie réseau, jamais « tout permis » |
 | `SourceForbiddenOps` | `WRITE, DELETE, EXEC, SYMLINK_FOLLOW, UNDECLARED_EGRESS` | vérifié sur l'AST, pas par regex |
-| `SourceMaxStalenessHours` | 24 | au-delà → erreur `SOURCE_STALE` déclarée, pas un avertissement de log |
+| `SourceMaxStalenessHours` | 24 | au-delà → donnée servie avec `stale: true` et `as_of`, que l'agent doit dire ; ni un log, ni une exception |
 | `SourceQueryLogging` | `full` | sans le journal, aucun post-mortem n'est possible |
 
 Les deux dernières lignes de la table `SourceForbiddenOps` méritent d'être
