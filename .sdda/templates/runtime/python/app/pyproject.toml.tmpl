@@ -65,6 +65,13 @@ select = ["E", "F", "I", "B", "ASYNC", "S", "T20"]
 strict = true
 python_version = "3.12"
 
+# Dépendances OPTIONNELLES, importées paresseusement : le fournisseur de modèle
+# qu'on n'utilise pas (`anthropic`), les formats de fichier qu'on n'a pas
+# (`openpyxl`, `pyarrow`). Absentes, elles ne sont pas une erreur de type.
+[[tool.mypy.overrides]]
+module = ["anthropic", "anthropic.*", "openai", "openai.*", "openpyxl", "openpyxl.*", "pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 # Layout plat : les tests vivent À CÔTÉ de ce qu'ils testent (`app/tests`,

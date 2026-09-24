@@ -10,6 +10,8 @@ prompt, et il donne à la suite d'injection quelque chose à vérifier.
 """
 from __future__ import annotations
 
+from typing import Any
+
 WRAPPER = '<untrusted source="{source}" field="{field}">\n{value}\n</untrusted>'
 
 #: Caractères neutralisés à l'intérieur de l'enveloppe.
@@ -30,7 +32,7 @@ def wrap_untrusted(value: object, *, source: str, field: str) -> str:
     return WRAPPER.format(source=source, field=field, value=text)
 
 
-def wrap_record(record: dict, *, source: str, untrusted_fields: frozenset[str]) -> dict:
+def wrap_record(record: dict[str, Any], *, source: str, untrusted_fields: frozenset[str]) -> dict[str, Any]:
     """Enveloppe les champs de texte libre d'un enregistrement.
 
     Rend un NOUVEAU dictionnaire : muter l'enregistrement d'origine ferait que

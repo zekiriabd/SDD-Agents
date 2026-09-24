@@ -277,7 +277,7 @@ def apply_bound_policy(exc: BoundExceeded, *, guard: BoundGuard,
     `escalate-human` s'arrête et attend une décision, ce qui suppose un
     checkpoint — sans lui, la reprise n'existe pas et le run est perdu.
     """
-    base = {
+    base: dict[str, Any] = {
         "bound_exceeded": exc.bound, "bound_policy": exc.policy,
         "message": str(exc), "partial_state": dict(exc.partial_state or guard.state()),
         "iterations": guard.iterations, "tool_calls": guard.tool_calls,

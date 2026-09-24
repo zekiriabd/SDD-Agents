@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import functools
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
@@ -82,7 +83,13 @@ def _index_of(ctx: ToolContext, source: Source) -> SourceIndex:
     """
     if source.id not in ctx._indexes:
         ctx._indexes[source.id] = build_index(_registry_of(ctx), source, ctx.base)
-    return ctx._indexes[source.id]
+    index: SourceIndex = ctx._indexes[source.id]
+    return index
+
+
+def _now(ctx: ToolContext) -> float:
+    """L'horloge du contexte (injectable en test), sinon l'horloge monotone."""
+    return (ctx.clock or time.monotonic)()
 
 
 def _build(output_model: Any, record_model: Any, payload: dict[str, Any]) -> Any:
@@ -255,11 +262,11 @@ def _scan(ctx: ToolContext, source: Source, index: SourceIndex, filters: dict[st
     de deux millions de lignes doit rendre `Timeout` au bout de 5 secondes, pas
     après les avoir toutes lues pour constater qu'elle a dépassé.
     """
-    deadline = ctx.clock() + budget_ms / 1000.0
+    deadline = _now(ctx) + budget_ms / 1000.0
     kept = 0
     for path in index.files:
         for record in read_records(path, source):
-            if ctx.clock() > deadline:
+            if _now(ctx) > deadline:
                 raise Timeout(f"budget de lecture dépassé ({budget_ms} ms)", source=source.id,
                               detail=f"{kept} enregistrement(s) retenus avant l'arrêt")
             if not _matches(record, filters):
@@ -310,10 +317,10 @@ async def lookup_record(*, source: str, key: Any, ctx: ToolContext,
     stale = _check_freshness(registry, spec, index)
 
     identity = _identity_filters(ctx, spec)
-    deadline = ctx.clock() + registry.envelope.read_timeout_ms / 1000.0
+    deadline = _now(ctx) + registry.envelope.read_timeout_ms / 1000.0
     location = index.by_key.get(str(key))
     record = record_at(location, spec) if location else None
-    if ctx.clock() > deadline:
+    if _now(ctx) > deadline:
         raise Timeout(f"budget de lecture dépassé ({registry.envelope.read_timeout_ms} ms)", source=spec.id)
     if record is not None and any(str(record.get(k)) != v for k, v in identity.items()):
         # L'enregistrement d'un AUTRE appelant n'existe pas pour celui-ci :

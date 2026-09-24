@@ -66,7 +66,8 @@ def load_schema(base: Path, source_id: str) -> dict[str, Any]:
         raise SourceUnavailable(
             f"schéma figé absent ({path.name})", source=source_id,
             detail="`gen_source_tools.py --infer --source " + source_id + "`, puis RELIRE le fichier")
-    return json.loads(path.read_text(encoding="utf-8"))
+    schema: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return schema
 
 
 def _type_ok(value: Any, declared: Any) -> bool:
