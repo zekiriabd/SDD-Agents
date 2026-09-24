@@ -1,173 +1,201 @@
-# Patterns d'orchestration — catalogue et matrice de sélection
+# Orchestration patterns — catalogue and selection matrix
 
-Consommé par `architect-topology`. SSoT machine :
-`.sdda/registry/patterns.registry.json`.
+Read by the architect who declares the roster, and by `architect-topology`,
+which materialises it. Machine SSoT: `.sdda/registry/patterns.registry.json`.
 
-> **Le défaut est `single-agent`.** Tout autre choix doit être justifié par écrit
-> dans `topology/{n}-topology.md` (P7). Ce document donne les critères qui rendent
-> cette justification vérifiable plutôt qu'esthétique.
+> **The default is `single-agent`.** The root pattern is the **architect's**
+> choice, declared in `STACK.md` (`## Active Orchestration Pattern`), and the
+> roster that embodies it is declared in `workspace/feats/{n}-roster.md` (P7):
+> the framework chooses neither the pattern nor the number of agents. It
+> requires the declaration to be **complete** — each pattern imposes its fields
+> (`registry/architecture-requirements.yml`), and a missing field is
+> `[ARCH_SPEC_INCOMPLETE]`, blocking at G2 (`validate-architecture`). It
+> **flags**, without a veto, a choice heavier than necessary: a missing or
+> unargued "Alternative plus simple considérée" section in
+> `pipeline/topology/{n}-topology.md` is `[TOPOLOGY_SIMPLICITY_ADVISORY]`. This
+> document gives the criteria that make that argument verifiable rather than
+> aesthetic.
+
+**What loads today.** Only `single-agent`, `router` and `sequential` have a card
+under `.sdda/stacks/orchestration/`; they are the only ones the generated
+runtime can carry. The other patterns in this catalogue are **documented
+intentions**: activated in `STACK.md`, they load nothing and are refused at
+preflight (`[STACK_COMBO_UNLOADABLE]`). A pattern nested inside the topology
+(§3) does not need a root card, but it must be materialised by the IR graph.
 
 ---
 
-## 1. Le catalogue
+## 1. The catalogue
 
-### `single-agent` — un agent, des outils
-Un modèle, une boucle, N outils. L'agent décide quoi appeler.
+### `single-agent` — one agent, some tools
+One model, one loop, N tools. The agent decides what to call.
 
-- **Quand** : ≤ ~8 outils, un seul domaine, une seule posture de sortie.
-- **Coût** : 1 × (tours). Le moins cher, le plus rapide, le plus débogable.
-- **Dégrade quand** : au-delà de ~10-15 outils, la sélection devient bruitée ;
-  au-delà de ~2 personas contradictoires dans un prompt, les instructions se
-  neutralisent.
-- **Signal qu'il faut escalader** : la matrice de confusion des appels d'outils
-  montre des erreurs systématiques entre outils voisins, **mesurée**, pas
-  soupçonnée.
+- **When**: ≤ ~8 tools, a single domain, a single output posture.
+- **Cost**: 1 × (turns). The cheapest, the fastest, the most debuggable.
+- **Degrades when**: beyond ~10-15 tools, tool selection gets noisy; beyond ~2
+  contradictory personas in one prompt, the instructions cancel each other out.
+- **Signal that you should escalate**: the tool-call confusion matrix shows
+  systematic errors between neighbouring tools — **measured**, not suspected.
 
-### `router` — classifier puis déléguer
-Un nœud de classification bon marché route vers un spécialiste.
+### `router` — classify, then delegate
+A cheap classification node routes to a specialist.
 
-- **Quand** : intentions disjointes traitées très différemment.
-- **Coût** : 1 classification `fast` + 1 spécialiste. Souvent **moins cher** que
-  single-agent, parce que chaque spécialiste a un prompt court.
-- **Mode d'échec dominant** : le **misroute silencieux et irrécupérable**. Une
-  fois parti chez le mauvais spécialiste, rien ne le rattrape.
-- **Obligations** : seuil de confiance + chemin de repli (`fallback` ou
-  `clarify`) ; golden set de routing avec **accuracy par classe**, pas globale —
-  une accuracy globale de 0.95 peut cacher 0.40 sur la classe critique.
+- **When**: disjoint intents handled very differently.
+- **Cost**: 1 `fast` classification + 1 specialist. Often **cheaper** than
+  single-agent, because each specialist has a short prompt.
+- **Dominant failure mode**: the **silent, unrecoverable misroute**. Once the
+  request has gone to the wrong specialist, nothing brings it back.
+- **Obligations**: a confidence threshold + a fallback path (`fallback` or
+  `clarify`) — without a fallback, `[ROUTER_NO_FALLBACK]`; a routing golden set
+  with **per-class accuracy**, not global — a global accuracy of 0.95 can hide
+  0.40 on the critical class. `trajectory-report` flags a fallback that is never
+  taken (`[ROUTER_FALLBACK_UNTESTED]`).
 
-### `sequential` — pipeline d'étapes ordonnées *(SeqAgent)*
-Étapes fixes et connues, chacune raffine la précédente.
+### `sequential` — pipeline of ordered steps *(SeqAgent)*
+Fixed, known steps, each refining the previous one.
 
-- **Quand** : l'ordre est une propriété du métier (extraire → normaliser →
-  valider → rédiger).
-- **Coût** : somme des étapes. Prévisible, linéaire.
-- **Mode d'échec dominant** : **l'erreur compose**. Une extraction à 0.9 suivie
-  d'une normalisation à 0.9 donne 0.81, et personne ne l'a vu passer.
-- **Obligations** : validation par étape (schéma ou grader), et une eval par
-  étape en plus de l'eval bout-en-bout. Sinon on débogue un résultat final sans
-  savoir quelle étape l'a abîmé.
+- **When**: the order is a property of the business (extract → normalise →
+  validate → draft).
+- **Cost**: the sum of the steps. Predictable, linear.
+- **Dominant failure mode**: **errors compound**. An extraction at 0.9 followed
+  by a normalisation at 0.9 gives 0.81, and nobody saw it go by.
+- **Obligations**: per-step validation (schema or grader), and one eval per step
+  on top of the end-to-end eval. Otherwise you debug a final result without
+  knowing which step damaged it.
 
 ### `parallel` — fan-out / gather
-N sous-tâches indépendantes lancées ensemble, puis fusionnées.
+N independent sub-tasks launched together, then merged.
 
-- **Quand** : la latence contraint et les sous-tâches sont vraiment indépendantes.
-- **Coût** : N × tokens, 1 × latence. On achète du temps avec de l'argent.
-- **Mode d'échec dominant** : **l'étape de fusion**, systématiquement sous-estimée.
-  Réconcilier des sorties contradictoires est le vrai travail.
-- **Obligations** : la stratégie de fusion est spécifiée (vote, priorité,
-  synthèse LLM, échec si divergence) et évaluée **séparément**.
+- **When**: latency is constrained and the sub-tasks are genuinely independent.
+- **Cost**: N × tokens, 1 × latency. You buy time with money.
+- **Dominant failure mode**: **the merge step**, systematically underestimated.
+  Reconciling contradictory outputs is the real work.
+- **Obligations**: the merge strategy is specified (vote, priority, LLM
+  synthesis, fail on divergence) and evaluated **separately**.
 
-### `supervisor` — hiérarchique, délégation dynamique
-Un superviseur décompose, délègue à des spécialistes, recueille, décide de
-continuer ou de conclure.
+### `supervisor` — hierarchical, dynamic delegation
+A supervisor decomposes, delegates to specialists, collects, and decides whether
+to continue or conclude.
 
-- **Quand** : tâches hétérogènes, décomposition non connue d'avance.
-- **Coût** : overhead du superviseur **à chaque hop**, et le contexte grossit à
-  chaque retour. C'est le pattern le plus cher et celui qui dérape le plus vite.
-- **Mode d'échec dominant** : le **ping-pong** superviseur ↔ spécialiste, qui
-  consomme le budget sans progresser.
-- **Obligations** : `maxHops` **dur** ; les handoffs portent un contrat explicite
-  (quel état passe, quelle condition de retour) ; une eval de trajectoire vérifie
-  la distribution du nombre de hops, pas seulement la réponse finale.
+- **When**: heterogeneous tasks, decomposition not known in advance.
+- **Cost**: supervisor overhead **on every hop**, and the context grows with
+  every return. It is the most expensive pattern and the one that drifts
+  fastest.
+- **Dominant failure mode**: supervisor ↔ specialist **ping-pong**, which burns
+  the budget without making progress.
+- **Obligations**: a **hard** `maxHops`; handoffs carry an explicit contract
+  (what state passes, what return condition); a trajectory eval checks the
+  distribution of the number of hops, not just the final answer.
 
-### `graph` — machine à états explicite
-Nœuds, arêtes conditionnelles, cycles bornés, état persisté, reprise possible,
-interruption humaine.
+### `graph` — explicit state machine
+Nodes, conditional edges, bounded cycles, persisted state, resumability, human
+interruption.
 
-- **Quand** : il faut des cycles contrôlés, du human-in-the-loop, de la
-  reprise après interruption, ou de la durabilité.
-- **Coût** : explicite et calculable — c'est son principal avantage.
-- **Mode d'échec dominant** : la **complexité de conception**. Un graphe à 15
-  nœuds qu'on n'a jamais dessiné est ingérable.
-- **Obligations** : le graphe est dessiné (bloc ```mermaid de `{n}-topology.md`
-  §4) et validé déterministiquement sur l'IR — atteignabilité, terminaison,
-  cycles bornés.
+- **When**: you need controlled cycles, human-in-the-loop, resumption after an
+  interruption, or durability.
+- **Cost**: explicit and computable — that is its main advantage.
+- **Dominant failure mode**: **design complexity**. A 15-node graph that nobody
+  ever drew is unmanageable.
+- **Obligations**: the graph is drawn (the ```mermaid block of
+  `{n}-topology.md` §4) and validated deterministically on the IR —
+  reachability, termination, bounded cycles.
 
-### `plan-execute` — plan explicite puis exécution
-Un appel `deep` produit un plan ; des appels `fast` l'exécutent étape par étape.
+### `plan-execute` — explicit plan, then execution
+One `deep` call produces a plan; `fast` calls execute it step by step.
 
-- **Quand** : horizon long, nombreuses étapes, le plan a de la valeur pour
-  l'humain (auditabilité).
-- **Coût** : 1 cher + N bon marché. Souvent le meilleur rapport qualité/prix sur
-  les tâches longues.
-- **Mode d'échec dominant** : le **plan périmé** — la réalité diverge et
-  l'exécuteur suit quand même.
-- **Obligations** : condition de **replanification** spécifiée (échec d'étape,
-  découverte contredisant une prémisse), et plafond de replanifications.
+- **When**: long horizon, many steps, the plan has value for the human
+  (auditability).
+- **Cost**: 1 expensive + N cheap. Often the best quality/price ratio on long
+  tasks.
+- **Dominant failure mode**: the **stale plan** — reality diverges and the
+  executor follows it anyway.
+- **Obligations**: a specified **replanning** condition (step failure, a
+  discovery that contradicts a premise), and a cap on replannings.
 
-### `reflection` — rédacteur / critique
-Un agent produit, un critique note selon une grille, on itère.
+### `reflection` — writer / critic
+One agent produces, a critic scores it against a rubric, and you iterate.
 
-- **Quand** : la qualité prime, et il existe une **grille explicite** — pas un
-  « c'est mieux ».
-- **Coût** : × 2 à × 4.
-- **Mode d'échec dominant** : le **polissage infini**, ou pire, la dérive où
-  chaque itération dégrade.
-- **Obligations** : `max_reflections` **et** un critère d'arrêt sur *delta*
-  d'amélioration (on s'arrête si le gain < seuil). Le critique ne peut pas être
-  le même agent que le rédacteur (P7, raison 4).
+- **When**: quality comes first, and there is an **explicit rubric** — not an
+  "it's better".
+- **Cost**: × 2 to × 4.
+- **Dominant failure mode**: **endless polishing**, or worse, drift where each
+  iteration makes things worse.
+- **Obligations**: `max_reflections` **and** a stopping criterion on the
+  improvement *delta* (stop if the gain < threshold). The critic cannot be the
+  same agent as the writer (P7, reason 4) — `[REFLECTION_SELF_GRADING]`,
+  including when the reflection is nested inside a single agent node.
 
-### `blackboard` — état partagé
-Plusieurs agents contribuent à un artefact commun.
+### `blackboard` — shared state
+Several agents contribute to a common artefact.
 
-- **Quand** : élaboration collaborative d'un document ou d'un plan.
-- **Coût** : croît avec la taille de l'état — chaque agent relit tout.
-- **Mode d'échec dominant** : **conflits d'écriture** et écrasements.
-- **Obligations** : une matrice d'ownership sur les sections de l'état — le
-  mécanisme est exactement celui de la matrice d'ownership de SDD_Pro, appliqué
-  au runtime.
+- **When**: collaborative elaboration of a document or a plan.
+- **Cost**: grows with the size of the state — every agent re-reads everything.
+- **Dominant failure mode**: **write conflicts** and overwrites.
+- **Obligations**: an ownership matrix over the sections of the state — the
+  mechanism is exactly SDD_Pro's ownership matrix, applied at runtime.
 
-### `network` — handoff libre entre pairs
-Tout agent peut passer la main à tout agent.
+### `network` — free peer-to-peer handoff
+Any agent can hand over to any agent.
 
-- **Statut : refusé par défaut.** Coût non borné, trajectoires non prédictibles,
-  évaluation quasi impossible. Un ADR est exigé pour l'activer, et il doit
-  démontrer qu'aucun `graph` ne convient.
+- **Status: refused by default.** Unbounded cost, unpredictable trajectories,
+  near-impossible evaluation. `Root Pattern: network` is
+  `[TOPOLOGY_PATTERN_REFUSED]`; an accepted ADR is required to enable it
+  (`registry/adr-requirements.yml`), and it must show that no `graph` fits.
 
 ---
 
-## 2. Matrice de sélection
+## 2. Selection matrix
 
-| Critère | single | router | sequential | parallel | supervisor | graph | plan-exec | reflection |
+| Criterion | single | router | sequential | parallel | supervisor | graph | plan-exec | reflection |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Intentions disjointes | ○ | **●** | ○ | ○ | ◐ | ◐ | ○ | ○ |
-| Ordre imposé par le métier | ○ | ○ | **●** | ○ | ○ | ● | ◐ | ○ |
-| Décomposition inconnue d'avance | ○ | ○ | ○ | ○ | **●** | ◐ | ● | ○ |
-| Latence contrainte | ● | ● | ◐ | **●** | ○ | ◐ | ◐ | ○ |
-| Budget serré | **●** | ● | ◐ | ○ | ○ | ◐ | ● | ○ |
-| Cycles nécessaires | ○ | ○ | ○ | ○ | ◐ | **●** | ◐ | ● |
+| Disjoint intents | ○ | **●** | ○ | ○ | ◐ | ◐ | ○ | ○ |
+| Order imposed by the business | ○ | ○ | **●** | ○ | ○ | ● | ◐ | ○ |
+| Decomposition unknown in advance | ○ | ○ | ○ | ○ | **●** | ◐ | ● | ○ |
+| Constrained latency | ● | ● | ◐ | **●** | ○ | ◐ | ◐ | ○ |
+| Tight budget | **●** | ● | ◐ | ○ | ○ | ◐ | ● | ○ |
+| Cycles required | ○ | ○ | ○ | ○ | ◐ | **●** | ◐ | ● |
 | Human-in-the-loop | ○ | ○ | ◐ | ○ | ◐ | **●** | ● | ○ |
-| Reprise après interruption | ○ | ○ | ◐ | ○ | ○ | **●** | ● | ○ |
-| Qualité > coût, grille explicite | ○ | ○ | ○ | ○ | ◐ | ● | ◐ | **●** |
-| Auditabilité du raisonnement | ◐ | ● | ● | ◐ | ◐ | ● | **●** | ● |
-| Facilité d'évaluation | **●** | ● | ● | ◐ | ○ | ◐ | ● | ◐ |
+| Resumption after interruption | ○ | ○ | ◐ | ○ | ○ | **●** | ● | ○ |
+| Quality > cost, explicit rubric | ○ | ○ | ○ | ○ | ◐ | ● | ◐ | **●** |
+| Auditability of reasoning | ◐ | ● | ● | ◐ | ◐ | ● | **●** | ● |
+| Ease of evaluation | **●** | ● | ● | ◐ | ○ | ◐ | ● | ◐ |
 
-● adapté · ◐ possible · ○ inadapté
+● suited · ◐ possible · ○ unsuited
+
+The matrix says what a pattern **can** do, not what loads: a column without a
+stack card (everything except `single`, `router`, `sequential`) stays refused at
+preflight until its card is written.
 
 ---
 
 ## 3. Composition
 
-Un pattern peut en imbriquer un autre : un nœud d'un `graph` peut être un
-`reflection`, une branche d'un `router` peut être un `sequential`. Le
-**pattern racine** est déclaré dans `STACK.md` ; les imbrications vivent dans
-`topology/{n}-topology.md` et apparaissent dans l'IR.
+A pattern can nest another: a node of a `graph` can be a `reflection`, a branch
+of a `router` can be a `sequential`. The **root pattern** is declared in
+`STACK.md`; nestings live in `pipeline/topology/{n}-topology.md` (§8) and show
+up in the IR (`nestedPattern`).
 
-**Limite dure** : profondeur d'imbrication ≤ 2. Au-delà, plus personne ne peut
-raisonner sur le coût ni sur les trajectoires — et une architecture sur laquelle
-on ne peut pas raisonner ne peut pas être évaluée.
+**Hard limit**: nesting depth ≤ 2. Beyond that, nobody can reason about cost or
+trajectories any more — and an architecture nobody can reason about cannot be
+evaluated. This limit is a design rule: no script measures it on the IR yet, so
+holding it is the topology review's job.
 
 ---
 
-## 4. Anti-patterns refusés par la TOPOLOGY GATE
+## 4. Anti-patterns flagged or refused
 
-| Anti-pattern | Pourquoi il apparaît | Classe |
-|---|---|---|
-| **Un agent par outil** | Confusion entre « séparation des responsabilités » et topologie. Un outil est un outil | `[TOPOLOGY_UNJUSTIFIED]` |
-| **Superviseur à 1 seul spécialiste** | Reste d'une conception abandonnée. Un hop payé pour rien | `[TOPOLOGY_REDUNDANT_HOP]` |
-| **Boucle sans plafond de hops** | « L'agent s'arrêtera quand il aura fini » | `[UNBOUNDED_LOOP]` |
-| **Routeur sans repli** | Le cas « aucune classe ne correspond » n'a pas été pensé | `[ROUTER_NO_FALLBACK]` |
-| **Critique = rédacteur** | Économie apparente. Le modèle valide sa propre sortie | `[REFLECTION_SELF_GRADING]` |
-| **Handoff sans contrat d'état** | On suppose que « le contexte suit » | `[HANDOFF_UNCONTRACTED]` |
-| **Agent sans CAP** | Ajouté « pour la structure » | `[AGENT_SERVES_NO_CAP]` |
-| **Agent avec des outils qu'aucune de ses CAPs n'exige** | Copie d'une liste d'outils globale | `[TOOL_SCOPE_EXCESS]` |
+Since P7, the TOPOLOGY GATE no longer judges the **size** of a declared
+architecture — that is the architect's decision, and they are entitled to make
+it knowingly. It still refuses whatever makes the architecture **unevaluable**
+or **unbounded**.
+
+| Anti-pattern | Why it appears | Class | Effect |
+|---|---|---|---|
+| **One agent per tool** | Confusing "separation of concerns" with topology. A tool is a tool | `[TOPOLOGY_SIMPLICITY_ADVISORY]` | advisory (`validate-topology`) |
+| **Supervisor with a single specialist** | Leftover of an abandoned design. A hop paid for nothing | `[TOPOLOGY_REDUNDANT_HOP]` | advisory, **measured** on trajectories (`trajectory-report`) |
+| **Loop without a hop cap** | "The agent will stop when it's done" | `[UNBOUNDED_LOOP]` | blocking at G2 (`validate-topology`, `validate-ir`) |
+| **Router without a fallback** | The "no class matches" case was never thought through | `[ROUTER_NO_FALLBACK]` | blocking at G2 |
+| **Critic = writer** | Apparent saving. The model validates its own output | `[REFLECTION_SELF_GRADING]` | blocking at G2 (`validate-ir`) |
+| **Handoff without a state contract** | Assuming "the context follows" | `[HANDOFF_UNCONTRACTED]` | blocking at G2 (`validate-topology`) |
+| **Agent without a CAP** | Added "for structure" | `[AGENT_SERVES_NO_CAP]` | blocking: `ir-compiler` refuses to compile |
+| **Agent with tools none of its CAPs requires** | Copy of a global tool list | `[TOOL_SCOPE_EXCESS]` | blocking at G2 on the declaration (`validate-ir`), replayed at G7 on the live system (`audit-tool-scope`) |
