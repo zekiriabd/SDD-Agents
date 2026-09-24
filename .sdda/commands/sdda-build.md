@@ -536,6 +536,17 @@ Tant qu'aucun `openapi.json` n'est publié sous `workspace/src/`, la part est
 exige un ADR référencé : une route non soutenue reste une surface d'entrée que
 rien n'a évaluée, que la divergence de schémas soit assumée ou non.
 
+### 5.3 bis — FRAMEWORK (G6, part `framework`) — déterministe, 0 token
+
+```bash
+python .sdda/sdda.py validate-framework --mission {n} --json
+```
+
+Le code de `agents/` et `orchestration/` importe le framework déclaré dans
+`## Active Agent Framework`, là où sa fiche le place, et aucun framework
+concurrent (`[FRAMEWORK_DRIFT]`). Exit ≠ 0 → STOP : l'ORCH GATE mesurerait une
+architecture que la fiche relue en revue ne décrit pas.
+
 ### 5.4 — ORCH GATE (G6)
 
 ```bash

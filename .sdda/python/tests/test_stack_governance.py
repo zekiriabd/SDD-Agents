@@ -518,6 +518,65 @@ def test_a_dedicated_store_needs_a_collection(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# C6 — le code généré utilise le framework déclaré, et lui seul
+# ---------------------------------------------------------------------------
+def with_app(project: Path, files: dict[str, str]) -> Path:
+    app = project / "workspace" / "src" / "SupportAssistant"
+    for rel, body in files.items():
+        target = app / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+    return project
+
+
+def framework_report(project: Path) -> tuple[int, dict]:
+    from conftest import run_main
+    from sdda_scripts import validate_framework
+
+    code, out = run_main(validate_framework.main, ["--root", str(project), "--json", "--mission", "1"])
+    return code, json.loads(out)
+
+
+CONFORMING = {
+    "agents/billing/agent.py": "from langchain_core.messages import AIMessage\n",
+    "orchestration/graph.py": "from langgraph.graph import StateGraph\n",
+}
+
+
+def test_code_that_follows_the_declared_frameworks_is_green(tmp_path: Path) -> None:
+    project = with_app(make_project(tmp_path), CONFORMING)
+    code, payload = framework_report(project)
+    assert code == 0, payload
+    assert (project / "workspace/.sys/.validation/G6-1.framework.json").is_file()
+
+
+def test_a_declared_framework_that_the_code_ignores_is_drift(tmp_path: Path) -> None:
+    """L'orchestration écrite à la main alors que `langgraph.md` est déclaré."""
+    project = with_app(make_project(tmp_path), {**CONFORMING, "orchestration/graph.py": "import anthropic\n"})
+    code, payload = framework_report(project)
+    assert code == 1 and any("orchestration/" in f["message"] for f in payload["errors"])
+
+
+def test_an_undeclared_competitor_is_drift_even_in_tests(tmp_path: Path) -> None:
+    project = with_app(make_project(tmp_path), {**CONFORMING, "agents/billing/tests/test_x.py": "import crewai\n"})
+    code, payload = framework_report(project)
+    assert code == 1 and any("crewai" in f["message"] for f in payload["errors"])
+
+
+def test_create_agent_without_langgraph_declared_is_drift(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), " - .sdda/stacks/framework/langgraph.md\n", "")
+    with_app(project, {"agents/billing/agent.py": "from langchain.agents import create_agent\n"})
+    code, payload = framework_report(project)
+    assert code == 1 and any("langgraph" in f["message"] for f in payload["errors"])
+
+
+def test_the_framework_part_is_a_g6_part_whose_red_blocks() -> None:
+    from sdda_lib.gate_reports import GATE_PARTS_ADVISORY
+
+    assert "framework" in GATE_PARTS_ADVISORY["G6"] and "adr" in GATE_PARTS_ADVISORY["G2"]
+
+
+# ---------------------------------------------------------------------------
 # C9 — ce que le parseur accepte et que rien n'implémente est refusé, pas avalé
 # ---------------------------------------------------------------------------
 def test_long_term_memory_is_refused_for_lack_of_an_implementation(tmp_path: Path) -> None:

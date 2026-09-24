@@ -65,7 +65,10 @@ GATE_PARTS_ADVISORY: dict[str, tuple[str, ...]] = {
     # `batch` ne publie aucun contrat HTTP : l'exiger ferait échouer G6 sur des
     # livrables qui n'ont pas d'API. Son ROUGE, lui, bloque — une API qui a
     # dérivé de l'IR est une promesse rompue à l'appelant.
-    "G6": ("api",),
+    # `framework` (validate_framework) : le code des dev-* importe le framework
+    # déclaré là où sa fiche le place, et aucun autre. Rouge = une architecture
+    # que la fiche relue en revue ne décrit plus.
+    "G6": ("api", "framework"),
     "G7": ("secrets", "pii", "toolscope"),
 }
 
