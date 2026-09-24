@@ -220,6 +220,19 @@ def _retrieval_drift(root: Path, activated: list[tuple[str, str]]) -> str | None
     return None
 
 
+def _config_refusal(root: Path) -> int | None:
+    """Refus sur la première classe bloquante de `validate_config`, les autres nommées."""
+    from sdda_lib.layered_config import validate_config  # noqa: E402
+
+    blocking = [i for i in validate_config(root) if i.blocking]
+    if not blocking:
+        return None
+    first = blocking[0]
+    others = f" · {len(blocking) - 1} autre(s) : " + "; ".join(i.message for i in blocking[1:4]) if len(blocking) > 1 else ""
+    return deny(HOOK, first.cls, f"{first.message} [{first.location}]{others}",
+                f"{first.fix}. `python .sdda/sdda.py smoke-check` liste tous les constats")
+
+
 def check(root: Path, data: dict) -> int:
     try:
         matrix = _matrix()
@@ -279,6 +292,11 @@ def check(root: Path, data: dict) -> int:
             "Aucune fiche RAG/vectorstore n'existe pour csharp (cf. ROADMAP Lot 7). "
             "Projet polyglotte assumé (side-car) : SDDA_ALLOW_LANG_MISMATCH=1 (audit-loggué)",
         )
+
+    # Les VALEURS : un agent lit `OnBoundExceeded: foo` ou `CitationMode:
+    # requried` comme une consigne, et en invente le sens.
+    if (refusal := _config_refusal(root)) is not None:
+        return refusal
 
     if (drift := _retrieval_drift(root, activated)) is not None:
         return deny(
