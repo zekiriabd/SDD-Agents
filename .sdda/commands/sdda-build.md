@@ -67,14 +67,14 @@ FIX: lister les agents avec /sdda-status {n}, ou relancer /sdda-topology {n} si 
    CAUSE: [IR_STALE] compiledFrom.topologyHash ≠ hash courant de workspace/pipeline/topology/{n}-topology.md
    FIX: /sdda-topology {n} --recompile-only (recompile + rejoue G2), puis relancer /sdda-build {n}
    ```
-3. Le `.env` de l'application est à jour (0 token, aucune valeur affichée) :
-   ```bash
-   python .sdda/sdda.py install-env
-   ```
-   Il copie `workspace/assets/.env` (déposé par l'humain) vers
-   `workspace/src/{App}/.env` (lu par l'application). Absent : WARN, le build
-   continue — la clé n'est exigée qu'aux évaluations. Aucun agent ne lit l'un
-   ou l'autre fichier (`[SECRET_READ_FORBIDDEN]`).
+3. Le `.env` n'est **pas** une pré-condition : c'est l'étape qui crée le
+   projet qui l'y pose. `gen-app-skeleton --write` (STEP 3.0, lancé par
+   `dev-backend`) copie `workspace/assets/.env` (déposé par l'humain) vers
+   `workspace/src/{App}/.env` (lu par l'application), 0 token, aucune valeur
+   affichée. Absent : WARN, le build continue — la clé n'est exigée qu'aux
+   évaluations (`install-env --require` dans `/sdda-eval`). Aucun agent ne lit
+   l'un ou l'autre fichier (`[SECRET_READ_FORBIDDEN]`) : l'agent lance le
+   script, le script copie.
 4. Lire `## Project Config` : `MaxParallel`, `BuildLoopMaxCostUsd`,
    `BuildLoopMaxIter`, `MaxCostPerRun`, `EvalRuns`, seuils retrieval.
    Lire `## Active Language`, `## Active Agent Framework`, `## Active Serving
@@ -118,7 +118,7 @@ Prompt d'invocation :
 ```
 Construire la coquille de la MISSION {n}-{MissionName} — phase skeleton.
 Livrable : {DeliverableType} · archi : {archi} · backend : {backend|aucune} · langage : {lang}.
-Générateur d'abord (gen-app-skeleton), puis projet,
+Générateur d'abord (gen-app-skeleton --write : il crée le projet ET y pose le .env de workspace/assets/), puis projet,
 composition contre l'IR, configuration par NOMS de variables, Domaine (BR-x calculables).
 N'écrire ni agent, ni outil, ni orchestration, ni prompt, ni dataset.
 Fin : `python .sdda/sdda.py gen-app-skeleton --check` et `validate-packaging` verts, une ligne de confirmation.

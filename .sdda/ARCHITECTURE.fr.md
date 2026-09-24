@@ -182,13 +182,14 @@ SDD-Agents/
     │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/   ┐ ce qui JUGE :
     │   ├── suites/      les suites d'évaluation                            │ qa-evals et les
     │   ├── baselines/   la référence de non-régression                     │ scripts, JAMAIS
-    │   └── calibration/ κ de chaque juge LLM                               ┘ un `dev-*`
+    │   ├── calibration/ κ de chaque juge LLM                               │ un `dev-*`
+    │   └── fixtures/    tools/ · retrieval figé — les doubles d'isolement L4 ┘
     │
     ├── src/
     │   └── {AppName}/                       # l'application agentic générée — layout PLAT (SDD_Pro) :
     │       │                                #   ce répertoire EST le paquet, un seul niveau
     │       ├── pyproject.toml · README.md   # le projet (dev-backend)
-    │       ├── .env                         # copié depuis assets/.env par `install-env`, sans LLM
+    │       ├── .env                         # copié depuis assets/.env à la création du projet, sans LLM
     │       ├── app/                         # composition, config, Domaine (dev-backend)
     │       ├── shared/                      # types partagés, posés par la pré-passe (dev-orchestration)
     │       ├── agents/{agent}/              # un agent du produit (dev-agent, une instance par agent)
@@ -234,9 +235,11 @@ doit faire, puis le roster qui dit comment), ses données et son `.env` sous
 `assets/`, et sa vérité terrain sous `seed/`. Le `.env` porte la clé des
 *Runtime Models* (§6) : l'application générée le lit, le harnais de
 construction jamais — il paie ses tokens avec son propre compte. Il est déposé
-dans `assets/` et **copié** vers `src/{AppName}/.env` par
-`python .sdda/sdda.py install-env`, sans LLM, parce que c'est de
-`src/{AppName}/` que l'application part en exécutable ou en conteneur. Aucun
+dans `assets/` et **copié** vers `src/{AppName}/.env` par l'étape qui crée le
+projet — `gen-app-skeleton --write`, lancé par `dev-backend` en PHASE 3.0 —
+sans LLM, parce que c'est de `src/{AppName}/` que l'application part en
+exécutable ou en conteneur. L'humain n'a aucune commande à lancer ; la
+commande `install-env` reste pour recopier une clé changée après le build. Aucun
 agent ne lit l'un ou l'autre fichier : `preflight_forbidden_reads` et
 `preflight_bash_ownership` refusent `[SECRET_READ_FORBIDDEN]`, y compris à
 `architect-data` qui parcourt `assets/` pour inférer les schémas — quelle que
@@ -253,7 +256,7 @@ réécrit les références qui le citaient.
 **La seule frontière qui ne souffre aucune exception est celle du jugement.**
 L'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni à la
 référence contre laquelle sa régression est mesurée : `pipeline/datasets/`,
-`suites/`, `baselines/` et `calibration/` sont interdits en écriture à tout
+`suites/`, `baselines/`, `calibration/` et `fixtures/` sont interdits en écriture à tout
 `dev-*`. La fusion de l'ancien `feats/` et de l'ancien `proof/` sous `pipeline/`
 ne la desserre pas : elle tient aux zones de la matrice d'ownership, pas au nom
 du répertoire parent. Ranger ces jeux sous `src/`, en revanche, les ferait

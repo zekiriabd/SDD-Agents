@@ -52,6 +52,27 @@ def test_check_before_generation_reports_the_whole_skeleton(project: Path) -> No
     assert report.data["missing"], "aucun fichier manquant signalé sur un projet vierge"
 
 
+def test_write_puts_the_human_env_into_the_project_it_creates(project: Path) -> None:
+    """L'humain dépose `assets/.env` ; le script qui crée le projet l'y pose — aucune commande à part."""
+    secret = "sk-test-NEVER-PRINTED"
+    source = project / "workspace/assets/.env"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(f"LLM_API_KEY={secret}\n", encoding="utf-8")
+    report = gas.run(project, mode="write")
+    assert report.ok, report.render_text()
+    target = project / SRC / ".env"
+    assert target.read_bytes() == source.read_bytes()
+    assert report.data["env"]["copied"] is True
+    assert secret not in json.dumps(report.data) and secret not in report.render_text()
+
+
+def test_write_without_assets_env_warns_and_still_builds(project: Path) -> None:
+    report = gas.run(project, mode="write")
+    assert report.ok, report.render_text()
+    assert "SECRET_FILE_MISSING" in {f.cls for f in report.warnings}
+    assert not (project / SRC / ".env").exists()
+
+
 def test_write_then_check_is_green(written: Path) -> None:
     again = gas.run(written, mode="check")
     assert again.ok, again.render_text()

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Copie `workspace/assets/.env` vers `workspace/src/{App}/.env` — 0 token, aucune valeur affichée.
 
+C'est l'étape qui CRÉE le projet qui l'appelle : `gen-app-skeleton --write`,
+lancé par `dev-backend` en phase 3.0, pose le `.env` dans le répertoire qu'il
+vient d'écrire. La commande reste pour la reprise à la main (clé changée après
+le build) et pour `/sdda-eval`, qui l'exige avec `--require`.
+
 L'humain dépose ses entrées là où il dépose le reste : `stack/`, `feats/`,
 `assets/`, `seed/`. Le runtime, lui, lit `src/{App}/.env` : c'est de là que
 l'application part en exécutable ou en conteneur, avec le fichier qui porte les
@@ -52,22 +57,32 @@ def env_names(path: Path) -> set[str]:
     return set(_NAME_RE.findall(path.read_text(encoding="utf-8", errors="replace")))
 
 
+def _uncommented(text: str) -> str:
+    """Le texte sans ses lignes `# …` : les exemples du gabarit ne déclarent rien.
+
+    `## Active Data Sources` porte en commentaire des stores d'exemple
+    (`key_env: CRM_API_KEY`, `access_key_env: S3_ACCESS_KEY`) : les lire
+    réclamait au `.env` de chaque projet des clés qu'aucune source active ne cite.
+    """
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
 def declared_names(root: Path) -> set[str]:
     """Les variables que STACK.md déclare : `## Active Secrets` et les `*_env` des stores."""
     stack = paths.stack_md_path(root)
     if not stack.is_file():
         return set()
     text = markdown_io.read_text(stack)
-    names = set(_DECLARED_RE.findall(markdown_io.section_body(text, "Active Secrets") or ""))
-    names |= set(_STORE_ENV_RE.findall(markdown_io.section_body(text, "Active Data Sources") or ""))
+    names = set(_DECLARED_RE.findall(_uncommented(markdown_io.section_body(text, "Active Secrets") or "")))
+    names |= set(_STORE_ENV_RE.findall(_uncommented(markdown_io.section_body(text, "Active Data Sources") or "")))
     return names
 
 
-def run(root: Path, *, write: bool, require: bool) -> Report:
+def run(root: Path, *, write: bool, require: bool, target: Path | None = None) -> Report:
+    """`target` : le `.env` du projet généré ; défaut `workspace/src/{AppName}/.env`."""
     report = Report(name="INSTALL-ENV", target=str(root))
     source = paths.env_source_path(root)
-    app = app_name(root)
-    target = paths.env_path(root, app)
+    target = target or paths.env_path(root, app_name(root))
     report.data.update({"source": paths.rel(root, source), "target": paths.rel(root, target)})
 
     if not source.is_file():

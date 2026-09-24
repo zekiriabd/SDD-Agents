@@ -175,6 +175,13 @@ sans agent), L5 trajectoire (hops, ordre d'outils, bornes), L7 mission
 (qualité + coût + latence conjointement — dépasser `CostPerRunHardCapUsd` est
 rouge, pas jaune), L8 adversarial, L9 régression.
 
+**Les doubles d'isolement L4** sont à toi aussi, sous `workspace/pipeline/fixtures/` :
+`tools/{tool}.jsonl` (une ligne `{"tool": "…", "result": …}` par réponse mockée)
+et `{index}-v{k}.json` (retrieval figé), cités par `fixtures:` dans la suite. Tu
+les dérives des **contrats d'outils et de retrieval** — sorties déclarées,
+erreurs déclarées — jamais du code. Un outil appelé sans fixture rend une
+erreur, pas une réponse vide : la suite L4 échoue au lieu de mentir.
+
 Le rapport de chaque suite porte `score_mean`, `score_stddev`, `pass_rate`,
 `min`, `max`, verdict vert/jaune/rouge. Jamais un booléen.
 
@@ -199,6 +206,7 @@ Une baseline se déplace par une action tracée, jamais par écrasement.
 - [ ] Juge ≠ modèle évalué
 - [ ] Jeu adversarial par agent `untrusted`, neuf familles, refusal policy retournée en attaques, attendus vérifiables
 - [ ] Toute suite : dataset + grader + threshold + runs + pins ; rapport avec variance
+- [ ] Toute suite L4 : une fixture sous `pipeline/fixtures/` pour chaque outil et retriever de l'agent, dérivée des contrats
 - [ ] Rien écrit dans `workspace/src/**`, `workspace/src/{App}/prompts/**`, `workspace/pipeline/baselines/**`
 - [ ] Le holdout n'a servi à aucun ajustement
 

@@ -113,8 +113,9 @@ modèles de construction viennent du harnais (`capability-matrix.yml`,
    jamais une valeur de secret. Les valeurs sont validées contre le schéma au
    `smoke-check` et au preflight.
 4. **Secrets** — les valeurs dans `workspace/assets/.env` (`LLM_API_KEY`,
-   `DB_*` si base), puis `python .sdda/sdda.py install-env` les copie dans
-   l'application générée. Aucun agent ne lit l'un ou l'autre fichier.
+   `DB_*` si base). Rien d'autre à lancer : l'étape qui crée l'application
+   (`dev-backend`, PHASE 3.0) y copie le fichier. Aucun agent ne lit l'un ou
+   l'autre fichier.
 5. **Vos entrées** — le brief en `workspace/feats/1-{Name}.md` (Markdown
    seulement), vos données sous `workspace/assets/`, votre vérité terrain
    (scénarios annotés, labels) sous `workspace/seed/`.
@@ -157,7 +158,7 @@ Vous fournissez quatre choses : `stack/STACK.md` (langage, framework, pattern,
 sources de données, URL d'API, serveurs MCP), des fichiers Markdown sous
 `feats/` (ce que le système doit faire, puis le roster qui dit comment), vos
 données et votre `.env` sous `assets/`, et votre vérité terrain sous `seed/`.
-`python .sdda/sdda.py install-env` copie `assets/.env` vers `src/{App}/.env`
+L'étape qui crée l'application copie `assets/.env` vers `src/{App}/.env`
 sans LLM : l'application générée le lit, le harnais de construction jamais, et
 aucun agent ne peut le lire — les hooks de lecture refusent
 `[SECRET_READ_FORBIDDEN]`. **Aucun agent `dev-*` n'écrit jamais sous
@@ -399,7 +400,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 <!--sdda:count classes-->440<!--/sdda:count--> classes d'erreur,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks et
 <!--sdda:count subcommands-->76<!--/sdda:count--> sous-commandes déterministes existent sur
-disque et sont testés (<!--sdda:count tests-->1495<!--/sdda:count--> fonctions de test).
+disque et sont testés (<!--sdda:count tests-->1498<!--/sdda:count--> fonctions de test).
 Aucun script cité par un prompt ne manque
 ([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
 n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en

@@ -75,7 +75,7 @@ WORKSPACE_TREE: tuple[str, ...] = (
     "seed",
     # ── CE QUE LE FRAMEWORK PRODUIT ─────────────────────────────────────────
     # pipeline/ — tout ce que le pipeline génère. Les zones qui JUGENT
-    # (datasets, suites, baselines, calibration) ne sont jamais écrites par un dev-*.
+    # (datasets, suites, baselines, calibration, fixtures) ne sont jamais écrites par un dev-*.
     "pipeline/missions",
     "pipeline/caps",
     "pipeline/topology",
@@ -91,6 +91,9 @@ WORKSPACE_TREE: tuple[str, ...] = (
     "pipeline/suites",
     "pipeline/baselines",
     "pipeline/calibration",
+    # fixtures/ — les doubles d'isolement L4 : réponses d'outils mockées
+    # (`tools/*.jsonl`, que charge `app/evals/executor.py`) et retrieval figé.
+    "pipeline/fixtures/tools",
     # src/ — le CODE GÉNÉRÉ : `src/{App}/` est l'application, layout plat, prompts,
     # skills, rules et schémas figés DEDANS (créés par gen-app-skeleton, pas ici).
     "src",

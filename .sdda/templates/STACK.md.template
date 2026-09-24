@@ -21,13 +21,14 @@
 # Ce fichier ne contient AUCUNE valeur de secret — seulement des NOMS de
 # variables, sous la forme `${LLM_API_KEY}`. Les valeurs vivent dans
 # `workspace/assets/.env`, gitignoré, que l'humain dépose avec ses autres
-# entrées ; `python .sdda/sdda.py install-env` le COPIE, sans LLM, vers
+# entrées ; l'étape qui crée l'application (`gen-app-skeleton --write`, lancé
+# par `dev-backend` en PHASE 3.0) le COPIE, sans LLM, vers
 # `workspace/src/{AppName}/.env` — c'est de là que l'application part en
 # exécutable ou en conteneur. Aucun agent ne lit l'un ou l'autre fichier
 # ([SECRET_READ_FORBIDDEN]). Une valeur en clair ici est refusée au smoke :
 # [STACK_SECRET_IN_CLEAR].
 #   1. Le Tech Lead déclare les noms ici et écrit les valeurs dans
-#      `workspace/assets/.env`, puis lance `install-env`.
+#      `workspace/assets/.env` ; rien d'autre à lancer, le build le copie.
 #   2. `dev-backend` les projette dans la config native de la stack cible
 #      (.env chargé par pydantic-settings, appsettings.json, application.yml) :
 #      c'est lui qui possède la coquille `workspace/src/{AppName}/app/`, donc la
@@ -683,12 +684,12 @@ HumanInTheLoopEnabled: false          # exige le checkpointing : `true` sans
 ## Active Secrets
 # Les NOMS des variables que l'application et les outils attendent. Les VALEURS,
 # l'humain les dépose dans `workspace/assets/.env` (gitignoré) ;
-# `python .sdda/sdda.py install-env` les copie vers `workspace/src/{AppName}/.env`,
-# AVEC l'application : c'est elle qui consomme la clé (Runtime Models), et c'est
+# l'étape qui crée l'application les copie vers `workspace/src/{AppName}/.env`,
+# AVEC elle : c'est elle qui consomme la clé (Runtime Models), et c'est
 # de là qu'elle part en exécutable ou en conteneur. Le harnais de construction ne
 # lit jamais ni l'un ni l'autre — il paie ses tokens avec son propre compte.
-# Jamais ici : STACK.md est versionné. `bootstrap.py` écrit `assets/.env` et fait
-# la première copie ; `smoke-check` refuse une valeur en clair
+# Jamais ici : STACK.md est versionné. `bootstrap.py` écrit `assets/.env`, sans
+# le copier ; `smoke-check` refuse une valeur en clair
 # ([STACK_SECRET_IN_CLEAR]). Aucune valeur ne DOIT apparaître dans un prompt, un
 # trace span ni un dataset (scan-secrets, G7). L'emplacement n'est pas une clé :
 # `SecretsFile` n'était lu par personne, le chemin est fixé par

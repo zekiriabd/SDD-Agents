@@ -182,13 +182,14 @@ SDD-Agents/
     │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/   ┐ what JUDGES:
     │   ├── suites/      the evaluation suites                              │ qa-evals and the
     │   ├── baselines/   the non-regression reference                       │ scripts, NEVER
-    │   └── calibration/ κ of every LLM judge                               ┘ a `dev-*`
+    │   ├── calibration/ κ of every LLM judge                               │ a `dev-*`
+    │   └── fixtures/    tools/ · frozen retrieval — the L4 isolation doubles ┘
     │
     ├── src/
     │   └── {AppName}/                       # the generated agentic application — FLAT layout (SDD_Pro):
     │       │                                #   this directory IS the package, one level
     │       ├── pyproject.toml · README.md   # the project (dev-backend)
-    │       ├── .env                         # copied from assets/.env by `install-env`, no LLM
+    │       ├── .env                         # copied from assets/.env when the project is created, no LLM
     │       ├── app/                         # composition, config, Domain (dev-backend)
     │       ├── shared/                      # shared types, laid down by the prepass (dev-orchestration)
     │       ├── agents/{agent}/              # one product agent (dev-agent, one instance per agent)
@@ -234,9 +235,11 @@ the roster that says how), their data and `.env` under `assets/`, and their
 ground truth under `seed/`. The `.env` carries the key of the *Runtime Models*
 (§6): the generated application reads it, the build harness never does — it
 pays for its tokens with its own account. It is dropped in `assets/` and
-**copied** to `src/{AppName}/.env` by `python .sdda/sdda.py install-env`,
-without an LLM, because `src/{AppName}/` is where the application leaves from as
-an executable or a container. No agent reads either file:
+**copied** to `src/{AppName}/.env` by the step that creates the project —
+`gen-app-skeleton --write`, run by `dev-backend` in PHASE 3.0 — without an LLM,
+because `src/{AppName}/` is where the application leaves from as an executable
+or a container. The human has no command to run; the `install-env` command
+remains to re-copy a key changed after the build. No agent reads either file:
 `preflight_forbidden_reads` and `preflight_bash_ownership` refuse
 `[SECRET_READ_FORBIDDEN]`, `architect-data` included, although it walks
 `assets/` to infer schemas — whatever spelling opens the file (`.ENV`, `.env.`,
@@ -252,7 +255,7 @@ its place and rewrites the references that cited it.
 **The only boundary with no exception is the judgement boundary.** The agent
 that writes the code can touch neither the set that grades it nor the
 reference its regression is measured against: `pipeline/datasets/`, `suites/`,
-`baselines/` and `calibration/` are write-forbidden to every `dev-*`. Merging
+`baselines/`, `calibration/` and `fixtures/` are write-forbidden to every `dev-*`. Merging
 the old `feats/` and the old `proof/` under `pipeline/` does not loosen it: it
 holds by the zones of the ownership matrix, not by the name of the parent
 directory. Putting these sets under `src/`, on the other hand, would drop them

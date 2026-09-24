@@ -33,7 +33,7 @@ ne peut plus rien conclure.
 |---|---|---|---|
 | `workspace/stack/STACK.md` | **humain (Tech Lead)** | édition manuelle — aucun agent n'écrit ; versionné, noms de variables seulement | — |
 | `workspace/assets/.env` | **humain** | les VALEURS des secrets du RUNTIME — gitignoré ; lu par aucun agent, le harnais de construction compris (`[SECRET_READ_FORBIDDEN]`) | — |
-| `workspace/src/{App}/.env` | script `install-env` | copie de `assets/.env`, avec l'application qui la consomme ; lue par aucun agent | 3, 6 |
+| `workspace/src/{App}/.env` | script (`gen-app-skeleton --write` à la création du projet, `install-env` en reprise) | copie de `assets/.env`, avec l'application qui la consomme ; lue par aucun agent | 3, 6 |
 | `workspace/assets/**` | **humain** | les données déposées — racine des stores `kind: local` ; lues par `architect-data` et les générateurs, écrites par aucun agent | — |
 | `workspace/feats/{n}-{Name}.md` | **humain** | le brief : ce qu'il dépose, matière d'une MISSION | — |
 | `workspace/feats/{n}-roster.md` | **humain (architecte)** | la décision d'architecture (P7) — `architect-topology` la lit, ne l'écrit jamais | — |

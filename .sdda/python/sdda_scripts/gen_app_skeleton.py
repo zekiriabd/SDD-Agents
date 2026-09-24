@@ -654,8 +654,26 @@ def run(root: Path, *, mode: str = "check", src_root: Path | None = None) -> Rep
         return report
 
     report.data.update(generate(ctx, report, write=(mode == "write")))
+    report.data["env"] = install_app_env(ctx, report, write=(mode == "write"))
     report.data["packaging"] = packaging.data
     return report
+
+
+def install_app_env(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
+    """Pose `assets/.env` dans le projet que ce script vient de créer.
+
+    Le projet naît ici : c'est donc ici qu'il reçoit ses clés, et non par une
+    commande à part lancée avant que son répertoire existe. Aucun agent ne lit
+    le fichier (`[SECRET_READ_FORBIDDEN]`) : `dev-backend` lance ce script, le
+    script copie. Avertissements seulement — la clé n'est exigée qu'aux
+    évaluations (`install-env --require` dans `/sdda-eval`).
+    """
+    from sdda_scripts import install_env  # même module que la commande `install-env`
+
+    sub = install_env.run(ctx.root, write=write, require=False, target=ctx.src_root / ".env")
+    for finding in sub.findings:
+        report.warn(finding.cls, finding.message, finding.fix, finding.location)
+    return {k: sub.data.get(k) for k in ("source", "target", "copied", "upToDate")}
 
 
 # ---------------------------------------------------------------------------

@@ -108,8 +108,9 @@ what Codex and Gemini CLI actually read. Build models come from the harness
    the MISSION GATE requires them. Names of variables only, never a secret value.
    Values are validated against the schema at `smoke-check` and at preflight.
 4. **Secrets** — put the values in `workspace/assets/.env` (`LLM_API_KEY`,
-   `DB_*` if a database), then `python .sdda/sdda.py install-env` copies them
-   into the generated application. No agent ever reads either file.
+   `DB_*` if a database). Nothing else to run: the step that creates the
+   application (`dev-backend`, PHASE 3.0) copies the file into it. No agent ever
+   reads either file.
 5. **Your inputs** — the brief as `workspace/feats/1-{Name}.md` (Markdown only),
    your data under `workspace/assets/`, your ground truth (annotated scenarios,
    labels) under `workspace/seed/`.
@@ -150,8 +151,8 @@ workspace/
 You provide four things: `stack/STACK.md` (language, framework, pattern, data
 sources, API URLs, MCP servers), Markdown files under `feats/` (what the system
 must do, then the roster that says how), your data and `.env` under `assets/`,
-and your ground truth under `seed/`. `python .sdda/sdda.py install-env` copies
-`assets/.env` into `src/{App}/.env` without an LLM: the generated application
+and your ground truth under `seed/`. The step that creates the application
+copies `assets/.env` into `src/{App}/.env` without an LLM: the generated application
 reads it, the build harness never does, and no agent may read it — the read
 hooks refuse `[SECRET_READ_FORBIDDEN]`. **No `dev-*` agent may ever write under
 `pipeline/datasets`, `suites`, `baselines` or `calibration`**: the agent that
@@ -388,7 +389,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 <!--sdda:count classes-->440<!--/sdda:count--> error classes,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks and
 <!--sdda:count subcommands-->76<!--/sdda:count--> deterministic subcommands exist on disk and
-are tested (<!--sdda:count tests-->1495<!--/sdda:count--> test functions). No script
+are tested (<!--sdda:count tests-->1498<!--/sdda:count--> test functions). No script
 cited by a prompt is missing ([PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md)
 is empty). What does **not** exist yet is the proof: no pipeline has run end to
 end on a real product, so no combination is validated. That is Lot 6 of the

@@ -95,9 +95,18 @@ priment sur les noms ; les principes de `archi/*.md` priment sur tout.
 ### 3.1 Les générateurs d'abord
 
 ```bash
-python .sdda/sdda.py gen-app-skeleton --write        # Python seulement : config, models, bounds, tracing, CLI, exécuteur d'eval
+python .sdda/sdda.py gen-app-skeleton --write        # Python seulement : config, models, bounds, tracing, CLI, exécuteur d'eval, .env
 python .sdda/sdda.py gen-app-skeleton --check        # exit 0 : rien n'a dérivé
 ```
+
+**Le `.env` du projet, c'est ce script qui le pose.** `--write` copie
+`workspace/assets/.env` (déposé par l'humain) vers `workspace/src/{App}/.env`,
+dans le répertoire qu'il vient de créer. Tu ne l'ouvres pas, tu ne le recopies
+pas, tu ne lances pas `install-env` à la main : le lire est refusé
+(`[SECRET_READ_FORBIDDEN]`), le copier n'est pas ton travail. Le rapport ne
+donne que des NOMS de variables ; un `[SECRET_FILE_MISSING]` ou
+`[SECRET_VAR_UNDECLARED]` est un avertissement à rapporter dans ta ligne de
+confirmation, pas un arrêt — la clé n'est exigée qu'aux évaluations.
 
 `gen-source-tools` **n'est pas à toi**. Tu le lançais ici, et il écrivait
 d'un coup les contrats des outils de source — après l'IR et G2, qui ne les

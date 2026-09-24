@@ -619,6 +619,7 @@ qa-evals:
     - workspace/pipeline/datasets/**                          # OWNER EXCLUSIF — dérivés de seed/, jamais l'inverse
     - workspace/pipeline/suites/**
     - workspace/pipeline/calibration/**                 # sauf les labels, qui sont humains
+    - workspace/pipeline/fixtures/**                    # doubles L4, dérivés des CONTRATS, jamais du code
   forbidden_writes:
     - workspace/pipeline/baselines/**   # script déterministe uniquement
     - workspace/src/**

@@ -128,6 +128,19 @@ def test_a_declared_variable_missing_from_assets_env_is_an_error(project: Path) 
     assert SECRET not in out
 
 
+def test_a_commented_example_store_declares_no_variable(project: Path) -> None:
+    """Les stores d'exemple du gabarit (`# auth: {… key_env: CRM_API_KEY }`) ne réclament rien."""
+    stack = paths.stack_md_path(project)
+    text = stack.read_text(encoding="utf-8")
+    example = "#    auth: { mode: api-key, header: X-API-Key, key_env: CRM_API_KEY }\n"
+    if "## Active Data Sources" in text:
+        text = text.replace("## Active Data Sources\n", "## Active Data Sources\n" + example, 1)
+    else:
+        text += "\n## Active Data Sources\n" + example
+    stack.write_text(text, encoding="utf-8")
+    assert "CRM_API_KEY" not in install_env.declared_names(project)
+
+
 def test_no_assets_env_is_a_warning_until_it_is_required(project: Path) -> None:
     assert not paths.env_source_path(project).exists()
     assert run_main(install_env.main, ["--root", str(project)])[0] == 0

@@ -469,8 +469,8 @@ def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: st
     if not existing.strip():
         lines += [
             "# SDD_Agents — VALEURS des secrets et de la configuration sensible. Gitignoré.",
-            "# Déposé ici, dans assets/, avec vos autres entrées ; `python .sdda/sdda.py install-env`",
-            "# le copie vers workspace/src/{App}/.env, d'où l'APPLICATION part (Runtime Models).",
+            "# Déposé ici, dans assets/, avec vos autres entrées ; l'étape qui crée l'application",
+            "# (dev-backend, PHASE 3.0) le copie vers workspace/src/{App}/.env, d'où elle part (Runtime Models).",
             "# Aucun agent ne le lit, le harnais de construction compris.",
             "# workspace/stack/STACK.md (versionné) n'en porte que les noms : `LLM_API_KEY: ${LLM_API_KEY}`.",
             "# Le code généré lit ces variables par leur NOM (config.py) ; aucune valeur ne voyage ailleurs.",
@@ -482,20 +482,19 @@ def build_env(app_name: str, combo: Combo, secrets: dict[str, str], existing: st
 
 
 def write_env(app_name: str, combo: Combo, secrets: dict[str, str]) -> Path:
-    """`workspace/assets/.env` — la source humaine ; `install-env` la copie vers `src/{App}/.env`.
+    """`workspace/assets/.env` — la source humaine, copiée vers `src/{App}/.env` à la création du projet.
 
     L'humain dépose ses entrées à la racine du workspace (`stack/`, `feats/`,
-    `assets/`, `seed/`), jamais dans l'arbre généré. La copie est immédiate,
-    pour qu'un projet amorcé ait tout de suite le `.env` que lit son application.
+    `assets/`, `seed/`), jamais dans l'arbre généré. Le bootstrap ne copie PAS :
+    `src/{App}/` n'existe pas encore, et c'est l'étape qui le crée
+    (`gen-app-skeleton --write`, lancé par `dev-backend`) qui y pose le fichier.
     """
     from sdda_lib import paths  # import tardif : sys.path est complété après les constantes
-    from sdda_scripts import install_env
 
     env_path = paths.env_source_path(ROOT)
     env_path.parent.mkdir(parents=True, exist_ok=True)
     existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
     env_path.write_text(build_env(app_name, combo, secrets, existing), encoding="utf-8")
-    install_env.run(ROOT, write=True, require=False)
     return env_path
 
 
@@ -704,8 +703,8 @@ def main() -> int:
     say()
     say("  Étapes suivantes")
     say()
-    say(f"   1. Compléter workspace/assets/.env (LLM_API_KEY, DB_* si base), puis `python .sdda/sdda.py install-env`,")
-    say("      et workspace/stack/STACK.md,")
+    say("   1. Compléter workspace/assets/.env (LLM_API_KEY, DB_* si base) — copié dans")
+    say("      l'application quand le build la crée, rien à lancer —, et workspace/stack/STACK.md,")
     say("      surtout ## Project Config > budget d'exécution :")
     say("        CostPerRunTargetUsd / LatencyP95TargetMs n'ont pas de défaut,")
     say("        et la MISSION GATE les exigera.")
