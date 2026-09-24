@@ -1,4 +1,4 @@
-<!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/ARCHITECTURE.md.
+<!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/ARCHITECTURE.fr.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
      et le test de parité la signale. Éditer la source. -->
 

@@ -622,6 +622,200 @@ def check_documented_classes() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 4.quater Parité des jumeaux de documentation (`X.md` anglais / `X.fr.md`)
+# ---------------------------------------------------------------------------
+#: Un jumeau manquant est-il un ÉCHEC ou un AVERTISSEMENT ? Avertissement tant
+#: que la traduction est en cours (les jumeaux arrivent par lots) ; à passer à
+#: `True` une fois tous les jumeaux fusionnés, pour qu'une nouvelle page sans
+#: jumeau ne puisse plus entrer. Une paire DIVERGENTE est toujours un échec :
+#: deux pages qui disent deux choses différentes sont pire qu'une page seule.
+MISSING_TWIN_IS_FAILURE = False
+
+#: Où vivent les paires. Hors de ces emplacements, rien n'a de jumeau : les
+#: prompts (`agents/`, `commands/`, `rules/`, `stacks/`, `templates/`,
+#: `digests/`) restent en français seul, par décision.
+TWIN_GLOBS: tuple[str, ...] = ("*.md", ".sdda/*.md", ".sdda/docs/*.md", ".sdda/python/**/README*.md")
+
+#: Pages anglaises qui n'ont pas de jumeau, par nature : journal de versions
+#: anglais, pointeurs racine générés pour Codex et Gemini CLI.
+TWIN_EXEMPT: frozenset[str] = frozenset({"CHANGELOG.md", "AGENTS.md", "GEMINI.md"})
+
+#: Blocs dont les COMMANDES doivent être identiques dans les deux langues : une
+#: commande traduite n'est plus la même commande. Leurs commentaires se
+#: traduisent (cf. `_strip_shell_comments`).
+_VERBATIM_LANGS = frozenset({"bash", "sh", "shell", "console"})
+_FENCE_RE = re.compile(r"^\s*(```|~~~)\s*([\w+-]*)")
+_HEADING_RE = re.compile(r"^(#{1,6})\s+\S")
+_CLASS_RE = re.compile(r"\[([A-Z][A-Z0-9_]{2,})\]")
+_MARKER_RE = re.compile(r"<!--sdda:(count|config) ([A-Za-z0-9_]+)-->")
+_LINK_RE = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)]*)?\)")
+
+
+_SHELL_COMMENT_RE = re.compile(r"\s+#[^'\"]*$")
+
+
+def _strip_shell_comments(lines: list[str]) -> list[str]:
+    """Les commandes d'un bloc shell, sans leurs commentaires.
+
+    Une commande ne se traduit pas ; son commentaire, si : `# taxonomy` et
+    `# taxonomie` décrivent la même ligne. Comparer les commentaires ferait
+    échouer toute traduction honnête, et on finirait par désactiver le contrôle.
+    """
+    out: list[str] = []
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        out.append(_SHELL_COMMENT_RE.sub("", line).rstrip())
+    return out
+
+
+def doc_fingerprint(text: str) -> dict:
+    """Ce qui doit être identique entre une page et son jumeau.
+
+    Classes citées, nombre de titres par niveau (hors blocs de code, où `#` est
+    un commentaire), marqueurs `sdda:count`/`sdda:config` dans l'ordre, langage
+    de chaque bloc de code, et commandes des blocs shell (commentaires exclus).
+    """
+    headings: dict[int, int] = {}
+    fences: list[str] = []
+    verbatim: list[str] = []
+    in_block: str | None = None
+    fence_mark = ""
+    buffer: list[str] = []
+    for line in text.splitlines():
+        m = _FENCE_RE.match(line)
+        if in_block is None:
+            if m:
+                fence_mark, in_block = m.group(1), m.group(2).lower()
+                fences.append(in_block)
+                buffer = []
+                continue
+            h = _HEADING_RE.match(line)
+            if h:
+                headings[len(h.group(1))] = headings.get(len(h.group(1)), 0) + 1
+        else:
+            if m and m.group(1) == fence_mark and not m.group(2):
+                if in_block in _VERBATIM_LANGS:
+                    verbatim.append("\n".join(_strip_shell_comments(buffer)))
+                in_block = None
+                continue
+            buffer.append(line.rstrip())
+    return {
+        "classes": sorted(set(_CLASS_RE.findall(text))),
+        "headings": dict(sorted(headings.items())),
+        "markers": [f"{kind}:{name}" for kind, name in _MARKER_RE.findall(text)],
+        "fences": fences,
+        "verbatim": verbatim,
+    }
+
+
+def parity_diffs(english: str, french: str) -> list[str]:
+    """Les écarts de contenu technique entre une page anglaise et son jumeau."""
+    en, fr = doc_fingerprint(english), doc_fingerprint(french)
+    out: list[str] = []
+    only_en = sorted(set(en["classes"]) - set(fr["classes"]))
+    only_fr = sorted(set(fr["classes"]) - set(en["classes"]))
+    if only_en or only_fr:
+        out.append("classes " + " ".join([f"+en:{c}" for c in only_en] + [f"+fr:{c}" for c in only_fr])[:160])
+    if en["headings"] != fr["headings"]:
+        out.append(f"titres par niveau en {en['headings']} ≠ fr {fr['headings']}")
+    if en["markers"] != fr["markers"]:
+        out.append(f"marqueurs sdda en {len(en['markers'])} ≠ fr {len(fr['markers'])} (ou ordre différent)")
+    if en["fences"] != fr["fences"]:
+        out.append(f"blocs de code en {len(en['fences'])} ≠ fr {len(fr['fences'])} (ou langages différents)")
+    elif en["verbatim"] != fr["verbatim"]:
+        diff = next(i for i, (a, b) in enumerate(zip(en["verbatim"], fr["verbatim"])) if a != b)
+        out.append(f"bloc de commandes n°{diff + 1} différent — une commande ne se traduit pas")
+    return out
+
+
+def twin_candidates(root: Path) -> list[Path]:
+    """Les pages anglaises qui doivent avoir un jumeau `.fr.md`."""
+    found: set[Path] = set()
+    for pattern in TWIN_GLOBS:
+        for path in root.glob(pattern):
+            if path.name.endswith(".fr.md") or path.name in TWIN_EXEMPT:
+                continue
+            if {"__pycache__"} & set(path.parts):
+                continue
+            # Les fixtures de test sont des données, sauf leur README.
+            if "fixtures" in path.relative_to(root).parts and path.name != "README.md":
+                continue
+            found.add(path)
+    return sorted(found)
+
+
+def twin_path(path: Path) -> Path:
+    return path.with_name(path.name[: -len(".md")] + ".fr.md")
+
+
+def hub_listed_docs(hub: Path) -> list[Path]:
+    """Les pages `.md` que le hub de documentation référence (liens relatifs)."""
+    out: list[Path] = []
+    for target in _LINK_RE.findall(read(hub)):
+        if "://" in target or target.endswith(".fr.md"):
+            continue
+        path = (hub.parent / target).resolve()
+        if path.is_file() and path not in out:
+            out.append(path)
+    return out
+
+
+def check_docs_parity(root: Path | None = None, *, missing_is_failure: bool | None = None) -> None:
+    """`docs.parity` : un jumeau dit la même chose que sa page, techniquement.
+
+    La traduction est libre ; le contenu technique ne l'est pas. Une classe
+    citée d'un côté seulement, une section en plus, un marqueur de compteur
+    oublié ou une commande « traduite » font deux références pour une même
+    règle — et c'est celle que personne ne relit qui gouverne.
+    """
+    base = root or ROOT
+    missing_fails = MISSING_TWIN_IS_FAILURE if missing_is_failure is None else missing_is_failure
+    on_missing = fail if missing_fails else warn
+
+    pairs = 0
+    missing: list[str] = []
+    diverged = 0
+    for english in twin_candidates(base):
+        rel = english.relative_to(base).as_posix()
+        french = twin_path(english)
+        if not french.is_file():
+            missing.append(rel)
+            continue
+        pairs += 1
+        for diff in parity_diffs(read(english), read(french)):
+            diverged += 1
+            fail("docs.parity", f"{rel} ↔ {french.name} : {diff}")
+
+    # Orphelins : un `.fr.md` sans page anglaise n'est le jumeau de rien.
+    for pattern in TWIN_GLOBS:
+        for french in base.glob(pattern):
+            if not french.name.endswith(".fr.md"):
+                continue
+            english = french.with_name(french.name[: -len(".fr.md")] + ".md")
+            if not english.is_file():
+                diverged += 1
+                fail("docs.parity", f"{french.relative_to(base).as_posix()} sans page anglaise `{english.name}`")
+
+    hub = base / ".sdda" / "docs" / "README.md"
+    hub_missing: list[str] = []
+    if hub.is_file():
+        for doc in hub_listed_docs(hub):
+            if doc.suffix == ".md" and not twin_path(doc).is_file():
+                try:
+                    hub_missing.append(doc.relative_to(base.resolve()).as_posix())
+                except ValueError:
+                    hub_missing.append(doc.name)
+
+    for rel in sorted(set(missing) | set(hub_missing)):
+        on_missing("docs.twins", f"{rel} sans jumeau `.fr.md`"
+                   + (" (listé par le hub)" if rel in hub_missing else ""))
+    if not diverged:
+        ok("docs.parity", f"{pairs} paire(s) en/fr au même contenu technique"
+           + (f" · {len(set(missing) | set(hub_missing))} jumeau(x) manquant(s)" if missing or hub_missing else ""))
+
+
+# ---------------------------------------------------------------------------
 # 5. Schémas JSON : parsables ?
 # ---------------------------------------------------------------------------
 def check_json() -> None:
@@ -1006,6 +1200,7 @@ def main() -> int:
         check_template_numbering,
         check_section_refs,
         check_documented_classes,
+        check_docs_parity,
         check_json,
         check_honesty,
         check_stack_languages,
