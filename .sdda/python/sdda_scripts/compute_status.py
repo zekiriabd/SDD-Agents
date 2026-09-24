@@ -110,9 +110,16 @@ def current_hash(root: Path, key: str, artifact: str) -> str | None:
     if key == "mission":
         files = sorted(paths.missions_dir(root).glob(f"{n}-*.md"))
         return hashing.sha256_spec_file(files[0]) if files else ""
+    # `cap` (G1 par CAP) et `capspec:` (G1 traçabilité) : la CAP telle que G1 la
+    # juge, sans `## Allocated To` — la PHASE 2 l'écrit, elle ne doit pas
+    # périmer la PHASE 1 (hashing.cap_spec_text). `cap:` (G2, IR) : la CAP
+    # entière, allocation comprise — une réallocation périme bien la topologie.
     if key == "cap":
         p = paths.caps_dir(root) / f"{artifact}.md"
-        return hashing.sha256_spec_file(p) if p.is_file() else ""
+        return hashing.sha256_cap_spec_file(p) if p.is_file() else ""
+    if key.startswith("capspec:"):
+        p = paths.caps_dir(root) / f"{key[8:]}.md"
+        return hashing.sha256_cap_spec_file(p) if p.is_file() else ""
     if key.startswith("cap:"):
         p = paths.caps_dir(root) / f"{key[4:]}.md"
         return hashing.sha256_spec_file(p) if p.is_file() else ""
