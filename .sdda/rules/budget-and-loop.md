@@ -11,7 +11,7 @@
 
 | | Budget de construction | Budget d'exécution |
 |---|---|---|
-| Qui paie | le pipeline SDD_Agents (22 Developer Agents) | l'application générée, à chaque appel utilisateur |
+| Qui paie | le pipeline SDD_Agents (les Developer Agents, `.sdda/agents/`) | l'application générée, à chaque appel utilisateur |
 | Déclaré dans | `## Project Config` → `MaxCostPerRun` | `## Execution Budget` de la MISSION |
 | Modèles | `## Build Models` | `## Runtime Models` |
 | Plafonné par | hook `preflight_cost_cap` | bornes d'agent + `costPerRunHardCapUsd` |
@@ -123,6 +123,29 @@ La boucle de correction (`build_loop`) s'arrête à la **première** des trois
 conditions : succès, itérations épuisées, budget épuisé. Elle ne relance jamais à
 l'identique : sans changement de cause, une nouvelle tentative achète le même
 échec.
+
+Ce que chaque borne mesure, exactement — `sdda_state.py should-retry-item` les
+applique, le prompt de l'agent ne fait que les rappeler :
+
+| Borne | Porte sur | Ne porte pas sur |
+|---|---|---|
+| `MaxCostPerRun` | le cumul du **run** (`costUsd`, hook `preflight_cost_cap`) | les runs précédents d'une lignée : chaque run garde sa facture |
+| `BuildLoopMaxCostUsd` | ce qu'**un item** (une couche du socle, une instance de `dev-agent`) a coûté à force d'être repris — les dépenses que `build-trace agent --phase … --item …` lui rattache, **reprises `--resume` comprises** | le reste du run : dépasser $15 de construction ailleurs ne ferme la boucle d'aucun item |
+| `BuildLoopMaxIter` | les tentatives d'un item **sur les mêmes entrées** (`--inputs-hash`), reprises comprises | les tentatives sur des entrées corrigées : un contrat ou un prompt modifié ouvre une boucle neuve |
+
+`BuildLoopMaxCostUsd` a longtemps été comparé au cumul du run. Deux effets, tous
+deux faux : passé $15 de construction — ce qu'un `/sdda-full` atteint en
+PHASE 4 sans qu'aucune boucle ne s'emballe — plus aucun item ne pouvait être
+retenté, même une première fois ; et une boucle réellement emballée sur un seul
+item restait invisible tant que le run n'avait pas dépensé ailleurs. Une borne
+qui mord au mauvais endroit n'est pas plus prudente qu'une borne absente : elle
+bloque le travail sain et laisse passer la dérive.
+
+**La lignée.** `/sdda-full --resume` ouvre un run lié au précédent
+(`resumedFrom`). Les décisions de reprise — phases à sauter, items `pass`,
+tentatives, coût de boucle — se lisent sur toute la lignée. Sans cela, chaque
+`--resume` remettait `BuildLoopMaxIter` à zéro : une boucle qu'on relance par
+reprise n'était plus bornée du tout.
 
 ---
 

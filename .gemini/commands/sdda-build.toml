@@ -146,7 +146,7 @@ python .sdda/sdda.py state should-skip-item --phase build_socle --item {couche} 
   && echo "⊘ {couche}: skipped (pass sur les mêmes entrées, run $SDDA_RUN_ID)"
 
 # Si la couche PART : la boucle de correction est-elle encore ouverte ?
-python .sdda/sdda.py state should-retry-item --phase build_socle --item {couche}
+python .sdda/sdda.py state should-retry-item --phase build_socle --item {couche} --inputs-hash "$H"
 ```
 
 Exit 0 → la couche ne part pas. Exit 1 → elle part. Le hash porte la tranche
@@ -343,7 +343,7 @@ python .sdda/sdda.py state should-skip-item --phase build_agents --item {agent} 
   && echo "⊘ dev-agent {agent}: skipped (pass sur le même prompt et la même entrée IR)"
 
 # Si l'agent PART : la boucle de correction est-elle encore ouverte ?
-python .sdda/sdda.py state should-retry-item --phase build_agents --item {agent}
+python .sdda/sdda.py state should-retry-item --phase build_agents --item {agent} --inputs-hash "$H_{agent}"
 ```
 
 Le hash porte l'entrée `agents[{agent}]` de l'IR **et** le texte du prompt :

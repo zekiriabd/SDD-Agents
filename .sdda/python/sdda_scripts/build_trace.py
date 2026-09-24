@@ -163,8 +163,11 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 from sdda_scripts import sdda_state  # noqa: E402  (import tardif : coût de démarrage)
 
+                # `phase`/`item` rattachent aussi la dépense à la boucle de
+                # correction de l'item : c'est ce que BuildLoopMaxCostUsd plafonne.
                 run = sdda_state.add_cost(root, run_id, usd=float(args.cost_usd),
-                                          label=f"{args.agent}{f'/{args.item}' if args.item else ''}")
+                                          label=f"{args.agent}{f'/{args.item}' if args.item else ''}",
+                                          phase=args.phase, item=args.item)
                 report.data["cumulativeUsd"] = run.get("costUsd")
             except KeyError:
                 report.warn("STATE_RUN_NOT_FOUND",
