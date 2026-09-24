@@ -259,3 +259,36 @@ def test_reviewers_read_what_is_produced_before_them() -> None:
 def test_producers_inputs_are_opened() -> None:
     assert "workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl" in _reads("qa-evals")
     assert "workspace/pipeline/contracts/tools/{n}-data-*.tool.md" in _reads("dev-data")
+
+
+# ---------------------------------------------------------------------------
+# A12 — la prose nomme les fichiers que les scripts écrivent vraiment
+# ---------------------------------------------------------------------------
+def test_commands_name_gate_reports_the_way_gate_reports_writes_them() -> None:
+    """`{n}-G1-cap.json`, `{n}-G{k}-{gate}.json`, `{n}-review-B-{name}.json` :
+    des noms qu'aucun script n'écrit ni ne relit — un lecteur qui les ouvre ne
+    trouve rien, ou pire, trouve un dump de console pris pour un rapport."""
+    import re
+
+    commands = Path(__file__).resolve().parents[2] / "commands"
+    for name in ("sdda-full.md", "sdda-caps.md", "sdda-eval.md", "sdda-review.md", "sdda-topology.md"):
+        text = (commands / name).read_text(encoding="utf-8")
+        wrong = [w for w in re.findall(r"\.validation/\{n\}-(?:G\d|review-)[^\s`]*", text)
+                 if not w.endswith(".recap.json")]   # récap assumé, cf. sdda-topology STEP 7
+        assert not wrong, f"{name} : {wrong}"
+
+
+def test_review_command_names_reviewers_and_their_reports_like_the_gate() -> None:
+    from sdda_scripts import validate_safety_gate
+
+    text = (Path(__file__).resolve().parents[2] / "commands/sdda-review.md").read_text(encoding="utf-8")
+    for alias in ("`agent-safety` +", "`cost-latency` monte", "`rag-quality` qui"):
+        assert alias not in text
+    for stem in validate_safety_gate.REPORT_STEM.values():
+        assert f"{stem}-{{n}}.md" in text
+
+
+def test_lifecycle_gives_architected_to_g2() -> None:
+    text = (Path(__file__).resolve().parents[2] / "docs/LIFECYCLE.md").read_text(encoding="utf-8")
+    diagram = text.split("```", 2)[1]
+    assert "Specified ──G2──► Architected" in diagram and "──G1──► Architected" not in diagram

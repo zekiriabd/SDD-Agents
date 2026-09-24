@@ -14,7 +14,7 @@ Deux agents en parallèle, puis une exécution déterministe :
 ```
 qa-evals  ∥  qa-tests                 (parallèle, chemins disjoints)
    datasets/**       src/**/tests/**
-   evals/suites/**   (L0→L2, déterministes)
+   suites/**         (L0→L2, déterministes)
    graders, calibration, baselines
         ↓ datasets FIGÉS (hash)
 eval_runner.py  L0 → L7                          (script, k runs, variance)
@@ -105,9 +105,10 @@ MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/pipeline/caps
   les items à faire labelliser, ne jamais les inventer)
 - adversarial/{n}-*.jsonl  (≥ {AdversarialSetMinItems} : injection directe, indirecte via corpus
   empoisonné, via outil, abus d'outil, escalade, exfiltration, tenant, budget, persona)
-- evals/suites/{n}-*.yaml  (grader, seuil, runs, dataset, niveau L3..L7 — depuis les AC)
+- workspace/pipeline/suites/{n}-*.yaml  (grader, seuil, runs, dataset, niveau L3..L7 — depuis les AC)
 Droit de veto : un AC non mesurable → [AC_NOT_EVALUABLE] renvoyé à po-capabilities, STOP.
-Ground truth : ## Ground Truth de la MISSION (Source, Volume). Aucune écriture hors datasets/ et evals/.
+Ground truth : ## Ground Truth de la MISSION (Source, Volume). Aucune écriture hors
+workspace/pipeline/{datasets,suites,calibration}/.
 ```
 
 Prompt `qa-tests` :
@@ -131,9 +132,12 @@ Si `--datasets-only` → STEP 4 puis récap court, STOP.
 ## STEP 4 — Figer les datasets (déterministe)
 
 ```bash
-python .sdda/sdda.py validate-datasets --mission {n} --freeze --json \
-  > workspace/.sys/.validation/{n}-datasets.json
+python .sdda/sdda.py validate-datasets --mission {n} --freeze --json
 ```
+
+Le script écrit lui-même la part `datasets` de G8
+(`workspace/.sys/.validation/G8-{n}-{MissionName}.datasets.json`) ; la sortie
+`--json` ne sert qu'au récap.
 
 | # | Contrôle | Classe si KO |
 |---|---|---|
@@ -219,7 +223,7 @@ sont **marqués périmés** (`[EVAL_STALE]`, WARN) et la ré-exécution est
 obligatoire — c'est précisément ce qui se passe ici. Aucun résultat périmé
 n'est réutilisé.
 
-Les rapports de gate `{n}-G3..G6` sont **réécrits** par cette exécution : ils
+Les rapports de gate `G3-{outil}.suites`, `G5-{cap}`, `G6-{n}-{MissionName}` sont **réécrits** par cette exécution : ils
 sont la source de vérité de `compute_status.py` (R1). Une régression ici fait
 redescendre la MISSION à `Implemented` (R2), silencieusement et sans arbitrage.
 

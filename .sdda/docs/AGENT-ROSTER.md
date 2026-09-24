@@ -63,7 +63,7 @@ MISSION dont elle dérive.
 | **`dev-orchestration`** | 5 | **deep** | `src/orchestration/` | — implémente le graphe/superviseur/routeur |
 | **`dev-api`** | 5 | balanced | `src/serving/` | — implémente la surface d'exposition |
 | **`dev-backend`** | 3, 5 | balanced | `src/{App}/*`, `src/app/` | — la coquille : projet, composition, config, règles calculables, packaging (hérité de SDD_Pro, EN PLUS des six du moteur) |
-| **`qa-evals`** | 6 | **deep** | `datasets/`, `evals/` | Quel jeu, quel grader, quel seuil, calibré comment ? |
+| **`qa-evals`** | 6a, 6 | **deep** | `datasets/`, `suites/`, `calibration/` | Quel jeu, quel grader, quel seuil, calibré comment ? (6a : les jeux, AVANT le code ; 6 : suites complétées) |
 | **`qa-tests`** | 6 | balanced | `src/**/tests/` | — tests déterministes L0→L2 |
 | **`review-spec`** | 7A | balanced | rapports | Chaque AC de CAP a-t-elle une eval qui la couvre vraiment ? |
 | **`review-safety`** | 7B | **deep** | rapports | Où passe le texte hostile, et que peut-il déclencher ? |
