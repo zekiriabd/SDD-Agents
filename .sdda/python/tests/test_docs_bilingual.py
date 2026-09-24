@@ -113,6 +113,14 @@ def test_architecture_twin_is_a_counter_target() -> None:
     assert ".sdda/ARCHITECTURE.fr.md" in sync_counters.target_files()
 
 
+def test_subcommands_counter_is_the_launcher_registry() -> None:
+    # ARCHITECTURE §2.ante annonçait « 60 » sous-commandes quand le disque en
+    # portait davantage : le chiffre est désormais un marqueur régénéré.
+    import sdda_cli
+
+    assert sync_counters.COUNTERS["subcommands"]() == len(sdda_cli.discover())
+
+
 # ---------------------------------------------------------------------------
 # framework_smoke — docs.parity
 # ---------------------------------------------------------------------------
