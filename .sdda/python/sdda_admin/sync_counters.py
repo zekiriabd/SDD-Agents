@@ -30,6 +30,7 @@ Compteurs :
     stacks      fiches `stacks/**/*.md` (README exclus)
     classes     registre canonique (`sync_error_registry.collect()`)
     hooks       modules de `sdda_hooks/` porteurs d'un WIRING
+    subcommands sous-commandes du lanceur (`sdda_cli.discover()`)
     tests       fonctions `def test_` des `tests/test_*.py` (statique — pas de
                 collecte pytest, qui coûterait des secondes à chaque smoke ;
                 la prose dit « fonctions de test »)
@@ -64,6 +65,8 @@ BILAN_RE = re.compile(r"(?P<head># sdda:bilan-begin[^\n]*\n)(?P<body>.*?)(?P<tai
 
 #: Fichiers porteurs de marqueurs. Un fichier hors liste avec un marqueur est
 #: signalé : un marqueur que personne ne régénère est pire qu'un chiffre nu.
+#: Les jumeaux `.fr.md` des cibles `.md` s'y ajoutent d'eux-mêmes
+#: (`target_files`) ; `README.fr.md` reste listé pour être exigé.
 TARGETS: tuple[str, ...] = (
     "README.md",
     "README.fr.md",
@@ -76,6 +79,30 @@ TARGETS: tuple[str, ...] = (
     ".sdda/commands/sdda-help.md",
     ".sdda/commands/sdda-caps.md",
 )
+
+
+def twin_of(rel: str) -> str:
+    """`docs/X.md` -> `docs/X.fr.md` : le jumeau français d'une page anglaise."""
+    return rel[: -len(".md")] + ".fr.md" if rel.endswith(".md") and not rel.endswith(".fr.md") else ""
+
+
+def target_files(root: Path | None = None) -> list[str]:
+    """TARGETS, plus le jumeau `.fr.md` de chaque cible `.md` qui en a un.
+
+    Un jumeau porte les mêmes marqueurs que sa page anglaise (`docs.parity` le
+    vérifie) : les lister à la main ferait oublier chaque nouveau jumeau, et son
+    marqueur deviendrait un chiffre que personne ne régénère. Un jumeau absent
+    n'est pas une dérive de compteur — c'est l'affaire de `docs.parity`.
+    """
+    base = root or ROOT
+    out: list[str] = []
+    for rel in TARGETS:
+        if rel not in out:
+            out.append(rel)
+        twin = twin_of(rel)
+        if twin and twin not in out and (base / twin).is_file():
+            out.append(twin)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +146,13 @@ def count_hooks() -> int:
     return n
 
 
+def count_subcommands() -> int:
+    """Sous-commandes de `python .sdda/sdda.py` — le registre dérivé du disque."""
+    import sdda_cli
+
+    return len(sdda_cli.discover())
+
+
 def count_tests() -> int:
     n = 0
     for path in (SDDA / "python" / "tests").glob("test_*.py"):
@@ -139,6 +173,7 @@ COUNTERS: dict[str, Callable[[], int]] = {
     "stacks": count_stacks,
     "classes": count_classes,
     "hooks": count_hooks,
+    "subcommands": count_subcommands,
     "tests": count_tests,
 }
 
@@ -228,7 +263,7 @@ def render(text: str, facts: dict[str, int], config: dict[str, Any], graders: st
 def stray_markers() -> list[str]:
     """Marqueurs dans des fichiers hors TARGETS — personne ne les régénère."""
     out: list[str] = []
-    targets = {str((ROOT / t).resolve()) for t in TARGETS}
+    targets = {str((ROOT / t).resolve()) for t in target_files()}
     for path in list(SDDA.rglob("*.md")) + list(SDDA.rglob("*.yaml")) + list(ROOT.glob("*.md")):
         if "fixtures" in path.parts or str(path.resolve()) in targets:
             continue
@@ -252,7 +287,7 @@ def main() -> int:
     drifts: list[str] = []
     rewritten: list[str] = []
     markers = 0
-    for rel in TARGETS:
+    for rel in target_files():
         path = ROOT / rel
         if not path.is_file():
             drifts.append(f"{rel} : fichier cible absent")

@@ -1,30 +1,30 @@
-# Scripts planifiés
+# Planned scripts
 
-> **Généré** par `sdda_admin/planned_scripts.py`. Ne pas éditer à la main.
+> **Generated** by `sdda_admin/planned_scripts.py`. Do not edit by hand.
 
-Inventaire des scripts déterministes que les agents, commandes et
-invariants nomment sans qu'ils existent encore. C'est le backlog des
-lots d'implémentation, pas une liste de bugs.
+Inventory of the deterministic scripts that agents, commands and
+invariants name before they exist. It is the backlog of the
+implementation lots, not a list of bugs.
 
-**Lecture** : le nombre d'appelants est un signal. Un script réclamé par
-six endroits est un besoin établi ; un script réclamé une seule fois a pu
-être inventé au fil de la plume et mérite une question avant d'être écrit.
+**Reading**: the number of callers is a signal. A script requested by
+six places is an established need; a script requested once may have
+been invented in passing and deserves a question before it is written.
 
-- **69** écrits · **0** à écrire · **0** cité(s) sans déclaration
+- **71** written · **0** to write · **0** cited without declaration
 
-**Déclaré** : le prompt qui appelle le script dit « Planifié » à la ligne
-suivante, avec la conduite à tenir tant qu'il manque. Un script absent cité
-sans le dire fait croire à l'agent qu'il dispose d'un outil — il en invente
-la sortie. `framework_smoke` échoue sur toute référence muette.
+**Declared**: the prompt that calls the script says « Planifié » on the
+following line, with what to do while it is missing. A missing script
+cited without saying so makes the agent believe it has a tool — and it
+invents the output. `framework_smoke` fails on every silent reference.
 
-## Noms cités sans chemin
+## Names cited without a path
 
-Ces scripts sont nommés quelque part mais aucun endroit ne dit où ils
-vivent. À rattacher à un paquet, ou à fusionner avec un script existant
-qui fait déjà le travail.
+These scripts are named somewhere, but nothing says where they live.
+Attach them to a package, or merge them into an existing script that
+already does the job.
 
-| Nom | Cité par |
+| Name | Cited by |
 |---|---|
-| `bootstrap.py` | `commands\sdda-bootstrap.md` |
-| `framework_smoke.py` | `INVARIANTS.yml`, `rules\error-classification.md` |
+| `bootstrap.py` | `commands/sdda-bootstrap.md` |
+| `framework_smoke.py` | `INVARIANTS.yml`, `rules/error-classification.md` |
 
