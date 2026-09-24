@@ -237,6 +237,21 @@ def _retrieval_drift(root: Path, activated: list[tuple[str, str]]) -> str | None
                     f"`{external[0]}` est un service distinct de la base métier")
         if mode == "dedicated" and not str(connection.get("Endpoint") or "").strip():
             return "VectorStoreConnection.Mode: dedicated sans Endpoint — l'index n'a aucune adresse"
+        if mode == "dedicated" and not str(connection.get("Collection") or "").strip():
+            return ("VectorStoreConnection.Mode: dedicated sans Collection — un store partagé sans "
+                    "collection nommée mélange les index de tous ceux qui l'utilisent")
+
+    # Deux clés retirées du gabarit parce qu'elles REDISAIENT une autre
+    # déclaration sans que personne les lise. Écrites quand même (STACK.md
+    # antérieur), elles doivent dire la même chose — sinon l'humain croit avoir
+    # activé ce que la fiche n'active pas.
+    rag = [name for category, name in activated if category == "rag"]
+    if "HybridEnabled" in values and rag and truthy(values["HybridEnabled"]) != (rag == ["hybrid"]):
+        return (f"HybridEnabled: {values['HybridEnabled']} alors que `## Active RAG Pattern` -> rag/{rag[0]}.md "
+                "— c'est la fiche qui décide ; retirer la clé")
+    if truthy(values.get("ParentChildEnabled")) and str(values.get("ChunkStrategy") or "") != "parent-child":
+        return ("ParentChildEnabled: true avec ChunkStrategy: "
+                f"{values.get('ChunkStrategy') or '<absent>'} — seul `ChunkStrategy: parent-child` le fait ; retirer la clé")
     return None
 
 

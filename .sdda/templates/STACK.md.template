@@ -8,6 +8,13 @@
 # et `seed/` (sa vérité terrain). Tout le reste est produit sous `pipeline/`,
 # `src/` et `.sys/`. Ce `.template` est le squelette de ce fichier.
 #
+# CHAQUE CLÉ A UN LECTEUR, et il est nommé : `x-readBy` dans
+# `.sdda/templates/project-config.schema.json` — un script (qui l'applique),
+# un agent ou une commande (dont la prose la lit : `agent:dev-retrieval`…),
+# ou le squelette généré. Le schéma valide aussi chaque VALEUR (type, domaine,
+# bornes) : `smoke-check` et le preflight refusent [CONFIG_VALUE_INVALID]. Une
+# clé sans lecteur n'a pas sa place ici — tests/test_stack_governance.py l'interdit.
+#
 # ============================================================================
 # CONTRAT DE PROPAGATION DES SECRETS
 # ============================================================================
@@ -43,16 +50,17 @@ Harness: claude-code
 ## Build Models
 # Quels modèles paient les tokens de CONSTRUCTION. Indépendant du Harness
 # ET des Runtime Models. Les agents déclarent un TIER, jamais un modèle ;
-# la résolution tier -> modèle appartient au provider (.sdda/providers/*.yaml).
-Provider: anthropic
-Endpoint: default
-TierMap:
-  deep: anthropic
-  balanced: anthropic
-  fast: anthropic
-# Mode : static (chaque agent prend son tier_default) | dynamic (scorer
-# déterministe par work-item, clampé par tier_floor/tier_ceiling).
-Mode: static
+# la résolution tier -> modèle de construction appartient au HARNAIS :
+# `.sdda/capability-matrix.yml` > `harnesses.{Harness}.tier_models`, que
+# `harness_build` compile dans le `model:` de chaque façade d'agent. Bornes :
+# `.sdda/agent-bounds.yaml` (tier_floor / tier_ceiling, non surchargeables).
+#
+# AUCUNE CLÉ ICI, délibérément. Ce bloc portait `Provider`, `Endpoint`,
+# `TierMap` (qui mappait des tiers vers… des noms de fournisseurs) et `Mode` :
+# aucun script ni aucun agent ne les lisait, et changer `TierMap` ne changeait
+# aucun appel. Une clé qu'on édite sans effet est pire qu'une clé absente —
+# elle fait croire à un réglage. Une valeur écrite ici est signalée
+# [CONFIG_UNKNOWN_KEY].
 
 
 ## Runtime Models
@@ -89,7 +97,6 @@ JudgeModel: claude-opus-5             # grader LLM — DOIT être calibré (inva
 
 ## Project Config
 AppName: {{AppName}}
-SystemName: {{SystemName}}
 
 # --- Budget d'EXECUTION du produit généré (exigence fonctionnelle, cf. P6) ---
 CostPerRunTargetUsd: 0.05           # coût cible d'une exécution bout-en-bout
@@ -322,9 +329,11 @@ VectorStoreConnection:
 ChunkStrategy: recursive-structural   # fixed | recursive-structural | semantic | document-aware | parent-child
 ChunkSize: 800                        # tokens
 ChunkOverlap: 120
-ParentChildEnabled: false             # récupérer le petit chunk, servir le parent
-HybridEnabled: true
-HybridWeights: { vector: 0.6, lexical: 0.4 }
+# `ParentChildEnabled` et `HybridEnabled` ne sont plus des clés : le premier
+# redisait `ChunkStrategy: parent-child`, le second `## Active RAG Pattern =
+# hybrid`, et personne ne les lisait. Écrits quand même, ils doivent s'accorder
+# avec ce qu'ils redisent ([RETRIEVAL_CONFIG_DRIFT]).
+HybridWeights: { vector: 0.6, lexical: 0.4 }   # lu si `## Active RAG Pattern` = hybrid
 RerankEnabled: false                  # DOIT s'accorder avec `## Active Reranker`
                                       # ci-dessous : `true` avec rerank/none.md
                                       # est [RETRIEVAL_CONFIG_DRIFT].
@@ -604,7 +613,11 @@ CostTrackingEnabled: true
 GoldenSetMinItems: 50
 HoldoutSetMinItems: 30
 AdversarialSetMinItems: 25
-BaselineStorage: workspace/pipeline/baselines/
+# Les baselines vivent sous `workspace/pipeline/baselines/`, et nulle part
+# ailleurs : c'est une zone de JUGEMENT, interdite en écriture à tout `dev-*`
+# (ARCHITECTURE §2.ter). La clé `BaselineStorage` qui prétendait la déplacer
+# n'était lue par personne — et la rendre lisible permettrait de ranger la
+# référence de non-régression là où l'agent jugé écrit.
 
 
 ## Active Serving Surface
@@ -677,8 +690,9 @@ HumanInTheLoopEnabled: false          # exige le checkpointing : `true` sans
 # Jamais ici : STACK.md est versionné. `bootstrap.py` écrit `assets/.env` et fait
 # la première copie ; `smoke-check` refuse une valeur en clair
 # ([STACK_SECRET_IN_CLEAR]). Aucune valeur ne DOIT apparaître dans un prompt, un
-# trace span ni un dataset (scan-secrets, G7).
-SecretsFile: .env                     # relatif à workspace/src/{AppName}/ (la copie)
+# trace span ni un dataset (scan-secrets, G7). L'emplacement n'est pas une clé :
+# `SecretsFile` n'était lu par personne, le chemin est fixé par
+# `sdda_lib/paths.py` (env_source_path, env_path).
  - LLM_API_KEY: ${LLM_API_KEY}
 # - EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
 # - LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}

@@ -422,6 +422,102 @@ def test_a_refused_by_default_decision_blocks_builders_until_an_adr_is_accepted(
 
 
 # ---------------------------------------------------------------------------
+# C2 — chaque clé du gabarit a un lecteur déclaré, et ce lecteur la nomme
+# ---------------------------------------------------------------------------
+_TOP_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)\s*:")
+_SUB_KEY_RE = re.compile(r"^  ([A-Z][A-Za-z0-9]*)\s*:")
+
+
+def template_keys() -> list[tuple[str, str]]:
+    """`[(section, clé)]` des clés NON commentées du gabarit ; `Parent.Enfant` pour un mapping."""
+    out, section, parent = [], None, None
+    for line in TEMPLATE.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            section, parent = line[3:].strip(), None
+            continue
+        if section is None:
+            continue
+        if (m := _TOP_KEY_RE.match(line)):
+            parent = m.group(1)
+            out.append((section, parent))
+        elif parent and (m := _SUB_KEY_RE.match(line)):
+            out.append((section, f"{parent}.{m.group(1)}"))
+    return out
+
+
+def schema_entry(schema: dict, section: str, key: str) -> dict | None:
+    props = schema["properties"]
+    head, _, leaf = key.partition(".")
+    if section == "Project Config" or props.get(head, {}).get("x-section") == section:
+        node = props.get(head)
+    else:
+        node = ((schema["x-stackSections"].get(section) or {}).get("properties") or {}).get(head)
+    if node is not None and leaf:
+        node = (node.get("properties") or {}).get(leaf)
+    return node
+
+
+def reader_file(reader: str) -> Path:
+    kind, _, target = reader.partition(":")
+    return {"script": PYTHON_DIR / target, "runtime": SDDA / "templates" / "runtime" / "python" / target,
+            "agent": SDDA / "agents" / f"{target}.md", "command": SDDA / "commands" / f"{target}.md"}[kind]
+
+
+def test_every_template_key_has_a_declared_reader_that_names_it() -> None:
+    """`HybridEnabled`, `TlsVerify`, `BaselineStorage`, `TierMap`… étaient écrits et lus par personne.
+
+    Une clé qu'on édite sans effet fait croire à un réglage. Chaque clé du
+    gabarit doit donc porter `x-readBy` dans le schéma, et chaque lecteur
+    déclaré — script, agent, commande, squelette — doit la NOMMER : un
+    lecteur qui ne cite pas la clé ne la lit pas.
+    """
+    schema = json.loads((SDDA / "templates" / "project-config.schema.json").read_text(encoding="utf-8"))
+    problems = []
+    for section, key in template_keys():
+        entry = schema_entry(schema, section, key)
+        if entry is None:
+            problems.append(f"{section} > {key} : absent du schéma")
+            continue
+        readers = entry.get("x-readBy") or []
+        if not readers:
+            problems.append(f"{section} > {key} : aucun lecteur déclaré (x-readBy)")
+        names = {key.rpartition(".")[2], key.partition(".")[0]}
+        for reader in readers:
+            path = reader_file(reader)
+            if not path.is_file():
+                problems.append(f"{section} > {key} : lecteur `{reader}` introuvable")
+            elif not any(re.search(rf"\b{re.escape(n)}\b", path.read_text(encoding="utf-8")) for n in names):
+                problems.append(f"{section} > {key} : `{reader}` ne nomme pas la clé")
+    assert not problems, "\n".join(problems)
+
+
+def test_retired_keys_are_gone_from_the_template() -> None:
+    keys = {k for _, k in template_keys()}
+    assert not keys & {"HybridEnabled", "ParentChildEnabled", "BaselineStorage", "SecretsFile", "TierMap",
+                       "Provider", "Endpoint", "SystemName"}
+
+
+def test_observability_keys_now_mean_something(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "TraceLevel: full", "TraceLevel: off")
+    assert any("TraceRequiredPerRun" in i.message for i in issues(project) if i.blocking)
+
+
+def test_a_retired_key_that_contradicts_the_fiche_is_drift(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "ChunkStrategy: recursive-structural",
+                          "ChunkStrategy: recursive-structural\nHybridEnabled: false")
+    code, out = run_hook(project)
+    assert code == 2 and "RETRIEVAL_CONFIG_DRIFT" in out and "HybridEnabled" in out, out
+
+
+def test_a_dedicated_store_needs_a_collection(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), " - .sdda/stacks/embedding/voyage.md\n",
+                          " - .sdda/stacks/embedding/voyage.md\nVectorStoreConnection:\n  Mode: dedicated\n"
+                          "  Endpoint: https://idx.internal\n")
+    code, out = run_hook(project)
+    assert code == 2 and "Collection" in out, out
+
+
+# ---------------------------------------------------------------------------
 # C9 — ce que le parseur accepte et que rien n'implémente est refusé, pas avalé
 # ---------------------------------------------------------------------------
 def test_long_term_memory_is_refused_for_lack_of_an_implementation(tmp_path: Path) -> None:
