@@ -20,6 +20,7 @@ FIX: <l'action précise qui débloque>
 - `[RAG_PATTERN_MISMATCH]`
 - `[RAG_PATTERN_UNUSED]`
 - `[RETRIEVAL_CHUNKING_UNMEASURED]`
+- `[RETRIEVAL_CORPUS_MISSING]`
 - `[UNBOUNDED_LOOP]`
 
 ## Classes universelles
