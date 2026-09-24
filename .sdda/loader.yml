@@ -682,6 +682,11 @@ review-cost:
     - workspace/.sys/reports/**                     # le budget mesuré
   writes:
     - workspace/.sys/.validation/reports/cost-latency-{n}.md
+    # Écrit par le script que l'agent LANCE (`cost-report --out …`, fiche
+    # STEP 2), jamais par Write/Edit : un `.json` sous `.validation/` reste
+    # refusé à l'éditeur même déclaré (zone protégée). Déclaré ici pour que la
+    # matrice dise tout ce que la revue produit — y compris par script.
+    - workspace/.sys/.validation/cost-{n}.json
   why_fast: |
     Il lit des mesures produites par des scripts et les compare à des seuils.
     Aucun jugement ouvert — candidat `fast` canonique.
@@ -695,6 +700,9 @@ review-orchestration:
     - workspace/.sys/reports/trajectory-*.json
   writes:
     - workspace/.sys/.validation/reports/orchestration-{n}.md
+    # Écrit par `trajectory-report --out …` que l'agent lance (fiche STEP 2) —
+    # même règle que `cost-{n}.json` de review-cost : script oui, éditeur non.
+    - workspace/.sys/.validation/trajectories-{n}.json
 
 review-rag:
   model_tier: balanced
