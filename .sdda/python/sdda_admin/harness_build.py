@@ -2,8 +2,11 @@
 """
 harness_build — compile `.sdda/` vers les façades des harnais.
 
-C'est **la jonction** : sans elle, les 28 agents et les 10 commandes de
-`.sdda/` ne sont visibles d'aucun harnais et ne s'exécutent jamais.
+C'est **la jonction** : sans elle, les agents et les commandes de `.sdda/`
+ne sont visibles d'aucun harnais et ne s'exécutent jamais. Le fichier mémoire
+(`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) est compilé depuis
+`.sdda/ARCHITECTURE.fr.md` — le jumeau français, parce que les agents lisent
+des prompts français — avec repli sur `ARCHITECTURE.md` (cf. `memory_source`).
 
     .sdda/  (source neutre, la seule chose qu'on écrit)
         │
@@ -149,6 +152,23 @@ def frontmatter_and_body(text: str) -> tuple[dict[str, Any], str]:
 # silencieuse.
 BUILD_NOTES: dict[str, list[str]] = {}
 
+#: Le fichier mémoire des harnais (`.claude/CLAUDE.md`, `.codex/AGENTS.md`,
+#: `.gemini/GEMINI.md`) est compilé depuis le jumeau FRANÇAIS de l'architecture.
+#: La documentation est en anglais par défaut (`ARCHITECTURE.md`), mais le
+#: fichier mémoire est lu par les Developer Agents avec leurs prompts, qui sont
+#: en français : leur servir l'architecture dans une autre langue que leurs
+#: fiches, c'est deux vocabulaires pour une même règle. Si le jumeau manque, on
+#: compile l'anglais plutôt que rien — et le build le dit.
+MEMORY_SOURCE_FR = "ARCHITECTURE.fr.md"
+MEMORY_SOURCE_FALLBACK = "ARCHITECTURE.md"
+
+
+def memory_source(sdda: Path | None = None) -> Path:
+    """La source du fichier mémoire : `ARCHITECTURE.fr.md`, sinon `ARCHITECTURE.md`."""
+    base = sdda or SDDA
+    preferred = base / MEMORY_SOURCE_FR
+    return preferred if preferred.is_file() else base / MEMORY_SOURCE_FALLBACK
+
 
 @dataclass
 class BuildPlan:
@@ -198,7 +218,12 @@ class Adapter:
     def emit_memory_file(self, plan: BuildPlan, out: Path) -> None:
         # Le fichier mémoire de chaque harnais EST l'architecture : une seule
         # source, pas de « corps d'entrée » optionnel qu'aucun dépôt n'a jamais eu.
-        source = SDDA / "ARCHITECTURE.md"
+        source = memory_source()
+        if source.name != MEMORY_SOURCE_FR:
+            BUILD_NOTES.setdefault(self.harness.name, []).append(
+                f".sdda/{MEMORY_SOURCE_FR} absent — fichier mémoire compilé depuis "
+                f".sdda/{source.name} (anglais), alors que les prompts sont en français"
+            )
         text = rewrite_refs(strip_sync_markers(source.read_text(encoding="utf-8")), self.harness)
         plan.add(
             out / self.harness.memory_file,
