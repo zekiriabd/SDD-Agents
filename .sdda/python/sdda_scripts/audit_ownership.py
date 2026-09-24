@@ -834,6 +834,56 @@ def check_write(loader: dict[str, Any], agent: str, path: str, report: Report,
     return False
 
 
+#: Au-delà, un répertoire est jugé sur ce qu'on en a vu : une commande
+#: récursive sur un arbre de cette taille n'est de toute façon pas un geste de
+#: `dev-*`, et le hook doit répondre vite.
+_RECURSIVE_WALK_LIMIT = 20000
+
+
+def check_recursive_write(loader: dict[str, Any], agent: str, path: str, report: Report,
+                          bindings: dict[str, str] | None = None, root: Path | None = None) -> bool:
+    """Une écriture qui porte sur un RÉPERTOIRE et tout ce qu'il contient.
+
+    `rm -rf workspace/src/App/agents` par `dev-backend` : le chemin lui-même
+    matche `workspace/src/*/*`, donc `check_write` l'autorisait — et la
+    commande effaçait le code de `dev-agent`. Un répertoire détruit, déplacé ou
+    réécrit est autorisé seulement s'il est dans la zone de l'agent ET que
+    chaque fichier EXISTANT dessous l'est aussi : c'est ce que la commande
+    touchera, ni plus ni moins.
+    """
+    rel = normalize(path)
+    if rel == ".":
+        report.error("OWNERSHIP_VIOLATION", f"`{agent}` réécrit tout le projet (`{path}`)",
+                     fix="une commande qui porte sur tout l'arbre (`git reset --hard`, `git stash`, "
+                         "`rm -rf .`) touche la zone de chaque agent : la limiter à SA zone",
+                     location=".sdda/loader.yml")
+        return False
+    probe = Report(name="probe", target=".")
+    if not (check_write(loader, agent, rel, probe, bindings)
+            or check_write(loader, agent, rel + "/x", Report(name="probe", target="."), bindings)):
+        return check_write(loader, agent, rel, report, bindings)
+    base = Path(root) / rel if root is not None else None
+    if base is None or not base.is_dir():
+        return True
+    seen = 0
+    for dirpath, _dirs, files in os.walk(base):
+        for name in files:
+            seen += 1
+            if seen > _RECURSIVE_WALK_LIMIT:
+                return True
+            child = (Path(dirpath) / name).relative_to(root).as_posix()  # type: ignore[arg-type]
+            sub = Report(name="probe", target=".")
+            if not check_write(loader, agent, child, sub, bindings):
+                first = sub.errors[0] if sub.errors else None
+                report.error(first.cls if first else "OWNERSHIP_VIOLATION",
+                             f"`{agent}` touche `{rel}` récursivement, et `{child}` dessous n'est pas à lui",
+                             fix=(first.fix if first and first.fix else "")
+                                 or "viser les fichiers de SA zone, pas le répertoire qui contient ceux des autres",
+                             location=".sdda/loader.yml")
+                return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # 3. Une lecture donnée est-elle autorisée ?
 # ---------------------------------------------------------------------------

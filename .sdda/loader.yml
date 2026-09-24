@@ -355,6 +355,9 @@ dev-prompt:
 # Les tests (`tests/`) ne sont pas une couche : zone partagée par couche,
 # déclarée dans `shared_writes:`. Les prompts, skills et rules sont interdits à
 # tout `dev-*` (§2.2 de rules/ownership.md), en une ligne.
+# Conséquence à connaître : une APPLICATION ne porte pas le nom d'une couche
+# (`agents`, `tools`, `app`…) — `src/App/` et `src/app/` sont le même
+# répertoire sous Windows, et `src/**/app/**` couvrirait l'application entière.
 dev-tools:
   model_tier: balanced
   budget_bytes: 360000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
