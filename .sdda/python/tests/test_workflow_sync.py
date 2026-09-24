@@ -205,3 +205,29 @@ def test_every_command_propagates_the_run_id_and_never_sends_a_literal_k() -> No
     for command, line in calls:
         assert "--run-id" in line, f"{command} : {line.strip()}"
         assert "EvalRuns" not in line and "${RUNS" not in line, f"{command} : {line.strip()}"
+
+
+# ---------------------------------------------------------------------------
+# A7 — la passe `--pre` informe ; seule la passe complète rend la part de G2
+# ---------------------------------------------------------------------------
+def test_pre_pass_writes_no_gate_part_and_the_full_pass_does(project: Path) -> None:
+    """`/sdda-topology` ne lançait que `--pre`, et `--pre` écrivait une part
+    `topology` verte : G2 franchissable avec un agent sans contrat."""
+    from sdda_lib import paths
+    from sdda_scripts import validate_topology
+
+    part = paths.validation_dir(project) / "G2-1-SupportAssistant.topology.json"
+    for contract in (project / "workspace/pipeline/contracts/agents").glob("*.agent.md"):
+        contract.unlink()
+    assert run_main(validate_topology.main, ["--root", str(project), "--mission", "1", "--pre"])[0] == 0
+    assert not part.exists()
+    code, out = run_main(validate_topology.main, ["--root", str(project), "--mission", "1"])
+    assert code == 1 and "AGENT_CONTRACT_MISSING" in out
+    assert json.loads(part.read_text(encoding="utf-8"))["ok"] is False
+
+
+def test_the_topology_command_runs_the_full_pass_before_compiling_the_ir() -> None:
+    text = (Path(__file__).resolve().parents[2] / "commands/sdda-topology.md").read_text(encoding="utf-8")
+    step6 = text[text.index("## STEP 6"):text.index("## STEP 7")]
+    full = step6.index("validate-topology --mission {n}\n")
+    assert full < step6.index("ir-compiler --mission {n}")
