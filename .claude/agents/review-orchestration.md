@@ -50,11 +50,15 @@ matrice de confusion du routeur par classe, séquences d'outils par agent,
 cycles observés et leur longueur.
 
 Read **uniquement** :
-- ce rapport et `workspace/.sys/reports/{n}/L5-*.json`, `L7-*.json` ;
+- ce rapport et les rapports d'eval `workspace/.sys/reports/{n}-*.json` (suites `L5` et `L7`) ;
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `agents[].bounds`, `agents[].handoff` ;
 - `workspace/pipeline/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4), les justifications P7, l'alternative écartée, le budget estimé ;
-- `workspace/pipeline/contracts/agents/{n}-*.agent.md §13` — contrats de handoff ;
-- `workspace/.sys/.validation/reports/cost-latency-{n}.md` **si présent** — la queue qu'il t'a signalée.
+- `workspace/pipeline/contracts/agents/{n}-*.agent.md §13` — contrats de handoff.
+
+Tu ne lis **pas** le rapport de `review-cost` : il tourne dans la même vague que
+toi (`/sdda-review` STEP 4), donc sa présence dépendrait de l'ordonnanceur. Une
+entrée qui existe une fois sur deux rend un rapport non reproductible. La queue
+de coût se lit directement dans les rapports d'eval, qui sont des mesures.
 
 Traces insuffisantes → `[MEASUREMENT_MISSING]`, STOP (même règle que `review-cost`).
 

@@ -203,6 +203,56 @@ def test_attack_absent_from_replay_is_reported_not_assumed_held(project_covered:
 
 
 # ---------------------------------------------------------------------------
+# Live — le mode nominal de /sdda-review, qui écrit lui-même son replay
+# ---------------------------------------------------------------------------
+class _HoldingSystem:
+    """Un système qui refuse tout, avec la signature des exécuteurs de l'app."""
+
+    name = "cli"
+
+    def __init__(self, root: Path) -> None:
+        self.expected = {i["id"]: i["adversarial"]["expected_outcome"]
+                         for ref in (BILLING, CLASSIFIER) for i in _read_jsonl(root / ref)}
+
+    def run(self, item, *, suite=None, run_index=0, seed=None, **options):
+        return {"output": "je ne peux pas faire cela", "trace": {"spans": []}, "outcome": self.expected[item["id"]]}
+
+
+def test_live_run_records_the_replay_that_review_used_to_expect_from_nobody(project_covered: Path) -> None:
+    """`/sdda-review` rejouait `reports/runs/{n}-adversarial.jsonl`, que personne
+    n'écrivait : `[EVAL_DATASET_NOT_FOUND]`, part `adversarial` absente, G7 rouge,
+    G8 inatteignable. Le live joue le set versionné ET écrit ce fichier."""
+    root = project_covered
+    report, payload = run_adversarial_suite.run(root, _ir(root), executor=_HoldingSystem(root), runs_override=3, run_id="R2")
+    assert payload["verdict"] == "green", report.render_text()
+    runs_file = run_adversarial_suite.replay_path(root, "1-SupportAssistant")
+    assert payload["written"]["runs"] == "workspace/.sys/reports/runs/1-adversarial.jsonl"
+    rows = _read_jsonl(runs_file)
+    assert len(rows) == 6 * 3 and {"id", "run", "output", "trace", "outcome"} <= set(rows[0])
+    gate = json.loads((paths.validation_dir(root) / "G7-1-SupportAssistant.adversarial.json").read_text(encoding="utf-8"))
+    assert gate["ok"] is True
+
+    # Rejuger ce passage à 0 token : le fichier est exactement ce que --replay relit.
+    code, out = run_main(run_adversarial_suite.main, [
+        "--root", str(root), "--mission", "1", "--replay", paths.rel(root, runs_file), "--json", "--no-report"])
+    assert code == 0 and json.loads(out)["verdict"] == "green"
+
+
+def test_a_replay_is_never_recorded_over_itself(project_covered: Path) -> None:
+    root = project_covered
+    _, payload = run_adversarial_suite.run(root, _ir(root), executor=_replay(root, _all_held(root)), run_id="R3")
+    assert "runs" not in payload["written"]
+    assert not run_adversarial_suite.replay_path(root, "1").exists()
+
+
+def test_missing_replay_points_to_the_live_run_that_writes_it(project_covered: Path) -> None:
+    code, out = run_main(run_adversarial_suite.main, [
+        "--root", str(project_covered), "--mission", "1",
+        "--replay", "workspace/.sys/reports/runs/1-adversarial.jsonl", "--no-report"])
+    assert code == 1 and "EVAL_DATASET_NOT_FOUND" in out and "--executor" in out
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def test_cli_replay_json(project_covered: Path) -> None:
