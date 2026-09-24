@@ -42,10 +42,60 @@ def write(project: Path, rel: str, content: str) -> Path:
 # ---------------------------------------------------------------------------
 # prompts-are-files (P1)
 # ---------------------------------------------------------------------------
+BILLING_PROMPT = "workspace/src/SupportAssistant/prompts/billing-specialist.system.md"
+INTENT_PROMPT = "workspace/src/SupportAssistant/prompts/intent-classifier.system.md"
+
+
 def test_the_reference_project_has_clean_prompts(project: Path) -> None:
+    ir_compiler.compile_to_file(project, 1)
     report = lp.run(project, mission=1)
     assert report.ok, report.render_text()
     assert set(report.data["promptHashes"]) == {"billing-specialist", "intent-classifier"}
+    assert {BILLING_PROMPT, INTENT_PROMPT} == set(report.data["pinnedHashes"])
+
+
+# ---------------------------------------------------------------------------
+# P10 — la part `prompts` de G5 épingle ce qu'elle a vérifié, ou elle est rouge
+# ---------------------------------------------------------------------------
+def test_the_g5_prompts_part_pins_every_prompt_the_ir_expects(project: Path) -> None:
+    """`G5-1.prompts.json` sortait avec `pinnedHashes: {}` : vert, et ne prouvant rien."""
+    ir_compiler.compile_to_file(project, 1)
+    code, out = run_main(lp.main, ["--root", str(project), "--mission", "1"])
+    assert code == 0, out
+    gate = json.loads((paths.validation_dir(project) / "G5-1.prompts.json").read_text(encoding="utf-8"))
+    prompt = project / "workspace/src/SupportAssistant/prompts/billing-specialist.system.md"
+    from sdda_lib import hashing
+    assert gate["pinnedHashes"][BILLING_PROMPT] == hashing.sha256_file(prompt)
+    assert INTENT_PROMPT in gate["pinnedHashes"]
+    # La clé est de celles que compute_status sait recalculer : un prompt
+    # réécrit après le lint PÉRIME la part, au lieu de la laisser verte.
+    from sdda_scripts import compute_status
+    assert compute_status.stale_keys(project, gate) == []
+    prompt.write_text(prompt.read_text(encoding="utf-8") + "\nRègle ajoutée après le lint.\n", encoding="utf-8")
+    assert BILLING_PROMPT in compute_status.stale_keys(project, gate)
+
+
+def test_an_expected_prompt_absent_from_disk_is_an_error_even_with_a_prompt_ref(project: Path) -> None:
+    """L'ancien contrôle se taisait dès que l'agent portait un `promptRef` — toujours, après compilation."""
+    ir_compiler.compile_to_file(project, 1)
+    (project / "workspace/src/SupportAssistant/prompts/intent-classifier.system.md").unlink()
+    report = lp.run(project, mission=1)
+    assert "PROMPT_MISSING" in errors(report)
+    assert INTENT_PROMPT not in report.data["pinnedHashes"]
+
+
+def test_a_prompt_changed_since_ir_compilation_is_not_pinned(project: Path) -> None:
+    ir_compiler.compile_to_file(project, 1)
+    prompt = project / "workspace/src/SupportAssistant/prompts/intent-classifier.system.md"
+    prompt.write_text(prompt.read_text(encoding="utf-8") + "\nNouvelle consigne.\n", encoding="utf-8")
+    report = lp.run(project, mission=1)
+    assert "PROMPT_HASH_MISMATCH" in errors(report)
+    assert INTENT_PROMPT not in report.data["pinnedHashes"]
+
+
+def test_linting_a_mission_without_ir_is_red_not_an_empty_green(project: Path) -> None:
+    report = lp.run(project, mission=1)
+    assert "IR_NOT_FOUND" in errors(report) and report.data["pinnedHashes"] == {}
 
 
 def test_an_inline_system_prompt_in_code_is_caught(project: Path) -> None:

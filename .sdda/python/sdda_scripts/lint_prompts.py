@@ -417,19 +417,22 @@ def run(root: Path, mission: int | str | None = None, require_code: bool = False
     tool_names |= contract_tool_names(root)
     report.data["fragmentsMissing"] = check_fragments(root, files, report)
 
+    pinned: dict[str, str] = {}
+    if mission is not None and not ir_loc:
+        report.error(
+            "IR_NOT_FOUND",
+            f"`--mission {mission}` : IR absent — aucun prompt attendu n'est connu, donc aucun ne peut être épinglé",
+            fix=f"`python .sdda/sdda.py ir-compiler --mission {mission}` avant le lint. Sans IR, la part "
+                "`prompts` de G5 serait verte sur une liste vide : un contrôle P10 qui n'a rien contrôlé",
+            location="workspace/.sys/.ir/")
+    elif mission is not None and not agents:
+        report.error(
+            "PROMPT_NOT_PINNED",
+            f"l'IR `{ir_loc}` ne déclare aucun agent : aucun prompt à épingler",
+            fix="un système sans agent n'a rien à évaluer en G5 — corriger la topologie, puis recompiler l'IR",
+            location=ir_loc)
     if agents:
-        have = {p.name[: -len(".system.md")] for p in files}
-        for agent in agents:
-            slug = str(agent.get("id") or "")
-            ref = str(agent.get("promptRef") or "")
-            if slug and slug not in have and not ref:
-                report.error(
-                    "PROMPT_MISSING",
-                    f"agent `{slug}` de l'IR n'a pas de prompt sur disque",
-                    fix=f"écrire `workspace/src/{App}/prompts/{slug}.system.md` — un agent sans prompt de "
-                        "fichier est un agent dont le comportement n'est ni versionné ni hashé",
-                    location=ir_loc or "workspace/.sys/.ir/",
-                )
+        pinned = pin_expected_prompts(root, agents, ir_loc, report)
     elif not files:
         report.warn("PROMPT_MISSING", "aucun prompt sur disque et aucun agent dans l'IR",
                     fix="rien à vérifier — relancer après `/sdda-topology` puis `/sdda-build`")
@@ -460,8 +463,72 @@ def run(root: Path, mission: int | str | None = None, require_code: bool = False
         # Les hashes sont rendus pour l'épinglage P10 : `agents[].promptHash`
         # se recalcule ici, sans que l'IR ait à faire confiance au générateur.
         "promptHashes": {s["slug"]: s["hash"] for s in summaries if s.get("hash")},
+        # Ce qui entre dans `pinnedHashes` du rapport de gate : un hash par
+        # prompt ATTENDU par l'IR (clé = chemin relatif, que `compute_status`
+        # sait recalculer), plus l'identité de l'IR. Les prompts orphelins
+        # (sans agent) n'y entrent pas : épingler ce que personne n'exécute
+        # ferait périmer la gate pour un fichier sans effet.
+        "pinnedHashes": pinned,
     })
     return report
+
+
+def pin_expected_prompts(root: Path, agents: list[dict[str, Any]], ir_loc: str, report: Report) -> dict[str, str]:
+    """Le hash de chaque `prompts/{agent}.system.md` que l'IR attend — ou une ERREUR.
+
+    P10 : un résultat d'eval ne vaut que pour le tuple qu'il épingle, et le
+    prompt en est la première composante. La part `prompts` de G5 s'écrivait
+    avec `pinnedHashes: {}` : verte, et ne prouvant rien — un prompt réécrit
+    après le lint ne périmait aucune gate. Trois cas, et aucun n'est muet :
+
+      - le fichier attendu est absent : `[PROMPT_MISSING]`. L'ancien contrôle se
+        taisait dès que l'agent portait un `promptRef`, c'est-à-dire toujours
+        après compilation — le cas même où l'on attend le fichier ;
+      - le fichier est là mais son hash diffère du `promptHash` que l'IR a
+        figé : `[PROMPT_HASH_MISMATCH]`. L'IR décrit un autre prompt que celui
+        qui tournera, et les evals épinglées sur l'IR mesurent un fantôme ;
+      - sinon : épinglé, sous son chemin relatif.
+    """
+    pinned: dict[str, str] = {}
+    prompts_root = paths.prompts_dir(root, app_name(root))
+    for agent in agents:
+        agent_id = str(agent.get("id") or "")
+        ref = str(agent.get("promptRef") or "")
+        slug = _prompt_key(agent)
+        if not slug:
+            continue
+        path = paths.resolve_rel(root, ref) if ref else prompts_root / f"{slug}.system.md"
+        loc = paths.rel(root, path)
+        if not path.is_file():
+            report.error(
+                "PROMPT_MISSING",
+                f"agent `{agent_id}` : prompt attendu `{loc}` absent — rien à épingler",
+                fix=f"écrire `{loc}` (dev-prompt) — un agent sans prompt de fichier est un agent dont le "
+                    "comportement n'est ni versionné ni hashé, et G5 ne peut rien épingler pour lui",
+                location=ir_loc or "workspace/.sys/.ir/")
+            continue
+        digest = hashing.sha256_file(path)
+        frozen = str(agent.get("promptHash") or "")
+        if frozen and not hashing.hashes_match(frozen, digest):
+            report.error(
+                "PROMPT_HASH_MISMATCH",
+                f"agent `{agent_id}` : `{loc}` a changé depuis la compilation de l'IR "
+                f"(IR {frozen[:19]}…, disque {digest[:19]}…)",
+                fix="recompiler l'IR (`ir-compiler`) puis relancer les evals : ce qu'elles épinglent "
+                    "doit être le prompt qui tournera",
+                location=loc)
+            continue
+        # Clé = chemin relatif, la forme qu'épingle déjà `eval_runner` pour
+        # G5 et que `compute_status.current_hash` recalcule. (La forme
+        # `prompt:{slug}` y a une branche, mais qui lève `NameError` — jamais
+        # exercée, puisque personne n'épinglait de prompt.)
+        pinned[loc] = digest
+    # Pas de clé `ir` ici : la part est écrite sous l'artefact `{n}` (numéro
+    # seul), et `compute_status` ne retrouve la mission d'une clé `ir` que
+    # depuis un artefact `{n}-{Nom}` — la clé serait donc « périmée » dès
+    # l'écriture. Le `promptHash` figé par l'IR est déjà confronté au disque
+    # ci-dessus, ce qui couvre le seul lien IR <-> prompt que cette part juge.
+    return dict(sorted(pinned.items()))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -480,7 +547,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_report:
         try:
-            write_gate_report(root, "G5", args.mission or "stack", report, pinned={}, part="prompts")
+            write_gate_report(root, "G5", args.mission or "stack", report,
+                              pinned=dict(report.data.get("pinnedHashes") or {}), part="prompts")
         except OSError:
             pass
     return finish(report, args)
