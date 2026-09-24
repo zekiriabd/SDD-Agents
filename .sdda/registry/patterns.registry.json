@@ -558,7 +558,7 @@
       }
     },
     "memory": {
-      "description": "Stratégies de mémoire (STACK.md ## Active Memory Strategy, IR memory). ATTENTION : aucun document de référence dédié (pas de MEMORY-PATTERNS.md) — les entrées ci-dessous se limitent à ce que DOMAIN-MODEL.md (MEMORY SCOPE), le template STACK.md et ir.schema.json déclarent. Elles ne portent ni coût ni mode d'échec caractérisé : c'est un TROU documentaire, signalé, pas comblé par invention.",
+      "description": "Stratégies de mémoire (STACK.md ## Active Memory Strategy, IR memory). Document de référence : .sdda/docs/MEMORY-PATTERNS.md. Seule `buffer` a une fiche (stacks/memory/buffer.md) ; les autres stratégies sont refusées au preflight faute de fiche ([STACK_COMBO_UNLOADABLE]), la mémoire long terme faute d'implémentation ([STACK_VALUE_UNIMPLEMENTED]).",
       "default": "buffer",
       "docRef": null,
       "scopes": [

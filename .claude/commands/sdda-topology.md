@@ -140,9 +140,10 @@ Concevoir la topologie de la MISSION {n}-{MissionName} à partir de ses {C} CAPs
 Roster DÉCLARÉ : {workspace/feats/{n}-roster.md (validé) | aucun roster — repli ## 2. Roster déclaré}.
 Le recopier tel quel ; ne renommer, n'ajouter ni ne retirer aucun agent (P7). Ne PAS écrire dans {n}-roster.md.
 Template : .sdda/templates/topology.template.md. Graphe : bloc ```mermaid de ## 4 (aucun .mmd).
-Procédure imposée (AGENT-ROSTER.md §2) : partir de UN agent + des outils ; pour chaque
-CAP demander « un outil suffit-il ? » ; n'escalader qu'avec une des 5 raisons closes de P7 ;
-remplir « Alternative plus simple considérée » (vide = WARN [TOPOLOGY_SIMPLICITY_ADVISORY] : l'architecture t'appartient, P7).
+Procédure imposée (AGENT-ROSTER.md §2) : le roster est la décision de l'architecte humain ;
+tu vérifies sa complétude pour le pattern actif, alloues chaque CAP à un agent déclaré, bornes et chiffres.
+Si une CAP te semble tenir par un outil seul, dis-le dans « Alternative plus simple considérée »
+(vide = WARN [TOPOLOGY_SIMPLICITY_ADVISORY]) — le constat, jamais une modification du roster.
 Budget déclaré : ${CostPerRunTargetUsd} cible / ${CostPerRunHardCapUsd} cap · p95 {LatencyP95TargetMs} ms.
 Bornes minimales par agent : MaxIterations={…} MaxToolCalls={…} MaxDelegationDepth={…}
 AgentTimeoutSec={…} OnBoundExceeded={…}. Patterns autorisés : {## Active Orchestration}.
