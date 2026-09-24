@@ -47,6 +47,9 @@ mesure au premier run de conformance, jamais par optimisme.**
 
 ## Note de la matrice
 
+EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
+Gemini CLI lit `GEMINI.md` à la racine : harness_build y écrit un
+pointeur vers `.gemini/GEMINI.md`.
 Idem codex pour les hooks. `structured_output: emulated` est le point à
 surveiller : les rapports d'eval et les verdicts de gate sont du JSON, et
 un parsing défensif est un coût réel. À requalifier après mesure — pas

@@ -66,6 +66,21 @@ Lot 7 de la [ROADMAP](.sdda/docs/ROADMAP.md).
 Rien ici n'est *validé* : `frameworkStatus: design-phase`, et tous les
 composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
 
+### Quel harnais exécute la construction
+
+| Harnais | Statut | Gates bloquantes au runtime |
+|---|---|---|
+| **Claude Code** | **supporté** — le harnais de référence | oui — les hooks de `.claude/settings.json` refusent l'appel d'outil |
+| **Codex CLI** | **expérimental** — compilé vers `.codex/`, jamais validé par un run de conformance | **non** — reportées au CI et aux scripts déterministes |
+| **Gemini CLI** | **expérimental** — compilé vers `.gemini/`, même réserve | **non** — idem |
+
+Sous Codex ou Gemini CLI, rien n'empêche au moment de l'action une écriture
+hors ownership ou un agent câblé avant sa TOOL GATE ; le CI la rattrape plus
+tard. Le wrapper de spawn dont ces harnais auraient besoin est planifié, pas
+écrit. Les `AGENTS.md` et `GEMINI.md` de la racine sont des pointeurs générés
+vers les façades — c'est eux que Codex et Gemini CLI lisent vraiment. Détail :
+[MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md).
+
 ---
 
 ## Où vit votre travail — le workspace
@@ -253,7 +268,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1166<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->1170<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification
