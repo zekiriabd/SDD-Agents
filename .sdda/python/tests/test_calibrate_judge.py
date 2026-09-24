@@ -280,7 +280,7 @@ def test_the_gate_report_is_written_as_the_calibration_part_of_g5(compiled: Path
     write_labels(compiled)
     code, _ = run_json(compiled)
     assert code == 0
-    path = report_path(compiled, "G5", "calibration", part="calibration")
+    path = report_path(compiled, "G5", "1", part="calibration")
     assert path.is_file()
     written = json.loads(path.read_text(encoding="utf-8"))
     assert written["gate"] == "G5" and written["part"] == "calibration" and written["ok"] is True
@@ -289,7 +289,7 @@ def test_the_gate_report_is_written_as_the_calibration_part_of_g5(compiled: Path
 def test_a_red_verdict_is_written_red(compiled: Path) -> None:
     write_labels(compiled, source="llm")
     assert run_json(compiled)[0] == 1
-    written = json.loads(report_path(compiled, "G5", "calibration", part="calibration").read_text(encoding="utf-8"))
+    written = json.loads(report_path(compiled, "G5", "1", part="calibration").read_text(encoding="utf-8"))
     assert written["ok"] is False
     assert {e["class"] for e in written["errors"]} == {"JUDGE_CALIBRATION_SYNTHETIC"}
 
@@ -297,7 +297,7 @@ def test_a_red_verdict_is_written_red(compiled: Path) -> None:
 def test_no_report_writes_nothing(compiled: Path) -> None:
     write_labels(compiled)
     run_json(compiled, "--no-report")
-    assert not report_path(compiled, "G5", "calibration", part="calibration").exists()
+    assert not report_path(compiled, "G5", "1", part="calibration").exists()
 
 
 def test_the_python_api_returns_the_report_and_the_outcomes(compiled: Path) -> None:
@@ -305,4 +305,18 @@ def test_the_python_api_returns_the_report_and_the_outcomes(compiled: Path) -> N
     report, outcomes = cj.run(compiled, write=False)
     assert report.ok and report.name == "G5.calibration"
     assert [o["suiteId"] for o in outcomes] == [SUITE]
-    assert not report_path(compiled, "G5", "calibration", part="calibration").exists()
+    assert not report_path(compiled, "G5", "1", part="calibration").exists()
+
+
+def test_a_red_calibration_blocks_g5_for_every_cap_of_the_mission(compiled: Path) -> None:
+    """Le rapport était écrit sous l'artefact `calibration`, que `compute_status`
+    ne rattache à rien : des labels synthétiques ne bloquaient jamais G5."""
+    from sdda_scripts import compute_status
+
+    write_labels(compiled, source="llm")
+    assert run_json(compiled)[0] == 1
+    assert report_path(compiled, "G5", "1", part="calibration").is_file()
+    index = compute_status.GateIndex(compiled)
+    for cap in ("1-1-ClassifyIntent", "1-2-ExplainInvoiceLine"):
+        ev = index.evaluate("G5", cap)
+        assert ev.verdict == "red" and "JUDGE_CALIBRATION_SYNTHETIC" in ev.classes, (cap, ev)

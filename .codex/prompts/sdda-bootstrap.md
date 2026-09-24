@@ -139,7 +139,7 @@ rendu — les confondre rend le budget d'exécution incalculable
 | Bloc | Répond à |
 |---|---|
 | `## Active Harness` | où tourne l'orchestration de construction |
-| `## Build Models` | quels modèles paient les 22 Developer Agents |
+| `## Build Models` | quels modèles paient les Developer Agents (`.sdda/agents/`) |
 | `## Runtime Models` | quels modèles fait tourner l'application générée |
 
 `## Project Config` porte les clés lues par toutes les commandes :

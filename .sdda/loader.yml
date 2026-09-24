@@ -379,6 +379,9 @@ dev-data:
     - workspace/stack/STACK.md                       # semi — Stores/Sources inline (## Active Data Sources)
     - workspace/stack/mcp.json                       # semi — optionnel : config MCP standard importée
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/pipeline/contracts/tools/{n}-data-*.tool.md   # volatile — SES contrats (enveloppe,
+                                                     # stratégie d'accès) : sa fiche les nomme comme
+                                                     # entrée, et `reads:` ne les ouvrait pas
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -535,6 +538,12 @@ qa-evals:
     - workspace/seed/**                        # semi — la ground truth ELLE-MÊME, fournie par l'humain
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — les AC à mesurer
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl   # volatile — si présent : le
+                                                     # brouillon d'architect-rag, que sa fiche lui
+                                                     # demande de promouvoir (jamais de recopier)
+    - workspace/.sys/.validation/adversarial-findings/{n}.jsonl     # volatile — si présent : les
+                                                     # attaques réussies de l'étage C, à promouvoir
+                                                     # au set permanent (qa-evals.md)
   writes:
     - workspace/pipeline/datasets/**                          # OWNER EXCLUSIF — dérivés de seed/, jamais l'inverse
     - workspace/pipeline/suites/**
@@ -589,7 +598,11 @@ review-safety:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — scopes et postures
     - workspace/src/*/prompts/**                           # volatile
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
-    - workspace/.sys/reports/adversarial-*.json     # volatile
+    # Les rapports des scans (`G7-*.secrets|pii|toolscope.json`), joués par
+    # /sdda-review STEP 3.bis AVANT l'étage B. Il lisait `reports/adversarial-*.json`,
+    # que `run-adversarial-suite` écrit au STEP 6 — APRÈS lui : une entrée qui
+    # n'existe jamais au moment où on la lit.
+    - workspace/.sys/.validation/G7-*.json          # volatile
   writes:
     - workspace/.sys/.validation/reports/agent-safety-{n}.md
 
@@ -612,7 +625,11 @@ review-orchestration:
   reads:
     - workspace/.sys/.ir/{n}-system.ir.json
     - workspace/.sys/traces/runs/*.jsonl                  # volatile — les trajectoires réelles
-    - workspace/.sys/reports/trajectory-*.json
+    - workspace/.sys/.validation/trajectories-{n}.json    # le rapport que sa fiche produit (trajectory-report)
+    - workspace/.sys/reports/{n}-*.json                   # les suites L5/L7 d'eval-runner
+    - workspace/pipeline/topology/{n}-topology.md         # le graphe DESSINÉ, confronté au graphe observé
+    # PAS `cost-latency-{n}.md` : review-cost tourne dans la même vague ; sa
+    # présence dépendrait de l'ordonnanceur (review-orchestration.md STEP 2).
   writes:
     - workspace/.sys/.validation/reports/orchestration-{n}.md
 
@@ -621,8 +638,10 @@ review-rag:
   budget_bytes: 140000
   reads:
     - workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md
-    - workspace/.sys/reports/retrieval-*.json
-    - workspace/.sys/reports/groundedness-*.json
+    - workspace/.sys/reports/retrieval-*.json            # L3, écrits par run-retrieval-eval
+    # La groundedness est une suite d'eval-runner, dans le rapport de son run —
+    # il lisait `groundedness-*.json`, que rien n'écrit.
+    - workspace/.sys/reports/{n}-*.json
   writes:
     - workspace/.sys/.validation/reports/rag-quality-{n}.md
 
@@ -633,6 +652,12 @@ review-adversarial:
     - .sdda/rules/agent-safety.md                    # stable
     - workspace/pipeline/missions/{n}-*.md                    # le mandat à faire sortir
     - workspace/pipeline/datasets/adversarial/**              # volatile
+    # Ce que sa description promet de lire, et que `reads:` n'ouvrait pas :
+    # l'IR (postures, outils, arêtes), les prompts (la refusal policy à faire
+    # céder) et les cibles de l'étage B.
+    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/src/*/prompts/*.system.md            # volatile — lecture seule
+    - workspace/.sys/.validation/reports/agent-safety-{n}.md  # « Cibles pour l'étage C »
   writes:
     - workspace/.sys/.validation/reports/adversarial-{n}.md
     - workspace/.sys/.validation/adversarial-findings/{n}.jsonl

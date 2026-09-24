@@ -158,9 +158,14 @@ python .sdda/sdda.py resolve-cap-hash-sentinel --mission {n}
 ## STEP 6 — CAP GATE (G1) — déterministe, 0 token
 
 ```bash
-python .sdda/sdda.py validate-cap --mission {n} --json \
-  > workspace/.sys/.validation/{n}-G1-cap.json
+python .sdda/sdda.py validate-cap --mission {n} --json
 ```
+
+Le script écrit lui-même ses rapports de gate : `G1-{n}-{m}-{Cap}.json` par
+CAP et `G1-{n}-{MissionName}.json` (traçabilité), sous
+`workspace/.sys/.validation/` — les noms que `compute_status` relit. La sortie
+`--json` sert au récap ; redirigée vers `{n}-G1-cap.json`, elle produisait un
+fichier que personne ne relit, sous un nom qui faisait croire à un rapport.
 
 Contrôles (INVARIANTS `cap-ac-must-be-evaluable`, G1) :
 
@@ -175,7 +180,7 @@ Contrôles (INVARIANTS `cap-ac-must-be-evaluable`, G1) :
 | 7 | Chaque `Covers` référence un identifiant existant dans la MISSION | `[TRACEABILITY_DANGLING]` |
 | 8 | `Parent MISSION hash` == hash courant de la MISSION | `[MISSION_HASH_MISMATCH]` |
 | 9 | `Confidence` CAP ≤ `Confidence` MISSION | `[CONFIDENCE_ESCALATION]` |
-| 10 | `## Allocated To` vide ou `<à déterminer>` (pas de topologie figée en PHASE 1) | `[CAP_PREMATURE_ALLOCATION]` |
+| 10 | `## Allocated To` vide ou `<à déterminer>` à la création (pas de topologie figée en PHASE 1). La section est ensuite remplie par `architect-topology` en PHASE 2 et **exclue du hash que G1 épingle** : la remplir ne périme pas G1 | `[CAP_PREMATURE_ALLOCATION]` |
 | 11 | Nombre de CAPs ≤ `CapGranularityHardCap` sauf bypass | `[CAP_GRANULARITY_EXCEEDED]` |
 | 12 | Aucun identifiant de framework — P11 | `[FRAMEWORK_LEAK_IN_CONTRACT]` |
 
@@ -188,7 +193,7 @@ Contrôles (INVARIANTS `cap-ac-must-be-evaluable`, G1) :
 Format ERROR :
 ```
 ERROR: /sdda-caps {n} — CAP GATE rouge
-CAUSE: [CAP_GATE_FAILED] [AC_NOT_EVALUABLE] ×{a} (CAP {n}-{m} AC-{i}: "…"), [TRACEABILITY_GAP] ×{b} (BR-{j} non couvert) — rapport workspace/.sys/.validation/{n}-G1-cap.json
+CAUSE: [CAP_GATE_FAILED] [AC_NOT_EVALUABLE] ×{a} (CAP {n}-{m} AC-{i}: "…"), [TRACEABILITY_GAP] ×{b} (BR-{j} non couvert) — rapports workspace/.sys/.validation/G1-{n}-*.json
 FIX: relancer /sdda-caps {n} (l'agent lit le rapport et corrige les AC listés) — ou éditer les CAPs à la main
 ```
 

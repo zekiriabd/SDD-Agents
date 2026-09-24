@@ -119,6 +119,16 @@ chaque entrée respecte la séparation qui le rend sûr.
 6. **Un schéma figé par source**, y compris pour un CSV, un XLSX ou une
    réponse d'API — aucun des trois n'a de schéma, et sans épinglage une
    colonne qui change de type change l'agent en silence.
+7. **Les contrats des outils de source ne sont pas les tiens à écrire.**
+   `/sdda-topology` STEP 4.bis les génère **avant toi**, depuis la déclaration
+   et le schéma figé (`gen-source-tools --write --scope contracts` :
+   `workspace/pipeline/contracts/tools/{n}-{source}-{kind}.tool.md`), et avant
+   `ir-compiler` — c'est ce qui permet à l'IR et à G2 de les voir. Tu ne les
+   recopies pas sous `{n}-data-*` : deux contrats pour un même outil feraient
+   deux vérités sur sa description. Ton `{n}-data-*` porte ce que le générateur
+   ne sait pas décider : l'enveloppe (STEP 4) et la stratégie d'accès. Une
+   source sans schéma figé a déjà arrêté la commande
+   (`[DATA_SOURCE_SCHEMA_MISSING]`, tâche humaine : `--infer` puis relecture).
 
 ```
 ERROR: agent architect-data — secret en clair dans la déclaration

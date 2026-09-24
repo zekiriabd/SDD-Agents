@@ -341,9 +341,12 @@ Déterministe, 0 token — vérifie le **runner**, pas les agents :
 
 ```bash
 cd workspace/src/{AppName}
-uv run pytest ../../evals -q -m "not llm and not network" \
+uv run pytest ../../pipeline -q -m "not llm and not network" \
   --co -p no:randomly                                   # collection : suites valides, marqueurs cohérents, k ≥ 2, disjonction golden/holdout
-uv run pytest ../../evals/test_datasets_disjoint.py ../../evals/test_baselines_fresh.py ../../evals/test_calibration.py -q
+uv run pytest ../../pipeline/test_datasets_disjoint.py ../../pipeline/test_baselines_fresh.py ../../pipeline/test_calibration.py -q
+#   workspace/pipeline/ (§4) depuis workspace/src/{AppName}/ — l'ancien `../../evals`
+#   visait l'arbre v5, que `migrate-workspace` a rangé sous pipeline/ : le smoke
+#   échouait sur un répertoire absent, pour une raison étrangère au runner.
 uv run python -m sdda_eval.selftest
 #   → graders déterministes sur cas connus (recall@k, nDCG, kappa, exact, regex, schema, trajectory sur une trace JSONL fixture)
 #   → verdict.compute sur la table §3.4 (9 cas)

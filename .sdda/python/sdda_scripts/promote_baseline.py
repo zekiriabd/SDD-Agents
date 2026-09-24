@@ -44,6 +44,7 @@ from sdda_lib.eval_reports import (  # noqa: E402
     find_ir_file,
     latest_report,
     load_json,
+    merged_run_report,
     mission_number,
     report_by_run_id,
     report_suites,
@@ -76,8 +77,12 @@ def promote(
     operator: str | None = None,
     baseline_file: Path | None = None,
     write: bool = True,
+    data: dict[str, Any] | None = None,
 ) -> Report:
-    """Promeut les suites d'un rapport. Rend le Report ; `data['promoted']` liste ce qui a bougé."""
+    """Promeut les suites d'un rapport. Rend le Report ; `data['promoted']` liste ce qui a bougé.
+
+    `data` : un rapport déjà chargé — la vue réunie d'un run (`merged_run_report`).
+    """
     mid = str(ir.get("missionId", ""))
     number = mission_number(ir)
     report = Report(name="EVAL.promote", target=mid)
@@ -87,7 +92,8 @@ def promote(
         report.error("EVAL_PROMOTION_LABEL_MISSING", "promotion sans raison", "--label « pourquoi cette baseline remplace la précédente » (ex. « après correction du chunking »)", rloc)
         return report
 
-    data = load_json(report_path)
+    if data is None:
+        data = load_json(report_path)
     if data is None:
         report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` illisible ou absent", "eval_runner.py produit workspace/.sys/reports/{n}-{RUN_ID}.json", rloc)
         return report
@@ -222,7 +228,11 @@ def main(argv: list[str] | None = None) -> int:
         return finish(report, args)
     only = {t.strip() for chunk in (args.suite or []) for t in chunk.split(",") if t.strip()} or None
     bfile = args.baseline if args.baseline is None or args.baseline.is_absolute() else root / args.baseline
-    sub = promote(root, ir, rpath, label=args.label or "", force=args.force, only=only, operator=args.operator, baseline_file=bfile, write=not args.no_report)
+    # `--run` : toutes les mesures du run, chaque suite à sa dernière — un
+    # RUN_ID propagé porte plusieurs rapports (`{n}-{RUN_ID}-2.json`…).
+    run_data = merged_run_report(root, number, args.run) if args.run and args.report is None else None
+    sub = promote(root, ir, rpath, label=args.label or "", force=args.force, only=only, operator=args.operator,
+                  baseline_file=bfile, write=not args.no_report, data=run_data)
     report.extend(sub)
     report.data.update(sub.data)
     report.data["promotionPolicy"] = str(config.get("BaselinePromotionPolicy", "explicit"))

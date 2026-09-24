@@ -15,7 +15,7 @@ Deux agents en parallèle, puis une exécution déterministe :
 ```
 qa-evals  ∥  qa-tests                 (parallèle, chemins disjoints)
    datasets/**       src/**/tests/**
-   evals/suites/**   (L0→L2, déterministes)
+   suites/**         (L0→L2, déterministes)
    graders, calibration, baselines
         ↓ datasets FIGÉS (hash)
 eval_runner.py  L0 → L7                          (script, k runs, variance)
@@ -106,9 +106,10 @@ MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/pipeline/caps
   les items à faire labelliser, ne jamais les inventer)
 - adversarial/{n}-*.jsonl  (≥ {AdversarialSetMinItems} : injection directe, indirecte via corpus
   empoisonné, via outil, abus d'outil, escalade, exfiltration, tenant, budget, persona)
-- evals/suites/{n}-*.yaml  (grader, seuil, runs, dataset, niveau L3..L7 — depuis les AC)
+- workspace/pipeline/suites/{n}-*.yaml  (grader, seuil, runs, dataset, niveau L3..L7 — depuis les AC)
 Droit de veto : un AC non mesurable → [AC_NOT_EVALUABLE] renvoyé à po-capabilities, STOP.
-Ground truth : ## Ground Truth de la MISSION (Source, Volume). Aucune écriture hors datasets/ et evals/.
+Ground truth : ## Ground Truth de la MISSION (Source, Volume). Aucune écriture hors
+workspace/pipeline/{datasets,suites,calibration}/.
 ```
 
 Prompt `qa-tests` :
@@ -132,9 +133,12 @@ Si `--datasets-only` → STEP 4 puis récap court, STOP.
 ## STEP 4 — Figer les datasets (déterministe)
 
 ```bash
-python .sdda/sdda.py validate-datasets --mission {n} --freeze --json \
-  > workspace/.sys/.validation/{n}-datasets.json
+python .sdda/sdda.py validate-datasets --mission {n} --freeze --json
 ```
+
+Le script écrit lui-même la part `datasets` de G8
+(`workspace/.sys/.validation/G8-{n}-{MissionName}.datasets.json`) ; la sortie
+`--json` ne sert qu'au récap.
 
 | # | Contrôle | Classe si KO |
 |---|---|---|
@@ -153,9 +157,16 @@ ultérieure change le hash et périme les résultats (R2).
 Pour chaque grader `llm-judge` des suites :
 
 ```bash
-python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json \
-  > workspace/pipeline/calibration/{g}.json
+python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json
 ```
+
+Le script écrit lui-même la part `calibration` de G5
+(`workspace/.sys/.validation/G5-{n}.calibration.json`, rattachée à chaque CAP de
+la MISSION) : rouge, elle bloque G5. La sortie `--json` n'est **jamais**
+redirigée vers `workspace/pipeline/calibration/{g}.json` — ce fichier est
+l'ENTRÉE du script (le `judgeCalibrationRef` de la suite, qui pointe les labels
+humains) ; l'écraser par le rapport effaçait la référence aux labels à la
+première exécution.
 
 | Résultat | Effet |
 |---|---|
@@ -172,15 +183,25 @@ mesure la complaisance d'un modèle envers un autre.
 ```bash
 # L2 (G3 part suites) : les tests de contrat pytest de qa-tests, pas des items notés
 python .sdda/sdda.py run-tool-suites --mission {n} --json
-python .sdda/sdda.py eval-runner --mission {n} \
-  --levels ${LEVELS:-L0,L1,L3,L4,L5,L6,L7} --runs ${RUNS:-EvalRuns} \
-  --executor {module}:{Executor} --json \
-  > workspace/.sys/.validation/{n}-eval.json
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" \
+  --levels ${LEVELS:-L0,L1,L3,L4,L5,L6,L7} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
+  --executor {module}:{Executor} --json
 ```
 
+`--run-id "$RUN_ID"` est obligatoire : sans lui le rapport est nommé par
+horodatage, et `check-regression --run` / `promote-baseline --run` ne le
+retrouvent pas. `--runs` n'est envoyé que sur surcharge explicite (`/sdda-eval
+{n} --runs 5` → `RUNS=5`) : sans lui, `eval-runner` résout k **par suite** —
+`runs` de l'AC, sinon `EvalRuns`, ou `EvalRunsCritical` pour une CAP
+`critical` et toute suite L8. L'ancien `--runs ${RUNS:-EvalRuns}` envoyait le
+texte `EvalRuns` à argparse (refus immédiat), et une valeur unique aurait
+écrasé `EvalRunsCritical` sur les CAPs critiques.
+
 Le rapport complet est écrit par le script lui-même, en JSON, sous
-`workspace/.sys/reports/{n}-{RUN_ID}.json` — c'est ce fichier que lisent les
-reviewers de l'étage B. La redirection ci-dessus ne sert qu'au récap.
+`workspace/.sys/reports/{n}-{RUN_ID}.json` (`-2`, `-3`… pour les appels suivants
+du même run) — c'est ce que lisent les reviewers de l'étage B. La sortie
+`--json` ne sert qu'au récap ; elle n'est jamais redirigée sous `.validation/`,
+où seul un rapport de gate a sa place.
 
 | Niveau | Contenu | Coût | Gate rejouée |
 |---|---|---|---|
@@ -203,7 +224,7 @@ sont **marqués périmés** (`[EVAL_STALE]`, WARN) et la ré-exécution est
 obligatoire — c'est précisément ce qui se passe ici. Aucun résultat périmé
 n'est réutilisé.
 
-Les rapports de gate `{n}-G3..G6` sont **réécrits** par cette exécution : ils
+Les rapports de gate `G3-{outil}.suites`, `G5-{cap}`, `G6-{n}-{MissionName}` sont **réécrits** par cette exécution : ils
 sont la source de vérité de `compute_status.py` (R1). Une régression ici fait
 redescendre la MISSION à `Implemented` (R2), silencieusement et sans arbitrage.
 
@@ -263,13 +284,25 @@ franchies (`--require-gate G7`) ; sinon ERROR `[SAFETY_GATE_NOT_PASSED]`.
 
 ```bash
 python .sdda/sdda.py check-baseline-freshness --mission {n} --strict
-python .sdda/sdda.py eval-runner --mission {n} --level L9 --dataset holdout \
-  --executor {module}:{Executor} --runs ${RUNS:-EvalRuns} \
-  --baseline workspace/pipeline/baselines/{n}-system.json --json \
-  > workspace/.sys/.validation/{n}-G8-acceptance.recap.json
-python .sdda/sdda.py check-regression --mission {n} --run {RUN_ID} --json \
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L9 --dataset holdout \
+  --executor {module}:{Executor} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
+  --baseline workspace/pipeline/baselines/{n}-system.json --json
+python .sdda/sdda.py check-regression --mission {n} --run "$RUN_ID" --json \
   > workspace/.sys/.validation/regression-{n}.json
+python .sdda/sdda.py compute-status --mission {n} --require-gate G8
+# exit 0 → G8 franchie ; sinon → fail
+python .sdda/sdda.py state set-phase --phase acceptance --status {pass|fail}
 ```
+
+`check-regression --run "$RUN_ID"` lit **tous** les rapports du run
+(`{n}-{RUN_ID}.json`, `-2`, `-3`…), chaque suite à sa dernière mesure : un run
+de `/sdda-full` en porte un par appel d'`eval-runner` (G5, G6, PHASE 6, L8,
+G8), et le premier seul était celui de la PHASE 4.
+
+`set-phase --phase acceptance` ferme la lignée : sans lui, aucune commande
+n'enregistrait la dernière phase canonique, `resume-target` ne rendait jamais
+`done`, et un `--resume` après une acceptation verte rejouait l'acceptation —
+c'est-à-dire relisait le holdout une fois de plus.
 
 > **Un seul appel, niveau L9.** Il y en avait deux : un `--level L7 --dataset
 > holdout`, puis un `--level L9`, concaténés par `>>` dans le même fichier. Les
@@ -302,7 +335,7 @@ pas `[REGRESSION]` — bloquer sur un tirage apprend à relever la tolérance. E
 
 | G8 | Effet |
 |---|---|
-| 🟢 | MISSION → `Approved`. La baseline **ne bouge pas automatiquement** (L9) : proposer `promote_baseline.py --mission {n} --run {RUN_ID}` (action tracée) |
+| 🟢 | MISSION → `Approved`. La baseline **ne bouge pas automatiquement** (L9) : proposer `promote-baseline --mission {n} --run "$RUN_ID" --label "…"` (action tracée ; toutes les suites mesurées par le run) |
 | 🟡 | objectif atteint en moyenne, variance élevée — MISSION reste `Evaluated` |
 | 🔴 | STOP + ERROR `[ACCEPTANCE_GATE_FAILED]` |
 

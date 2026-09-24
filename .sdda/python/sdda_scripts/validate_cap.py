@@ -106,7 +106,9 @@ def parse_cap(text: str, path: Path | None = None) -> CapSpec:
         criticality=header.get("Criticality", "normal").strip().lower(),
         statement=statement_lines[0] if statement_lines else "",
         acs=acs, covers=sorted(set(covers), key=_item_key), allocated=allocated,
-        hash=hashing.sha256_spec_text(text), path=path, text=text,   # `Status:` exclu (hashing.spec_text)
+        # `Status:` et `## Allocated To` exclus (hashing.cap_spec_text) : G1 ne se
+        # périme que sur ce qu'elle juge, pas sur ce que la PHASE 2 y écrit.
+        hash=hashing.sha256_cap_spec_text(text), path=path, text=text,
         sections_missing=[s for s in REQUIRED_SECTIONS if sec(s) is None],
     )
 
@@ -279,7 +281,10 @@ def validate_caps(root: Path, files: list[Path], config: LayeredConfig | None, *
         tr = validate_traceability(mission, all_caps, config)
         combined.extend(tr)
         if write_report:
-            write_gate_report(root, "G1", mission.id, tr, {"mission": mission.hash, **{f"cap:{c.id}": c.hash for c in all_caps}})
+            # `capspec:` et non `cap:` : `cap:{id}` est la clé de G2 (validate_ir),
+            # qui épingle la CAP ENTIÈRE, allocation comprise. Une même clé ne peut
+            # pas désigner deux hashes — compute_status n'en calculerait qu'un.
+            write_gate_report(root, "G1", mission.id, tr, {"mission": mission.hash, **{f"capspec:{c.id}": c.hash for c in all_caps}})
     return combined
 
 
