@@ -27,81 +27,77 @@ HOOK = "preflight_ownership"
 WIRING = {"event": "PreToolUse", "matcher": "Write|Edit", "applies_to": ()}
 
 
-#: Zones que personne n'écrit avec un outil d'édition, quel qu'en soit l'auteur.
+#: Zones protégées : `pipeline/baselines/`, `.sys/.validation/`, `.sys/.audit/`.
+#: Définies dans `audit_ownership.PROTECTED_ZONES` — le hook Bash applique les
+#: MÊMES, et deux copies d'une liste de zones protégées finissent par diverger
+#: exactement là où l'une des deux protège.
 #:
-#: Trois répertoires ne sont écrits QUE par des scripts, en E/S Python, jamais
-#: par l'outil `Write` ou `Edit`. Un `Write` sur l'un d'eux est donc fautif sans
-#: qu'on ait besoin de savoir QUI le tente — c'est le seul contrôle d'ownership
-#: qui ne dépend pas de l'identification de l'auteur, et il est joué avant elle.
-#:
-#:   pipeline/baselines/    `promote_baseline.py` — retouchée à la main, la
-#:                       référence rend toute non-régression tautologique ;
-#:   .sys/.validation/   les rapports de gate. Ils sont du JSON en clair, non
-#:                       signé, et `gate_status` ne lit que leur `ok` : un
-#:                       rapport `{"ok": true}` déposé par `Write` rendait
-#:                       n'importe quelle gate verte, et `.sys/` est gitignoré,
-#:                       donc la contrefaçon n'atteignait jamais une revue ;
-#:   .sys/.audit/        `bypasses.jsonl`, que la matrice déclare append-only
-#:                       « hooks framework » — sans qu'aucun enforcer n'existe.
-#:
-#: Ce que ce contrôle ne couvre pas, et qu'il faut dire : une écriture par
-#: `python -c` ou par un shell contourne l'outil `Write`. C'est la limite
-#: lexicale du hook Bash, assumée dans son propre docstring. Ce qui reste vrai
-#: est plus modeste et suffisant : aucun agent ne peut le faire par l'outil
-#: qu'on lui donne pour écrire, et il doit donc le faire *sciemment*.
-#: Nommée en constante pour que `sync_error_registry` la voie : il ne lit que les
-#: littéraux (`deny(HOOK, "CLASS", …)` ou `CLS_X = "CLASS"`), et une classe
-#: émise depuis la valeur d'un dictionnaire n'entrait jamais au registre — tout
-#: en étant réellement émise. C'est la définition même d'une classe orpheline.
-CLS_GATE_REPORT_FORGERY = "GATE_REPORT_FORGERY"
-CLS_BASELINE_OWNERSHIP_VIOLATION = "BASELINE_OWNERSHIP_VIOLATION"
+#: Ce que ce contrôle ne couvre pas, et qu'il faut dire : une écriture par un
+#: script (`python x.py`) contourne l'outil `Write`. Le hook Bash ferme les
+#: formes lexicales et refuse les formes opaques sur les zones régies ; ce qui
+#: reste — un script qui écrit de l'intérieur — est rattrapé APRÈS la phase par
+#: `audit-ownership --since-snapshot`, qui compare le disque à l'instantané.
 
-IDENTITY_FREE_ZONES: dict[str, tuple[str, str]] = {
-    "workspace/pipeline/baselines": (
-        CLS_BASELINE_OWNERSHIP_VIOLATION,
-        "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
-        "déplacer la référence rend toute non-régression tautologique"),
-    "workspace/.sys/.validation": (
-        CLS_GATE_REPORT_FORGERY,
-        "un rapport de gate est écrit par le script de la gate, jamais par Write/Edit : "
-        "un `{\"ok\": true}` déposé à la main rend verte une gate que rien n'a mesurée"),
-    "workspace/.sys/.audit": (
-        CLS_GATE_REPORT_FORGERY,
-        "le journal des bypasses est append-only et n'est écrit que par les scripts : "
-        "un audit qu'on peut réécrire n'est pas un audit"),
-}
+#: Les clés du payload qui nomment le fichier écrit, par outil : `Write`, `Edit`
+#: et `MultiEdit` portent `file_path`, `NotebookEdit` porte `notebook_path`. Un
+#: outil d'écriture dont la clé n'est pas lue est un outil que le hook ne voit
+#: pas — il laisse passer sans rien dire.
+TARGET_KEYS = ("file_path", "notebook_path", "path")
 
 
-def identity_free_violation(rel: str) -> tuple[str, str] | None:
-    for zone, (cls, fix) in IDENTITY_FREE_ZONES.items():
-        if rel == zone or rel.startswith(zone + "/"):
-            return cls, fix
-    return None
-
-
-def _relative(root: Path, target: str) -> str:
-    try:
-        return Path(str(target)).resolve().relative_to(root).as_posix()
-    except ValueError:
-        return str(target).replace("\\", "/")
+def target_of(data: dict) -> str:
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    for key in TARGET_KEYS:
+        value = tool_input.get(key) or data.get(key)
+        if value:
+            return str(value)
+    return ""
 
 
 def check(root: Path, data: dict) -> int:
     agent = agent_of(data)
 
-    target = (data.get("tool_input") or {}).get("file_path") or data.get("file_path")
+    target = target_of(data)
     if not target:
         return ALLOW
 
-    from sdda_lib import paths  # noqa: E402  (import tardif : coût de démarrage du hook)
+    from sdda_scripts import audit_ownership as ao  # noqa: E402  (import tardif : coût de démarrage)
+
+    loader = ao.load_loader(root) if agent else {}
+    # Le chemin tel qu'écrit ET le chemin physique (lien, jonction) : un lien
+    # anodin vers le golden est le golden.
+    rels = [ao.relative_to_root(root, target, data.get("cwd"))]
+    real = ao.real_relative_to_root(root, target, data.get("cwd"))
+    if real is not None:
+        rels.append(real)
+    for rel in rels:
+        verdict = verdict_for(root, loader, agent, rel, data)
+        if verdict != ALLOW:
+            return verdict
+    return ALLOW
+
+
+def bindings_for(root: Path, loader: dict, agent: str, rel: str, data: dict) -> tuple[dict[str, str] | None, int]:
+    """Liaison d'instance (`{agent}` de `dev-agent`) — cf. `_instances`.
+
+    Rend `(bindings, verdict)` : un verdict ≠ ALLOW est un refus déjà émis.
+    """
+    try:
+        import _instances  # noqa: E402
+    except ImportError:  # pragma: no cover — module absent : pas de liaison
+        return None, ALLOW
+    return _instances.bindings_for_write(root, loader, agent, rel, data, HOOK)
+
+
+def verdict_for(root: Path, loader: dict, agent: str, rel: str, data: dict) -> int:
     from sdda_lib.errors import Report  # noqa: E402
     from sdda_scripts import audit_ownership as ao  # noqa: E402
 
-    rel = _relative(root, str(target))
-
-    violation = identity_free_violation(rel)
-    if violation:
-        cls, fix = violation
+    if ao.protected_zone(rel) is not None:
+        verdict = ao.protected_write(loader, agent, rel)
+        if verdict is None:
+            return ALLOW
+        cls, fix = verdict
         return deny(HOOK, cls, f"`{rel}` édité par un outil d'édition{f' (`{agent}`)' if agent else ''}", fix)
 
     if not agent:
@@ -109,12 +105,15 @@ def check(root: Path, data: dict) -> int:
         # ne régit que les agents. Refuser ici bloquerait l'utilisateur.
         return ALLOW
 
-    report = Report(name="OWNERSHIP-HOOK", target=str(root))
-    loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
         return unknown_subagent(HOOK, agent, rel)
 
-    if ao.check_write(loader, agent, rel, report):
+    bindings, verdict = bindings_for(root, loader, agent, rel, data)
+    if verdict != ALLOW:
+        return verdict
+
+    report = Report(name="OWNERSHIP-HOOK", target=str(root))
+    if ao.check_write(loader, agent, rel, report, bindings):
         return ALLOW
 
     first = report.errors[0] if report.errors else None

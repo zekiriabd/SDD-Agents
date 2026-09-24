@@ -80,8 +80,15 @@ ne peut plus rien conclure.
 > vérité est pire qu'aucun enforcer.
 | `workspace/.sys/.context/constitution.md` | **séquentiel** : `po-elicitor` (§1-§3) → `po-capabilities` (§3 acteurs) → `architect-topology` (§4 architecture) | Append-only par section | 0, 1, 2 |
 | `workspace/pipeline/decisions/ADR-*.md` | `architect-topology`, `architect-data` | Numérotation atomique par horodatage | 2 |
-| `workspace/.sys/.validation/**` | scripts de gate | Create exclusif | tout |
-| `workspace/.sys/.audit/**` | hooks framework | Append-only | tout |
+| `workspace/.sys/.validation/**` | scripts de gate | Create exclusif — **zone protégée** : refusée à `Write`/`Edit` et au shell des sous-agents, fil principal compris à l'éditeur | tout |
+| `workspace/.sys/.validation/reports/{revue}-{n}.md` · `adversarial-findings/{n}.jsonl` | le reviewer qui le déclare dans ses `writes:` | Create exclusif — **seule exception** à la zone protégée : un motif de SES `writes:` ancré DANS la zone ; un rapport de gate `.json` reste refusé à tous | 7 |
+| `workspace/.sys/.audit/**` | hooks framework | Append-only — zone protégée, au shell comme à l'éditeur | tout |
+
+> **Le motif est segmenté.** `*` reste dans un segment, `**` en couvre zéro ou
+> plus, un placeholder (`{n}`, `{agent}`) vaut un segment. Le repli par
+> `fnmatch` d'avant laissait `*` traverser les `/` : `workspace/src/*/*` — les
+> fichiers à la racine du projet — couvrait tout `src/`. Un motif dont le
+> dernier segment est littéral nomme un répertoire et couvre son contenu.
 
 ---
 

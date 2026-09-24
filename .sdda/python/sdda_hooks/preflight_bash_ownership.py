@@ -217,10 +217,36 @@ def classify(root: Path, command: str) -> tuple[list[str], list[tuple[str, str]]
     return writes, reads
 
 
+#: Zones protégées que le fil principal lui-même n'écrit pas au shell. Pas
+#: `.sys/.validation/` : les commandes y redirigent la sortie JSON de leurs
+#: scripts (`eval-runner … > workspace/.sys/.validation/{n}-G5-agent.json`),
+#: c'est le mécanisme documenté par lequel un rapport de gate est déposé. Le
+#: fil principal y reste refusé à `Write`/`Edit` — la contrefaçon à la main —
+#: et les sous-agents y sont refusés au shell comme à l'éditeur.
+MAIN_THREAD_SHELL_PROTECTED = ("workspace/pipeline/baselines", "workspace/.sys/.audit")
+
+
+def _protected_verdict(ao, loader: dict, agent: str, writes: list[str]) -> int:
+    """Les zones protégées (`audit_ownership.PROTECTED_ZONES`) — les MÊMES que
+    `preflight_ownership`. Une redirection `>` vers `.sys/.validation/` passait
+    le shell alors que l'éditeur la refusait : la protection tenait à l'outil
+    choisi, c'est-à-dire à rien."""
+    for path in writes:
+        found = ao.protected_zone(path)
+        if found is None:
+            continue
+        zone = found[0]
+        if not agent and zone not in MAIN_THREAD_SHELL_PROTECTED:
+            continue
+        verdict = ao.protected_write(loader, agent, path)
+        if verdict is not None:
+            cls, fix = verdict
+            return deny(HOOK, cls, f"via le shell — `{path}` écrit{f' par `{agent}`' if agent else ''}", fix)
+    return ALLOW
+
+
 def check(root: Path, data: dict) -> int:
     agent = agent_of(data)
-    if not agent:
-        return ALLOW
 
     tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
     command = str(tool_input.get("command") or data.get("command") or "")
@@ -234,13 +260,17 @@ def check(root: Path, data: dict) -> int:
     from sdda_lib.errors import Report  # noqa: E402  (import tardif : coût de démarrage du hook)
     from sdda_scripts import audit_ownership as ao  # noqa: E402
 
+    loader = ao.load_loader(root) if agent else {}
+    verdict = _protected_verdict(ao, loader, agent, writes)
+    if verdict != ALLOW or not agent:
+        return verdict
+
     for path, _scope in reads:
         if ao.is_secret_file(str(path)):
             return deny(HOOK, "SECRET_READ_FORBIDDEN",
                         f"via Bash — `{agent}` a voulu lire `{path}` : un fichier de secrets n'est lu par aucun agent",
                         "`python .sdda/sdda.py install-env` copie assets/.env vers src/{App}/.env, sans LLM")
 
-    loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
         # Sous-agent hors matrice : rien sous workspace/, ni en écriture ni en
         # lecture. Voir `_hook.unknown_subagent` pour le pourquoi.
