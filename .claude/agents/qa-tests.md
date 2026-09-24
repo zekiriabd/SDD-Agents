@@ -40,7 +40,15 @@ Read **uniquement** :
   timeoutSec, contractTestsRef), `retrievers[].binding.chunk`, `agents[].bounds`,
   `orchestration` (maxHops, edges), `dataAccess[].envelope`.
 - `workspace/pipeline/contracts/tools/{n}-*.tool.md` §4 (erreurs) et §8 (checklist L2).
-- `workspace/src/**` **hors** `tests/` — les interfaces que tu testes.
+- `workspace/src/{App}/{couche}/**` **hors** `tests/` — les interfaces de LA couche
+  que tu testes, et les fichiers racine du projet (`src/{App}/*`, la config du
+  runner). Tu es lancé **une fois par couche** : la première ligne de ton prompt
+  est `SDDA-LAYER: {couche}` (`tools`, `retrieval`, `data`, `agents`,
+  `orchestration`, `serving`, ou `tests` pour les tests transverses). Lire tout
+  `src/**` d'un coup remplissait la fenêtre entière du modèle avant le premier
+  tour — un contexte qui ne laisse pas la place de travailler produit des tests
+  tronqués et confiants. Pour une interface d'une AUTRE couche dont tu as besoin,
+  l'IR la décrit (schémas, erreurs) : tu ne lis pas son code.
 - `workspace/stack/STACK.md` — `## Active Language & Runtime`, `## Active Eval Stack`
   (runner de tests), `## Active Tools & Integrations` (endpoints pour `network`).
 - `.sdda/stacks/lang/{lang}.md ## Testing`, `.sdda/stacks/eval/pytest-eval.md` ou équivalent.

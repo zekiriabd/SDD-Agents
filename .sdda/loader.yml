@@ -127,6 +127,13 @@ shared_writes:
 # AVANT le spawn. Dépassement -> l'agent ne part pas. C'est volontairement
 # brutal : un agent qui déborde son budget produit une sortie tronquée et
 # confiante, ce qui est pire qu'un échec net.
+#
+# Le budget a lui-même un PLAFOND, calculé et non déclaré : fenêtre du tier
+# (200 k tokens) × 4 octets/token × 60 % = 480 000 octets. Les 40 % restants
+# paient les tours, les sorties d'outils et la réponse, que `reads:` ne compte
+# pas. Un budget au-dessus est refusé au spawn
+# ([CONTEXT_BUDGET_CEILING_EXCEEDED]) : l'agent qui a besoin de plus découpe
+# son chargement, il ne relève pas son budget.
 
 # ---------------------------------------------------------------------------
 # Phase 0 — élicitation
@@ -607,11 +614,19 @@ qa-evals:
 
 qa-tests:
   model_tier: balanced
-  budget_bytes: 800000      # recalibré sur le premier projet réel (était 140000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
+  # 800 Ko recalibrés sur le premier projet réel pour lire `workspace/src/**`
+  # EN ENTIER : ~200 000 tokens, la fenêtre complète du tier avant le premier
+  # tour. Le hook `preflight_agent_budget` plafonne désormais chaque budget à
+  # fenêtre × 4 o/token × 60 % (480 Ko). Le besoin réel n'est pas « plus de
+  # budget » mais un chargement DÉCOUPÉ : `/sdda-eval` lance qa-tests une fois
+  # par couche (`SDDA-LAYER: tools|retrieval|data|agents|orchestration|serving|tests`),
+  # et `{object}` ci-dessous désigne la couche du spawn.
+  budget_bytes: 420000
   reads:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
-    - workspace/src/**                               # volatile — lecture seule
+    - workspace/src/*/*                              # volatile — fichiers racine du projet (config du runner)
+    - workspace/src/*/{object}/**                    # volatile — LA couche du spawn, lecture seule
   writes:
     - workspace/src/*/tests/**          # tests TRANSVERSES — la zone propre de qa-tests
     - workspace/src/**/tests/**         # tests de couche, partagés (cf. shared_writes)                      # territoire test UNIQUEMENT

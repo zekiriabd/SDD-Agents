@@ -115,8 +115,15 @@ Droit de veto : un AC non mesurable → [AC_NOT_EVALUABLE] renvoyé à po-capabi
 Ground truth : ## Ground Truth de la MISSION (Source, Volume). Aucune écriture hors datasets/ et evals/.
 ```
 
-Prompt `qa-tests` :
+`qa-tests` part **une fois par couche présente** dans `workspace/src/{App}/`
+(`tools`, `retrieval`, `data`, `agents`, `orchestration`, `serving`, puis `tests`
+pour les transverses), en vagues ≤ `MaxParallel` : son budget est plafonné par
+tier (`preflight_agent_budget`), et lire tout `src/**` d'un coup remplissait la
+fenêtre avant le premier tour. Les couches écrivent sous des `tests/` disjoints.
+
+Prompt `qa-tests` — la première ligne désigne la couche (`{object}` de ses `reads:`) :
 ```
+SDDA-LAYER: {couche}
 MISSION {n}. Tests déterministes L0 (schémas, lint, IR, budget, disjonction, fraîcheur, ownership,
 secrets), L1 (fonctions pures, LLM mocké), L2 (contrats d'outils : happy, chaque erreur, timeout,
 auth KO, idempotence ; connectivité live marquée `network`). Stack : {lang}.md, {eval}.md.
