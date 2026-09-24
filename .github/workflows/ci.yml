@@ -9,6 +9,7 @@
 #                         compilées depuis .sdda/ — une édition à la main échoue
 #   sync_error_registry   le registre [CLASS] correspond aux émetteurs réels
 #   sync_digests          les tranches de taxonomie par agent sont à jour
+#   hooks_selfcheck       chaque hook câblé démarre et juge (SDDA_HOOKS_STRICT=1)
 #   pytest                la couche déterministe
 #
 # Matrice : Linux sur la version minimale (3.11) et une récente, Windows sur la
@@ -63,6 +64,14 @@ jobs:
 
       - name: sync_counters --check
         run: python .sdda/sdda.py sync-counters --check
+
+      # Chaque hook câblé est EXÉCUTÉ, pas seulement lu : un hook qui ne démarre
+      # pas rend un code ≠ 2, que le harnais traite comme une autorisation. En
+      # mode strict, une panne de hook refuse au lieu d'autoriser.
+      - name: hooks_selfcheck (strict)
+        env:
+          SDDA_HOOKS_STRICT: "1"
+        run: python .sdda/sdda.py hooks-selfcheck
 
       - name: pytest
         run: python -m pytest .sdda/python/tests -q -p no:cacheprovider
