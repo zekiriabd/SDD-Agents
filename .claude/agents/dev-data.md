@@ -102,16 +102,16 @@ déclaré. Une condition manquante est `[DATA_ACCESS_ENVELOPE_MISSING]`, bloquan
 ## STEP 6 — Vérification locale
 
 ```bash
-python .sdda/sdda.py validate-envelope --mission {n} --src workspace/src/data
+python .sdda/sdda.py validate-envelope --mission {n} --src workspace/src/{App}/data
 ```
-(0 token : présence des six clés, AST parser branché, aucun `retry` sur
-écriture non idempotente, aucune chaîne de connexion en clair.)
-
-> ⏳ **Planifié** (ROADMAP Lot 4) — `validate_envelope.py` n'existe pas encore.
-> Tant qu'il est absent : lance `validate_data_access.py --mission {n}` (l'enveloppe
-> côté **contrat** existe, elle) et vérifie **à la main** les six clés dans le
-> code. Ce que tu ne peux pas prouver par un script, tu le dis dans ta sortie
-> chat : les tests exécutés de `qa-tests` restent la seule preuve.
+(0 token, analyse statique : les six clés matérialisées par entrée
+`dataAccess[]`, parser AST importé — une regex de garde est refusée —, filtre
+d'identité de session dans chaque vue et jamais en paramètre d'outil, SQL figé
+et non assemblé, aucun `retry` sur écriture, aucune chaîne de connexion en
+clair. Rapport : `workspace/.sys/.validation/envelope-{n}.json`.) C'est le
+contrôle côté **code** ; `validate-data-access --mission {n}` reste celui côté
+**contrat**. Il prouve la PRÉSENCE, pas l'effet : les tests L2 de `qa-tests` et
+le smoke de la stack restent la preuve d'exécution.
 
 Puis le smoke de la stack sur une base de test. Les tests L1/L2 sont à
 `qa-tests`.
