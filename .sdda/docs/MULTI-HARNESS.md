@@ -6,6 +6,28 @@ supplémentaire propre à l'agentic.
 
 SSoT machine : [`.sdda/capability-matrix.yml`](../capability-matrix.yml).
 
+## 0. Statut, à lire avant le reste
+
+| Harnais | Statut | Gates bloquantes au runtime |
+|---|---|---|
+| **Claude Code** | **supporté** — harnais de référence, niveau A | oui : hooks `PreToolUse` / `SubagentStop` de `.claude/settings.json` |
+| **Codex CLI** | **expérimental** — `status: planned`, niveau B | **non** : reportées au CI et aux scripts déterministes |
+| **Gemini CLI** | **expérimental** — `status: planned`, niveau B | **non** : idem |
+
+« Expérimental » veut dire exactement ceci : la façade se **compile** et reste à
+jour (`harness-build --check` en CI), mais aucun run de conformance ne l'a
+jamais exécutée de bout en bout, et **rien n'empêche au moment de l'action**
+une écriture hors ownership, un agent câblé avant sa TOOL GATE ou un prompt
+inline. Le wrapper de spawn que décrit ce document (§2, « wrapper
+`codex exec` / `gemini -p` ») est **planifié, pas encore écrit** : sous Codex ou
+Gemini, c'est à l'humain de lancer chaque sous-agent et de passer
+`python .sdda/sdda.py framework-smoke` avant de croire un résultat.
+
+Codex CLI lit `AGENTS.md` et Gemini CLI `GEMINI.md` **à la racine du dépôt**,
+pas dans `.codex/` ou `.gemini/`. `harness_build` écrit donc à la racine un
+`AGENTS.md` et un `GEMINI.md` générés, qui renvoient à la façade et répètent ce
+statut.
+
 ---
 
 ## 1. Le principe
@@ -40,8 +62,8 @@ SSoT machine : [`.sdda/capability-matrix.yml`](../capability-matrix.yml).
 | `agents/{a}.md` | `.claude/agents/{a}.md` — sous-agent natif | inliné dans le prompt du wrapper `codex exec` | inliné dans le prompt `gemini -p` |
 | `commands/{c}.md` | `.claude/commands/{c}.md` | `.codex/prompts/{c}.md` | `.gemini/commands/{c}.toml` |
 | `rules/*.md` | `@`-référencées, chargement paresseux | **inlinées** (pas de `@`) | inlinées |
-| fichier mémoire | `CLAUDE.md` | `AGENTS.md` | `GEMINI.md` |
-| hooks | `.claude/settings.json` — **bloquants au runtime** | absents → gates du wrapper + CI | absents → wrapper + CI |
+| fichier mémoire | `.claude/CLAUDE.md` (lu nativement) | `.codex/AGENTS.md`, pointé par `AGENTS.md` racine | `.gemini/GEMINI.md`, pointé par `GEMINI.md` racine |
+| hooks | `.claude/settings.json` — **bloquants au runtime** | absents → CI (wrapper planifié) | absents → CI (wrapper planifié) |
 | `python/` | tel quel | tel quel | tel quel |
 
 Le corps métier est **identique** partout : seules l'enveloppe et la politique
@@ -67,7 +89,8 @@ un hook qui refuse l'appel d'outil :
 | ownership (datasets, prompts, baselines) | `audit_ownership` |
 
 Sur un harnais sans hooks, **ils ne disparaissent pas — ils se déplacent** vers
-un contrôle pre/post-exec du wrapper et une gate CI.
+un contrôle pre/post-exec du wrapper et une gate CI. Tant que le wrapper n'est
+pas écrit, il ne reste que la gate CI.
 
 **La conséquence doit être dite, pas maquillée** : entre deux exécutions du
 wrapper, rien n'empêche une écriture hors scope. Le CI la rattrape — plus tard,

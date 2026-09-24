@@ -66,6 +66,60 @@ Lot 7 de la [ROADMAP](.sdda/docs/ROADMAP.md).
 Rien ici n'est *validé* : `frameworkStatus: design-phase`, et tous les
 composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
 
+### Quel harnais exécute la construction
+
+| Harnais | Statut | Gates bloquantes au runtime |
+|---|---|---|
+| **Claude Code** | **supporté** — le harnais de référence | oui — les hooks de `.claude/settings.json` refusent l'appel d'outil |
+| **Codex CLI** | **expérimental** — compilé vers `.codex/`, jamais validé par un run de conformance | **non** — reportées au CI et aux scripts déterministes |
+| **Gemini CLI** | **expérimental** — compilé vers `.gemini/`, même réserve | **non** — idem |
+
+Sous Codex ou Gemini CLI, rien n'empêche au moment de l'action une écriture
+hors ownership ou un agent câblé avant sa TOOL GATE ; le CI la rattrape plus
+tard. Le wrapper de spawn dont ces harnais auraient besoin est planifié, pas
+écrit. Les `AGENTS.md` et `GEMINI.md` de la racine sont des pointeurs générés
+vers les façades — c'est eux que Codex et Gemini CLI lisent vraiment. Détail :
+[MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md).
+
+---
+
+## Démarrage rapide
+
+> **Phase de conception.** `frameworkStatus: design-phase` dans
+> [`registry/compatibility.matrix.json`](.sdda/registry/compatibility.matrix.json) :
+> **aucune combinaison de stack n'est validée de bout en bout**, C1 comprise.
+> Les étapes ci-dessous font tourner le pipeline ; elles ne promettent pas un
+> verdict vert. Harnais : Claude Code (Codex et Gemini CLI sont expérimentaux,
+> voir plus haut).
+
+1. **Cloner** — Python 3.11+ seulement, rien à installer :
+   `git clone https://github.com/zekiriabd/SDD-Agents.git && cd SDD-Agents`
+2. **Amorcer** — `python bootstrap.py` (interactif), ou
+   `python bootstrap.py --combo c1 --app-name SupportDesk --auto`. Il écrit
+   `workspace/stack/STACK.md`, `workspace/assets/.env` et l'arborescence du
+   workspace, puis lance un smoke. Aucun appel LLM.
+3. **Remplir `workspace/stack/STACK.md`** — surtout `## Project Config` :
+   `CostPerRunTargetUsd` et `LatencyP95TargetMs` n'ont pas de défaut, et la
+   MISSION GATE les exige. Des noms de variables seulement, jamais une valeur
+   de secret.
+4. **Secrets** — les valeurs dans `workspace/assets/.env` (`LLM_API_KEY`,
+   `DB_*` si base), puis `python .sdda/sdda.py install-env` les copie dans
+   l'application générée. Aucun agent ne lit l'un ou l'autre fichier.
+5. **Vos entrées** — le brief en `workspace/feats/1-{Name}.md` (Markdown
+   seulement), vos données sous `workspace/assets/`, votre vérité terrain
+   (scénarios annotés, labels) sous `workspace/seed/`.
+6. **Ouvrir Claude Code à la racine du dépôt**, puis éliciter la MISSION 1 depuis
+   le brief : `/sdda-mission {Name} --from-brief workspace/feats/1-{Name}.md`.
+   Tout `<à préciser>` laissé ouvert bloque G0 — y répondre, ou éditer la MISSION.
+7. **Lancer le pipeline** — `/sdda-full 1`. Il s'arrête proprement sur toute
+   décision qui vous appartient, à commencer par le roster : `/sdda-roster 1`
+   écrit un `workspace/feats/1-roster.md` pré-rempli, vous le complétez, puis
+   `/sdda-full 1 --resume`.
+8. **Lire l'état** — `/sdda-status 1` (`--gates` pour le détail contrôle par
+   contrôle). L'état est dérivé des rapports de gate, jamais déclaré.
+
+`/sdda-help` dit quoi faire ensuite depuis l'état dérivé.
+
 ---
 
 ## Où vit votre travail — le workspace
@@ -253,7 +307,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1166<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->1170<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification
@@ -412,7 +466,7 @@ constat corrigé. Ce qu'il a trouvé :
   d'ownership lisaient l'identité du sous-agent au mauvais endroit du payload
   (toute écriture de sous-agent passait) ; les hooks de spawn ne matchaient que
   `Task`, jamais `Agent` ; les façades portaient `model_tier` mais aucune clé
-  `model:` (les 22 agents héritaient du modèle parent) ; `MaxCostPerRun` n'avait
+  `model:` (tous les agents héritaient du modèle parent) ; `MaxCostPerRun` n'avait
   aucun appelant qui alimente le cumul ; les bornes du `build_loop` ne vivaient
   que dans le prompt qu'elles devaient borner ;
 - les commandes de hook étaient relatives au répertoire courant : un `cd`
@@ -447,3 +501,11 @@ revue (Lot 5). Ordre et raisons : [ROADMAP.md](.sdda/docs/ROADMAP.md).
 encore été mesurée par un run réel. C1 est la cible du MVP, en `design-phase`.
 Annoncer autre chose serait précisément le faux vert que ce framework existe
 pour empêcher.
+
+---
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE). Les mêmes termes couvrent les sources du
+framework sous `.sdda/` et le paquet Python `sdda` construit depuis
+`.sdda/python/`.

@@ -1,0 +1,64 @@
+# Release de SDD_Agents — déclenchée par un tag `v*` (ex. `v0.1.0`).
+#
+# Construit la wheel et le sdist du paquet `sdda` (.sdda/python), vérifie que
+# la version du tag est celle du pyproject, et attache les deux artefacts à une
+# GitHub Release. Rien n'est publié sur PyPI : le framework s'utilise depuis un
+# clone (`python .sdda/sdda.py`), la wheel sert à `pip install` l'outillage.
+#
+# La vérification de version est le point porteur : un tag `v0.2.0` posé sur un
+# pyproject resté en 0.1.0 produirait une release dont les artefacts mentent
+# sur leur propre version — et `workspace.json` enregistre cette version.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # créer la GitHub Release et y attacher les artefacts
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Tag version == pyproject version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(python -c 'import tomllib; print(tomllib.load(open(".sdda/python/pyproject.toml", "rb"))["project"]["version"])')"
+          lib="$(python -c 'import sys; sys.path.insert(0, ".sdda/python"); import sdda_lib; print(sdda_lib.__version__)')"
+          echo "tag=${tag} pyproject=${version} sdda_lib=${lib}"
+          if [ "${tag}" != "${version}" ] || [ "${tag}" != "${lib}" ]; then
+            echo "ERROR: release — la version du tag ne correspond pas au paquet"
+            echo "CAUSE: [RELEASE_VERSION_MISMATCH] tag ${tag}, pyproject ${version}, sdda_lib.__version__ ${lib}"
+            echo "FIX: aligner .sdda/python/pyproject.toml et sdda_lib/__init__.py sur ${tag}, puis re-tagger"
+            exit 1
+          fi
+
+      # La licence vit à la racine ; setuptools refuse un chemin hors du projet.
+      # La copie est gitignorée (cf. pyproject.toml).
+      - name: Embed LICENSE
+        run: cp LICENSE .sdda/python/LICENSE
+
+      - name: Build wheel + sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build .sdda/python --outdir dist
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "See CHANGELOG.md for the changes in ${GITHUB_REF_NAME}." \
+            --verify-tag

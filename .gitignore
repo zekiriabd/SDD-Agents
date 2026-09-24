@@ -20,6 +20,16 @@ workspace/**/.env
 workspace/**/.env.*
 /.env
 
+# Copie de LICENSE déposée par release.yml avant `python -m build` (cf.
+# .sdda/python/pyproject.toml) ; la source unique est /LICENSE. Et les
+# artefacts de build eux-mêmes.
+/.sdda/python/LICENSE
+/.sdda/python/dist/
+/.sdda/python/build/
+*.egg-info/
+.coverage
+coverage.xml
+
 __pycache__/
 *.pyc
 .pytest_cache/

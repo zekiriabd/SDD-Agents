@@ -528,6 +528,42 @@ def impact_report(harness: Harness) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Pointeur racine — Codex CLI lit `AGENTS.md`, Gemini CLI `GEMINI.md`, à la
+# RACINE du dépôt, jamais dans `.codex/` ou `.gemini/`. Sans pointeur, la façade
+# compilée existe et aucun des deux harnais ne l'ouvre. Claude Code lit
+# `.claude/CLAUDE.md` nativement : pas de pointeur.
+# ---------------------------------------------------------------------------
+ROOT_POINTER_DIRS = {".codex": "Codex CLI", ".gemini": "Gemini CLI"}
+
+
+def root_pointer(harness: Harness, out_dir: str) -> str:
+    """Contenu du fichier mémoire racine : un renvoi, pas une copie.
+
+    Ne dépend que du répertoire de la façade, pas du harnais : `gemini-cli` et
+    `antigravity` partagent `.gemini/` et doivent produire le même pointeur,
+    sinon `--check` échoue sur celui qui n'a pas été construit en dernier.
+    """
+    label = ROOT_POINTER_DIRS[out_dir]
+    commands = "prompts/*.md" if out_dir == ".codex" else "commands/*.toml"
+    agents = "agents/" if out_dir == ".codex" else "agents-inline/"
+    return (
+        GENERATED_BANNER.format(source=".sdda/capability-matrix.yml")
+        + f"\n# SDD_Agents — {label} (expérimental)\n\n"
+        f"Les instructions du framework sont dans `{out_dir}/{harness.memory_file}` :\n"
+        "**le lire en entier avant toute action.** Commandes :\n"
+        f"`{out_dir}/{commands}`. Agents : `{out_dir}/{agents}`.\n\n"
+        f"**Statut : expérimental.** La façade {label} est compilable, jamais\n"
+        "validée par un run de conformance, et n'a\n"
+        "**aucune gate bloquante au runtime** : les hooks d'ownership et de gates\n"
+        "n'existent que sous Claude Code. Ce qu'ils appliquent est reporté au CI\n"
+        "et aux scripts déterministes — une écriture hors scope n'est rattrapée\n"
+        "qu'après coup. Détail :\n"
+        f"`{out_dir}/harness-impact.md`, `.sdda/docs/MULTI-HARNESS.md`.\n\n"
+        "Avant de considérer un travail terminé : `python .sdda/sdda.py framework-smoke`.\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 def build_harness(name: str, harness: Harness) -> tuple[BuildPlan, dict[str, int]]:
@@ -539,6 +575,8 @@ def build_harness(name: str, harness: Harness) -> tuple[BuildPlan, dict[str, int
     # Le rapport d'impact fait partie du plan : on ne peut pas produire une
     # façade sans lui.
     plan.add(ROOT / adapter.out_dir / "harness-impact.md", impact_report(harness))
+    if adapter.out_dir in ROOT_POINTER_DIRS:
+        plan.add(ROOT / harness.memory_file, root_pointer(harness, adapter.out_dir))
     return plan, counts
 
 

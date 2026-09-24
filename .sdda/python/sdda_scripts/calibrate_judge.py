@@ -32,6 +32,9 @@ from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
 try:
     ensure_utf8_stdout()
 except Exception:
+    # Ignorable : un encodage de console non reconfigurable ne doit pas
+    # empêcher la calibration ; `ensure_utf8_stdout` avale déjà ce cas, ce
+    # bloc n'est qu'une ceinture en plus.
     pass
 
 
