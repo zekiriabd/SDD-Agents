@@ -83,6 +83,45 @@ vers les façades — c'est eux que Codex et Gemini CLI lisent vraiment. Détail
 
 ---
 
+## Démarrage rapide
+
+> **Phase de conception.** `frameworkStatus: design-phase` dans
+> [`registry/compatibility.matrix.json`](.sdda/registry/compatibility.matrix.json) :
+> **aucune combinaison de stack n'est validée de bout en bout**, C1 comprise.
+> Les étapes ci-dessous font tourner le pipeline ; elles ne promettent pas un
+> verdict vert. Harnais : Claude Code (Codex et Gemini CLI sont expérimentaux,
+> voir plus haut).
+
+1. **Cloner** — Python 3.11+ seulement, rien à installer :
+   `git clone https://github.com/zekiriabd/SDD-Agents.git && cd SDD-Agents`
+2. **Amorcer** — `python bootstrap.py` (interactif), ou
+   `python bootstrap.py --combo c1 --app-name SupportDesk --auto`. Il écrit
+   `workspace/stack/STACK.md`, `workspace/assets/.env` et l'arborescence du
+   workspace, puis lance un smoke. Aucun appel LLM.
+3. **Remplir `workspace/stack/STACK.md`** — surtout `## Project Config` :
+   `CostPerRunTargetUsd` et `LatencyP95TargetMs` n'ont pas de défaut, et la
+   MISSION GATE les exige. Des noms de variables seulement, jamais une valeur
+   de secret.
+4. **Secrets** — les valeurs dans `workspace/assets/.env` (`LLM_API_KEY`,
+   `DB_*` si base), puis `python .sdda/sdda.py install-env` les copie dans
+   l'application générée. Aucun agent ne lit l'un ou l'autre fichier.
+5. **Vos entrées** — le brief en `workspace/feats/1-{Name}.md` (Markdown
+   seulement), vos données sous `workspace/assets/`, votre vérité terrain
+   (scénarios annotés, labels) sous `workspace/seed/`.
+6. **Ouvrir Claude Code à la racine du dépôt**, puis éliciter la MISSION 1 depuis
+   le brief : `/sdda-mission {Name} --from-brief workspace/feats/1-{Name}.md`.
+   Tout `<à préciser>` laissé ouvert bloque G0 — y répondre, ou éditer la MISSION.
+7. **Lancer le pipeline** — `/sdda-full 1`. Il s'arrête proprement sur toute
+   décision qui vous appartient, à commencer par le roster : `/sdda-roster 1`
+   écrit un `workspace/feats/1-roster.md` pré-rempli, vous le complétez, puis
+   `/sdda-full 1 --resume`.
+8. **Lire l'état** — `/sdda-status 1` (`--gates` pour le détail contrôle par
+   contrôle). L'état est dérivé des rapports de gate, jamais déclaré.
+
+`/sdda-help` dit quoi faire ensuite depuis l'état dérivé.
+
+---
+
 ## Où vit votre travail — le workspace
 
 Ce que vous fournissez est à la racine ; ce que le framework produit est sous
