@@ -70,6 +70,7 @@ TARGETS: tuple[str, ...] = (
     ".sdda/ARCHITECTURE.md",
     ".sdda/agent-bounds.yaml",
     ".sdda/docs/README.md",
+    ".sdda/docs/README.fr.md",
     ".sdda/docs/AGENT-ROSTER.md",
     ".sdda/commands/sdda-help.md",
     ".sdda/commands/sdda-caps.md",
