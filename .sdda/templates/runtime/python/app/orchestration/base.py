@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from ..bounds import BoundExceeded, BoundGuard, Bounds
+from ..guardrails import Guardrails
 from ..models import Completion, LLMClient, Message, ToolCall
 from ..tracing import Tracer
 from ..trust import Untrusted, wrap
@@ -305,8 +306,13 @@ class BoundedLoop:
 
     def __init__(self, *, agent_id: str, bounds: Bounds, client: LLMClient, model: str,
                  system_prompt: str = "", agent_name: str = "", tier: str = "",
-                 toolset: DictToolset | None = None, tracer: Tracer | None = None) -> None:
+                 toolset: DictToolset | None = None, tracer: Tracer | None = None,
+                 guardrails: Guardrails | None = None) -> None:
         self.agent_id = agent_id
+        # Les guardrails s'appliquent au texte d'un TIERS qui entre dans la
+        # boucle (sorties d'outils `untrusted`). Absents : rien n'est filtré,
+        # ce qui est le comportement déclaré quand STACK.md n'en active aucun.
+        self.guardrails = guardrails or Guardrails()
         self.agent_name = agent_name or agent_id
         self.bounds = bounds
         self.client = client
@@ -423,6 +429,12 @@ class BoundedLoop:
             if not outcome.ok:
                 span.set("sdda.tool.error_code", outcome.error_code)
                 span.error(outcome.error_code or "TOOL_ERROR")
-        content = (wrap(outcome.content, source=f"tool:{call.name}", field="result")
-                   if outcome.trust == "untrusted" else outcome.content)
+        content = outcome.content
+        if outcome.trust == "untrusted":
+            # Injection INDIRECTE : la voie d'attaque qui compte. Le passage qui
+            # instruit est neutralisé AVANT l'enveloppe — l'enveloppe rend la
+            # frontière visible, elle n'empêche pas le modèle de lire l'ordre.
+            screened = self.guardrails.screen_untrusted(content, source=f"tool:{call.name}",
+                                                        tracer=self.tracer)
+            content = wrap(screened, source=f"tool:{call.name}", field="result")
         return Message(role="tool", content=content, name=call.name, tool_call_id=call.id)
