@@ -403,6 +403,11 @@ def test_facades_carry_no_sync_markers() -> None:
     """Les marqueurs vivent dans la source ; un agent ne paie aucun token pour eux."""
     for facade in (".claude", ".codex", ".gemini"):
         for path in (ROOT / facade).rglob("*"):
+            # `.claude/worktrees/` porte des copies de travail du dépôt entier
+            # (worktrees de Claude Code), sources à marqueurs comprises : ce ne
+            # sont pas des façades.
+            if "worktrees" in path.relative_to(ROOT / facade).parts:
+                continue
             if path.is_file() and path.suffix in (".md", ".toml"):
                 assert "<!--sdda:" not in path.read_text(encoding="utf-8", errors="replace"), path
 
