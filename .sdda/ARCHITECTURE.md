@@ -1,90 +1,105 @@
 # SDD_Agents — Architecture
 
-Document de référence : arborescence, couches, pipeline, gates, abstraction
-harness/provider. Découle de [PHILOSOPHY.md](PHILOSOPHY.md).
+Reference document: tree, layers, pipeline, gates, harness/provider
+abstraction. It follows from [PHILOSOPHY.md](PHILOSOPHY.md).
+
+> French twin: [ARCHITECTURE.fr.md](ARCHITECTURE.fr.md). It carries the same
+> technical content, and **it** is what `harness_build.py` compiles into the
+> harness memory file (`.claude/CLAUDE.md`, `.codex/AGENTS.md`,
+> `.gemini/GEMINI.md`): the Developer Agents read French prompts, and serving
+> them the architecture in another language would give one rule two
+> vocabularies. If the twin is missing, the build compiles this page and says
+> so.
 
 ---
 
-## 1. Les trois couches
+## 1. The three layers
 
-Identique en esprit à SDD_Pro, adapté à l'agentic.
+The same in spirit as SDD_Pro, adapted to agentic systems.
 
-| Couche | Emplacement | Nature | Qui la lit |
+| Layer | Location | Nature | Read by |
 |---|---|---|---|
-| **Framework** | `.sdda/` | Source neutre : agents, commandes, règles, stacks, templates, invariants | Compilée vers les façades harness |
-| **Façades harness** | `.claude/`, `.codex/`, `.gemini/` | Générées depuis `.sdda/` par `harness_build.py` | Le harnais actif |
-| **Workspace** | `workspace/` | Le projet de l'utilisateur : spécifications, contrats, prompts, datasets, code généré | Les agents, au runtime |
+| **Framework** | `.sdda/` | Neutral source: agents, commands, rules, stacks, templates, invariants | Compiled into the harness facades |
+| **Harness facades** | `.claude/`, `.codex/`, `.gemini/` | Generated from `.sdda/` by `harness_build.py` | The active harness |
+| **Workspace** | `workspace/` | The user's project: specifications, contracts, prompts, datasets, generated code | The agents, at runtime |
 
-> `.sdda/` (et non `.sdd/`) : nom court volontaire — il est référencé des centaines
-> de fois dans <!--sdda:count agents-->23<!--/sdda:count--> prompts d'agents ; deux caractères de moins sont des tokens
-> économisés à chaque invocation. Distinct de `.sdd/` pour permettre de vendorer
-> SDD_Pro et SDD_Agents dans un même dépôt.
+> `.sdda/` (not `.sdd/`): a deliberately short name — it is referenced hundreds
+> of times across <!--sdda:count agents-->23<!--/sdda:count--> agent prompts; two characters fewer are tokens
+> saved on every invocation. Distinct from `.sdd/` so that SDD_Pro and
+> SDD_Agents can be vendored into the same repository.
 
 ---
 
-## 2. Arborescence
+## 2. Tree
 
 ```
 SDD-Agents/
-├── README.md                          # anglais par défaut ; jumeau README.fr.md
-├── README.fr.md                       #   (convention : .sdda/docs/README.md)
-├── bootstrap.py                       # interactif : STACK.md + workspace + smoke
-├── plugin.json                        # 🟡 planifié — découverte marketplace (comme SDD_Pro)
+├── README.md                          # English by default; twin README.fr.md
+├── README.fr.md                       #   (convention: .sdda/docs/README.md)
+├── CHANGELOG.md                       # Keep a Changelog; a release = a v* tag
+├── LICENSE                            # MIT — covers .sdda/ and the sdda package
+├── AGENTS.md · GEMINI.md              # GENERATED: pointers to .codex/ and .gemini/,
+│                                      #   which Codex CLI and Gemini CLI read at the root
+├── bootstrap.py                       # interactive: STACK.md + workspace + smoke
+├── plugin.json                        # 🟡 planned — marketplace discovery (as in SDD_Pro)
+├── .github/
+│   ├── workflows/ci.yml               # smoke, generators' --check, pytest Linux+Windows,
+│   │                                  #   lint (ruff + mypy), coverage with a floor
+│   ├── workflows/release.yml          # v* tag -> wheel + sdist; actions pinned by SHA
+│   └── dependabot.yml
 │
-├── .sdda/                             # ── FRAMEWORK (source neutre) ──────────
-│   ├── PHILOSOPHY.md
-│   ├── ARCHITECTURE.md
-│   ├── INVARIANTS.yml                 # contrats porteurs + enforcer sur disque (compte : sync_counters)
-│   ├── config.base.yml                # couche 1/3 du Project Config
-│   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache par agent
-│   ├── agent-bounds.yaml              # tier_default / floor / ceiling par agent
-│   ├── capability-matrix.yml          # harnais x mécanismes
-│   ├── agents/                        # <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents (cf. docs/AGENT-ROSTER.md)
-│   ├── commands/                      # commandes slash
-│   ├── rules/                         # règles opérationnelles
-│   │   ├── ownership.md               # matrice d'écriture (hérité SDD_Pro)
+├── .sdda/                             # ── FRAMEWORK (neutral source) ─────────
+│   ├── PHILOSOPHY.md · PHILOSOPHY.fr.md
+│   ├── ARCHITECTURE.md · ARCHITECTURE.fr.md   # the .fr.md is the memory files' source
+│   ├── INVARIANTS.yml                 # load-bearing contracts + on-disk enforcer (count: sync_counters)
+│   ├── config.base.yml                # layer 1/3 of the Project Config
+│   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache per agent
+│   ├── agent-bounds.yaml              # tier_default / floor / ceiling per agent
+│   ├── capability-matrix.yml          # harnesses x mechanisms; tier -> BUILD model
+│   ├── agents/                        # <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents (see docs/AGENT-ROSTER.md)
+│   ├── commands/                      # <!--sdda:count commands-->11<!--/sdda:count--> slash commands
+│   ├── rules/                         # operational rules
+│   │   ├── ownership.md               # write matrix (inherited from SDD_Pro)
 │   │   ├── output-protocol.md
-│   │   ├── error-classification.md    # taxonomie [CLASS] agentic
-│   │   ├── eval-protocol.md           # k-runs, variance, calibration, baselines
-│   │   ├── prompt-authoring.md        # comment un contrat devient un prompt
-│   │   ├── agent-safety.md            # injection, scopes, effets de bord
-│   │   └── budget-and-loop.md         # bornes, coût, escalade
-│   ├── skills/                        # 🟡 planifié — skills auto-déclenchées des
-│   │                                  #   Developer Agents. À ne pas confondre avec
-│   │                                  #   les skills des agents du PRODUIT, qui
-│   │                                  #   vivent au §5 des contrats et dans les
-│   │                                  #   prompts (cf. §7, rules/ownership.md §2.2)
-│   ├── providers/                     # anthropic / openai / google / azure / local
-│   ├── stacks/                        # ── LE CATALOGUE — <!--sdda:count stacks-->45<!--/sdda:count--> fiches sur disque ─
-│   │   │                    # Chaque fiche déclare `Languages:` (un langage,
-│   │   │                    # plusieurs, ou `*` si elle n'en suppose aucun).
-│   │   │                    # C'est la SSoT du couplage : preflight_stack_combo
-│   │   │                    # refuse une fiche d'un autre runtime que le
-│   │   │                    # langage actif -> [STACK_LANGUAGE_MISMATCH].
+│   │   ├── error-classification.md    # agentic [CLASS] taxonomy
+│   │   ├── eval-protocol.md           # k runs, variance, calibration, baselines
+│   │   ├── prompt-authoring.md        # how a contract becomes a prompt
+│   │   ├── agent-safety.md            # injection, scopes, side effects
+│   │   └── budget-and-loop.md         # bounds, cost, escalation
+│   ├── skills/                        # 🟡 planned — auto-triggered skills of the
+│   │                                  #   Developer Agents. Not to be confused with
+│   │                                  #   the skills of the PRODUCT's agents, which
+│   │                                  #   live in §5 of the contracts and in the
+│   │                                  #   prompts (see §7, rules/ownership.md §2.2)
+│   ├── providers/                     # anthropic · openai · google · azure-openai · local-ollama
+│   │                                  #   rates, URLs, key variable — read by pricing and the judge
+│   ├── stacks/                        # ── THE CATALOGUE — <!--sdda:count stacks-->45<!--/sdda:count--> sheets on disk ─
+│   │   │                    # Every sheet declares `Languages:` (one language,
+│   │   │                    # several, or `*` when it assumes none).
+│   │   │                    # This is the SSoT of the coupling: preflight_stack_combo
+│   │   │                    # refuses a sheet for another runtime than the
+│   │   │                    # active language -> [STACK_LANGUAGE_MISMATCH].
 │   │   ├── lang/            python.md · csharp.md · typescript.md · kotlin.md
-│   │   │                    # typescript et kotlin : fiches présentes, aucune combo
-│   │   │                    # de bootstrap (eval/ et observability/ sont [python])
+│   │   │                    # typescript and kotlin: sheets present, no bootstrap
+│   │   │                    # combo (eval/ and observability/ are [python])
 │   │   ├── archi/           mvc.md · ddd.md · microservice.md     [*]
-│   │   │                    # hérité de SDD_Pro : l'architecture de la COQUILLE
-│   │   │                    # (entrée, composition, config, Domaine) — le moteur
-│   │   │                    # garde son découpage par ownership
+│   │   │                    # inherited from SDD_Pro: the architecture of the SHELL
+│   │   │                    # (entry, composition, config, Domain) — the engine
+│   │   │                    # keeps its split by ownership
 │   │   ├── backend/         python-fastapi.md · node-express.md · nestjs.md
 │   │   │                    kotlin-spring-boot.md · dotnet-minimalapi.md
-│   │   │                    # hérité de SDD_Pro : la maison HTTP autour de la
-│   │   │                    # surface, active seulement si backend-api ; pins
-│   │   │                    # python/csharp dans serving/*.libs.json
+│   │   │                    # inherited from SDD_Pro: the HTTP house around the
+│   │   │                    # surface, active only for backend-api; python/csharp
+│   │   │                    # pins in serving/*.libs.json
 │   │   ├── framework/       langchain.md · langgraph.md · ms-agent-framework.md
 │   │   │                    langgraph-js.md [typescript] · spring-ai.md [kotlin]
-│   │   │                      (+ .libs.json chacun)
+│   │   │                      (+ .libs.json each)
 │   │   ├── orchestration/   single-agent.md · router.md · sequential.md
-│   │   ├── rag/             none.md · hybrid.md            [python sauf none]
+│   │   ├── rag/             none.md · hybrid.md            [python except none]
 │   │   ├── vectorstore/     pgvector.md (+ .libs.json)     [python]
 │   │   ├── embedding/       voyage.md · bge-local.md
 │   │   ├── rerank/          none.md · cohere-rerank.md
 │   │   │                    bge-reranker-local.md (+ .libs.json)
-│   │   │                    # `RerankEnabled` existait dans STACK.md sans
-│   │   │                    # aucune fiche derrière : la clé était lue, rien
-│   │   │                    # ne l'implémentait.
 │   │   ├── dataaccess/      view-per-agent.md · declared-sources.md · none.md
 │   │   ├── memory/          buffer.md
 │   │   ├── tools/           mcp.md
@@ -94,13 +109,14 @@ SDD-Agents/
 │   │   │                    injection-detection.md
 │   │   └── serving/         cli.md · cli-dotnet.md · cli-node.md · cli-kotlin.md
 │   │                        fastapi-sse.md · aspnet-minimal.md · batch.md
-│   │                        # surface = PAR OÙ L'ON ENTRE ; le LIVRABLE
-│   │                        # (DeliverableType) vit dans ## Project Config
-│   ├── registry/                      # ── REGISTRES MACHINE ─────────────────
-│   │   ├── patterns.registry.json     # tout pattern : id, famille, critères, coût, risques
-│   │   ├── compatibility.matrix.json  # lang x framework x pattern x provider x store
-│   │   ├── architecture-requirements.yml  # P7 : ce que chaque choix de stack impose
-│   │   └── ir.schema.json             # schéma de l'Agentic IR (cf. docs/AGENTIC-IR.md)
+│   │                        # surface = WHERE YOU ENTER; the DELIVERABLE
+│   │                        # (DeliverableType) lives in ## Project Config
+│   ├── registry/                      # ── MACHINE REGISTRIES ────────────────
+│   │   ├── patterns.registry.json     # every pattern: id, family, criteria, cost, risks
+│   │   ├── compatibility.matrix.json  # lang x framework x pattern x provider x store; combos
+│   │   ├── architecture-requirements.yml  # P7: what each stack choice imposes
+│   │   ├── adr-requirements.yml       # decisions that require an accepted ADR (G2 `adr` part)
+│   │   └── ir.schema.json             # schema of the Agentic IR (see docs/AGENTIC-IR.md)
 │   ├── templates/
 │   │   ├── STACK.md.template
 │   │   ├── mission.template.md
@@ -111,497 +127,679 @@ SDD-Agents/
 │   │   ├── retrieval-contract.template.md
 │   │   ├── memory-contract.template.md
 │   │   ├── eval-suite.template.md
-│   │   ├── roster.template.md         # roster déclaré par l'architecte (P7) — Markdown, bloc yaml
+│   │   ├── roster.template.md         # roster declared by the architect (P7) — Markdown, yaml block
 │   │   ├── golden-set.schema.json
 │   │   ├── tool-schema.schema.json
-│   │   ├── project-config.schema.json
-│   │   ├── libs-catalog.schema.json   # schéma des .libs.json de stacks/
+│   │   ├── project-config.schema.json # validates STACK.md VALUES (x-stackSections, x-readBy)
+│   │   ├── libs-catalog.schema.json   # schema of the stacks/ .libs.json files
 │   │   ├── prompt.template.md
 │   │   ├── adr.template.md
-│   │   └── runtime/                   # squelettes de code par langage
-│   │       # (les combinaisons de stack vivent dans registry/compatibility.matrix.json)
-│   ├── digests/                       # tranches de taxonomie par agent
-│   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
-│   │                                  #   marche depuis un clone nu, sans pip install
-│   └── python/                        # outillage déterministe 0-token
-│       ├── sdda_cli.py                # dispatcher des 60 sous-commandes ; registre
-│       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
-│       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces
-│       ├── sdda_scripts/              # validate_*, estimate_budget, eval_runner, …
-│       ├── sdda_admin/                # harness_build, sync_digests, sync_error_registry
-│       ├── sdda_hooks/                # gates bloquantes PreToolUse / SubagentStop
-│       │                              #   chacune déclare son WIRING ; harness_build
-│       │                              #   les câble TOUS, aucune table en dur
+│   │   ├── datasets/
+│   │   │   └── adversarial-seed.jsonl # hand-written seed set that qa-evals copies and extends
+│   │   └── runtime/python/            # skeleton of the generated application (gen-app-skeleton)
+│   │       ├── app/                   #   entry, config, bounds, traces, orchestration, serving…
+│   │       │   └── guardrails/        #   injection, PII, output schema — IN CODE, per
+│   │       │                          #   ## Active Guardrails
+│   │       └── data/ · tools/         #   runtime of the declared sources
+│   │       # (stack combinations live in registry/compatibility.matrix.json)
+│   ├── digests/                       # per-agent slices of the taxonomy
+│   ├── sdda.py                        # launcher: `python .sdda/sdda.py {cmd}` —
+│   │                                  #   works from a bare clone, no pip install
+│   └── python/                        # deterministic 0-token tooling
+│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->76<!--/sdda:count--> subcommands; registry
+│       │                              #   DERIVED from disk, also read by the scanners
+│       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
+│       │                              #   graders (including judge_clients: the real LLM judge)
+│       ├── sdda_scripts/              # validate_*, estimate_budget, eval_runner, audit_ownership, …
+│       ├── sdda_admin/                # harness_build, framework_smoke, sync_*, planned_scripts,
+│       │                              #   command_flags, hooks_selfcheck
+│       ├── sdda_hooks/                # <!--sdda:count hooks-->15<!--/sdda:count--> blocking PreToolUse / SubagentStop hooks
+│       │                              #   each declares its WIRING; harness_build
+│       │                              #   wires them ALL, no hardcoded table
 │       └── tests/
 │
-└── workspace/                         # ── LE PROJET — l'humain fournit, le framework produit (§2.ter)
+└── workspace/                         # ── THE PROJECT — the human provides, the framework produces (§2.ter)
     │
-    │   ═══ CE QUE L'HUMAIN FOURNIT ════════════════════════════════════════
+    │   ═══ WHAT THE HUMAN PROVIDES ════════════════════════════════════════
     ├── stack/
-    │   ├── STACK.md                   # VERSIONNÉ — les choix techniques, des NOMS de variables
-    │   │                              #   (${LLM_API_KEY}), jamais de valeur. Sources inline, API, MCP.
-    │   └── mcp.json                   # optionnel — config MCP standard importée telle quelle
-    ├── feats/                         # ses spécifications — du MARKDOWN, à plat
-    │   ├── {n}-{Name}.md              #   le brief (--from-brief)
-    │   └── {n}-roster.md              #   le ROSTER : combien d'agents, lesquels, qui porte quoi (P7)
-    ├── assets/                        # les données (racine des stores `kind: local`)
-    │   └── .env                       #   les VALEURS des secrets du runtime — gitignoré, lu par AUCUN agent
-    ├── seed/                          # la vérité terrain : scénarios annotés, labels
+    │   ├── STACK.md                   # VERSIONED — technical choices, variable NAMES
+    │   │                              #   (${LLM_API_KEY}), never a value. Inline sources, APIs, MCP.
+    │   └── mcp.json                   # optional — standard MCP config imported as is
+    ├── feats/                         # their specifications — MARKDOWN, flat
+    │   ├── {n}-{Name}.md              #   the brief (--from-brief)
+    │   └── {n}-roster.md              #   the ROSTER: how many agents, which ones, who carries what (P7)
+    ├── assets/                        # the data (root of `kind: local` stores)
+    │   └── .env                       #   the VALUES of the runtime secrets — gitignored, read by NO agent
+    ├── seed/                          # the ground truth: annotated scenarios, labels
     │
-    │   ═══ CE QUE LE FRAMEWORK PRODUIT ════════════════════════════════════
-    ├── pipeline/                      # tout ce que le pipeline génère avant et autour du code
+    │   ═══ WHAT THE FRAMEWORK PRODUCES ════════════════════════════════════
+    ├── pipeline/                      # everything the pipeline generates before and around the code
     │   ├── missions/    {n}-{Name}.md          # po-elicitor
     │   ├── caps/        {n}-{m}-{Name}.md      # po-capabilities
-    │   ├── topology/    {n}-topology.md        # architect-topology, graphe Mermaid inclus
-    │   ├── contracts/   agents/ · tools/ · retrieval/ · memory/   # les architectes
-    │   ├── decisions/   ADR-{ts}-{slug}.md     # UN seul endroit (cf. §2.ter)
-    │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/   ┐ ce qui JUGE :
-    │   ├── suites/      les suites d'évaluation                            │ qa-evals et les
-    │   ├── baselines/   la référence de non-régression                     │ scripts, JAMAIS
-    │   └── calibration/ κ de chaque juge LLM                               ┘ un `dev-*`
+    │   ├── topology/    {n}-topology.md        # architect-topology, Mermaid graph included
+    │   ├── contracts/   agents/ · tools/ · retrieval/ · memory/   # the architects
+    │   ├── decisions/   ADR-{ts}-{slug}.md     # ONE place (see §2.ter)
+    │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/   ┐ what JUDGES:
+    │   ├── suites/      the evaluation suites                              │ qa-evals and the
+    │   ├── baselines/   the non-regression reference                       │ scripts, NEVER
+    │   └── calibration/ κ of every LLM judge                               ┘ a `dev-*`
     │
     ├── src/
-    │   └── {AppName}/                       # l'application agentic générée — layout PLAT (SDD_Pro) :
-    │       │                                #   ce répertoire EST le paquet, un seul niveau
-    │       ├── pyproject.toml · README.md   # le projet (dev-backend)
-    │       ├── .env                         # copié depuis assets/.env par `install-env`, sans LLM
-    │       ├── app/                         # composition, config, Domaine (dev-backend)
-    │       ├── agents/{agent}/              # un agent du produit (dev-agent)
-    │       ├── prompts/{agent}.system.md    # l'exécutable hashé de chaque agent (dev-prompt)
-    │       ├── skills/ · rules/             # ce que l'agent SAIT FAIRE / DOIT FAIRE, un fragment par slug (dev-prompt)
-    │       ├── tools/ · data/ · retrieval/  # le socle (dev-tools, dev-data, dev-retrieval)
-    │       ├── memory/                      # l'implémentation du contrat de mémoire (dev-orchestration)
-    │       ├── orchestration/ · serving/    # graphe et surface (dev-orchestration, dev-api)
-    │       ├── data/schemas/                # schémas figés des sources — actif d'EXÉCUTION
-    │       └── **/tests/                    # L0→L2 (qa-tests), à côté de ce qu'ils testent
+    │   └── {AppName}/                       # the generated agentic application — FLAT layout (SDD_Pro):
+    │       │                                #   this directory IS the package, one level
+    │       ├── pyproject.toml · README.md   # the project (dev-backend)
+    │       ├── .env                         # copied from assets/.env by `install-env`, no LLM
+    │       ├── app/                         # composition, config, Domain (dev-backend)
+    │       ├── shared/                      # shared types, laid down by the prepass (dev-orchestration)
+    │       ├── agents/{agent}/              # one product agent (dev-agent, one instance per agent)
+    │       ├── prompts/{agent}.system.md    # the hashed executable of each agent (dev-prompt)
+    │       ├── skills/ · rules/             # what the agent CAN DO / MUST DO, one fragment per slug (dev-prompt)
+    │       ├── tools/ · data/ · retrieval/  # the foundation (dev-tools, dev-data, dev-retrieval)
+    │       ├── memory/                      # interface (prepass) then implementation (dev-orchestration)
+    │       ├── orchestration/ · serving/    # graph and surface (dev-orchestration, dev-api)
+    │       ├── data/schemas/                # frozen source schemas — a RUNTIME asset
+    │       └── **/tests/                    # L0→L2 (qa-tests), next to what they test
     │
-    └── .sys/                          # ── ÉTAT INTERNE ET SORTIES DE RUN ─────
-        ├── .ir/         {n}-system.ir.json  # Agentic IR compilé depuis les contrats
+    └── .sys/                          # ── INTERNAL STATE AND RUN OUTPUT ───────
+        ├── .ir/         {n}-system.ir.json  # Agentic IR compiled from the contracts
         ├── .context/ · .state/ · .validation/ · .audit/
-        ├── reports/     {n}-{run-id}.json   # rapports d'eval
+        ├── reports/     {n}-{run-id}.json   # eval reports; runs/: recorded executions
         ├── traces/runs/ {run-id}.jsonl
-        └── workspace.json                   # workspaceVersion — écrit par bootstrap,
-                                             #   monté par sdda_scripts/migrate_workspace.py
+        └── workspace.json                   # workspaceVersion — written by bootstrap,
+                                             #   upgraded by sdda_scripts/migrate_workspace.py
 ```
 
-### 2.ter Ce que l'humain fournit, ce que le framework produit
+### 2.ter What the human provides, what the framework produces
 
-Jusqu'à la v5, `feats/` rangeait côte à côte le brief et le roster que l'humain
-écrit, et la MISSION, les CAPs et les contrats que les agents génèrent ;
-`proof/` rangeait sa vérité terrain à côté des jeux de `qa-evals`. En ouvrant
-l'un ou l'autre, l'humain ne pouvait pas savoir ce qu'il devait remplir et ce
-qu'il devait laisser au framework. La v6 le dit par l'arbre.
+Up to v5, `feats/` put the brief and roster the human writes next to the
+MISSION, CAPs and contracts the agents generate; `proof/` put the human's
+ground truth next to the `qa-evals` sets. Opening either one, the human could
+not tell what was theirs to fill and what to leave to the framework. v6 says it
+with the tree.
 
-| Entrée | Nature | Écrite par | Régénérable |
+| Entry | Nature | Written by | Regenerable |
 |---|---|---|---|
-| `stack/` | les choix techniques — `STACK.md`, seul, versionné | **l'humain** | non |
-| `feats/` | ses spécifications — brief et roster, **Markdown seul**, à plat | **l'humain** | non |
-| `assets/` | les données (racine des stores `kind: local`, l'`assets/` de SDD_Pro) et `.env` | **l'humain** | non |
-| `seed/` | la vérité terrain — scénarios annotés, labels | **l'humain** | non |
-| `pipeline/` | tout ce que le pipeline génère : MISSION, CAPs, topologie, contrats, ADR, jeux, suites, baselines, calibration | les agents `po-*`, `architect-*`, `qa-evals`, les scripts — **jamais un `dev-*`** sous datasets/suites/baselines/calibration | en partie |
-| `src/` | l'application générée, prompts et schémas figés compris | les sept `dev-*`, `qa-tests`, les générateurs | oui |
-| `.sys/` | état interne et sorties de run | les scripts | oui |
+| `stack/` | the technical choices — `STACK.md`, alone, versioned | **the human** | no |
+| `feats/` | their specifications — brief and roster, **Markdown only**, flat | **the human** | no |
+| `assets/` | the data (root of `kind: local` stores, SDD_Pro's `assets/`) and `.env` | **the human** | no |
+| `seed/` | the ground truth — annotated scenarios, labels | **the human** | no |
+| `pipeline/` | everything the pipeline generates: MISSION, CAPs, topology, contracts, ADRs, sets, suites, baselines, calibration | the `po-*`, `architect-*` and `qa-evals` agents, the scripts — **never a `dev-*`** under datasets/suites/baselines/calibration | partly |
+| `src/` | the generated application, prompts and frozen schemas included | the seven `dev-*`, `qa-tests`, the generators | yes |
+| `.sys/` | internal state and run output | the scripts | yes |
 
-**L'entrée de l'utilisateur tient en quatre dépôts**, et c'est voulu : `STACK.md`
-(les choix techniques — langage, framework, pattern, sources de données, URL
-d'API, serveurs MCP), ses fichiers Markdown sous `feats/` (ce que le système
-doit faire, puis le roster qui dit comment), ses données et son `.env` sous
-`assets/`, et sa vérité terrain sous `seed/`. Le `.env` porte la clé des
-*Runtime Models* (§6) : l'application générée le lit, le harnais de
-construction jamais — il paie ses tokens avec son propre compte. Il est déposé
-dans `assets/` et **copié** vers `src/{AppName}/.env` par
-`python .sdda/sdda.py install-env`, sans LLM, parce que c'est de
-`src/{AppName}/` que l'application part en exécutable ou en conteneur. Aucun
-agent ne lit l'un ou l'autre fichier : `preflight_forbidden_reads` et
-`preflight_bash_ownership` refusent `[SECRET_READ_FORBIDDEN]`, y compris à
-`architect-data` qui parcourt `assets/` pour inférer les schémas. Trois règles
-tiennent l'entrée, vérifiées par `smoke-check` et non racontées : `feats/` ne
-contient que du Markdown (`[FEATS_NOT_MARKDOWN]`), `stack/` ne contient que
-`STACK.md` (`[STACK_DIR_UNEXPECTED_FILE]`), aucune valeur de secret n'entre dans
-STACK.md (`[STACK_SECRET_IN_CLEAR]`). Un workspace d'une version antérieure
-monte par `python .sdda/sdda.py migrate-workspace`, qui range chaque fichier à
-sa place et réécrit les références qui le citaient.
+**The user's input fits in four places**, deliberately: `STACK.md` (the
+technical choices — language, framework, pattern, data sources, API URLs, MCP
+servers), their Markdown files under `feats/` (what the system must do, then
+the roster that says how), their data and `.env` under `assets/`, and their
+ground truth under `seed/`. The `.env` carries the key of the *Runtime Models*
+(§6): the generated application reads it, the build harness never does — it
+pays for its tokens with its own account. It is dropped in `assets/` and
+**copied** to `src/{AppName}/.env` by `python .sdda/sdda.py install-env`,
+without an LLM, because `src/{AppName}/` is where the application leaves from as
+an executable or a container. No agent reads either file:
+`preflight_forbidden_reads` and `preflight_bash_ownership` refuse
+`[SECRET_READ_FORBIDDEN]`, `architect-data` included, although it walks
+`assets/` to infer schemas — whatever spelling opens the file (`.ENV`, `.env.`,
+the `.env::$DATA` stream, a Grep filtered on `.env`), and `.claude/settings.json`
+backs these hooks with native read `deny` rules. Three rules hold the input,
+checked by `smoke-check` rather than told: `feats/` contains Markdown only
+(`[FEATS_NOT_MARKDOWN]`), `stack/` contains `STACK.md` only
+(`[STACK_DIR_UNEXPECTED_FILE]`), no secret value enters STACK.md
+(`[STACK_SECRET_IN_CLEAR]`). A workspace from an earlier version is carried
+forward by `python .sdda/sdda.py migrate-workspace`, which puts every file in
+its place and rewrites the references that cited it.
 
-**La seule frontière qui ne souffre aucune exception est celle du jugement.**
-L'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni à la
-référence contre laquelle sa régression est mesurée : `pipeline/datasets/`,
-`suites/`, `baselines/` et `calibration/` sont interdits en écriture à tout
-`dev-*`. La fusion de l'ancien `feats/` et de l'ancien `proof/` sous `pipeline/`
-ne la desserre pas : elle tient aux zones de la matrice d'ownership, pas au nom
-du répertoire parent. Ranger ces jeux sous `src/`, en revanche, les ferait
-tomber dans la zone d'écriture des agents développeurs.
+**The only boundary with no exception is the judgement boundary.** The agent
+that writes the code can touch neither the set that grades it nor the
+reference its regression is measured against: `pipeline/datasets/`, `suites/`,
+`baselines/` and `calibration/` are write-forbidden to every `dev-*`. Merging
+the old `feats/` and the old `proof/` under `pipeline/` does not loosen it: it
+holds by the zones of the ownership matrix, not by the name of the parent
+directory. Putting these sets under `src/`, on the other hand, would drop them
+into the developer agents' write zone.
 
-Deux conséquences se lisent directement dans l'arbre :
+Two consequences can be read directly in the tree:
 
-- **Les prompts sont DANS l'application**, `src/{App}/prompts/`, parce qu'un
-  prompt système est un actif d'exécution. Rangé au même rang que les specs, il
-  ne part pas avec le code ; rangé sous `src/` mais à côté de l'application, il
-  n'en part pas davantage — l'exécutable ou le conteneur bâti depuis `src/{App}/`
-  cherchait ses prompts dans un répertoire resté dans le dépôt. Même logique pour
-  `skills/` (ce que l'agent sait faire, un fragment par compétence), `rules/` (ce
-  qu'il doit ou ne doit jamais faire) et `memory/` (l'implémentation du contrat
-  de mémoire) : une application agentic se lit dans son arbre — agents, prompts,
-  skills, rules, tools, memory, orchestration — pas dans le framework qui l'a
-  produite.
-- **Les ADR ont UN emplacement**, `pipeline/decisions/`. Ils en avaient deux —
-  `docs/adr/` que citait le gabarit, `.sys/.context/adrs/` que déclarait la
-  matrice d'ownership — et le script des tâches humaines cherchait dans les
-  deux. La question « cet ADR a-t-il été écrit ? » avait donc deux réponses
-  possibles, et c'est celle que personne ne relisait qui gouvernait.
+- **Prompts live INSIDE the application**, `src/{App}/prompts/`, because a
+  system prompt is a runtime asset. Stored alongside the specs, it does not ship
+  with the code; stored under `src/` but next to the application, it does not
+  either — the executable or container built from `src/{App}/` looked for its
+  prompts in a directory left behind in the repository. Same logic for
+  `skills/` (what the agent can do, one fragment per skill), `rules/` (what it
+  must or must never do) and `memory/` (the implementation of the memory
+  contract): an agentic application reads in its own tree — agents, prompts,
+  skills, rules, tools, memory, orchestration — not in the framework that
+  produced it.
+- **ADRs have ONE location**, `pipeline/decisions/`. They used to have two —
+  `docs/adr/`, cited by the template, and `.sys/.context/adrs/`, declared by the
+  ownership matrix — and the human-tasks script looked in both. The question
+  "has this ADR been written?" therefore had two possible answers, and the one
+  nobody reread was the one that governed.
 
-Un workspace d'une version antérieure monte par
-`python .sdda/sdda.py migrate-workspace`, qui **déplace** le contenu plutôt que
-de créer le nouvel arbre à côté de l'ancien.
+A workspace from an earlier version is carried forward by
+`python .sdda/sdda.py migrate-workspace`, which **moves** the content instead of
+creating the new tree next to the old one.
 
-**Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
-annoncé, pas encore écrit. La règle vaut surtout pour `stacks/` —
-<!--sdda:count stacks-->45<!--/sdda:count--> fiches existent, quand le
-catalogue visé en compte trois fois plus. Ce n'est pas un
-manque à combler avant d'annoncer : c'est la séquence de
-[docs/ROADMAP.md](docs/ROADMAP.md), qui livre **une combinaison validée de bout en
-bout** (C1) avant d'en annoncer douze. Le catalogue cible et le niveau de
-validation de chaque composant vivent dans `registry/compatibility.matrix.json`
-(`componentLevels`, `catalogDiscrepancies`) et `registry/patterns.registry.json` —
-registres machine, donc vérifiables, là où un arbre en prose ne l'est pas.
+**This tree describes the disk, not the intent.** 🟡 marks the only accepted
+gap: announced, not written yet — `plugin.json` and `.sdda/skills/`, nothing
+else. The rule matters most for `stacks/` —
+<!--sdda:count stacks-->45<!--/sdda:count--> sheets exist, while the target
+catalogue has three times as many. This is not a gap to close before
+announcing: it is the sequence of [docs/ROADMAP.md](docs/ROADMAP.md), which
+delivers **one combination validated end to end** (C1) before announcing
+twelve. The target catalogue and each component's validation level live in
+`registry/compatibility.matrix.json` (`componentLevels`,
+`catalogDiscrepancies`) and `registry/patterns.registry.json` — machine
+registries, hence checkable, where a prose tree is not.
 
-La conséquence opérationnelle, qui doit être dite : **une ligne activée dans
-`STACK.md` pour un composant sans fiche sur disque ne charge rien.** Le catalogue
-annoncé n'est pas un catalogue chargeable.
+The operational consequence, which has to be said: **a line activated in
+`STACK.md` for a component with no sheet on disk loads nothing.** The announced
+catalogue is not a loadable catalogue. A value the parsers accept but nothing
+implements — long-term memory, a remote store, an `http-api` or `mcp`
+connector, a guardrail with no sheet, human-in-the-loop outside langgraph — is
+refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`) instead of being swallowed.
 
-### 2.ante Un seul point d'entrée pour l'outillage
+### 2.ante One entry point for the tooling
 
-Les 60 scripts déterministes s'appellent par une forme unique :
+The <!--sdda:count subcommands-->76<!--/sdda:count--> deterministic subcommands are called in a single form:
 
 ```bash
-python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
-sdda validate-mission --mission 1                     # après `pip install -e .sdda/python`
+python .sdda/sdda.py validate-mission --mission 1     # from a bare clone
+sdda validate-mission --mission 1                     # after `pip install -e .sdda/python`
 ```
 
-La première ne suppose **aucune installation**, et c'est elle qu'écrivent les
-22 fiches d'agents et les 11 commandes. Un framework dont les prompts exigent un
-`pip install` préalable échoue au premier clone — et l'agent qui reçoit
-`command not found` invente la sortie du script au lieu de s'arrêter.
+The first assumes **no installation**, and it is the one the
+<!--sdda:count agents-->23<!--/sdda:count--> agent sheets and the <!--sdda:count commands-->11<!--/sdda:count--> commands write. A framework whose prompts
+require a prior `pip install` fails on the first clone — and the agent that gets
+`command not found` invents the script's output instead of stopping.
 
-Le registre des sous-commandes est **dérivé du disque** (`sdda_cli.discover()`) :
-tout module de `sdda_scripts/`, `sdda_admin/` ou `sdda_hooks/` est une
-sous-commande nommée par son fichier (`validate_mission.py` -> `validate-mission`).
-Aucune table à tenir, donc aucune table à laisser dériver — même raison que pour
-le registre d'erreurs (§9).
+The subcommand registry is **derived from disk** (`sdda_cli.discover()`): every
+module of `sdda_scripts/`, `sdda_admin/` or `sdda_hooks/` is a subcommand named
+after its file (`validate_mission.py` -> `validate-mission`). No table to
+maintain, hence no table to let drift — the same reason as for the error
+registry (§9).
 
-Ce n'est pas qu'une commodité d'écriture. `sdda_cli.resolve()` est la **SSoT que
-lisent les scanners** : `planned_scripts.py` et `framework_smoke.py` résolvent
-`python .sdda/sdda.py {cmd}` vers son module pour continuer de détecter un script
-qu'un prompt annonce sans que personne l'ait écrit. Migrer la prose vers la forme
-courte sans leur apprendre à la lire aurait rendu ce contrôle muet — c'est-à-dire
-aurait rouvert exactement la porte que `refs.planned.undeclared` a fermée.
+It is not only a writing convenience. `sdda_cli.resolve()` is the **SSoT the
+scanners read**: `planned_scripts.py` and `framework_smoke.py` resolve
+`python .sdda/sdda.py {cmd}` to its module so that they keep detecting a script
+a prompt announces without anyone having written it. Moving the prose to the
+short form without teaching them to read it would have silenced that check —
+that is, reopened exactly the door `refs.planned.undeclared` closed. Today the
+inventory is empty: no cited script is missing from disk
+(`.sdda/docs/PLANNED-SCRIPTS.md`, regenerated by `planned-scripts --write`).
 
-### 2.bis L'Agentic IR — la charnière du multi-framework
+### 2.bis The Agentic IR — the hinge of multi-framework
 
-Entre les contrats Markdown (lisibles, discutables, versionnés) et le code
-généré (LangGraph, Semantic Kernel, Pydantic-AI…) s'intercale une
-**représentation intermédiaire machine** : `workspace/.sys/.ir/{n}-system.ir.json`.
+Between the Markdown contracts (readable, debatable, versioned) and the
+generated code (LangGraph, Semantic Kernel, Pydantic-AI…) sits a **machine
+intermediate representation**: `workspace/.sys/.ir/{n}-system.ir.json`.
 
 ```
-contrats Markdown  --(ir-compiler, déterministe, 0 token)-->  system.ir.json
+Markdown contracts --(ir-compiler, deterministic, 0 token)-->  system.ir.json
                                                                     |
                         +-------------------------+-----------------+
                         v                         v                 v
-                 générateur Python         générateur C#      générateur TS
+                 Python generator          C# generator       TS generator
                  (LangGraph)               (Semantic Kernel)  (LangChain.js)
 ```
 
-Pourquoi c'est structurant, et pas une couche de plus :
+Why this is structural, and not one more layer:
 
-- **Le multi-framework devient déterministe.** Sans IR, chaque générateur
-  ré-interprète le Markdown avec un LLM — donc trois interprétations divergentes
-  de la même spécification. Avec IR, l'interprétation a lieu **une fois**, en
-  amont, et les générateurs consomment une structure close.
-- **L'IR est validable sans LLM** : schéma JSON, atteignabilité du graphe, bornes
-  présentes, outils référencés existants, cohérence des scopes. La TOPOLOGY GATE
-  s'exécute sur l'IR, pas sur de la prose.
-- **L'IR est diffable.** Un changement d'architecture devient un diff structuré
-  et lisible, pas un diff de paragraphes.
-- **L'IR porte le budget estimé.** Coût et latence se calculent sur le graphe, pas
-  sur une intention.
+- **Multi-framework becomes deterministic.** Without an IR, every generator
+  re-interprets the Markdown with an LLM — hence three divergent
+  interpretations of the same specification. With an IR, interpretation happens
+  **once**, upstream, and the generators consume a closed structure.
+- **The IR can be validated without an LLM**: JSON schema, graph reachability,
+  bounds present, referenced tools existing, scope consistency. The TOPOLOGY
+  GATE runs on the IR, not on prose.
+- **The IR is diffable.** An architecture change becomes a structured, readable
+  diff, not a diff of paragraphs.
+- **The IR carries the estimated budget.** Cost and latency are computed on the
+  graph, not on an intention.
 
-L'IR ne remplace pas les contrats Markdown : les contrats restent la source
-autoritaire éditée par l'humain et les agents. L'IR en est la projection
-compilée, régénérable, jamais éditée à la main. Détail et schéma :
+The IR does not replace the Markdown contracts: the contracts remain the
+authoritative source edited by humans and agents. The IR is their compiled
+projection, regenerable, never edited by hand. Details and schema:
 [docs/AGENTIC-IR.md](docs/AGENTIC-IR.md).
 
 ---
 
-## 3. Le pipeline forward
+## 3. The forward pipeline
 
 ```
  PHASE 0   ELICITATION        po-elicitor            -> pipeline/missions/{n}-{Name}.md
    |                                                         [MISSION GATE]
  PHASE 1   CAPABILITIES       po-capabilities        -> pipeline/caps/{n}-{m}-*.md
    |                                                         [CAP GATE]
- PHASE 2   TOPOLOGIE          architect-topology          -> pipeline/topology/{n}-topology.md
-   |         + architect-rag, architect-data,          + pipeline/contracts/**
-   |           architect-memory, architect-tools  (parallèle)
-   | PHASE 2.9 COMPILATION IR  ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
-   |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
- PHASE 3   SOCLE              dev-backend (squelette : projet, composition, config, Domaine — seul, d'abord)
-   |                          puis dev-tools || dev-retrieval || dev-data     (parallèle)
+   |       ROSTER             roster validate --if-present (script, 0 token, BEFORE the architect)
+ PHASE 2   TOPOLOGY           architect-topology (alone)  -> pipeline/topology/{n}-topology.md
+   |                          gen-source-tools --scope contracts (script, if declared-sources)
+   |                          then architect-tools || architect-rag ||
+   |                               architect-data || architect-memory  (parallel)
+   |                                                     -> pipeline/contracts/**
+   | PHASE 2.9 IR COMPILATION validate-topology (full pass), then
+   |                          ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
+   |                                                         [TOPOLOGY GATE]  (runs on the IR)
+ PHASE 6a  DATASETS           qa-evals --datasets-only: golden, calibration — BEFORE the code
+   |
+ PHASE 3   FOUNDATION         dev-backend (skeleton: project, composition, config, Domain — alone, first)
+   |                          then dev-tools || dev-retrieval || dev-data     (parallel)
+   |                          gen-source-tools --scope code right before dev-data
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
- PHASE 4   PROMPTS + AGENTS   dev-prompt -> dev-agent  (parallèle par agent)
+ PHASE 4   PROMPTS + AGENTS   4.0 dev-orchestration --prepass (shared/ + memory/interface, frozen)
+   |                          4.1 dev-prompt (alone) -> 4.2 dev-agent  (parallel, 1 instance per agent)
    |                                                         [AGENT GATE]
- PHASE 5   ORCHESTRATION      dev-orchestration             -> graphe / superviseur / routeur
-   |       + dev-api (surface d'exposition)
-   |       + dev-backend (packaging : exécutable, image, README d'exploitation)
+ PHASE 5   ORCHESTRATION      dev-orchestration -> dev-api -> dev-backend (packaging)   (sequential)
    |                                                         [ORCH GATE]
  PHASE 6   EVAL + TESTS       qa-evals || qa-tests
    |
- PHASE 7   REVUE              Etage A : spec-compliance seul
-   |                          Etage B : agent-safety || cost-latency ||
-   |                                    orchestration || rag-quality   (parallèle)
-   |                          Etage C : review-adversarial (système vivant)
+ PHASE 7   REVIEW             Stage A: spec-compliance alone
+   |                          secret + PII scans, once (0 token)
+   |                          Stage B: agent-safety || cost-latency ||
+   |                                   orchestration || rag-quality   (parallel)
+   |                          Stage C: review-adversarial (live system)
+   |                          + the versioned adversarial set, played LIVE
    |                                                         [SAFETY GATE]
- PHASE 8   ACCEPTATION        mesure de l'objectif chiffré sur holdout
-                              + non-régression vs baseline
+ PHASE 8   ACCEPTANCE         measure of the quantified goal on holdout
+                              + non-regression vs baseline
                                                              [ACCEPTANCE GATE]
-                                                          -> VERDICT vert/jaune/rouge
+                                                          -> VERDICT green/yellow/red
 ```
 
-**Délégation pure** (hérité SDD_Pro) : la commande orchestratrice `/sdda-full`
-n'invoque aucun agent directement — elle chaîne des commandes. **Aucun agent ne
-spawne un autre agent** : l'orchestration appartient à la commande, donc la
-facture reste prévisible.
+**Pure delegation** (inherited from SDD_Pro): the orchestrating command
+`/sdda-full` invokes no agent directly — it chains commands. **No agent spawns
+another agent**: orchestration belongs to the command, so the bill stays
+predictable.
+
+What the diagram does not say on its own, and was added because its absence
+cost something:
+
+- **The roster is checked before the architect.** `architect-topology`
+  materialises a DECLARED roster, it does not invent one (P7). Without this
+  0-token check, `/sdda-full` paid the most expensive agent of the pipeline to
+  fail at post-check — or to fill in, itself, the declaration nobody had made.
+- **Declared-source contracts are born in PHASE 2, before the IR**
+  (`gen-source-tools --scope contracts`), and their code in PHASE 3 right before
+  `dev-data` (`--scope code`). A contract created after the IR would describe a
+  tool G2 never saw.
+- **`validate-topology` runs its full pass before `ir-compiler`**, and it alone
+  writes the `topology` part of G2: an IR is not compiled against a missing
+  contract (`[TOPOLOGY_CONTRACT_MISSING]`, `[AGENT_CONTRACT_MISSING]`). The
+  `--pre` pass no longer writes a report — it granted a green part without any
+  contract having been checked.
+- **Sets before code (PHASE 6a).** G4 requires the retrieval golden, G5 the CAP
+  goldens and the calibration sets; producing them before the code is also what
+  keeps the code from influencing the set that will judge it.
+- **Step 4.0 — the prepass.** `dev-orchestration --prepass` lays down the shared
+  types (`shared/`) and the memory **interface** before the `dev-agent`
+  instances run in parallel. Without it, every instance invented its own handoff
+  types and coded against a memory written after it. These zones are then
+  **frozen** — `shared/**` and `memory/**` during phase 4, `shared/**` and
+  `memory/interface.*` during phase 5 — and the audit checks it on disk
+  (`[OWNERSHIP_FROZEN_ZONE_CHANGED]`).
+- **Every write wave is bracketed by a snapshot.** `audit-ownership snapshot`
+  before phases 3, 4.0, 4 and 5, then `audit-ownership --since-snapshot` after,
+  which judges the files the phase REALLY wrote (`--instances` for the
+  `dev-agent` instances, `--frozen` for the frozen zones) and can revoke them
+  (`--restore`). What the hooks do not see — a script writing from inside — shows
+  on disk.
+- **Phase 5 is sequential**: orchestration, then surface, then packaging. The
+  surface attaches to the graph, packaging to the surface.
+- **Resume follows the lineage.** `/sdda-full {n} --resume` opens a run linked to
+  the previous one (`resumedFrom`); skip, retry and the attempt counter are read
+  over the whole lineage, at item granularity (`--inputs-hash`), and
+  `BuildLoopMaxCostUsd` bounds the fix loop of ONE item, resumes included.
+  `set-phase --phase acceptance` closes the lineage.
 
 ---
 
-## 4. Les neuf gates
+## 4. The nine gates
 
-Chaque gate est **déterministe** (0 token) sauf mention contraire. Chaque gate a
-un enforcer sur disque déclaré dans `INVARIANTS.yml`.
+Every gate is **deterministic** (0 token) unless stated otherwise. Every gate
+has an on-disk enforcer declared in `INVARIANTS.yml`.
 
-| # | Gate | Vérifie | Bloquant sur |
+| # | Gate | Checks | Blocking on |
 |---|---|---|---|
-| G0 | **MISSION** | objectif chiffré présent, budget déclaré (coût/latence/tokens), ground truth identifiée, aucun `<à préciser>` résiduel | `[MISSION_INCOMPLETE]` |
-| G1 | **CAP** | chaque AC nomme métrique + seuil + dataset ; chaque élément de la MISSION couvert par >= 1 CAP | `[AC_NOT_EVALUABLE]`, `[TRACEABILITY_GAP]` |
-| G2 | **TOPOLOGY** | pattern justifié + alternative plus simple explicitement écartée ; budget estimé <= budget déclaré ; toute boucle bornée ; tout agent a un contrat ; graphe atteignable sans cycle non borné | `[TOPOLOGY_UNJUSTIFIED]`, `[BUDGET_EXCEEDED_ESTIMATE]`, `[UNBOUNDED_LOOP]` |
-| G3 | **TOOL** | schéma valide ; tests de contrat verts (happy + chaque erreur déclarée + timeout + auth KO) ; connectivité live vérifiée ; classe d'effet de bord déclarée ; stratégie de sûreté présente si destructif | `[TOOL_CONTRACT_FAILED]`, `[SIDE_EFFECT_UNDECLARED]` |
-| G4 | **RETRIEVAL** | golden set présent (>= n queries) ; recall@k, nDCG, groundedness, taux de citations résolues au-dessus des seuils | `[RETRIEVAL_BELOW_THRESHOLD]` |
-| G5 | **AGENT** | chaque agent évalué **isolé** (outils mockés, retrieval figé) contre ses CAP ACs, sur k runs | `[AGENT_EVAL_FAILED]` |
-| G6 | **ORCH** | evals bout-en-bout sur golden mission ; trajectoires conformes ; hops <= plafond ; coût et latence **mesurés** <= budget déclaré ; **part `api`** : le contrat exposé est dérivé de l'IR et lui correspond | `[TRAJECTORY_VIOLATION]`, `[BUDGET_EXCEEDED_MEASURED]`, `[API_CONTRACT_DRIFT]`, `[API_ROUTE_UNBACKED]` |
-| G7 | **SAFETY** | suite d'injection (directe + indirecte) ; audit de scope d'outils ; scan de secrets dans prompts/traces/datasets ; scan PII du vector store | `[INJECTION_SUCCEEDED]`, `[TOOL_SCOPE_EXCESS]`, `[SECRET_LEAK]`, `[PII_IN_INDEX]` |
-| G8 | **ACCEPTANCE** | objectif chiffré de la MISSION atteint sur **holdout** (jamais sur le golden d'entraînement) ; non-régression vs baseline au-delà de la tolérance | `[GOAL_NOT_MET]`, `[REGRESSION]` |
+| G0 | **MISSION** | quantified goal present, budget declared (cost/latency/tokens), ground truth identified, no residual `<à préciser>` | `[MISSION_INCOMPLETE]` |
+| G1 | **CAP** | every AC names metric + threshold + dataset; every MISSION element covered by >= 1 CAP | `[AC_NOT_EVALUABLE]`, `[TRACEABILITY_GAP]` |
+| G2 | **TOPOLOGY** | pattern justified + simpler alternative explicitly ruled out; estimated budget <= declared budget; every loop bounded; every agent has a contract; graph reachable with no unbounded cycle; **parts** `packaging`, `architecture`, `adr` | `[TOPOLOGY_UNJUSTIFIED]`, `[BUDGET_EXCEEDED_ESTIMATE]`, `[UNBOUNDED_LOOP]`, `[TOPOLOGY_CONTRACT_MISSING]`, `[ADR_MISSING]` |
+| G3 | **TOOL** | valid schema; green contract tests (happy + every declared error + timeout + auth failure); live connectivity verified; side-effect class declared; safety strategy present if destructive | `[TOOL_CONTRACT_FAILED]`, `[SIDE_EFFECT_UNDECLARED]` |
+| G4 | **RETRIEVAL** | golden set present (>= n queries); recall@k, nDCG, groundedness, resolved-citation rate above thresholds | `[RETRIEVAL_BELOW_THRESHOLD]` |
+| G5 | **AGENT** | every agent evaluated **in isolation** (mocked tools, frozen retrieval) against its CAP ACs, over k runs; **parts** `calibration` (a red calibration blocks), `prompts` (pinned hash of every prompt the IR expects), `ownership` | `[AGENT_EVAL_FAILED]`, `[PROMPT_MISSING]`, `[PROMPT_HASH_MISMATCH]` |
+| G6 | **ORCH** | end-to-end evals on the golden mission; conforming trajectories; hops <= ceiling; **measured** cost and latency <= declared budget; **`api` part**: the exposed contract is derived from the IR and matches it; **`framework` part**: the code imports the declared framework, where its sheet puts it, and no competitor | `[TRAJECTORY_VIOLATION]`, `[BUDGET_EXCEEDED_MEASURED]`, `[API_CONTRACT_DRIFT]`, `[API_ROUTE_UNBACKED]`, `[FRAMEWORK_DRIFT]` |
+| G7 | **SAFETY** | injection suite (direct + indirect); versioned adversarial set played live; tool scope audit; secret scan of prompts/traces/datasets; PII scan of the vector store; every mandatory reviewer report present | `[INJECTION_SUCCEEDED]`, `[TOOL_SCOPE_EXCESS]`, `[SECRET_LEAK]`, `[PII_IN_INDEX]`, `[SAFETY_REVIEW_REPORT_MISSING]` |
+| G8 | **ACCEPTANCE** | the MISSION's quantified goal met on the **holdout** (never on the training golden); non-regression vs baseline beyond tolerance | `[GOAL_NOT_MET]`, `[REGRESSION]` |
 
-**Règle du holdout** : les datasets d'ajustement (`golden/`) et de verdict
-(`holdout/`) sont disjoints et le pipeline le vérifie par hash. Optimiser les
-prompts contre le jeu qui rend le verdict est la façon agentic de se mentir.
+**Holdout rule**: the tuning datasets (`golden/`) and the verdict datasets
+(`holdout/`) are disjoint, and the pipeline checks it by hash. Optimising
+prompts against the set that delivers the verdict is the agentic way of lying to
+oneself.
 
-**L'API Gate est une part de G6, pas une dixième gate.** C'est la transposition
-de l'`API Gate` de SDD_Pro, qui validait le contrat back↔front avant de générer
-le front. Ici la couture est entre l'**IR** et le monde extérieur : l'OpenAPI
-publié est **dérivé** des `inputSchema` / `outputSchema` de l'IR, jamais écrit à
-la main, et un test déterministe (0 token) confronte les deux. La ranger dans G6
-plutôt qu'en gate séparée est délibéré : `dev-api` travaille en PHASE 5 aux
-côtés de `dev-orchestration`, et un dixième verrou pour une seule question
-diluerait la lecture des neuf autres. Détail :
-`stacks/serving/fastapi-sse.md §6`. Désactivable par `ApiContractFirst: false`,
-qui exige un ADR.
+**Mandatory parts, contributing parts.** A gate aggregates partial reports
+(`sdda_lib/gate_reports.py`). A missing **mandatory** part leaves the gate open;
+a missing **contributing** part does not block, but its RED always does. G2
+requires `topology`, `ir` and `budget`, and reads `packaging`, `architecture` and
+`adr`; G5 reads `calibration`, `ownership` and `prompts`; G6 reads `api` and
+`framework`; G7 requires `suites`, `adversarial` and `verdict`, and reads
+`secrets`, `pii` and `toolscope`. Contributing rather than mandatory because a
+project with no decision that requires an ADR, or a `cli` surface with no HTTP
+contract, has nothing to write — requiring it would fail deliverables that do
+not have the object. Red, on the other hand, never has an excuse.
 
-**Le livrable est déclaré, pas déduit.** `DeliverableType` (`## Project Config`)
-dit ce qu'on **installe** — `cli-exe`, `backend-api`, `library`, `batch-job`,
-`container`, `mcp-server` — là où `## Active Serving Surface` dit par où l'on
-**entre**. Les deux sont indépendants : un même `RunService` s'expose en HTTP ou
-en lot, et se livre en conteneur ou en exécutable. Leur cohérence (livrable x
-langage x surface x identité d'appelant) est vérifiée par
-`validate_packaging.py`, en **part `packaging` de G2** : c'est une décision
-d'architecture, et elle doit être tranchée avant qu'une ligne de code en dépende.
+**G2's `adr` part — a decision that contradicts a default is made in writing.**
+`registry/adr-requirements.yml` declares the decisions that require an ADR (a
+database in write mode for an agent, `ApiContractFirst: false`,
+`TlsVerify: false`, PII in memory or raw in traces, a network surface without
+identity, `StackComboCheck: off`, the `network` pattern); `validate-adr` writes
+the part. An ADR covers a requirement only if it is `Status: Accepted` and
+**names** it in a `Covers: Key=value` line: an ADR that wrote "false" anywhere
+used to cover every boolean decision of the project.
 
-**Le défaut est `cli-exe`, dans les quatre langages.** Un système agentic se
-livre d'abord comme un programme qu'on lance : une entrée, une sortie, un code
-de retour. Rien à déployer, rien à authentifier, et c'est la surface que le
-runner d'eval invoque en L4-L7 — donc ce qu'on mesure est ce qu'on livre. Chaque
-langage a sa fiche console (`serving/cli.md` en Python, `serving/cli-dotnet.md`
-en C#) ; un défaut qu'un langage ne peut pas honorer se voit au preflight
-(`[STACK_LANGUAGE_MISMATCH]`) et non en silence.
+**Judge calibration is a part of G5, not a warning.** The
+`G5-{n}.calibration.json` report is filed under the MISSION number, hence read
+by the gate: a red calibration blocks G5. An uncalibrated judge turns its grader
+`advisory` (informative score, non-blocking), and a CAP whose graders are all
+advisory cannot be green. A judge that is one of the models the product runs is
+refused at preflight (`[JUDGE_SAME_AS_EVALUATED]`); found at runtime, it yields
+an advisory verdict (`[JUDGE_EQUALS_EVALUATED]`). The judge is real:
+`graders/judge_clients.py` calls Anthropic, OpenAI, Gemini or Ollama with the
+stdlib, URL and key variable read from the provider sheet.
 
-**`backend-api` n'est pas une variante de présentation, c'est un changement de
-nature.** Le moteur agentic cesse d'être un programme que quelqu'un lance et
-devient un **service qu'une autre application appelle** : elle lui envoie une
-requête, il exécute la MISSION, il rend la réponse et les événements. On le
-choisit quand l'appelant est un logiciel — un front, un back métier, un
-ordonnanceur — jamais pour faire plus propre. Il rend alors obligatoires trois
-choses qui n'existent pas en `cli-exe` : un `ApiFramework` cohérent avec le
-langage (`fastapi`, `aspnet-minimal`, `spring-boot`, `express`…), une identité
-d'appelant établie au transport (`ApiAuthMode`, sans quoi tout le filtrage à la
-source est contournable), et un contrat public dérivé de l'IR
-(`ApiContractFirst`) — un appelant qu'on ne contrôle pas ne se corrige pas après
-coup. La CLI reste générée : elle porte le smoke et les evals.
+**G7 plays, it does not reread.** `/sdda-review` plays the versioned adversarial
+set against the delivered surface (`run-adversarial-suite --executor … --run-id`),
+and the script records every execution itself in
+`.sys/reports/runs/{n}-adversarial.jsonl`, which `--replay` can re-judge. The
+scans (`scan-secrets`, `scan-pii`) run once, before stage B. A missing mandatory
+reviewer report is `[SAFETY_REVIEW_REPORT_MISSING]`, not "zero findings": a
+reviewer that wrote nothing checked nothing.
+
+**The API Gate is a part of G6, not a tenth gate.** It transposes SDD_Pro's
+`API Gate`, which validated the back↔front contract before generating the
+front. Here the seam is between the **IR** and the outside world: the published
+OpenAPI is **derived** from the IR's `inputSchema` / `outputSchema`, never
+written by hand, and a deterministic test (0 token) confronts the two. Placing
+it in G6 rather than as a separate gate is deliberate: `dev-api` works in PHASE 5
+alongside `dev-orchestration`, and a tenth lock for a single question would
+dilute the reading of the other nine. Details:
+`stacks/serving/fastapi-sse.md §6`. It can be disabled with
+`ApiContractFirst: false`, which requires an ADR. The `framework` part follows
+the same logic: an architecture that the sheet read at review no longer
+describes is drift, not a detail.
+
+**`STACK.md` is validated before any spend.** Its values are checked against
+`templates/project-config.schema.json`, section by section
+(`[CONFIG_VALUE_INVALID]`, `[CONFIG_KEY_CONFLICT]`, `[CONFIG_KEY_MISPLACED]`),
+blocking at `smoke-check` and at preflight; every template key declares the
+script or agent that reads it (`x-readBy`), and the keys nobody read have been
+removed. The active combination is recognised by its signature in
+`registry/compatibility.matrix.json`; an unlisted combination is governed by
+`StackComboCheck: strict|warn|off` (`[STACK_COMBO_UNLISTED]`).
+
+**The deliverable is declared, not inferred.** `DeliverableType`
+(`## Project Config`) says what gets **installed** — `cli-exe`, `backend-api`,
+`library`, `batch-job`, `container`, `mcp-server` — while
+`## Active Serving Surface` says where you **enter**. The two are independent:
+the same `RunService` is exposed over HTTP or in batch, and shipped as a
+container or an executable. Their consistency (deliverable x language x surface
+x caller identity) is checked by `validate_packaging.py`, as the **`packaging`
+part of G2**: it is an architecture decision, and it must be settled before a
+line of code depends on it.
+
+**The default is `cli-exe`, in all four languages.** An agentic system ships
+first as a program you run: one input, one output, one exit code. Nothing to
+deploy, nothing to authenticate, and it is the surface the eval runner invokes
+at L4-L7 — so what is measured is what is shipped. Each language has its console
+sheet (`serving/cli.md` in Python, `serving/cli-dotnet.md` in C#,
+`serving/cli-node.md` in TypeScript, `serving/cli-kotlin.md` in Kotlin); a
+default a language cannot honour shows at preflight
+(`[STACK_LANGUAGE_MISMATCH]`), not silently.
+
+**`backend-api` is not a presentation variant, it is a change of nature.** The
+agentic engine stops being a program someone runs and becomes a **service
+another application calls**: it sends a request, the engine executes the
+MISSION, and returns the answer and the events. You choose it when the caller is
+software — a front end, a business back end, a scheduler — never to look
+cleaner. It then makes three things mandatory that do not exist in `cli-exe`: an
+`ApiFramework` consistent with the language (`fastapi`, `aspnet-minimal`,
+`spring-boot`, `express`…), a caller identity established at the transport
+(`ApiAuthMode`, without which all filtering at the source can be bypassed), and
+a public contract derived from the IR (`ApiContractFirst`) — a caller you do not
+control cannot be fixed after the fact. The CLI is still generated: it carries
+the smoke check and the evals.
 
 ---
 
-## 5. Contrat faits vs hypothèses
+## 5. Facts vs hypotheses contract
 
-Hérité de SDD_Pro, généralisé à tout le pipeline.
+Inherited from SDD_Pro, generalised to the whole pipeline.
 
-- **FAITS** — produits par des scripts déterministes : schémas d'outils, graphe
-  d'appels, métriques de retrieval, coûts mesurés, tailles de corpus, résultats de
-  tests. **Peuvent** devenir des critères d'acceptation.
-- **HYPOTHÈSES** — produites par des agents LLM : découpe en capabilities, choix de
-  topologie, glossaire métier, zones de risque. **Ne peuvent jamais** devenir des
-  critères d'acceptation sans validation humaine ou mesure.
+- **FACTS** — produced by deterministic scripts: tool schemas, call graph,
+  retrieval metrics, measured costs, corpus sizes, test results. **Can** become
+  acceptance criteria.
+- **HYPOTHESES** — produced by LLM agents: capability split, topology choice,
+  business glossary, risk areas. **Can never** become acceptance criteria
+  without human validation or measurement.
 
-La séparation est **structurelle** : l'agent écrit dans un fichier distinct qu'un
-script fusionne dans la branche `hypotheses` uniquement. Il ne peut pas écraser un
-fait, même s'il essaie.
+The separation is **structural**: the agent writes into a separate file that a
+script merges into the `hypotheses` branch only. It cannot overwrite a fact,
+even if it tries.
 
 ---
 
-## 6. Abstraction harness / provider / tier
+## 6. Harness / provider / tier abstraction
 
-Reprise intégrale du mécanisme SDD_Pro, avec une distinction supplémentaire
-obligatoire en agentic :
+SDD_Pro's mechanism taken over in full, with one additional distinction that is
+mandatory for agentic systems:
 
-| Notion | Qui exécute | Déclaré dans |
+| Notion | Who executes | Declared in |
 |---|---|---|
-| **Harness** | où tourne l'orchestration de *construction* (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
-| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents) | `STACK.md ## Build Models` |
-| **Runtime models** | quels modèles fait tourner l'**application générée** | `STACK.md ## Runtime Models` |
+| **Harness** | where the *build* orchestration runs (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
+| **Build models** | which models pay for the *build* tokens (the <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
+| **Runtime models** | which models the **generated application** runs | `STACK.md ## Runtime Models` |
 
-Les trois sont indépendants. Construire avec Claude Code + Opus une application
-qui tourne sur GPT-4-mini est un cas nominal, pas une exception. Confondre les
-deux derniers est l'erreur la plus fréquente des frameworks concurrents : elle
-rend le budget d'exécution incalculable.
+The three are independent. Building with Claude Code + Opus an application that
+runs on GPT-4-mini is a nominal case, not an exception. Confusing the last two
+is the most frequent mistake of competing frameworks: it makes the runtime
+budget impossible to compute.
 
-**Les agents déclarent un tier** (`fast` / `balanced` / `deep`), jamais un nom de
-modèle. La résolution tier -> modèle se lit dans `STACK.md` : `## Build Models`
-(`TierMap`) pour la construction, `## Runtime Models` (`RuntimeTierMap`) pour
-l'application — c'est ce que `layered_config.read_runtime_tier_map` et le
-squelette généré consomment. Les fiches `.sdda/providers/*.yaml` sont le
-**catalogue de référence** par fournisseur (identifiants de modèles, tarifs,
-noms de variables) que ces sections recopient ; aucun script ne les lit encore
-à l'exécution 🟡 — ce document l'a longtemps affirmé, et c'était faux sur
-disque. Ajouter un provider ne touche aucun agent. Les bornes `tier_floor` /
-`tier_ceiling` de `agent-bounds.yaml` sont des invariants de qualité : le
-Project Config ne peut pas les relâcher.
+**One harness is supported: Claude Code.** It is the only one where hooks refuse
+the tool call at the moment it happens. Codex CLI and Gemini CLI are
+**experimental**: their facades compile, no conformance run has validated them,
+and they have **no blocking gate at runtime** — what the hooks enforce is
+deferred to CI and the deterministic scripts. The root `AGENTS.md` and
+`GEMINI.md` files are generated pointers to their facade. Details:
+[docs/MULTI-HARNESS.md](docs/MULTI-HARNESS.md).
+
+**Agents declare a tier** (`fast` / `balanced` / `deep`), never a model name.
+Two resolutions, two sources:
+
+- **Build** — the harness resolves it: `capability-matrix.yml` >
+  `harnesses.{Harness}.tier_models`, which `harness_build` compiles into the
+  `model:` of every agent facade. `## Build Models` no longer carries any key:
+  `Provider`, `Endpoint`, `TierMap` and `Mode` were read by nobody, and changing
+  `TierMap` changed no call. A key you edit to no effect is worse than a missing
+  key — it makes you believe in a setting.
+- **Application** — `## Runtime Models` (`RuntimeProvider`, `RuntimeTierMap`),
+  which `layered_config.read_runtime_tier_map` and the generated skeleton
+  consume.
+
+The `.sdda/providers/*.yaml` sheets are the per-provider **catalogue** (model
+identifiers, rates, default URL, key variable), and they are read:
+`pricing.py` takes its rates from them (the hardcoded table is now only a tested
+fallback), the LLM judge takes `default_base_url`, `api_prefix` and `auth_env`
+from them, and `gen-app-skeleton` pins the runtime provider's SDK in the
+generated project. Adding a provider touches no agent. The `tier_floor` /
+`tier_ceiling` bounds in `agent-bounds.yaml` are quality invariants: the Project
+Config cannot relax them. Each agent's context budget (`budget_bytes` in
+`loader.yml`) is itself capped per tier — 60 % of a 200 k-token window, i.e.
+≈ 480 KB — and a budget declared beyond it refuses the spawn.
 
 ---
 
-## 7. Ownership et parallélisme
+## 7. Ownership and parallelism
 
-La matrice d'ownership de SDD_Pro est reprise telle quelle et étendue aux
-artefacts agentic. Extrait :
+SDD_Pro's ownership matrix is taken over as is and extended to agentic
+artefacts. Excerpt (the source is `loader.yml`, `writes:` keys):
 
-| Chemin | Owner exclusif | Mode |
+| Path | Exclusive owner | Mode |
 |---|---|---|
-| `workspace/pipeline/missions/{n}-*.md` | `po-elicitor` | Create puis append-only |
-| `workspace/pipeline/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) |
-| `workspace/pipeline/topology/{n}-*.md` | `architect-topology` | Create exclusif |
-| `workspace/pipeline/contracts/tools/*` | `architect-tools` | Create exclusif |
-| `workspace/pipeline/contracts/retrieval/*` | `architect-rag` | Create exclusif |
-| `workspace/src/{App}/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif |
-| `workspace/src/**/agents/{agent}/**` | `dev-agent` (1 instance par agent) | Edit-augment exclusif |
-| `workspace/src/**/tools/**` | `dev-tools` | Edit-augment exclusif |
-| `workspace/src/**/retrieval/**` | `dev-retrieval` | Edit-augment exclusif |
-| `workspace/src/**/orchestration/**` | `dev-orchestration` | Create + Edit exclusif |
-| `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif |
-| `workspace/src/{App}/*` · `workspace/src/**/app/**` | `dev-backend` | la coquille : projet, composition, config, Domaine, packaging — rien du moteur |
-| `workspace/pipeline/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
-| `workspace/pipeline/baselines/**` | script déterministe uniquement | Write atomique |
+| `workspace/pipeline/missions/{n}-*.md` | `po-elicitor` | Create then append-only |
+| `workspace/pipeline/caps/{n}-{m}-*.md` | `po-capabilities` | Exclusive create (1 file = 1 CAP); `architect-topology` only fills `## Allocated To` |
+| `workspace/pipeline/topology/{n}-*.md` | `architect-topology` | Exclusive create |
+| `workspace/pipeline/contracts/tools/{n}-*.tool.md` | `architect-tools` | Exclusive create |
+| `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` | `architect-rag` | Exclusive create |
+| `workspace/src/*/prompts/{agent}.system.md` | `dev-prompt` | Exclusive create + edit |
+| `workspace/src/**/agents/{agent}/**` | `dev-agent` (1 instance per agent, bound to its directory) | Exclusive edit-augment |
+| `workspace/src/**/tools/**` | `dev-tools` | Exclusive edit-augment |
+| `workspace/src/**/retrieval/**` | `dev-retrieval` | Exclusive edit-augment |
+| `workspace/src/**/orchestration/**` · `memory/**` · `shared/**` | `dev-orchestration` | Exclusive create + edit; `shared/` and the memory interface in the prepass |
+| `workspace/src/**/serving/**` | `dev-api` | Exclusive edit-augment |
+| `workspace/src/*/*` · `workspace/src/**/app/**` | `dev-backend` | the shell: project, composition, config, Domain, packaging — nothing of the engine |
+| `workspace/src/**/tests/**` | `qa-tests` (zone shared with the `dev-*`, by layer) | Edit-augment |
+| `workspace/pipeline/datasets/**` | `qa-evals` | Exclusive create; **never** `dev-*` |
+| `workspace/pipeline/baselines/**` | deterministic script only | Atomic write |
 
-> **Règle critique, propre à l'agentic** : `dev-agent` n'a **aucun** droit
-> d'écriture sur `workspace/pipeline/datasets/` ni sur `workspace/src/{App}/prompts/`. L'agent qui
-> écrit le code ne peut ni modifier le jeu qui le juge, ni réécrire le prompt qu'il
-> est censé implémenter. Sans cette séparation, l'auto-confirmation est garantie —
-> c'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de SDD_Pro.
+> **Critical rule, specific to agentic systems**: `dev-agent` has **no** write
+> right on `workspace/pipeline/datasets/` nor on `workspace/src/{App}/prompts/`.
+> The agent that writes the code can neither modify the set that judges it nor
+> rewrite the prompt it is supposed to implement. Without this separation,
+> self-confirmation is guaranteed — it is the agentic counterpart of SDD_Pro's
+> `[QA_OWNERSHIP_VIOLATION]`.
 
-**Le cas des skills — deux owners, aucune autorité unique.** Une skill d'agent du
-produit traverse deux fichiers déjà possédés : `architect-topology` la **déclare**
-au §5 du contrat d'agent, `dev-prompt` l'**implémente** dans
-`prompts/{agent}.system.md` (`## Compétences`). Aucun ne peut écrire chez l'autre,
-donc aucun ne peut résoudre seul un désaccord entre déclaration et
-implémentation — `lint_prompts.py` le constate dans les deux sens
-(`[SKILL_NOT_IMPLEMENTED]`, `[SKILL_UNDECLARED]`). C'est la seule vérification
-possible : un outil a un schéma qu'une gate peut exécuter, une skill n'a ni schéma
-ni effet de bord. Un outil est ce que l'agent a le **droit d'appeler** ; une skill
-est ce qu'il **sait faire**. Détail : `rules/ownership.md §2.2`.
+**Patterns are read by segment.** `*` covers one path segment, `**` several:
+`workspace/src/*/*` is the root of the generated project, not all of `src/`.
+Before, a star crossed `/`, and `dev-backend`'s zone silently overlapped every
+other `dev-*`. Overlap detection now compares the REAL zones, not the strings:
+two patterns that designate the same files are an overlap, which is either
+resolved (the outermost layer wins, `architect-tools` forbids itself the `data-`
+contracts `architect-data` writes) or **declared** in `shared_writes` with its
+mode (`serialized`, `append-only`, `disjoint-by-layer`…) and its reason.
 
----
+**One instance, one directory.** `dev-agent` runs as N parallel instances, and
+its `agents/{agent}/**` zone only makes sense if we know WHICH instance writes.
+`/sdda-build` writes `SDDA-INSTANCE: {agent}` into the prompt;
+`preflight_instance_bind` records it at spawn, and the instance binding is
+reserved at its first write. An instance writing into another one's directory is
+refused (`[OWNERSHIP_INSTANCE_ESCAPE]`).
 
-## 8. Observabilité : artefact de première classe
+**Gate reports cannot be forged.** Reviewers write exactly the `writes:` that
+`loader.yml` gives them under `.sys/.validation`; a GATE `.json` report remains
+forbidden to Write/Edit AND to the shell. A verdict an agent can write is not a
+verdict.
 
-Tout run — de construction comme d'exécution du produit — émet une trace de spans
-**OTel-GenAI** dans `workspace/.sys/traces/runs/{run-id}.jsonl`, une ligne par span :
-tour d'agent, appel d'outil (args redigés), requête de retrieval (+ documents
-retournés + scores), appel LLM (modèle, tokens in/out/cache, coût, latence),
-franchissement de gate.
+**The hooks.** <!--sdda:count hooks-->15<!--/sdda:count--> hooks are wired in
+`.claude/settings.json`, each declaring its `WIRING`: write
+(`Write|Edit|MultiEdit|NotebookEdit`), read (`Read|Glob|Grep`), shell
+(`Bash|PowerShell`), spawn (`Task|Agent`) and sub-agent stop. The shell hook
+analyses what a command writes — current directory, variables, wildcards,
+`bash -c`, `eval`, `$(…)`, `-EncodedCommand`, heredocs, Windows case, `/g/…`
+paths — and refuses what it cannot name without executing it
+(`[OWNERSHIP_SHELL_OPAQUE]`); PowerShell has its own dialect. A hook's command
+is `${SDDA_PYTHON:-python}`, anchored on `$CLAUDE_PROJECT_DIR`. By default, a
+hook that crashes lets the action through and says so; with
+`SDDA_HOOKS_STRICT=1` (CI), it REFUSES (`[HOOK_FAILED]`) — a hook that does not
+start returns a code the harness treats as an authorisation. And
+`python .sdda/sdda.py hooks-selfcheck` **executes** every wired hook, with a
+harmless payload and a payload to refuse: the only proof a hook holds is to run
+it. `preflight_stack_combo` only judges pipeline agents: a sub-agent outside the
+pipeline is not blocked by a red `STACK.md`.
 
-**Un seul format, et c'est le span.** Chaque ligne porte `run_id`, `trace_id`,
-`span_id` et `parent_span_id` : c'est ce dernier qui fait la valeur du format.
-La profondeur de délégation et l'agent responsable d'un appel d'outil se
-**lisent** dans l'arbre, là où une suite d'événements à plat obligeait à deviner
-« le dernier agent vu » — faux dès que deux agents travaillent en parallèle, et
-c'est précisément le moment où le périmètre d'outils compte.
-
-**Le coût est recalculé depuis les tokens**, jamais relu depuis l'attribut
-`sdda.cost.usd` que l'application déclare. Un chiffre qu'on relit sans le
-recalculer n'est pas une mesure, c'est une déclaration ; l'écart entre les deux
-est signalé, parce que c'est ce genre d'écart qui fait passer un run sous un
-plafond qu'il dépasse.
-
-**La construction laisse sa propre trace**, dans le même fichier et au même
-format : un span `sdda.build.agent {agent}` par invocation de Developer Agent
-(coût facturé, latence, tours de `build_loop`, contexte chargé vs le
-`budget_bytes` de `loader.yml`), un span `sdda.gate {gate}` par franchissement,
-et un span racine écrit par `sdda_state end-run`, seul à connaître le début, la
-fin et le cumul du run. C'est la facture que l'utilisateur voit en premier, et
-la seule que `MaxCostPerRun` prétend plafonner.
-
-Ce coût de construction est **déclaré par le harnais**, pas recalculé : nous ne
-voyons pas les tokens d'un sous-agent. Il reste donc dans un champ distinct de
-celui du produit. Les additionner ferait passer un chiffre invérifiable pour une
-mesure — et c'est exactement la confusion que §6 impose déjà d'éviter entre
-*build models* et *runtime models*.
-
-Sans trace, un système non déterministe n'est pas débogable : il n'y a pas de
-stack trace à lire. Invariant `trace-emitted-per-run`.
-
-Les traces alimentent la console de validation (même principe que la console
-SQLite de SDD_Pro) : coût par CAP, dérive de scores dans le temps, distribution de
-trajectoires, top des outils en échec.
+**The case of skills — two owners, no single authority.** A product agent's
+skill crosses two files that are already owned: `architect-topology`
+**declares** it in §5 of the agent contract, `dev-prompt` **implements** it in
+`prompts/{agent}.system.md` (`## Compétences`). Neither can write into the
+other's file, so neither can resolve on its own a disagreement between
+declaration and implementation — `lint_prompts.py` detects it both ways
+(`[SKILL_NOT_IMPLEMENTED]`, `[SKILL_UNDECLARED]`). It is the only possible check:
+a tool has a schema a gate can execute, a skill has neither schema nor side
+effect. A tool is what the agent is **allowed to call**; a skill is what it
+**knows how to do**. Details: `rules/ownership.md §2.2`.
 
 ---
 
-## 9. Taxonomie d'erreurs `[CLASS]`
+## 8. Observability: a first-class artefact
 
-Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
-`CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->440<!--/sdda:count-->**, liste close régénérée depuis
-les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
-main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
-Familles propres à SDD_Agents :
+Every run — build as well as product execution — emits an **OTel-GenAI** span
+trace in `workspace/.sys/traces/runs/{run-id}.jsonl`, one line per span: agent
+turn, tool call (redacted args), retrieval query (+ returned documents +
+scores), LLM call (model, tokens in/out/cache, cost, latency), gate crossing.
+Each span is written **whole, under an exclusive lock**: parallel evals used to
+lose lines.
+
+**One format, and it is the span.** Every line carries `run_id`, `trace_id`,
+`span_id` and `parent_span_id`: the last one is what gives the format its value.
+Delegation depth and the agent responsible for a tool call are **read** from the
+tree, where a flat sequence of events forced one to guess "the last agent seen"
+— wrong as soon as two agents work in parallel, which is precisely when tool
+scope matters.
+
+**Cost is recomputed from tokens**, never reread from the `sdda.cost.usd`
+attribute the application declares. A figure reread without being recomputed is
+not a measurement, it is a declaration; the gap between the two is reported,
+because that kind of gap is what lets a run pass under a ceiling it exceeds.
+`cost-report` and `trajectory-report` write the measurements `review-cost` and
+`review-orchestration` read.
+
+**The build leaves its own trace**, in the same file and the same format: one
+`sdda.build.agent {agent}` span per Developer Agent invocation (billed cost,
+latency, `build_loop` turns, context loaded vs `loader.yml`'s `budget_bytes`),
+one `sdda.gate {gate}` span per crossing, and a root span written by
+`sdda_state end-run`, the only one that knows the start, the end and the run
+total. It is the bill the user sees first, and the only one `MaxCostPerRun`
+claims to cap.
+
+That build cost is **declared by the harness**, not recomputed: we do not see a
+sub-agent's tokens. It therefore stays in a field distinct from the product's.
+Adding them up would pass an unverifiable figure off as a measurement — exactly
+the confusion §6 already forbids between *build models* and *runtime models*.
+
+Without a trace, a non-deterministic system cannot be debugged: there is no
+stack trace to read. Invariant `trace-emitted-per-run`.
+
+Traces feed the validation console (same principle as SDD_Pro's SQLite
+console): cost per CAP, score drift over time, trajectory distribution, top
+failing tools.
+
+---
+
+## 9. `[CLASS]` error taxonomy
+
+Inherited from SDD_Pro (193 classes): every ERROR block carries a `[CLASS]` code
+in its `CAUSE:`, so that hooks, retry loops and dashboards classify without
+interpreting text. SDD_Agents carries **<!--sdda:count classes-->440<!--/sdda:count-->**, a closed list regenerated from
+the real emitters by `sdda_admin/sync_error_registry.py` — writing the list by
+hand would let it drift both ways (`rules/error-classification.md §6`). The
+figure above is itself regenerated (`sync-counters`), not copied.
+Families specific to SDD_Agents:
 
 `[MISSION_*]` · `[CAP_*]` · `[TOPOLOGY_*]` · `[AGENT_*]` · `[TOOL_*]` ·
 `[RETRIEVAL_*]` · `[MEMORY_*]` · `[PROMPT_*]` · `[EVAL_*]` · `[JUDGE_*]` ·
 `[BUDGET_*]` · `[SAFETY_*]` · `[TRACE_*]` · `[API_*]`
 
-**Une classe citée ici doit avoir un émetteur.** `sync_error_registry.py`
-régénère le registre depuis les émetteurs **réels** — donc une classe qui ne
-vit que dans ce document n'y entre jamais, et le registre se déclare « à jour »
-sans elle. C'est ainsi que `[API_CONTRACT_DRIFT]` et `[API_ROUTE_UNBACKED]` ont
-pu être annoncés bloquants au §4 pendant tout un lot sans qu'aucun script ne
-les émette. Le contrôle `errors.documented` de `framework_smoke.py` ferme cette
-porte : toute classe citée dans la prose normative (`.sdda/*.md`,
-`.sdda/docs/*.md`) et émise par rien est un **échec**, pas un avertissement.
+**A class cited here must have an emitter.** `sync_error_registry.py`
+regenerates the registry from the **real** emitters — so a class that lives only
+in this document never enters it, and the registry declares itself "up to date"
+without it. That is how `[API_CONTRACT_DRIFT]` and `[API_ROUTE_UNBACKED]` could
+be announced as blocking in §4 for a whole lot without any script emitting them.
+The `errors.documented` check of `framework_smoke.py` closes that door: any
+class cited in normative prose (`.sdda/*.md`, `.sdda/docs/*.md`, `.fr.md` twins
+included) and emitted by nothing is a **failure**, not a warning.
+`docs.parity` adds the twin rule: a page and its `.fr.md` cite the same classes,
+carry the same number of headings per level, the same counter markers and the
+same commands.
 
 ---
 
-## 10. Ce que SDD_Agents ne fera pas
+## 10. What SDD_Agents will not do
 
-Déclaré d'entrée, pour que la promesse reste tenable :
+Stated up front, so that the promise stays tenable:
 
-- **Pas d'entraînement ni de fine-tuning.** Le framework compose des modèles
-  existants ; il ne produit pas de poids.
-- **Pas de garantie de correction du produit généré.** Il garantit que le produit
-  a été *mesuré* contre des seuils déclarés, sur des jeux déclarés. Un seuil trop
-  bas reste un seuil trop bas.
-- **Pas d'hébergement ni d'exploitation.** Il produit du code, des evals et de la
-  CI ; il ne fait pas tourner la production.
-- **Pas de choix de modèle à votre place sur des critères qu'il ne mesure pas.**
-  Les tiers sont déclarés, la résolution appartient au provider.
+- **No training or fine-tuning.** The framework composes existing models; it
+  produces no weights.
+- **No guarantee that the generated product is correct.** It guarantees that the
+  product has been *measured* against declared thresholds, on declared sets. A
+  threshold set too low remains a threshold set too low.
+- **No hosting or operations.** It produces code, evals and CI; it does not run
+  production.
+- **No model choice on your behalf on criteria it does not measure.** Tiers are
+  declared, resolution belongs to the provider.

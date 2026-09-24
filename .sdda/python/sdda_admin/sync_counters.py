@@ -30,6 +30,7 @@ Compteurs :
     stacks      fiches `stacks/**/*.md` (README exclus)
     classes     registre canonique (`sync_error_registry.collect()`)
     hooks       modules de `sdda_hooks/` porteurs d'un WIRING
+    subcommands sous-commandes du lanceur (`sdda_cli.discover()`)
     tests       fonctions `def test_` des `tests/test_*.py` (statique — pas de
                 collecte pytest, qui coûterait des secondes à chaque smoke ;
                 la prose dit « fonctions de test »)
@@ -143,6 +144,13 @@ def count_hooks() -> int:
     return n
 
 
+def count_subcommands() -> int:
+    """Sous-commandes de `python .sdda/sdda.py` — le registre dérivé du disque."""
+    import sdda_cli
+
+    return len(sdda_cli.discover())
+
+
 def count_tests() -> int:
     n = 0
     for path in (SDDA / "python" / "tests").glob("test_*.py"):
@@ -163,6 +171,7 @@ COUNTERS: dict[str, Callable[[], int]] = {
     "stacks": count_stacks,
     "classes": count_classes,
     "hooks": count_hooks,
+    "subcommands": count_subcommands,
     "tests": count_tests,
 }
 
