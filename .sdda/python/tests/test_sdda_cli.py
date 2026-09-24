@@ -60,9 +60,13 @@ def test_known_subcommands_resolve_to_their_module(name: str, expected: str) -> 
 
 
 def test_an_unknown_subcommand_resolves_to_nothing_but_still_has_a_home() -> None:
-    """Les 6 scripts « Planifié » ne résolvent pas ; l'inventaire doit quand même les nommer."""
-    assert sdda_cli.resolve("cost-report") is None
-    assert sdda_cli.expected_path("cost-report") == "sdda_scripts/cost_report.py"
+    """Un script « Planifié » ne résout pas ; l'inventaire doit quand même le nommer.
+
+    Le nom est fictif à dessein : l'exemple précédent (`cost-report`) a été
+    écrit, et un test qui dépend du backlog casse le jour où on le solde.
+    """
+    assert sdda_cli.resolve("never-written-report") is None
+    assert sdda_cli.expected_path("never-written-report") == "sdda_scripts/never_written_report.py"
 
 
 def test_the_name_transform_is_reversible() -> None:
