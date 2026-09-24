@@ -21,6 +21,34 @@ if str(PYTHON_DIR) not in sys.path:
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
+import _workspace_guard  # noqa: E402 — après l'insertion de PYTHON_DIR dans sys.path
+
+_workspace_guard.install()
+_WORKSPACE_BEFORE: dict[str, tuple[int, int]] = {}
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Photographie le `workspace/` réel : un sous-processus échappe à l'audit hook."""
+    _WORKSPACE_BEFORE.update(_workspace_guard.snapshot())
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    changes = _workspace_guard.diff(_WORKSPACE_BEFORE, _workspace_guard.snapshot())
+    if changes:
+        sys.stderr.write(
+            "\nERREUR : la suite de tests a modifié le workspace RÉEL "
+            f"({_workspace_guard.REAL_WORKSPACE}) :\n  " + "\n  ".join(changes[:20])
+            + "\nUn test travaille sur `make_project(tmp_path)` et lance ses sous-processus avec "
+              "`--root`/`cwd` vers un bac à sable.\n")
+        session.exitstatus = 1
+
+
+@pytest.fixture(autouse=True)
+def _no_write_under_real_workspace():
+    """Toute écriture tentée sous le `workspace/` réel est refusée, et fait échouer le test."""
+    with _workspace_guard.armed():
+        yield
+
 
 def make_project(tmp_path: Path, *overlays: str) -> Path:
     """Copie `project_ok/` puis recouvre avec chaque overlay (fichiers différents seulement).
