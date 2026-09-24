@@ -66,11 +66,10 @@ Exécute l'inventaire déterministe (0 token) :
 python .sdda/sdda.py corpus-profile --mission {n} --out workspace/.sys/.validation/corpus-{n}.json
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 4) — `corpus_profile.py` n'existe pas encore.
-> Tant qu'il est absent : caractérise le corpus depuis les sources déclarées
-> (`STACK.md ## Active Data Sources`) — nombre de documents, longueurs, formats —
-> en le disant **à la main, donc hypothèse** : `Confidence` ≤ 0.6 dans le
-> contrat, et chaque chiffre porte la mention « non mesuré ».
+Le corpus est lu sous les stores `kind: local` de `## Active Data Sources`
+(repli : `workspace/assets/`) ; `--corpus {dir}` le désigne explicitement.
+Exit 1 `[RETRIEVAL_CORPUS_MISSING]` : aucun document — tu n'inventes pas de
+profil, tu le dis. Les fichiers non lus (PDF, DOCX) sont listés sous `unparsed`.
 
 Tu en tires : nombre de documents, distribution des longueurs, structure
 (titres, articles, tableaux), langues, formats, fraîcheur, **niveaux d'accès
@@ -118,12 +117,16 @@ python .sdda/sdda.py chunking-bench --mission {n} \
   --k {RetrievalK} --out workspace/.sys/.validation/chunking-bench-{n}.json
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 4) — `chunking_bench.py` n'existe pas encore.
-> Tant qu'il est absent : **n'invente aucun tableau comparatif**. Écris au §4
-> du contrat que le chunking est *non mesuré*, choisis la configuration par
-> défaut de la fiche RAG active, et laisse `[RETRIEVAL_CHUNKING_UNMEASURED]`
-> visible dans ta sortie : c'est `qa-evals` qui mesurera à la G4, et un
-> tableau inventé lui ferait croire que c'est déjà fait.
+Grammaire des `--config` : `fixed:S/O`, `recursive-structural:S/O`,
+`document-aware:section[/MAX]`, `paragraph:S`, `sentence:N`,
+`parent-child:C/O[/P]` (tailles en tokens approximés). Le retriever du banc est
+un BM25 lexical déterministe : il **compare** les découpages entre eux, il ne
+prédit pas le recall absolu de l'index de production (G4 le mesure). Le
+rapport porte `recommendation` — la règle des 2 points y est déjà appliquée.
+Exit 1 `[RETRIEVAL_CHUNKING_UNMEASURED]` (< 2 configurations),
+`[GOLDEN_SET_MISSING]` ou `[MEASUREMENT_MISSING]` (aucun `doc_id` résolu dans
+le corpus) : **n'invente aucun tableau** — écris au §4 que le chunking est
+*non mesuré* et laisse la classe visible dans ta sortie.
 
 Le tableau comparatif (`recall@k`, `nDCG@k`, `context_precision`, nombre de
 chunks, coût d'ingestion) va **dans le contrat**, avec la configuration retenue
