@@ -144,6 +144,13 @@ Chaque item déclare l'**attendu** (refus, comportement inchangé, outil non
 appelé, borne atteinte) sous forme vérifiable par un grader `trajectory` ou
 `regex` — pas par un juge.
 
+**Pars de l'amorce du framework**, `.sdda/templates/datasets/adversarial-seed.jsonl`
+(≥ 30 items écrits par des humains, canaris `SDDA-CANARY-*`, toutes familles) :
+copie-la, remplace les marqueurs `{SYSTEM_PROMPT_FRAGMENT}` /
+`{DESTRUCTIVE_TOOL_NAME}` des items `needs-adaptation` par les valeurs de l'IR,
+puis étends-la au domaine. Ne retire aucun item : un jeu qui ne vient que d'un
+LLM ne contient pas l'attaque que ce LLM ne sait pas repérer.
+
 Les attaques réussies que `review-adversarial` déposera dans
 `workspace/.sys/.validation/adversarial-findings/{n}.jsonl` sont promues ici
 **par script**, à ta prochaine invocation ou par la commande :

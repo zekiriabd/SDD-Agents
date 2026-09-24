@@ -105,6 +105,71 @@ def test_pyproject_declares_the_console_entry_point(written: Path) -> None:
     assert "[project.scripts]" in text
 
 
+# ---------------------------------------------------------------------------
+# Dépendances : dérivées des `.libs.json` actifs, épinglées, déterministes
+# ---------------------------------------------------------------------------
+def _catalog_versions(name: str) -> dict[str, str]:
+    from sdda_lib import paths as _paths
+    return json.loads((_paths.FRAMEWORK_SDDA_DIR / f"stacks/{name}.libs.json").read_text(encoding="utf-8"))["versions"]
+
+
+def test_pyproject_pins_the_active_catalogs_and_the_runtime_sdk(written: Path) -> None:
+    """`dependencies = []` rendait vert un projet qui ne s'installait pas."""
+    text = (written / SRC / "pyproject.toml").read_text(encoding="utf-8")
+    runtime = gas._declared_dependencies(text)
+    lc = _catalog_versions("framework/langchain")
+    assert f"langchain-core=={lc['langchain-core']}" in runtime            # core d'une fiche active
+    assert f"langchain-anthropic=={lc['langchain-anthropic']}" in runtime  # onDemand déclenché (RuntimeProvider: anthropic)
+    assert not any(r.startswith(("langchain-openai", "langchain-google-genai")) for r in runtime)   # non déclenchés
+    assert "anthropic==1.8.0" in runtime                                  # SDK du fournisseur, fiche providers
+    assert f"psycopg[binary,pool]=={_catalog_versions('vectorstore/pgvector')['psycopg']}" in runtime
+    assert all("==" in r for r in runtime), "toute dépendance dérivée est épinglée"
+    assert runtime == sorted(runtime, key=gas.package_name)
+    # Les outils d'atelier vont au groupe dev, jamais dans la roue.
+    assert not any(gas.package_name(r) in {"ruff", "mypy", "pytest-xdist"} for r in runtime)
+    dev_line = next(line for line in text.splitlines() if line.startswith("dev = "))
+    assert f'"mypy=={lc["mypy"]}"' in dev_line and '"pytest-xdist==' in dev_line
+    assert '"pytest-asyncio' in dev_line                  # socle dev, épinglé par le catalogue quand il le porte
+
+
+def test_a_catalog_not_active_contributes_nothing(project: Path) -> None:
+    stack = project / "workspace/stack/STACK.md"
+    stack.write_text(markdown_io.read_text(stack).replace(" - .sdda/stacks/vectorstore/pgvector.md", ""), encoding="utf-8")
+    assert gas.run(project, mode="write").ok
+    runtime = gas._declared_dependencies((project / SRC / "pyproject.toml").read_text(encoding="utf-8"))
+    assert not any(gas.package_name(r) == "pgvector" for r in runtime)
+
+
+def test_a_missing_pin_is_drift_and_a_manual_addition_survives(written: Path) -> None:
+    target = written / SRC / "pyproject.toml"
+    text = target.read_text(encoding="utf-8")
+    edited = text.replace('  "anthropic==1.8.0",\n', '  "anthropic==1.7.0",\n  "rich==14.0.0",\n')
+    assert edited != text
+    target.write_text(edited, encoding="utf-8")
+    report = gas.run(written, mode="check")
+    assert "APP_SKELETON_STALE" in classes(report) and "anthropic==1.8.0" in report.data["missingPins"]
+    assert gas.run(written, mode="write").ok
+    runtime = gas._declared_dependencies(target.read_text(encoding="utf-8"))
+    assert "anthropic==1.8.0" in runtime and "anthropic==1.7.0" not in runtime
+    assert "rich==14.0.0" in runtime                     # l'ajout du projet (`uv add`) est conservé
+    assert gas.run(written, mode="check").ok
+
+
+def test_two_catalogs_disagreeing_on_a_pin_is_an_error(project: Path) -> None:
+    import shutil
+    from sdda_lib import paths as _paths
+    vendored = project / ".sdda"
+    shutil.copytree(_paths.FRAMEWORK_SDDA_DIR / "stacks", vendored / "stacks")
+    shutil.copytree(_paths.FRAMEWORK_SDDA_DIR / "providers", vendored / "providers")
+    catalog = vendored / "stacks/vectorstore/pgvector.libs.json"
+    data = json.loads(catalog.read_text(encoding="utf-8"))
+    data["versions"]["pydantic"] = "1.0.0"
+    data["core"].append({"module": "pydantic", "ref": "pydantic"})
+    catalog.write_text(json.dumps(data), encoding="utf-8")
+    report = gas.run(project, mode="check")
+    assert gas.CLS_PIN_CONFLICT in classes(report)
+
+
 def test_no_placeholder_survives_the_rendering(written: Path) -> None:
     for path in sorted((written / f"workspace/src/{APP}").rglob("*")):
         if path.is_file() and path.suffix in (".py", ".json", ".toml"):

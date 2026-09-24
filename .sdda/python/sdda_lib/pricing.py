@@ -1,8 +1,19 @@
 """Table de prix par modèle et estimation de coût (USD par million de tokens).
 
-Source des tarifs : table SDD_Pro (`.sdd/python/sdd_lib/pricing.py`), revue
-contre https://www.anthropic.com/pricing. Aucun appel réseau : la table est
-statique et sa fraîcheur est vérifiée par date.
+**Deux sources, une table.** Les fiches `.sdda/providers/*.yaml` sont le
+catalogue DÉCLARÉ par fournisseur (bloc `pricing:` + `pricing_last_reviewed`) ;
+elles sont lues ici, par `yaml_mini`, et elles GAGNENT sur la table écrite dans
+ce module. La table en dur (`FALLBACK_TABLE`) n'est plus qu'un repli : elle
+couvre les modèles qu'aucune fiche ne porte (générations antérieures,
+embeddings Voyage) et elle garde le framework chiffrable si le répertoire des
+fiches est absent ou illisible. Tenir les deux à la main faisait de chaque fiche
+un « miroir » que rien ne relisait — ARCHITECTURE §6 le disait lui-même — et
+de chaque révision de tarif une occasion de diverger sans que personne le sache.
+La concordance des deux, là où elles se recouvrent, est un test
+(`test_pricing.py`), et un désaccord entre deux fiches est un problème NOMMÉ
+(`CATALOG_PROBLEMS`), pas un choix silencieux.
+
+Aucun appel réseau : la table est statique et sa fraîcheur est vérifiée par date.
 
 Provenance PAR LIGNE (`PRICING_META`) : chaque modèle porte la date de sa
 dernière revue et la source du chiffre. La table n'est fraîche que si sa ligne
@@ -24,11 +35,19 @@ Les agents du produit déclarent un TIER (fast/balanced/deep), jamais un modèle
 from __future__ import annotations
 
 import datetime as _dt
+from pathlib import Path
+
+from sdda_lib import yaml_mini
 
 PRICING_MAX_AGE_DAYS = 90
 
-#: { model_id : { input, output, cache_read, cache_creation } } en USD / MTok.
-PRICING: dict[str, dict[str, float]] = {
+#: Le catalogue des fournisseurs : `.sdda/providers/*.yaml`.
+PROVIDERS_DIR: Path = Path(__file__).resolve().parents[2] / "providers"
+
+#: REPLI — { model_id : { input, output, cache_read, cache_creation } } en USD / MTok.
+#: Les fiches providers le recouvrent (`PRICING` ci-dessous) ; il ne sert seul
+#: que pour les modèles qu'aucune fiche ne déclare.
+FALLBACK_TABLE: dict[str, dict[str, float]] = {
     "claude-fable-5-1":  {"input": 10.00, "output": 50.00, "cache_read": 0.25, "cache_creation": 12.50},
     "claude-fable-5":    {"input": 10.00, "output": 50.00, "cache_read": 1.00, "cache_creation": 12.50},
     "claude-opus-5":     {"input": 5.00,  "output": 25.00, "cache_read": 0.50, "cache_creation": 6.25},
@@ -50,7 +69,7 @@ _ANTHROPIC_2026_06 = "https://www.anthropic.com/pricing (via claude-api referenc
 
 #: { model_id : { reviewed: date ISO de la dernière revue, source: URL ou table d'origine } }.
 #: Une ligne de PRICING sans méta fait échouer l'import (`_check_table`).
-PRICING_META: dict[str, dict[str, str]] = {
+FALLBACK_META: dict[str, dict[str, str]] = {
     "claude-fable-5-1":  {"reviewed": "2026-09-22", "source": _ANTHROPIC_2026_06},
     "claude-fable-5":    {"reviewed": "2026-08-30", "source": _SDD_PRO},
     "claude-opus-5":     {"reviewed": "2026-08-30", "source": _SDD_PRO},
@@ -65,6 +84,78 @@ PRICING_META: dict[str, dict[str, str]] = {
     "voyage-3-large":    {"reviewed": "2026-08-30", "source": _SDD_PRO},
     "voyage-3":          {"reviewed": "2026-08-30", "source": _SDD_PRO},
 }
+
+_RATE_KEYS = ("input", "output", "cache_read", "cache_creation")
+
+
+def load_provider_pricing(directory: Path | None = None) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, str]], list[str]]:
+    """(tarifs, méta, problèmes) lus dans les fiches `providers/*.yaml`.
+
+    Chaque ligne du bloc `pricing:` d'une fiche devient un tarif, daté par le
+    `pricing_last_reviewed` de la fiche et sourcé par son chemin. Rien ici ne
+    lève : une fiche illisible, une ligne incomplète ou deux fiches en désaccord
+    sur le même modèle deviennent des PROBLÈMES rendus à l'appelant, et la ligne
+    fautive est écartée — le repli la couvre alors, ou le modèle reste inconnu,
+    ce qui est refusé plus loin (`UnknownModelPricing`). Un tarif deviné à
+    moitié serait pire que l'un ou l'autre.
+
+    Deux fiches peuvent porter le même modèle (`azure-openai` recopie la grille
+    d'`openai`) : c'est légitime tant qu'elles s'accordent. La première fiche
+    (ordre alphabétique, donc stable) l'emporte, et un désaccord est nommé.
+    """
+    folder = PROVIDERS_DIR if directory is None else directory
+    rates_out: dict[str, dict[str, float]] = {}
+    meta_out: dict[str, dict[str, str]] = {}
+    problems: list[str] = []
+    if not folder.is_dir():
+        return rates_out, meta_out, [f"répertoire des fiches providers absent ({folder}) : repli sur la table de pricing.py"]
+    for path in sorted(folder.glob("*.yaml")):
+        try:
+            doc = yaml_mini.parse_mapping(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml_mini.YamlMiniError) as exc:
+            problems.append(f"{path.name} illisible ({exc}) : ses tarifs sont ignorés")
+            continue
+        table = doc.get("pricing")
+        if not isinstance(table, dict):
+            continue
+        reviewed = str(doc.get("pricing_last_reviewed") or "").strip()
+        try:
+            _dt.date.fromisoformat(reviewed)
+        except ValueError:
+            problems.append(f"{path.name} : `pricing_last_reviewed` absent ou invalide ({reviewed!r}) — tarifs ignorés")
+            continue
+        source = f"providers/{path.name} (pricing_last_reviewed {reviewed})"
+        for model, raw in table.items():
+            if not isinstance(raw, dict) or any(not isinstance(raw.get(k), (int, float)) or isinstance(raw.get(k), bool) or raw[k] < 0 for k in _RATE_KEYS):
+                problems.append(f"{path.name} : ligne `{model}` incomplète ou négative (attendu {list(_RATE_KEYS)})")
+                continue
+            rates = {k: float(raw[k]) for k in _RATE_KEYS}
+            model_id = str(model)
+            if model_id in rates_out:
+                if rates_out[model_id] != rates:
+                    problems.append(
+                        f"`{model_id}` : {path.name} déclare {rates}, {meta_out[model_id]['source']} déclare "
+                        f"{rates_out[model_id]} — la première fiche l'emporte ; accorder les deux")
+                continue
+            rates_out[model_id] = rates
+            meta_out[model_id] = {"reviewed": reviewed, "source": source}
+    return rates_out, meta_out, problems
+
+
+def build_table(directory: Path | None = None) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, str]], list[str]]:
+    """La table effective : le repli, recouvert par le catalogue des fiches."""
+    catalog, catalog_meta, problems = load_provider_pricing(directory)
+    table = {**FALLBACK_TABLE, **catalog}
+    meta = {**FALLBACK_META, **catalog_meta}
+    return table, meta, problems
+
+
+#: La table EFFECTIVE, lue à l'import. `PRICING_SOURCES` dit d'où vient chaque
+#: ligne (`providers` ou `fallback`) ; `CATALOG_PROBLEMS` ce que le catalogue a
+#: de faux — affiché par les scripts qui chiffrent, jamais avalé.
+PRICING, PRICING_META, CATALOG_PROBLEMS = build_table()
+PRICING_SOURCES: dict[str, str] = {m: ("providers" if PRICING_META[m]["source"].startswith("providers/") else "fallback")
+                                   for m in PRICING}
 
 #: Repli conservateur pour un modèle inconnu : tarif Sonnet 4.6.
 #: Servi UNIQUEMENT par `get_pricing(..., strict=False)`.
@@ -84,8 +175,6 @@ TIER_LATENCY_MS: dict[str, tuple[float, float]] = {
     "deep": (800.0, 25.0),      # ~40 tok/s
 }
 
-_RATE_KEYS = ("input", "output", "cache_read", "cache_creation")
-
 
 class UnknownModelPricing(KeyError):
     """Modèle absent de `PRICING` : aucun tarif ne peut lui être attribué sans mentir.
@@ -98,8 +187,9 @@ class UnknownModelPricing(KeyError):
     def __init__(self, model_id: str | None) -> None:
         self.model_id = model_id or ""
         super().__init__(
-            f"modèle `{self.model_id}` absent de la table de prix (sdda_lib/pricing.py) : "
-            f"l'ajouter avec `reviewed` + `source` dans PRICING_META, ou corriger la tier map"
+            f"modèle `{self.model_id}` absent de la table de prix (fiches .sdda/providers/*.yaml "
+            f"et repli sdda_lib/pricing.py) : l'ajouter au bloc `pricing:` de la fiche de son "
+            f"fournisseur (ou, à défaut, au repli FALLBACK_TABLE + PRICING_META), ou corriger la tier map"
         )
 
     def __str__(self) -> str:  # KeyError cite son argument entre quotes ; on veut la phrase.

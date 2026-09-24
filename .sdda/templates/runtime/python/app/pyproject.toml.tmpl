@@ -1,17 +1,19 @@
 # GÉNÉRÉ par gen_app_skeleton.py — ne pas éditer à la main.
 #
-# Les dépendances sont AJOUTÉES par les stacks actives (`uv add --project …`,
-# blocs CORE_PACKAGES des fiches), jamais écrites ici : une liste tenue à deux
-# endroits diverge, et c'est `uv.lock` que la gate compare aux `.libs.json`.
-# Ce fichier ne porte que ce qui ne dépend d'aucune stack — l'identité du
-# paquet et son point d'entrée console.
+# Les dépendances sont DÉRIVÉES par le générateur des `.libs.json` des fiches
+# ACTIVES de STACK.md (`core`, `dev`, `onDemand` déclenchés) et du SDK du
+# fournisseur runtime (`runtime_sdk` de sa fiche `.sdda/providers/`), épinglées
+# `==` sur la version du catalogue — la seule qui fasse foi. `dependencies = []`
+# laissait un projet « vert » qui ne s'installait pas. Un paquet ajouté à la main
+# (`uv add`) est conservé à la régénération ; un paquet dérivé est ramené à sa
+# version de catalogue.
 
 [project]
 name = "{AppName}"
 version = "0.1.0"
 description = "{AppName} — application agentic générée par SDD_Agents."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = {Dependencies}
 
 # Le livrable par défaut est `cli-exe` : un programme qu'on lance, une entrée,
 # une sortie, un code de retour. C'est aussi la surface que le runner d'eval
@@ -19,12 +21,13 @@ dependencies = []
 [project.scripts]
 {AppName} = "{AppName}.serving.cli:main"
 
-# Les outils de TEST, et eux seuls : ils ne partent pas dans la roue.
-# `asyncio_mode = "auto"` (plus bas) ne vaut rien sans pytest-asyncio — sans lui,
-# chaque test `async def` échoue en « async def functions are not natively
-# supported », ce qui ressemble à une panne du code et n'en est pas une.
+# Les outils d'ATELIER (tests, lint, typage), et eux seuls : ils ne partent pas
+# dans la roue. `ruff`/`mypy` des catalogues atterrissent ici, pas en dépendance
+# d'exécution. `asyncio_mode = "auto"` (plus bas) ne vaut rien sans
+# pytest-asyncio — sans lui, chaque test `async def` échoue en « async def
+# functions are not natively supported », ce qui ressemble à une panne du code.
 [dependency-groups]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.24"]
+dev = {DevDependencies}
 
 [build-system]
 requires = ["hatchling"]

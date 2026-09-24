@@ -5,6 +5,16 @@ Status: Stable
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: *
 
+> **Code (Python)** : `.sdda/templates/runtime/python/app/guardrails/pii.py`, émis
+> par `gen-app-skeleton` et **actif seulement si cette fiche est listée** sous
+> `## Active Guardrails`. Couvre la ligne « haute fiabilité » du §4, validée :
+> e-mail, téléphone FR et international, IBAN (mod 97), carte (Luhn), NIR (clé),
+> IP v4/v6. Jetons typés et stables (`[IBAN_1]`), table de correspondance dans
+> l'objet, ré-hydratation par le code (`restore`). Appliquée par `RunService` à
+> l'entrée utilisateur et par `BoundedLoop` aux sorties d'outils `untrusted`,
+> AVANT le modèle — donc avant la trace et le fournisseur. Les noms propres et
+> adresses (NER) n'y sont pas, et ne sont pas prétendus y être.
+
 ---
 
 ## 1. Rôle
