@@ -66,6 +66,21 @@ They are rewritten for agentic systems, not copied: no ORM, no entity, the
 Nothing here is *validated*: `frameworkStatus: design-phase`, and every
 component is `untested` until a measured run has taken place (Lot 6).
 
+### Which harness runs the build
+
+| Harness | Status | Blocking gates at runtime |
+|---|---|---|
+| **Claude Code** | **supported** — the reference harness | yes — hooks in `.claude/settings.json` refuse the tool call |
+| **Codex CLI** | **experimental** — compiled to `.codex/`, never validated by a conformance run | **no** — deferred to CI and the deterministic scripts |
+| **Gemini CLI** | **experimental** — compiled to `.gemini/`, same reserve | **no** — same |
+
+Under Codex or Gemini CLI nothing stops an out-of-ownership write or an agent
+wired before its TOOL GATE at the moment it happens; CI catches it later. The
+spawn wrapper those harnesses would need is planned, not written. The root
+`AGENTS.md` and `GEMINI.md` are generated pointers to the facades — they are
+what Codex and Gemini CLI actually read. Details:
+[MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md).
+
 ---
 
 ## Where your work lives — the workspace
@@ -255,7 +270,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->1166<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->1170<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

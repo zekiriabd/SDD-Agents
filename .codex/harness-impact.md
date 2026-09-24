@@ -39,6 +39,9 @@ appliqués au moment de l'action mais **en différé (CI)** :
 
 ## Note de la matrice
 
+EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
+Codex CLI lit `AGENTS.md` à la racine : harness_build y écrit un pointeur
+vers `.codex/AGENTS.md`.
 PERD : l'application des gates AU MOMENT de l'action. Les invariants
 tool-gate-before-agent-wiring et retrieval-gate-before-agent deviennent des
 contrôles pre-exec du wrapper + un gate CI. Conséquence assumée et à dire
