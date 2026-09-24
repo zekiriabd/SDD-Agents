@@ -138,6 +138,20 @@ Construire le `BATCH` depuis l'IR :
 Un seul message multi-`Agent`, **≤ `MaxParallel`** simultanés (3 agents au
 plus ici — sous le défaut `MaxParallel: 3`). Chemins disjoints par ownership.
 
+**Instantané AVANT la vague, écart APRÈS** — ce que les hooks ne voient pas (un
+script qui écrit de l'intérieur) se voit sur le disque :
+
+```bash
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 3        # avant le message multi-Agent
+# … la vague …
+python .sdda/sdda.py audit-ownership --mission {n} --phase 3 --since-snapshot   # après, avant les gates
+```
+
+Exit ≠ 0 → `--restore` (révoque chaque écriture hors de la zone de
+`dev-tools`/`dev-retrieval`/`dev-data` : restaure depuis l'instantané, supprime
+une création), puis **STOP** avec la classe rendue — la couche fautive se
+rejoue, les gates ne se jouent pas sur un arbre qu'un agent a débordé.
+
 **Garde par couche** (reprise à la granularité de l'item, `sdda_state.py`) —
 avant d'ajouter une couche au `BATCH` :
 
@@ -373,19 +387,34 @@ il DÉCLARE l'instance, et la première écriture de l'instance la lie à son
 d'une vague tournent en parallèle : c'est la seule chose qui garde leurs
 répertoires disjoints pendant qu'elles écrivent, et non après.
 
-Post-step déterministe par vague :
+Avant CHAQUE vague, l'instantané ; après elle, l'écart jugé contre les
+instances de CETTE vague :
 
 ```bash
-python .sdda/sdda.py audit-ownership --mission {n} --phase 4
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 4        # avant le message multi-Agent
+# … la vague …
+python .sdda/sdda.py audit-ownership --mission {n} --phase 4 --since-snapshot \
+  --instances {agents de la vague, séparés par des virgules} \
+  --frozen 'workspace/src/**/shared/**' --frozen 'workspace/src/**/memory/**'
 python .sdda/sdda.py postflight-no-inline-prompt --mission {n}
 python .sdda/sdda.py preflight-agent-bounds --mission {n}
 ```
 
-`[OWNERSHIP_VIOLATION]` (un `dev-agent` a touché `datasets/` ou `prompts/`) →
-**STOP immédiat**, révocation du fichier écrit (restauré depuis le hash
-précédent), ERROR. C'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de
-SDD_Pro : l'agent qui écrit le code ne modifie ni le jeu qui le juge ni le
-prompt qu'il implémente.
+L'audit juge les fichiers RÉELLEMENT créés, modifiés ou supprimés pendant la
+vague — pas la cohérence de `loader.yml`, que `--declared-only` vérifie à part.
+Il attrape ce que les hooks ne voient pas (un script qui écrit de l'intérieur,
+un payload sans `agent_id`, deux instances qui s'échangent leurs répertoires dès
+leur première écriture) : chaque fichier sous `agents/` doit être sous le
+répertoire d'une instance DÉCLARÉE de la vague, et les zones gelées par la
+pré-passe (4.0) n'ont pas bougé.
+
+`[OWNERSHIP_VIOLATION]`, `[DATASET_OWNERSHIP_VIOLATION]`,
+`[PROMPT_OWNERSHIP_VIOLATION]`, `[OWNERSHIP_INSTANCE_ESCAPE]` ou
+`[OWNERSHIP_FROZEN_ZONE_CHANGED]` → **STOP immédiat**, révocation par
+`--restore` (chaque fichier fautif restauré depuis l'instantané, chaque création
+fautive supprimée), ERROR. C'est le pendant agentic du
+`[QA_OWNERSHIP_VIOLATION]` de SDD_Pro : l'agent qui écrit le code ne modifie ni
+le jeu qui le juge ni le prompt qu'il implémente.
 
 Puis, **par instance** de la vague :
 
@@ -485,8 +514,18 @@ pattern : .sdda/stacks/orchestration/{pattern}.md. Chaque hop émet un span de t
 celui déclaré. Aucun agent instancié hors agents[] ; aucun outil câblé hors agents[].tools.
 ```
 
-Post-step : `audit_ownership.py --phase 5`, `preflight_agent_bounds.py`
-(bornes du graphe), vérification que le graphe codé est **isomorphe** à l'IR :
+Instantané avant 5.1 (`audit-ownership snapshot --mission {n} --phase 5`) ;
+post-step après 5.2bis :
+
+```bash
+python .sdda/sdda.py audit-ownership --mission {n} --phase 5 --since-snapshot \
+  --frozen 'workspace/src/**/shared/**'
+```
+
+— les types partagés gelés par la pré-passe (4.0) ne bougent plus : les agents
+de la phase 4 ont été construits contre eux. Puis `preflight_agent_bounds.py`
+(bornes du graphe), et la vérification que le graphe codé est **isomorphe** à
+l'IR :
 
 ```bash
 python .sdda/sdda.py diff-code-vs-ir --mission {n} --scope orchestration
