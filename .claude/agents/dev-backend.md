@@ -101,9 +101,16 @@ priment sur les noms ; les principes de `archi/*.md` priment sur tout.
 
 ```bash
 python .sdda/sdda.py gen-app-skeleton --write        # Python seulement : config, models, bounds, tracing, CLI, exécuteur d'eval
-python .sdda/sdda.py gen-source-tools --write        # si Active Data Access = declared-sources : wrappers + contrats
 python .sdda/sdda.py gen-app-skeleton --check        # exit 0 : rien n'a dérivé
 ```
+
+`gen-source-tools` **n'est pas à toi**. Tu le lançais ici, et il écrivait
+d'un coup les contrats des outils de source — après l'IR et G2, qui ne les
+voyaient donc pas — et leurs wrappers sous `data/tools/`, la zone de
+`dev-data`. Les contrats se génèrent en PHASE 2 (`/sdda-topology` STEP 4.bis,
+`--scope contracts`), le code en PHASE 3 dans la couche de `dev-data`
+(`/sdda-build` STEP 3.1, `--scope code`). Ta composition câble ces outils
+contre les ids de `tools[]` de l'IR, comme les autres.
 
 Le squelette Python est du **code invariant** : une retouche locale se perd à la
 régénération et diverge en silence d'ici là. Tu **n'édites pas** un fichier que
@@ -194,7 +201,6 @@ vert avant de rendre la main.
 
 ```bash
 python .sdda/sdda.py gen-app-skeleton --check                  # Python : le squelette n'a pas dérivé
-python .sdda/sdda.py gen-source-tools --check                  # si sources déclarées
 python .sdda/sdda.py validate-packaging --json                 # le livrable est cohérent (G2, part packaging)
 python .sdda/sdda.py audit-ownership --agent dev-backend       # tu n'as écrit que chez toi
 <smoke de la fiche de langage / backend>

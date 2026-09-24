@@ -31,7 +31,12 @@ Usage :
     python .sdda/sdda.py gen-source-tools --check --json
     python .sdda/sdda.py gen-source-tools --infer --source order_tracking
     python .sdda/sdda.py gen-source-tools --infer --source crm_customer --from-sample sample.json
-    python .sdda/sdda.py gen-source-tools --write --mission 1
+    python .sdda/sdda.py gen-source-tools --write --mission 1 --scope contracts   # PHASE 2, avant ir-compiler
+    python .sdda/sdda.py gen-source-tools --write --mission 1 --scope code        # PHASE 3, couche dev-data
+
+`--scope` sépare ce que `--write` produit en deux moments du pipeline : les
+CONTRATS en PHASE 2 (l'IR et G2 doivent les voir), le CODE en PHASE 3 (dans la
+zone de `dev-data`). Cf. `SCOPES`.
 """
 from __future__ import annotations
 
@@ -1016,38 +1021,61 @@ def emit_runtime(ctx: Context, report: Report, *, write: bool,
     return written, drifted
 
 
-def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None) -> dict[str, Any]:
+#: Ce que chaque portée génère — et donc QUAND elle se joue dans le pipeline.
+#:
+#: Les contrats et le code n'ont ni le même moment ni le même owner, et les
+#: générer ensemble faisait de `dev-backend` (PHASE 3.0) l'auteur des deux :
+#:   - les CONTRATS `{n}-{source}-{kind}.tool.md` arrivaient APRÈS la
+#:     compilation de l'IR et après G2 — l'IR ne les voyait pas, G2 non plus,
+#:     et le premier `/sdda-topology --recompile-only` venu changeait le
+#:     périmètre d'une topologie déjà franchie ;
+#:   - le CODE (`data/tools/`, runtime `data/` et `tools/`) était écrit par
+#:     l'agent de la coquille dans la zone de `dev-data`.
+#: `contracts` se joue en PHASE 2, avant `ir-compiler` (/sdda-topology) ;
+#: `code` en PHASE 3, dans la couche de `dev-data` (/sdda-build). `all` reste
+#: l'usage manuel et la CI (`--check`).
+SCOPES: tuple[str, ...] = ("all", "contracts", "code")
+
+
+def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None, scope: str = "all") -> dict[str, Any]:
     wrappers_written: list[str] = []
     contracts_written: list[str] = []
     stale: list[str] = []
     missing: list[str] = []
+    do_code = scope in ("all", "code")
+    do_contracts = scope in ("all", "contracts")
 
     for source_id, src, kind in planned(ctx, report, only):
         schema = load_frozen(ctx, source_id, report)
         if schema is None:
             continue
-        wrapper = render_wrapper(ctx, source_id, src, schema, kind)
-        wpath = ctx.wrapper_path(source_id, kind)
-        rel = paths.rel(ctx.root, wpath)
+        if do_code:
+            wrapper = render_wrapper(ctx, source_id, src, schema, kind)
+            wpath = ctx.wrapper_path(source_id, kind)
+            rel = paths.rel(ctx.root, wpath)
 
-        if write:
-            wpath.parent.mkdir(parents=True, exist_ok=True)
-            if not wpath.is_file() or markdown_io.read_text(wpath) != wrapper:
-                wpath.write_text(wrapper, encoding="utf-8")
-                wrappers_written.append(rel)
-        elif not wpath.is_file():
-            missing.append(rel)
-        elif markdown_io.read_text(wpath) != wrapper:
-            stale.append(rel)
+            if write:
+                wpath.parent.mkdir(parents=True, exist_ok=True)
+                if not wpath.is_file() or markdown_io.read_text(wpath) != wrapper:
+                    wpath.write_text(wrapper, encoding="utf-8")
+                    wrappers_written.append(rel)
+            elif not wpath.is_file():
+                missing.append(rel)
+            elif markdown_io.read_text(wpath) != wrapper:
+                stale.append(rel)
 
         cpath = ctx.contract_path(source_id, kind)
         crel = paths.rel(ctx.root, cpath)
         if not cpath.is_file():
-            if write:
+            if write and do_contracts:
                 cpath.parent.mkdir(parents=True, exist_ok=True)
                 cpath.write_text(render_contract(ctx, source_id, src, schema, kind), encoding="utf-8")
                 contracts_written.append(crel)
             else:
+                # En portée `code`, un contrat absent n'est pas à créer ici : il
+                # aurait dû l'être en PHASE 2, avant l'IR. Le créer maintenant
+                # recréerait exactement le décalage que les portées existent
+                # pour fermer — un outil que l'IR et G2 n'ont jamais vu.
                 missing.append(crel)
         else:
             _check_contract_drift(ctx, cpath, crel, source_id, src, kind, report)
@@ -1057,9 +1085,18 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None)
             "DATA_TOOL_MISSING",
             f"{len(missing)} artefact(s) déclaré(s) mais absent(s) : {', '.join(missing[:4])}"
             + (" …" if len(missing) > 4 else ""),
-            fix="`gen_source_tools.py --write` — un outil déclaré et non généré est une CAP qui échouera "
-                "au premier appel, pas au build",
+            fix=("les contrats se génèrent en PHASE 2, avant l'IR : `gen-source-tools --write --scope contracts` "
+                 "puis `/sdda-topology {n} --recompile-only`" if scope == "code" else
+                 "`gen_source_tools.py --write` — un outil déclaré et non généré est une CAP qui échouera "
+                 "au premier appel, pas au build"),
         )
+    if not do_code:
+        return {
+            "mission": ctx.mission, "app": ctx.app, "scope": scope,
+            "toolsDir": paths.rel(ctx.root, ctx.tools_dir()),
+            "wrappersWritten": [], "contractsWritten": contracts_written,
+            "runtimeWritten": [], "runtimeDrifted": [], "stale": [], "missing": missing,
+        }
     runtime_written, runtime_drifted = emit_runtime(ctx, report, write=write, only=only)
     if runtime_drifted:
         report.error(
@@ -1080,7 +1117,7 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None)
         )
 
     return {
-        "mission": ctx.mission, "app": ctx.app,
+        "mission": ctx.mission, "app": ctx.app, "scope": scope,
         "toolsDir": paths.rel(ctx.root, ctx.tools_dir()),
         "wrappersWritten": wrappers_written, "contractsWritten": contracts_written,
         "runtimeWritten": runtime_written, "runtimeDrifted": runtime_drifted,
@@ -1150,12 +1187,16 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fichier JSON d'échantillon, pour une source distante (http-api, mcp, store non local)")
     p.add_argument("--src-root", type=Path, default=None, help="racine du paquet applicatif généré")
     p.add_argument("--force", action="store_true", help="--infer : réécrire un schéma figé existant")
+    p.add_argument("--scope", choices=list(SCOPES), default="all",
+                   help="contracts : les squelettes de contrats seuls (PHASE 2, avant ir-compiler) ; "
+                        "code : wrappers + runtime seuls (PHASE 3, couche dev-data) ; all : les deux (défaut)")
     add_common_args(p)
     return p
 
 
 def run(root: Path, *, mode: str, source: str | None = None, mission: str | None = None,
-        sample: Path | None = None, src_root: Path | None = None, force: bool = False) -> Report:
+        sample: Path | None = None, src_root: Path | None = None, force: bool = False,
+        scope: str = "all") -> Report:
     report = Report(name="GEN-SOURCE-TOOLS", target=str(root))
 
     if not paths.stack_md_path(root).is_file():
@@ -1199,7 +1240,7 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
         )
         return report
 
-    report.data.update(run_generate(ctx, report, write=(mode == "write"), only=source))
+    report.data.update(run_generate(ctx, report, write=(mode == "write"), only=source, scope=scope))
     return report
 
 
@@ -1208,7 +1249,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     mode = "infer" if args.infer else ("write" if args.write else "check")
     report = run(resolve_root(args), mode=mode, source=args.source, mission=args.mission,
-                 sample=args.sample, src_root=args.src_root, force=args.force)
+                 sample=args.sample, src_root=args.src_root, force=args.force, scope=args.scope)
     return finish(report, args)
 
 

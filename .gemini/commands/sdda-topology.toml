@@ -13,6 +13,8 @@ Décide l'architecture de la MISSION `{n}` en trois temps :
 ```
 2.1  architect-topology                         (SEUL — fixe le périmètre)
        -> workspace/pipeline/topology/{n}-topology.md   (graphe Mermaid inclus, §4)
+2.1b gen-source-tools --scope contracts         (script, 0 token — si declared-sources)
+       -> workspace/pipeline/contracts/tools/{n}-{source}-{kind}.tool.md  (squelettes)
 2.2  architect-tools ∥ architect-rag ∥ architect-data ∥ architect-memory
        -> workspace/pipeline/contracts/{tools,retrieval,memory}/**   (PARALLÈLE, borné MaxParallel)
 2.9  ir_compiler.py  (script déterministe, 0 token)
@@ -94,7 +96,7 @@ python .sdda/sdda.py spawn-brief --agent architect-topology --mission {n} --prom
 un agent qui déborde ne rend pas une sortie plus courte, il rend une sortie
 tronquée et confiante.
 
-Si `--recompile-only` → aller directement à STEP 6.
+Si `--recompile-only` → STEP 4.bis (0 token, idempotent) puis STEP 6.
 
 ---
 
@@ -184,6 +186,35 @@ FIX: compléter `## 2. Roster déclaré` dans workspace/pipeline/topology/{n}-to
 
 **State tracking** : `set-phase --phase topology --status pass
 --payload-json '{"rootPattern":"…","agents":N,"tools":T,"retrievers":R}'`.
+
+---
+
+## STEP 4.bis — Contrats des sources déclarées (script, 0 token)
+
+Si `## Active Data Access` = `declared-sources` :
+
+```bash
+python .sdda/sdda.py gen-source-tools --write --scope contracts --mission {n}
+```
+
+Il crée le squelette de contrat `workspace/pipeline/contracts/tools/{n}-{source}-{kind}.tool.md`
+de chaque outil de source (`lookup`, `search`, `count`) et **ne touche jamais**
+à un contrat existant. Joué ici, **avant** les architectes parallèles et
+**avant** `ir-compiler` : `architect-tools` complète ces squelettes au STEP 5
+(§7), et l'IR les compile au STEP 6 — donc G2 les juge.
+
+Ils étaient générés par `dev-backend` en PHASE 3.0 (`gen-source-tools --write`,
+contrats et code d'un seul coup) : après la compilation de l'IR et après G2.
+L'IR ne voyait pas les outils de source, G2 non plus, et le code des wrappers
+atterrissait dans la zone de `dev-data` sous la main de l'agent de la coquille.
+Le code, lui, se génère en PHASE 3, dans la couche de `dev-data`
+(`/sdda-build` STEP 3.1, `--scope code`).
+
+| Exit | Cause | Action |
+|:-:|---|---|
+| `0` | contrats créés ou déjà présents, aucune dérive (`name`, `Trust`) | → STEP 5 |
+| `1` | `[DATA_SOURCE_SCHEMA_MISSING]` — une source sans schéma figé | **STOP humain** : `gen-source-tools --infer --source {id}`, **relire** le schéma, puis relancer. Un contrat se dérive du schéma figé ; sans lui il n'y a rien à contracter |
+| `1` | `[DATA_TOOL_CONTRACT_DRIFT]` | STOP + ERROR : le contrat existant contredit la déclaration de la source |
 
 ---
 

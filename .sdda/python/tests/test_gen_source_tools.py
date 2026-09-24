@@ -505,3 +505,39 @@ def test_mission_must_be_decidable(sources_project: Path) -> None:
     for path in (sources_project / "workspace/pipeline/missions").glob("*.md"):
         path.unlink()
     assert "MISSION_AMBIGUOUS" in classes(gst.run(sources_project, mode="check"))
+
+
+# ---------------------------------------------------------------------------
+# Portées : les contrats en PHASE 2, le code en PHASE 3
+# ---------------------------------------------------------------------------
+def test_contracts_scope_writes_contracts_only_so_the_ir_can_see_them(sources_project: Path) -> None:
+    """`dev-backend` générait les contrats en PHASE 3.0 — après l'IR et G2 — et
+    le code dans la zone de `dev-data`. La portée `contracts` se joue avant
+    `ir-compiler` et ne touche pas à `src/`."""
+    report = gst.run(sources_project, mode="write", scope="contracts")
+    assert report.ok, report.render_text()
+    assert len(report.data["contractsWritten"]) == 9 and report.data["wrappersWritten"] == []
+    assert not (sources_project / TOOLS).exists()
+    assert not (sources_project / "workspace/src/SupportAssistant/data/sources.json").exists()
+    assert gst.run(sources_project, mode="check", scope="contracts").ok
+
+
+def test_code_scope_never_creates_a_contract_the_ir_has_not_seen(sources_project: Path) -> None:
+    report = gst.run(sources_project, mode="write", scope="code")
+    assert "DATA_TOOL_MISSING" in classes(report)
+    assert not list((sources_project / CONTRACTS).glob("1-order-tracking-*.tool.md"))
+    assert "--scope contracts" in next(f for f in report.findings if f.cls == "DATA_TOOL_MISSING").fix
+
+
+def test_contracts_then_code_is_the_whole_generation(sources_project: Path) -> None:
+    assert gst.run(sources_project, mode="write", scope="contracts").ok
+    code = gst.run(sources_project, mode="write", scope="code")
+    assert code.ok, code.render_text()
+    assert len(code.data["wrappersWritten"]) == 9 and code.data["contractsWritten"] == []
+    assert gst.run(sources_project, mode="check").ok
+
+
+def test_the_cli_accepts_the_scope(sources_project: Path) -> None:
+    code, out = run_main(gst.main, ["--root", str(sources_project), "--write", "--scope", "contracts", "--json"])
+    assert code == 0, out
+    assert json.loads(out)["data"]["scope"] == "contracts"
