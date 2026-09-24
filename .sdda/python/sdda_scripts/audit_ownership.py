@@ -409,6 +409,166 @@ def agent_names(loader: dict[str, Any]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Recouvrement RÉEL entre deux motifs
+# ---------------------------------------------------------------------------
+# `check_declaration` comparait des CHAÎNES : deux agents qui déclaraient
+# `contracts/tools/{n}-*.tool.md` et `contracts/tools/{n}-data-*.tool.md`
+# n'étaient pas « le même chemin », donc pas contestés — alors que le premier
+# englobe le second, et que les deux tournent en même temps (phase 2). Idem
+# `src/**/tools/**` (dev-tools) contre `src/**/data/**` (dev-data) : le
+# répertoire `data/tools/` appartenait aux deux, en pleine phase 3 parallèle.
+#
+# Ce qui suit calcule si deux globs désignent un chemin COMMUN, et en exhibe
+# des exemples : un recouvrement se juge sur un chemin qu'on peut montrer, pas
+# sur une ressemblance de texte.
+_SEG_ANY = "\x00any"      # un segment non vide quelconque ({n}, dernier `**`)
+_DOUBLE = "**"
+
+
+def _segment_alternatives(seg: str) -> list[list[tuple[str, str]]]:
+    """Un segment de glob -> ses alternatives, chacune une suite d'atomes.
+
+    Atomes : `("lit", c)`, `("any", "")` (un caractère), `("star", "")`.
+    `{a,b}` démultiplie ; un placeholder `{n}` vaut « au moins un caractère ».
+    """
+    variants: list[list[tuple[str, str]]] = [[]]
+    i = 0
+    while i < len(seg):
+        ch = seg[i]
+        if ch == "{":
+            end = seg.find("}", i)
+            if end != -1:
+                inner = seg[i + 1:end]
+                if "," in inner:
+                    variants = [v + [("lit", c) for c in alt] for v in variants for alt in inner.split(",")]
+                else:
+                    variants = [v + [("any", ""), ("star", "")] for v in variants]
+                i = end + 1
+                continue
+        if ch == "*":
+            variants = [v + [("star", "")] for v in variants]
+        elif ch == "?":
+            variants = [v + [("any", "")] for v in variants]
+        else:
+            variants = [v + [("lit", ch.casefold() if CASE_INSENSITIVE else ch)] for v in variants]
+        i += 1
+    return variants
+
+
+def _segments(pattern: str) -> list[Any]:
+    """Motif -> segments. Un `**` final désigne un FICHIER sous le répertoire :
+    au moins un segment (le `.*` de la regex exige le `/` qui le précède)."""
+    parts = normalize(pattern).split("/")
+    out: list[Any] = []
+    for k, part in enumerate(parts):
+        if part == _DOUBLE:
+            if k == len(parts) - 1:
+                out.extend([_SEG_ANY, _DOUBLE])
+            else:
+                out.append(_DOUBLE)
+        else:
+            out.append(part)
+    return out
+
+
+def _atoms_witness(a: list[tuple[str, str]], b: list[tuple[str, str]]) -> str | None:
+    """Une chaîne reconnue par les deux suites d'atomes, ou None (DP mémoïsé)."""
+    memo: dict[tuple[int, int], str | None] = {}
+
+    def f(i: int, j: int) -> str | None:
+        key = (i, j)
+        if key in memo:
+            return memo[key]
+        memo[key] = None  # coupe les cycles star/star
+        res: str | None = None
+        if i == len(a) and j == len(b):
+            res = ""
+        if res is None and i < len(a) and a[i][0] == "star":
+            res = f(i + 1, j)
+            if res is None and j < len(b) and b[j][0] != "star":
+                tail = f(i, j + 1)
+                if tail is not None:
+                    res = (b[j][1] if b[j][0] == "lit" else "x") + tail
+        if res is None and j < len(b) and b[j][0] == "star":
+            res = f(i, j + 1)
+            if res is None and i < len(a) and a[i][0] != "star":
+                tail = f(i + 1, j)
+                if tail is not None:
+                    res = (a[i][1] if a[i][0] == "lit" else "x") + tail
+        if res is None and i < len(a) and j < len(b) and a[i][0] != "star" and b[j][0] != "star":
+            ca = a[i][1] if a[i][0] == "lit" else None
+            cb = b[j][1] if b[j][0] == "lit" else None
+            if ca is None or cb is None or ca == cb:
+                tail = f(i + 1, j + 1)
+                if tail is not None:
+                    res = (ca or cb or "x") + tail
+        memo[key] = res
+        return res
+
+    return f(0, 0)
+
+
+def _segment_witness(sa: str, sb: str) -> str | None:
+    """Un nom de segment reconnu par les deux segments de glob, ou None."""
+    alts_a = [[("any", ""), ("star", "")]] if sa == _SEG_ANY else _segment_alternatives(sa)
+    alts_b = [[("any", ""), ("star", "")]] if sb == _SEG_ANY else _segment_alternatives(sb)
+    for x in alts_a:
+        for y in alts_b:
+            w = _atoms_witness(x, y)
+            if w:
+                return w
+    return None
+
+
+def _sample(seg: str) -> str:
+    """Un nom concret pour un segment seul (absorbé par le `**` d'en face)."""
+    return _segment_witness(seg, _SEG_ANY) or "x"
+
+
+def overlap_witnesses(a: str, b: str, limit: int = 64) -> list[str]:
+    """Des chemins que les DEUX motifs désignent — vide s'ils sont disjoints.
+
+    Chaque branche où un `**` absorbe les segments d'en face donne une forme
+    différente (`src/data/tools/x` ET `src/tools/data/x`) : c'est ce qui permet
+    à l'appelant d'écarter les formes qu'un `forbidden_writes` retire, et de ne
+    signaler que celles qui restent réellement à deux propriétaires.
+    """
+    A, B = _segments(a), _segments(b)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def walk(i: int, j: int, acc: tuple[str, ...], depth: int) -> None:
+        if len(out) >= limit or depth > len(A) + len(B) + 4:
+            return
+        if i == len(A) and j == len(B):
+            path = "/".join(acc)
+            if path not in seen:
+                seen.add(path)
+                out.append(path)
+            return
+        if i < len(A) and A[i] == _DOUBLE:
+            walk(i + 1, j, acc, depth + 1)
+            if j < len(B) and B[j] != _DOUBLE:
+                walk(i, j + 1, acc + (_sample(B[j]),), depth + 1)
+        if j < len(B) and B[j] == _DOUBLE:
+            walk(i, j + 1, acc, depth + 1)
+            if i < len(A) and A[i] != _DOUBLE:
+                walk(i + 1, j, acc + (_sample(A[i]),), depth + 1)
+        if i < len(A) and j < len(B) and A[i] != _DOUBLE and B[j] != _DOUBLE:
+            name = _segment_witness(A[i], B[j])
+            if name:
+                walk(i + 1, j + 1, acc + (name,), depth + 1)
+
+    walk(0, 0, (), 0)
+    # Filet : un exemple doit être reconnu par la regex elle-même des deux côtés.
+    return [w for w in out if matches(a, w) and matches(b, w)]
+
+
+def overlaps(a: str, b: str) -> bool:
+    return bool(overlap_witnesses(a, b, limit=1))
+
+
+# ---------------------------------------------------------------------------
 # 1. La déclaration se tient-elle debout ?
 # ---------------------------------------------------------------------------
 #: Modes de partage admis. Un mode inconnu est refusé : « partagé » sans dire
@@ -518,10 +678,70 @@ def check_declaration(loader: dict[str, Any], report: Report) -> dict[str, Any]:
                 location=".sdda/loader.yml",
             )
 
+    overlapping = real_overlaps(loader, shared)
+    for item in overlapping:
+        report.error(
+            "OWNERSHIP_ZONE_CONTESTED",
+            f"`{item['a']}` ({item['patternA']}) et `{item['b']}` ({item['patternB']}) désignent "
+            f"tous deux `{item['example']}`",
+            fix="deux motifs différents peuvent désigner le même fichier : retirer la zone commune "
+                "chez l'un des deux (`forbidden_writes:`), ancrer le motif, ou DÉCLARER le partage "
+                "dans `shared_writes:` avec son mode — un recouvrement non déclaré est une course "
+                "en pleine phase parallèle",
+            location=".sdda/loader.yml",
+        )
+
     # Un agent qui n'écrit nulle part est un reviewer : c'est légitime, et c'est
     # une information — pas un défaut.
     return {"agents": len(agents), "readOnlyAgents": without,
-            "contested": sorted(contested), "sharedZones": sorted(shared)}
+            "contested": sorted(contested), "sharedZones": sorted(shared),
+            "overlaps": overlapping}
+
+
+def _forbidden_for(loader: dict[str, Any], agent: str, path: str) -> bool:
+    return any(matches(f, path) for f in forbidden_of(loader, agent))
+
+
+def _shared_excuses(shared: dict[str, dict[str, Any]], a: str, b: str, path: str) -> bool:
+    """Le chemin commun est-il dans une zone partagée DÉCLARÉE pour ces deux agents ?"""
+    for zone, entry in shared.items():
+        declared = {str(x) for x in (entry.get("agents") or [])}
+        if {a, b} <= declared and matches(zone, path):
+            return True
+    return False
+
+
+def real_overlaps(loader: dict[str, Any], shared: dict[str, dict[str, Any]] | None = None) -> list[dict[str, str]]:
+    """Les recouvrements RÉELS non déclarés entre les `writes:` de deux agents.
+
+    Global, et non par vague : l'ordre des phases vit dans les commandes, pas
+    dans `loader.yml`, et une sérialisation qu'on ne peut pas lire ici ne peut
+    pas servir d'excuse ici. Un partage voulu (phases sérialisées, couches
+    disjointes) se DÉCLARE dans `shared_writes:` — avec son mode, qui dit
+    pourquoi il n'y a pas de course.
+
+    Un chemin commun que l'un des deux s'interdit (`forbidden_writes:`) n'est
+    pas contesté : il n'a qu'un propriétaire. Les exemples viennent de
+    `overlap_witnesses`, donc un signalement montre toujours un chemin réel.
+    """
+    if shared is None:
+        shared = shared_writes(loader, Report(name="tmp", target="."))
+    agents = agent_names(loader)
+    found: list[dict[str, str]] = []
+    for x, a in enumerate(agents):
+        for b in agents[x + 1:]:
+            for pa in writes_of(loader, a):
+                for pb in writes_of(loader, b):
+                    if pa == pb:
+                        continue  # même chaîne : jugée par le contrôle des revendications
+                    for w in overlap_witnesses(pa, pb):
+                        if _forbidden_for(loader, a, w) or _forbidden_for(loader, b, w):
+                            continue
+                        if _shared_excuses(shared, a, b, w):
+                            continue
+                        found.append({"a": a, "b": b, "patternA": pa, "patternB": pb, "example": w})
+                        break
+    return found
 
 
 # ---------------------------------------------------------------------------

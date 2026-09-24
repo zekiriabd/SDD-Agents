@@ -182,6 +182,23 @@ Deux instances de `dev-agent` tournent en parallèle sur
 `workspace/src/**/agents/{agent-a}/` et `workspace/src/**/agents/{agent-b}/` :
 répertoires **disjoints**, aucun fichier partagé en écriture.
 
+**Disjoints se vérifie, et se vérifie sur des chemins.** `audit-ownership
+--declared-only` calcule, pour chaque paire d'agents, s'il EXISTE un chemin que
+leurs deux motifs désignent (`real_overlaps`) — et le montre. Comparer des
+chaînes ne suffisait pas : `contracts/tools/{n}-*.tool.md` englobait
+`{n}-data-*.tool.md`, `src/**/tools/**` englobait `src/**/data/tools/`, et
+aucune chaîne n'était identique. Un recouvrement se résout de trois façons,
+dans cet ordre de préférence :
+
+1. **Couche externe** — un chemin appartient à la couche la plus externe qu'il
+   traverse : `agents/billing/tools/` est à `dev-agent`, `data/tools/` à
+   `dev-data`. Chaque `dev-*` s'interdit sa couche nichée sous une autre
+   (`src/**/{autres}/**/{sa couche}/**` dans ses `forbidden_writes:`).
+2. **Préfixe réservé** — `architect-tools` s'interdit `{n}-data-*.tool.md`.
+3. **Partage déclaré** — `shared_writes:` avec un mode (`serialized`,
+   `disjoint-by-layer`…) : les CAPs (phase 1 puis `Allocated To` en phase 2),
+   les tests par couche.
+
 Ce qui est partagé — les schémas communs, les types, la configuration — est
 créé **avant** la phase parallèle, par `dev-orchestration` en pré-passe, puis
 gelé en lecture seule (**first-write wins + lock**). Un `dev-agent` qui a besoin

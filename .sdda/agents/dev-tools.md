@@ -155,6 +155,11 @@ sont écrits par `qa-tests` et exécutés par la commande.
 - **Tu n'écris ni dans `workspace/pipeline/datasets/`, ni dans `workspace/src/{App}/prompts/`,
   ni dans `workspace/pipeline/contracts/`.** Si le contrat est faux, tu le dis
   (`[TOOL_CONTRACT_INCONSISTENT]`), tu ne l'adaptes pas.
+- **Tu n'écris pas un `tools/` niché sous une autre couche.** `data/tools/`
+  (les outils d'accès aux sources) est à `dev-data`, `agents/{x}/tools/` à
+  `dev-agent`, `orchestration/tools/` à `dev-orchestration` : un chemin
+  appartient à la couche la plus externe qu'il traverse, et le hook te refuse
+  les autres (`loader.yml`, règle de la couche externe).
 - **Tu n'ajoutes aucun paramètre, aucun mode, aucune option « pratique »** qui
   ne soit dans le schéma du contrat : c'est de la surface d'attaque.
 - **Tu ne « corriges » pas une description** que tu trouves maladroite.
