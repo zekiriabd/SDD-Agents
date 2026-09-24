@@ -460,7 +460,7 @@ inert.** A full source-by-source audit, then every finding fixed. What it found:
 - five controls declared themselves active and never ran: the ownership hooks
   read the sub-agent identity in the wrong payload slot (every sub-agent write
   was allowed); the spawn hooks matched `Task` only, never `Agent`; the facades
-  carried `model_tier` but no `model:` (all 22 agents inherited the parent
+  carried `model_tier` but no `model:` (every agent inherited the parent
   model); `MaxCostPerRun` had no writer feeding the cumulative cost; the
   `build_loop` bounds lived only in the prompt they were meant to bound;
 - hook commands were relative to the current directory: one `cd` disarmed all
