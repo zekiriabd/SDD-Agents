@@ -1,173 +1,215 @@
-# Patterns RAG, recherche et retrieval
+# RAG, search and retrieval patterns
 
-Consommé par `architect-rag`. SSoT machine :
+Consumed by `architect-rag`. Machine SSoT:
 `.sdda/registry/patterns.registry.json`.
 
-> **`none` est un choix légitime et fréquent.** Mettre du RAG par réflexe sur un
-> problème que trois outils déterministes résolvent mieux est l'erreur la plus
-> coûteuse de ce domaine : on ajoute une chaîne d'ingestion, un index à maintenir,
-> une dérive de fraîcheur et une source d'hallucination, pour un gain nul.
+> **`none` is a legitimate and frequent choice.** Adding RAG by reflex to a
+> problem that three deterministic tools solve better is the most expensive
+> mistake in this domain: you add an ingestion pipeline, an index to maintain, a
+> freshness drift and a source of hallucination, for zero gain.
+
+**What loads today.** Only `none` and `hybrid` have a card under
+`.sdda/stacks/rag/` (`hybrid` assumes Python), with `pgvector` for the vector
+store, `voyage` and `bge-local` for embeddings, and `none`, `cohere-rerank` and
+`bge-reranker-local` for reranking. The other patterns in this catalogue are
+**documented intentions**: activated in `STACK.md`, they load nothing and are
+refused at preflight (`[STACK_COMBO_UNLOADABLE]`). Chunking (§4) is not a card:
+it is a set of `STACK.md` keys (`ChunkStrategy`, `ChunkSize`, `ChunkOverlap`)
+that the retrieval contract fixes after measurement.
 
 ---
 
-## 1. Les trois sous-systèmes, qui échouent séparément
+## 1. The three subsystems, which fail separately
 
-`CORPUS` → ingestion/chunking → `INDEX` → stratégie de requête → `RETRIEVER`
+`CORPUS` → ingestion/chunking → `INDEX` → query strategy → `RETRIEVER`
 
-Ils sont distincts dans le domain model parce qu'ils produisent **le même
-symptôme** en échouant : « l'agent invente ». Les distinguer, c'est pouvoir
-répondre à « où est le problème ? » avec une mesure plutôt qu'une intuition.
+They are distinct in the domain model because they produce **the same symptom**
+when they fail: "the agent is making things up". Telling them apart is what lets
+you answer "where is the problem?" with a measurement rather than a hunch.
 
-| Sous-système | Échoue comme | Se mesure par |
+| Subsystem | Fails as | Measured by |
 |---|---|---|
-| Corpus | le document n'existe pas dans l'index | couverture du corpus vs questions du golden set |
-| Chunking | le document est là, coupé au mauvais endroit | recall@k avec la **vérité au niveau document** |
-| Index / embedding | le chunk est bon, la similarité ne le remonte pas | recall@k, nDCG |
-| Stratégie de requête | la question ne ressemble pas au texte de la réponse | delta de recall avec et sans transformation de requête |
-| Génération | tout est remonté correctement, la réponse invente | **groundedness** (la seule qui isole ce cas) |
+| Corpus | the document is not in the index | corpus coverage vs the golden set questions |
+| Chunking | the document is there, cut in the wrong place | recall@k with **document-level ground truth** |
+| Index / embedding | the chunk is right, similarity does not surface it | recall@k, nDCG |
+| Query strategy | the question does not look like the text of the answer | recall delta with and without query transformation |
+| Generation | everything was retrieved correctly, the answer invents | **groundedness** (the only metric that isolates this case) |
 
 ---
 
 ## 2. Catalogue
 
 ### `none`
-Le modèle sait, ou des outils déterministes savent. **Envisager d'abord.**
+The model knows, or deterministic tools know. **Consider it first.**
 
 ### `classic` — chunk → embed → top-k → stuff
-- **Quand** : corpus homogène, questions factuelles, une réponse par document.
-- **Limite** : les questions multi-sauts, comparatives ou agrégatives échouent.
+- **When**: homogeneous corpus, factual questions, one answer per document.
+- **Limit**: multi-hop, comparative or aggregative questions fail.
 
-### `hybrid` — BM25 + vecteur, fusion RRF
-- **Quand** : **quasi toujours mieux que `classic`**, pour un surcoût faible.
-- **Pourquoi** : le vecteur rate les correspondances exactes (références,
-  identifiants, codes d'erreur, noms propres rares) ; le lexical les trouve. Le
-  lexical rate les paraphrases ; le vecteur les trouve.
-- **Recommandation par défaut** dès qu'il y a du RAG.
+### `hybrid` — BM25 + vector, RRF fusion
+- **When**: **almost always better than `classic`**, for a small extra cost.
+- **Why**: vectors miss exact matches (references, identifiers, error codes,
+  rare proper nouns); lexical search finds them. Lexical search misses
+  paraphrases; vectors find them.
+- **Default recommendation** as soon as there is RAG.
 
-### `contextual` — chunk préfixé du contexte de son document
-Chaque chunk est stocké avec 1-2 phrases situant sa place dans le document.
-- **Quand** : documents longs et structurés (contrats, normes, manuels), où un
-  chunk isolé perd son sujet.
-- **Coût** : une passe LLM à l'ingestion, **amortie** sur toutes les requêtes.
-- **Gain typique** : la plus forte amélioration par euro dépensé sur des corpus
-  documentaires structurés.
+### `contextual` — chunk prefixed with its document's context
+Each chunk is stored with 1-2 sentences locating it within its document.
+- **When**: long, structured documents (contracts, standards, manuals), where
+  an isolated chunk loses its subject.
+- **Cost**: one LLM pass at ingestion, **amortised** over every query.
+- **Typical gain**: the largest improvement per euro spent on structured
+  document corpora.
 
 ### `hyde` — hypothetical document embeddings
-Générer une réponse hypothétique, l'embedder, chercher avec elle.
-- **Quand** : les questions ne ressemblent pas lexicalement aux réponses
-  (question courte, corpus verbeux).
-- **Coût** : +1 appel LLM par requête, sur le chemin de latence.
+Generate a hypothetical answer, embed it, search with it.
+- **When**: questions do not look lexically like the answers (short question,
+  verbose corpus).
+- **Cost**: +1 LLM call per query, on the latency path.
 
-### `sequential-multihop` — décomposition + récupération en chaîne
-- **Quand** : « Quelle clause du contrat de ce client couvre l'incident de
-  mars ? » — il faut d'abord trouver le client, puis son contrat, puis la clause.
-- **Obligation** : plafond de sauts, sinon la chaîne dérive.
+### `sequential-multihop` — decomposition + chained retrieval
+- **When**: "Which clause of this customer's contract covers the March
+  incident?" — you must first find the customer, then their contract, then the
+  clause.
+- **Obligation**: a hop cap, otherwise the chain drifts.
 
-### `agentic` — le retriever est un outil
-L'agent décide **quand** chercher, **quoi** chercher, et s'il cherche encore.
-- **Quand** : besoin d'information imprévisible, sources multiples.
-- **Coût** : variable par nature — c'est son principal défaut budgétaire.
-- **Obligation** : `max_retrieval_calls` par run, tracé et plafonné.
+### `agentic` — the retriever is a tool
+The agent decides **when** to search, **what** to search for, and whether to
+search again.
+- **When**: unpredictable information needs, multiple sources.
+- **Cost**: variable by nature — that is its main budget flaw.
+- **Obligation**: `max_retrieval_calls` per run, traced and capped.
 
-### `self-rag` — noter la pertinence et décider
-L'agent évalue les documents remontés et décide : répondre, re-chercher,
-ou déclarer qu'il ne sait pas.
-- **Quand** : le coût d'une réponse fausse dépasse le coût d'un « je ne sais pas ».
-- **Gain réel** : c'est le pattern qui fabrique l'abstention — rare et précieux.
+### `self-rag` — grade relevance and decide
+The agent evaluates the retrieved documents and decides: answer, search again,
+or declare that it does not know.
+- **When**: the cost of a wrong answer exceeds the cost of an "I don't know".
+- **Real gain**: it is the pattern that produces abstention — rare and
+  valuable.
 
-### `corrective-rag` (CRAG) — évaluer puis se rabattre
-Si le retrieval est jugé insuffisant, repli sur une autre source (web, autre
-corpus, escalade humaine).
-- **Quand** : couverture du corpus incomplète et assumée.
-- **Danger** : le repli web introduit une source **non maîtrisée** → la suite
-  d'injection devient obligatoire (P8).
+### `corrective-rag` (CRAG) — evaluate, then fall back
+If retrieval is judged insufficient, fall back to another source (web, another
+corpus, human escalation).
+- **When**: incomplete corpus coverage, knowingly accepted.
+- **Danger**: the web fallback introduces an **untrusted** source → the
+  injection suite becomes mandatory (P8).
 
-### `graph-rag` — graphe d'entités + résumés de communautés
-- **Quand** : questions globales (« quels sont les thèmes récurrents des
-  réclamations ? ») qu'aucun top-k ne peut satisfaire.
-- **Coût** : construction du graphe chère, maintenance lourde.
-- **Franchise** : rarement justifié sous ~10 000 documents ou pour des questions
-  factuelles.
+### `graph-rag` — entity graph + community summaries
+- **When**: global questions ("what are the recurring themes in the
+  complaints?") that no top-k can satisfy.
+- **Cost**: expensive graph construction, heavy maintenance.
+- **Candidly**: rarely justified below ~10,000 documents or for factual
+  questions.
 
-### `raptor` — arbre hiérarchique de résumés
-Récupération à plusieurs niveaux d'abstraction.
-- **Quand** : il faut à la fois le détail et la synthèse selon la question.
+### `raptor` — hierarchical tree of summaries
+Retrieval at several levels of abstraction.
+- **When**: you need both the detail and the synthesis, depending on the
+  question.
 
 ---
 
-## 3. Matrice de sélection
+## 3. Selection matrix
 
-| Besoin | Pattern recommandé |
+| Need | Recommended pattern |
 |---|---|
-| Factuel, corpus homogène | `hybrid` |
-| Documents longs et structurés | `contextual` + `hybrid` |
-| Identifiants, codes, références exactes | `hybrid` (poids lexical ≥ 0.5) |
-| Question ≠ lexique de la réponse | `hyde` ou décomposition de requête |
-| Multi-sauts / relationnel | `sequential-multihop` |
-| Besoin d'info imprévisible | `agentic` |
-| Coût d'une erreur > coût d'un aveu d'ignorance | `self-rag` |
-| Couverture incomplète assumée | `corrective-rag` |
-| Questions globales / thématiques | `graph-rag` |
-| Détail **et** synthèse | `raptor` |
-| Les données sont dans une base, pas dans des documents | **aucun RAG** → `DATA-ACCESS.md` |
+| Factual, homogeneous corpus | `hybrid` |
+| Long, structured documents | `contextual` + `hybrid` |
+| Identifiers, codes, exact references | `hybrid` (lexical weight ≥ 0.5) |
+| Question ≠ vocabulary of the answer | `hyde` or query decomposition |
+| Multi-hop / relational | `sequential-multihop` |
+| Unpredictable information needs | `agentic` |
+| Cost of an error > cost of admitting ignorance | `self-rag` |
+| Incomplete coverage, knowingly accepted | `corrective-rag` |
+| Global / thematic questions | `graph-rag` |
+| Detail **and** synthesis | `raptor` |
+| The data lives in a database, not in documents | **no RAG** → [DATA-ACCESS.md](DATA-ACCESS.md) |
 
 ---
 
-## 4. Le découpage — la décision qui décide de tout
+## 4. Chunking — the decision that decides everything
 
-Plus déterminant pour la qualité finale que le choix du modèle d'embedding, et
-systématiquement sous-traité à une valeur par défaut.
+More decisive for final quality than the choice of embedding model, and
+routinely delegated to a default value.
 
-| Stratégie | Quand |
+| Strategy | When |
 |---|---|
-| `fixed` | corpus non structuré, baseline uniquement |
-| `recursive-structural` | respecte titres, paragraphes, listes — **défaut raisonnable** |
-| `semantic` | coupe aux ruptures de sens ; coûteuse à l'ingestion |
-| `document-aware` | par article/section/clause — le meilleur pour le juridique et les normes |
-| `parent-child` | chercher sur le petit chunk, servir le parent — **le meilleur compromis précision/contexte** |
+| `fixed` | unstructured corpus, baseline only |
+| `recursive-structural` | respects headings, paragraphs, lists — **a reasonable default** |
+| `semantic` | cuts at breaks in meaning; expensive at ingestion |
+| `document-aware` | by article/section/clause — the best for legal texts and standards |
+| `parent-child` | search on the small chunk, serve the parent — **the best precision/context trade-off** |
 
-`ChunkSize` et `ChunkOverlap` ne sont pas des constantes universelles : le
-`architect-rag` doit produire une **mesure comparative** d'au moins deux
-configurations sur le golden set, et le résultat va dans le
-`retrieval-contract`. Choisir 512/50 parce que c'est le défaut d'un tutoriel
-n'est pas une décision d'architecture.
+`ChunkSize` and `ChunkOverlap` are not universal constants: `architect-rag` must
+produce a **comparative measurement** of at least two configurations on the
+golden set, and the result goes into the `retrieval-contract`. Picking 512/50
+because it is a tutorial's default is not an architecture decision.
+
+Two deterministic scripts (0 tokens) make this rule enforceable rather than
+declarative:
+
+- **`python .sdda/sdda.py corpus-profile --mission {n}`** measures the corpus
+  **before** any choice: number of documents per type, length distribution
+  (which bounds the chunk size), language, structure (which makes
+  `document-aware` possible or not), duplicates, PII (type and file, never the
+  value), multi-valued access keys (which force the filter into the query, §6).
+  The `.env` file is never opened; a PDF or a DOCX is counted, not read, and the
+  report says so.
+- **`python .sdda/sdda.py chunking-bench --mission {n} --config … --config …`**
+  compares configurations on the same corpus and the same queries, with a stdlib
+  BM25: recall@k, nDCG@k, MRR, context precision, chunk size and count, tokens
+  served and indexed. It recommends the best recall@k but, among the
+  configurations within 2 points of the best, the cheapest to ingest.
+  Strategies: `fixed`, `recursive-structural`, `document-aware`, `paragraph`,
+  `sentence`, `parent-child` — `semantic` is not included.
+
+The bench compares chunkings **against each other**; it does not predict the
+absolute recall of the production retriever, which only G4 measures on the real
+index.
 
 ---
 
-## 5. Métriques de la RETRIEVAL GATE (G4)
+## 5. RETRIEVAL GATE (G4) metrics
 
-Mesurées **sans aucun agent** — c'est tout l'intérêt.
+Measured **without any agent** — that is the whole point.
 
-| Métrique | Mesure | Seuil par défaut |
+| Metric | Measures | Default threshold |
 |---|---|:---:|
-| `recall@k` | le document pertinent est-il dans le top-k | ≥ 0.80 |
-| `nDCG@k` | est-il bien classé | ≥ 0.70 |
-| `context_precision` | proportion de bruit dans le contexte servi | ≥ 0.60 |
-| `groundedness` | chaque affirmation de la réponse est-elle soutenue par le contexte | ≥ 0.85 |
-| `answer_relevance` | la réponse répond-elle à la question posée | ≥ 0.80 |
-| `citation_resolve_rate` | chaque citation pointe-t-elle vers un passage réel | ≥ 0.98 |
+| `recall@k` | is the relevant document in the top-k | ≥ 0.80 |
+| `nDCG@k` | is it ranked well | ≥ 0.70 |
+| `context_precision` | share of noise in the context served | ≥ 0.60 |
+| `groundedness` | is every claim in the answer supported by the context | ≥ 0.85 |
+| `answer_relevance` | does the answer address the question asked | ≥ 0.80 |
+| `citation_resolve_rate` | does every citation point to a real passage | ≥ 0.98 |
 
-`groundedness` et `answer_relevance` exigent un juge LLM → **calibration
-obligatoire** (P9). `recall@k`, `nDCG` et `citation_resolve_rate` sont
-déterministes et ne coûtent aucun token.
+`groundedness` and `answer_relevance` require an LLM judge → **calibration is
+mandatory** (P9). `recall@k`, `nDCG`, `context_precision` and
+`citation_resolve_rate` are deterministic and cost no tokens:
+`python .sdda/sdda.py run-retrieval-eval --mission {n}` computes them from an
+injected executor (`--executor`, the generated retriever) or from a replay
+(`--replay`), and writes one report per retriever
+(`.sys/.validation/G4-{retriever}.json`). Thresholds come from the retrieval
+contract, with the Project Config only as the default. The script calls no
+judge: a `groundedness` the executor does not provide stays **absent**, and the
+verdict turns yellow with the reason written down — never green by omission.
 
-**Règle de diagnostic** : `recall@k` haut + `groundedness` bas ⇒ le problème est
-la génération, pas le retrieval. `recall@k` bas ⇒ inutile de toucher au prompt.
-C'est cette distinction que la gate rend possible, et c'est pour elle qu'elle
-existe.
+**Diagnostic rule**: high `recall@k` + low `groundedness` ⇒ the problem is
+generation, not retrieval. Low `recall@k` ⇒ there is no point touching the
+prompt. This distinction is what the gate makes possible, and it is what the
+gate exists for.
 
 ---
 
-## 6. Sécurité du corpus
+## 6. Corpus security
 
-Un corpus est une **surface d'attaque** (P8) :
+A corpus is an **attack surface** (P8):
 
-- **Empoisonnement** : un document contenant « ignore les instructions
-  précédentes » finira dans un contexte. La suite adversariale de G7 injecte
-  volontairement de tels documents dans un index de test.
-- **PII** : ce qui entre dans le vector store est difficile à retirer
-  sélectivement. `MemoryPIIPolicy` et le scan PII de G7 s'appliquent à l'index.
-- **Fuite d'autorisation** : si le corpus mélange des documents de niveaux
-  d'accès différents, le retrieval **doit** être filtré par identité de
-  l'appelant — pas après coup par le modèle. Un filtrage post-génération est une
-  fuite avec une étape de plus.
+- **Poisoning**: a document containing "ignore the previous instructions" will
+  end up in a context. The G7 adversarial suite carries an
+  `indirect-injection` family that plays such documents against the live
+  system (`run-adversarial-suite`).
+- **PII**: what goes into the vector store is hard to remove selectively.
+  `MemoryPIIPolicy` and the G7 PII scan (`scan-pii`, `[PII_IN_INDEX]`) apply to
+  the corpus bound for the index.
+- **Authorisation leak**: if the corpus mixes documents with different access
+  levels, retrieval **must** be filtered by the caller's identity — not after
+  the fact by the model. Post-generation filtering is a leak with one more step.
