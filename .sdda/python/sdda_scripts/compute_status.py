@@ -300,6 +300,25 @@ def _header(path: Path) -> dict[str, str]:
     return markdown_io.parse_header_fields(markdown_io.read_text(path))
 
 
+def wired_tool_ids(root: Path, number: int) -> list[str]:
+    """Les outils dont G3 doit être verte : ceux que l'IR CÂBLE, pas tous les contrats.
+
+    `architect-data` écrit un contrat par source déclarée ; l'IR n'en retient que
+    ceux qu'un agent appelle (les autres : `[TOOL_SCOPE_EXCESS]` en warning à la
+    compilation). Exiger un G3 pour un outil que personne ne construit ni ne
+    câble laissait la MISSION bloquée à `Architected` pour toujours — 14 outils
+    « absents » sur 21 au premier run réel, alors que les 7 câblés étaient verts.
+    Sans IR, on retombe sur les contrats : c'est tout ce qu'on sait.
+    """
+    ir_file = paths.ir_path(root, number)
+    if ir_file.is_file():
+        try:
+            return sorted(str(t["id"]) for t in ir_compiler.load_ir(ir_file).get("tools") or [] if t.get("id"))
+        except (ValueError, KeyError):
+            pass
+    return [p.name[: -len(".tool.md")] for p in sorted(paths.contracts_dir(root, "tools").glob(f"{number}-*.tool.md"))]
+
+
 def compute_mission(root: Path, number: int, index: GateIndex) -> tuple[ArtifactStatus, list[ArtifactStatus], dict[str, list[Path]]]:
     missions = sorted(paths.missions_dir(root).glob(f"{number}-*.md"))
     mid = missions[0].stem if missions else f"{number}-?"
@@ -309,7 +328,7 @@ def compute_mission(root: Path, number: int, index: GateIndex) -> tuple[Artifact
         mission.declared, mission.confidence = h.get("Status"), (h.get("Confidence") or "").lower() or None
     cap_paths = sorted(paths.caps_dir(root).glob(f"{number}-*.md"))
     cap_ids = [p.stem for p in cap_paths]
-    tool_ids = [p.name[: -len(".tool.md")] for p in sorted(paths.contracts_dir(root, "tools").glob(f"{number}-*.tool.md"))]
+    tool_ids = wired_tool_ids(root, number)
     retr_ids = [p.name[: -len(".retrieval.md")] for p in sorted(paths.contracts_dir(root, "retrieval").glob(f"{number}-*.retrieval.md"))]
     agent_paths = sorted(paths.contracts_dir(root, "agents").glob(f"{number}-*.agent.md"))
     topo_paths = [p for p in (paths.topology_dir(root) / f"{number}-topology.md",) if p.is_file()]

@@ -79,8 +79,11 @@ LEVELS = tuple(f"L{i}" for i in range(10))
 #: **L3 est absent, et c'est délibéré.** G4 appartient à `run_retrieval_eval.py`,
 #: l'enforcer nommé par INVARIANTS : deux écrivains sur la même gate produisent
 #: deux vérités sur le même fait.
+#:
+#: **L2 est absent aussi**, pour la même raison : la part `suites` de G3
+#: appartient à `run_tool_suites.py`, qui joue les tests pytest de `qa-tests`.
+#: Une suite d'outil déclare des CAS inline, pas un dataset d'items.
 LEVEL_GATE: dict[str, tuple[str, str | None]] = {
-    "L2": ("G3", "suites"),
     "L4": ("G5", None),
     "L5": ("G6", None),
     "L7": ("G6", None),

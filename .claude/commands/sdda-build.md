@@ -189,8 +189,8 @@ c'est la clé que lit `compute_status`.
 python .sdda/sdda.py validate-tool-contract --mission {n} --json
 python .sdda/sdda.py validate-tool-contract --mission {n} --require-code --json   # après génération
 
-# part `suites` — les tests L2 réellement joués
-python .sdda/sdda.py eval-runner --mission {n} --level L2 --executor {module}:{Executor} --json
+# part `suites` — les tests L2 réellement joués (pytest dans l'application, 0 token)
+python .sdda/sdda.py run-tool-suites --mission {n} --json
 ```
 
 | # | Contrôle | Part | Classe si KO |
@@ -203,6 +203,12 @@ python .sdda/sdda.py eval-runner --mission {n} --level L2 --executor {module}:{E
 | 6 | Enveloppe DB présente et bornée pour chaque `dataAccess[]` | contracts | `[DB_ENVELOPE_MISSING]` · `[DATA_ACCESS_ADR_REQUIRED]` |
 | 7 | `toolSchemaHash` calculé et épinglé dans le rapport (P10) | contracts | — |
 | 8 | Connectivité live (`pytest -m network`) | suites | `[TOOL_LIVE_UNREACHABLE]` |
+
+**Qui rend la part `suites`.** `run-tool-suites` joue les tests que `qa-tests`
+a écrits pour chaque suite `tool-{n}-{outil}.yaml` de `qa-evals`, et exige que
+**chaque cas déclaré** soit exercé. Un `xfail` est un défaut connu : il rend la
+part rouge. G3 ne porte que sur les outils que l'IR **câble** : un contrat de
+source qu'aucun agent n'appelle n'est ni construit ni exigé.
 
 Bypass : `SDDA_BYPASS_TOOL_GATE=1` (INVARIANTS `tool-gate-before-agent-wiring`),
 audit-loggué. **Ne couvre jamais** `[SIDE_EFFECT_UNDECLARED]`,
