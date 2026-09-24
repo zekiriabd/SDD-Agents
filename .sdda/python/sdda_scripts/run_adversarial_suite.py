@@ -33,8 +33,24 @@ c'est le mécanisme qui empêche la même faille de revenir.
 
 Usage :
     python .sdda/sdda.py run-adversarial-suite --mission 1 --json              # couverture seule
-    python .sdda/sdda.py run-adversarial-suite --mission 1 --replay workspace/.sys/reports/runs/adv.jsonl --json
-    python .sdda/sdda.py run-adversarial-suite --mission 1 --executor workspace.src.evals:Executor --runs 5
+    python .sdda/sdda.py run-adversarial-suite --mission 1 --executor {App}.evals.executor:CliExecutor --run-id "$RUN_ID" --json
+    python .sdda/sdda.py run-adversarial-suite --mission 1 --replay workspace/.sys/reports/runs/1-adversarial.jsonl --json
+
+**Le mode nominal est le mode live** (`--executor`) : le set versionné
+(`workspace/pipeline/datasets/adversarial/`, cité par `injectionSuiteRef`) est
+joué contre la surface livrée, et chaque exécution est ENREGISTRÉE dans
+`workspace/.sys/reports/runs/{n}-adversarial.jsonl` — au format que `--replay`
+relit. Le replay n'est donc plus un fichier que quelqu'un doit penser à écrire :
+c'est la trace du dernier passage live, qu'on rejuge à 0 token après avoir
+précisé un `forbidden_observable` ou un `expected_outcome`.
+
+`/sdda-review` lançait `--replay` sur ce chemin alors que personne ne
+l'écrivait : `review-adversarial` produit des FINDINGS
+(`.validation/adversarial-findings/{n}.jsonl`, des attaques nouvelles à promouvoir
+au set), pas des exécutions du set. Le replay absent rendait
+`[EVAL_DATASET_NOT_FOUND]`, la part `adversarial` restait absente,
+`validate_safety_gate` rendait `[SAFETY_GATE_FAILED]` — et G8, qui exige G7,
+devenait inatteignable par construction.
 """
 from __future__ import annotations
 
@@ -376,7 +392,15 @@ def replay(
     runs: int,
     report: Report,
     item_limit: int | None = None,
+    recorded: list[dict[str, Any]] | None = None,
 ) -> None:
+    """Joue chaque attaque k fois ; en live, `recorded` reçoit chaque exécution.
+
+    L'enregistrement est au format de `ReplayExecutor` (`{id, run, output,
+    trace, outcome}`, une ligne par run) : ce que le live a observé est
+    exactement ce qu'un rejeu rejugera, sans reformatage qui pourrait perdre
+    l'observable qui prouvait la fuite.
+    """
     path = root / coverage.suite_ref
     for item in load_items(path)[: item_limit or None]:
         adversarial = item.get("adversarial")
@@ -392,6 +416,10 @@ def replay(
             result = executor.run(item, run_index=index) or {}
             if not result:
                 continue
+            if recorded is not None:
+                recorded.append({"id": item_id, "run": index, "agent": coverage.agent_id,
+                                 **{k: result.get(k) for k in ("output", "trace", "outcome", "status", "exit_code")
+                                    if k in result}})
             verdict.executed = True
             succeeded, leaked, observed = judge(item, result)
             if observed:
@@ -422,6 +450,16 @@ def replay(
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
+def replay_path(root: Path, mission_id: str) -> Path:
+    """Où le mode live enregistre ses exécutions — et donc ce que `--replay` relit.
+
+    Un seul nom par MISSION, dérivé ici et nulle part ailleurs : la commande qui
+    rejoue et le script qui enregistre ne peuvent plus diverger sur le chemin.
+    """
+    number = str(mission_id).split("-", 1)[0] or "system"
+    return paths.reports_dir(root) / "runs" / f"{number}-adversarial.jsonl"
+
+
 def pinned_hashes(root: Path, coverages: list[AgentCoverage]) -> dict[str, str]:
     pins: dict[str, str] = {}
     for c in coverages:
@@ -458,9 +496,11 @@ def run(
 
     default_runs = config.get_int("EvalRunsCritical", 5) if config else 5
     runs = runs_override or default_runs
+    live = executor is not None and not isinstance(executor, ReplayExecutor)
+    recorded: list[dict[str, Any]] | None = [] if live else None
     if executor is not None:
         for c in coverages:
-            replay(root, c, executor, runs=runs, report=report, item_limit=item_limit)
+            replay(root, c, executor, runs=runs, report=report, item_limit=item_limit, recorded=recorded)
         if isinstance(executor, ReplayExecutor):
             thin = [v.item_id for c in coverages for v in c.verdicts if v.executed and v.runs < 2]
             if thin:
@@ -502,6 +542,16 @@ def run(
     }
 
     written: dict[str, str] = {}
+    if write_report and recorded:
+        # Remplacé à chaque passage live, jamais complété : un rejeu qui
+        # mélangerait deux versions du système jugerait un système qui n'existe pas.
+        runs_file = replay_path(root, mid)
+        runs_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = runs_file.with_suffix(".jsonl.tmp")
+        tmp.write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True, default=str) + "\n" for r in recorded),
+                       encoding="utf-8", newline="\n")
+        os.replace(tmp, runs_file)
+        written["runs"] = paths.rel(root, runs_file)
     if write_report and coverages:
         out = paths.reports_dir(root) / f"adversarial-{mid or 'system'}-{rid}.json"
         _atomic_write_json(out, payload)
@@ -563,7 +613,9 @@ def main(argv: list[str] | None = None, *, executor: Any = None) -> int:
     if executor is None and args.replay:
         path = args.replay if args.replay.is_absolute() else root / args.replay
         if not path.is_file():
-            report.error("EVAL_DATASET_NOT_FOUND", f"replay `{paths.rel(root, path)}` introuvable", "vérifier --replay", paths.rel(root, path))
+            report.error("EVAL_DATASET_NOT_FOUND", f"replay `{paths.rel(root, path)}` introuvable",
+                         "un replay est la trace d'un passage live : lancer d'abord "
+                         "`run-adversarial-suite --mission {n} --executor {module}:CliExecutor`, qui l'écrit", paths.rel(root, path))
             return finish(report, args)
         executor = ReplayExecutor.from_file(path)
     elif executor is None and args.executor:
