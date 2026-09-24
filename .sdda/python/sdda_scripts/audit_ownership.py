@@ -24,9 +24,18 @@ Les chemins sont comparés en glob, avec `**` matchant **zéro segment ou plus**
 la profondeur du chemin applicatif appartient à la fiche de langage, pas à cette
 matrice (cf. `rules/ownership.md`).
 
+Et une troisième, qui est la seule à regarder le disque :
+
+    3. **Écriture réelle hors zone** — un instantané pris AVANT une phase
+       (`snapshot`), puis l'écart après elle (`--since-snapshot`) : chaque
+       fichier créé, modifié ou supprimé est attribué à la zone d'un agent de
+       la phase, et, pour `dev-agent`, au répertoire d'une instance déclarée.
+       `--restore` révoque ce qui ne l'est pas.
+
 Usage :
-    python .sdda/sdda.py audit-ownership --mission 1 --phase 4
     python .sdda/sdda.py audit-ownership --declared-only --json   # cohérence de loader.yml seule
+    python .sdda/sdda.py audit-ownership snapshot --mission 1 --phase 4
+    python .sdda/sdda.py audit-ownership --mission 1 --phase 4 --since-snapshot --instances billing,triage
     python .sdda/sdda.py audit-ownership --agent dev-agent --wrote workspace/src/prompts/x.system.md
 """
 from __future__ import annotations
@@ -964,8 +973,229 @@ def check_read(loader: dict[str, Any], agent: str, path: str, report: Report, *,
     return False
 
 
+# ---------------------------------------------------------------------------
+# 4. Ce qui a RÉELLEMENT été écrit pendant une phase — instantané, puis écart
+# ---------------------------------------------------------------------------
+# `/sdda-build` appelait `audit-ownership --phase 4` sans `--agent` ni
+# `--wrote` : seule la cohérence de loader.yml était vérifiée, jamais une
+# écriture. Et la « révocation du fichier écrit (restauré depuis le hash
+# précédent) » que la commande promettait n'avait aucun hash précédent où
+# puiser. Ce qui suit la rend réelle : un instantané AVANT la phase (empreinte
+# de chaque fichier, et copie de ceux qu'on pourra devoir restaurer), puis le
+# calcul de ce qui a été créé, modifié, supprimé — attribué aux zones des
+# agents de la phase. C'est le filet de tout ce que les hooks ne voient pas :
+# un script qui écrit de l'intérieur, un `agent_id` absent du payload, deux
+# instances qui s'échangent leurs répertoires.
+
+#: Les agents qui écrivent pendant chaque phase de `/sdda-build` (et des
+#: phases voisines), pour ne pas avoir à les lister à chaque appel.
+PHASE_AGENTS: dict[str, tuple[str, ...]] = {
+    "2": ("architect-topology", "architect-rag", "architect-data", "architect-memory", "architect-tools"),
+    "3.0": ("dev-backend",),
+    "3": ("dev-tools", "dev-retrieval", "dev-data"),
+    "4.0": ("dev-orchestration",),
+    "4.1": ("dev-prompt",),
+    "4": ("dev-agent",),
+    "5": ("dev-orchestration", "dev-api", "dev-backend"),
+    "6": ("qa-evals", "qa-tests"),
+    "7": ("review-spec", "review-safety", "review-cost", "review-orchestration", "review-rag",
+          "review-adversarial"),
+}
+
+#: Hors instantané : l'état interne (écrit par les scripts que les agents
+#: lancent — gates, traces, packs), et les caches d'outillage régénérables. Les
+#: zones protégées de `.sys/` sont tenues par les hooks ; ce qu'un script y
+#: écrit pendant la phase est, par construction, le fait des scripts.
+_SNAPSHOT_SKIP_TOP = ("workspace/.sys",)
+_SNAPSHOT_NOISE = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules",
+                             ".venv", "venv", ".gradle", "bin", "obj", "build", "dist", ".git", ".idea"})
+#: Copie gardée pour restauration : tout fichier sous ce seuil, hors données
+#: déposées par l'humain (`assets/`, que personne ne restaure depuis une copie).
+_BLOB_MAX_BYTES = 2_000_000
+CLS_FROZEN_ZONE_CHANGED = "OWNERSHIP_FROZEN_ZONE_CHANGED"
+
+
+def snapshot_dir(root: Path, mission: str | None, phase: str) -> Path:
+    return paths.workspace(root) / ".sys" / ".state" / "ownership-snapshots" / f"{mission or 'x'}-phase-{phase}"
+
+
+def _walk_workspace(root: Path):
+    base = paths.workspace(root)
+    if not base.is_dir():
+        return
+    for dirpath, dirs, files in os.walk(base):
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        if any(rel_dir == s or rel_dir.startswith(s + "/") for s in _SNAPSHOT_SKIP_TOP):
+            dirs[:] = []
+            continue
+        dirs[:] = [d for d in dirs if d not in _SNAPSHOT_NOISE and not d.endswith(".egg-info")]
+        for name in files:
+            yield Path(dirpath) / name
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def take_snapshot(root: Path, mission: str | None, phase: str) -> dict[str, Any]:
+    """Empreinte de chaque fichier du workspace (hors `.sys/`), et copie des
+    fichiers restaurables. Écrit atomiquement ; rend le manifeste."""
+    import json
+    import shutil
+
+    target = snapshot_dir(root, mission, phase)
+    tmp = target.with_name(target.name + ".tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    (tmp / "blobs").mkdir(parents=True, exist_ok=True)
+    files: dict[str, dict[str, Any]] = {}
+    for path in _walk_workspace(root):
+        rel = path.relative_to(root).as_posix()
+        try:
+            digest = _sha(path)
+            size = path.stat().st_size
+        except OSError:
+            continue
+        entry: dict[str, Any] = {"sha256": digest, "bytes": size}
+        restorable = size <= _BLOB_MAX_BYTES and not rel.startswith("workspace/assets/") and not is_secret_file(rel)
+        if restorable:
+            blob = tmp / "blobs" / digest
+            if not blob.exists():
+                shutil.copyfile(path, blob)
+            entry["blob"] = True
+        files[rel] = entry
+    manifest = {"mission": mission, "phase": phase, "files": files}
+    (tmp / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True), encoding="utf-8")
+    shutil.rmtree(target, ignore_errors=True)
+    os.replace(tmp, target)
+    return manifest
+
+
+def load_snapshot(root: Path, mission: str | None, phase: str) -> dict[str, Any] | None:
+    import json
+
+    path = snapshot_dir(root, mission, phase) / "manifest.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def changes_since(root: Path, manifest: dict[str, Any]) -> dict[str, list[str]]:
+    before = manifest.get("files") or {}
+    now: dict[str, str] = {}
+    for path in _walk_workspace(root):
+        try:
+            now[path.relative_to(root).as_posix()] = _sha(path)
+        except OSError:
+            continue
+    created = sorted(p for p in now if p not in before)
+    modified = sorted(p for p in now if p in before and before[p].get("sha256") != now[p])
+    deleted = sorted(p for p in before if p not in now)
+    return {"created": created, "modified": modified, "deleted": deleted}
+
+
+def _owners(loader: dict[str, Any], agents: tuple[str, ...], path: str,
+            instances: list[str] | None) -> tuple[list[str], str]:
+    """Les agents de la phase dont la zone couvre `path` — et, pour un agent à
+    instances, `""` si l'instance est déclarée, sinon le nom de l'instance fautive."""
+    owners: list[str] = []
+    escaped = ""
+    for agent in agents:
+        spec = loader.get(agent)
+        placeholder = str(spec.get("instance_placeholder") or "") if isinstance(spec, dict) else ""
+        probe = Report(name="probe", target=".")
+        if not check_write(loader, agent, path, probe):
+            continue
+        if placeholder and instances is not None:
+            if any(check_write(loader, agent, path, Report(name="probe", target="."), {placeholder: i})
+                   for i in instances):
+                owners.append(agent)
+            else:
+                escaped = path
+            continue
+        owners.append(agent)
+    return owners, escaped
+
+
+def check_since_snapshot(root: Path, loader: dict[str, Any], report: Report, *, mission: str | None,
+                         phase: str, agents: tuple[str, ...], instances: list[str] | None = None,
+                         frozen: list[str] | None = None, restore: bool = False) -> dict[str, Any]:
+    """Chaque fichier créé, modifié ou supprimé depuis l'instantané est-il dans
+    la zone d'un agent de la phase — et, par instance, sous SON répertoire ?"""
+    import shutil
+
+    manifest = load_snapshot(root, mission, phase)
+    if manifest is None:
+        report.error("OWNERSHIP_SNAPSHOT_MISSING",
+                     f"aucun instantané pour la MISSION {mission or '?'} phase {phase}",
+                     fix=f"`python .sdda/sdda.py audit-ownership snapshot --mission {mission or '{n}'} "
+                         f"--phase {phase}` AVANT la vague — sans lui, aucune écriture réelle n'est vérifiable")
+        return {}
+    changes = changes_since(root, manifest)
+    violations: list[dict[str, str]] = []
+    for kind in ("created", "modified", "deleted"):
+        for path in changes[kind]:
+            if frozen and any(matches(f, path) for f in frozen):
+                violations.append({"path": path, "kind": kind, "class": CLS_FROZEN_ZONE_CHANGED})
+                report.error(CLS_FROZEN_ZONE_CHANGED, f"`{path}` {kind} alors que sa zone est GELÉE pour la phase {phase}",
+                             fix="un type partagé ou une interface gelée par la pré-passe ne change pas pendant "
+                                 "la phase qui en dépend : relancer la pré-passe, puis la phase",
+                             location=path)
+                continue
+            owners, escaped = _owners(loader, agents, path, instances)
+            if owners:
+                continue
+            if escaped:
+                cls, why = "OWNERSHIP_INSTANCE_ESCAPE", (
+                    f"`{path}` est sous le répertoire d'une instance que la vague n'a pas déclarée "
+                    f"({', '.join(instances or []) or 'aucune'})")
+            else:
+                cls, why = _sacred_class(path)
+                cls = cls or "OWNERSHIP_VIOLATION"
+                why = why or f"hors de la zone de {', '.join(agents)}"
+            violations.append({"path": path, "kind": kind, "class": cls})
+            report.error(cls, f"phase {phase} : `{path}` {kind} — {why}",
+                         fix="révoquer (`--restore`) puis relancer l'agent fautif ; si l'écriture est "
+                             "légitime, c'est la matrice (`loader.yml`) qui est fausse, pas l'audit",
+                         location=path)
+
+    restored: list[str] = []
+    if restore and violations:
+        blobs = snapshot_dir(root, mission, phase) / "blobs"
+        before = manifest.get("files") or {}
+        for v in violations:
+            path, kind = v["path"], v["kind"]
+            target = root / path
+            if kind == "created":
+                try:
+                    target.unlink()
+                    restored.append(path)
+                except OSError:
+                    pass
+                continue
+            entry = before.get(path) or {}
+            blob = blobs / str(entry.get("sha256", ""))
+            if entry.get("blob") and blob.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(blob, target)
+                restored.append(path)
+            else:
+                report.warn("OWNERSHIP_RESTORE_IMPOSSIBLE", f"`{path}` : aucune copie dans l'instantané",
+                            fix="fichier trop gros ou sous assets/ : le restaurer à la main", location=path)
+    return {"changes": changes, "violations": violations, "restored": restored,
+            "agents": list(agents), "instances": instances}
+
+
 def run(root: Path, *, agent: str | None = None, wrote: list[str] | None = None,
-        declared_only: bool = False) -> Report:
+        declared_only: bool = False, since_snapshot: bool = False, mission: str | None = None,
+        phase: str | None = None, agents: list[str] | None = None, instances: list[str] | None = None,
+        frozen: list[str] | None = None, restore: bool = False) -> Report:
     report = Report(name="OWNERSHIP", target=str(root))
     loader = load_loader(root)
 
@@ -973,22 +1203,54 @@ def run(root: Path, *, agent: str | None = None, wrote: list[str] | None = None,
     if declared_only:
         return report
 
+    if since_snapshot:
+        if not phase:
+            report.error("INVALID_ARG", "`--since-snapshot` exige `--phase`",
+                         fix="la phase nomme l'instantané ET les agents dont les zones sont jugées")
+            return report
+        chosen = tuple(agents or ([agent] if agent else PHASE_AGENTS.get(str(phase), ())))
+        if not chosen:
+            report.error("INVALID_ARG", f"phase `{phase}` : aucun agent connu",
+                         fix=f"passer `--agents` ; phases connues : {sorted(PHASE_AGENTS)}")
+            return report
+        report.data["sinceSnapshot"] = check_since_snapshot(
+            root, loader, report, mission=mission, phase=str(phase), agents=chosen,
+            instances=instances, frozen=frozen, restore=restore)
+        return report
+
     if agent and wrote:
         verdict = {p: check_write(loader, agent, p, report) for p in wrote}
         report.data["checked"] = verdict
     elif agent or wrote:
         report.error("INVALID_ARG", "`--agent` et `--wrote` vont ensemble",
-                     fix="passer les deux, ou `--declared-only`")
+                     fix="passer les deux, `--since-snapshot`, ou `--declared-only`")
     return report
+
+
+def _csv(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    return [v.strip() for v in value.split(",") if v.strip()]
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Matrice d'écriture : qui a le droit d'écrire quoi (0 token)")
+    p.add_argument("action", nargs="?", choices=("check", "snapshot"), default="check",
+                   help="`snapshot` : instantané AVANT une phase ; `check` (défaut) : l'audit")
     p.add_argument("--mission", default=None, help="numéro de mission (contexte du rapport de gate)")
-    p.add_argument("--phase", default=None, help="phase du pipeline (contexte du rapport de gate)")
+    p.add_argument("--phase", default=None, help="phase du pipeline (nomme l'instantané et ses agents)")
     p.add_argument("--agent", default=None, help="agent dont on vérifie les écritures")
     p.add_argument("--wrote", nargs="*", default=None, help="chemins écrits, relatifs à la racine")
     p.add_argument("--declared-only", action="store_true", help="ne vérifier que la cohérence de loader.yml")
+    p.add_argument("--since-snapshot", action="store_true",
+                   help="juger les fichiers RÉELLEMENT créés/modifiés/supprimés depuis l'instantané de la phase")
+    p.add_argument("--agents", default=None, help="agents de la phase, séparés par des virgules (défaut : table)")
+    p.add_argument("--instances", default=None,
+                   help="instances déclarées de la vague (`dev-agent`), séparées par des virgules")
+    p.add_argument("--frozen", action="append", default=None,
+                   help="motif d'une zone GELÉE pendant la phase (répétable)")
+    p.add_argument("--restore", action="store_true",
+                   help="révoquer les écritures fautives depuis l'instantané (restaure, ou supprime une création)")
     add_common_args(p)
     return p
 
@@ -997,7 +1259,19 @@ def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdout()
     args = build_parser().parse_args(argv)
     root = resolve_root(args)
-    report = run(root, agent=args.agent, wrote=args.wrote, declared_only=args.declared_only)
+    if args.action == "snapshot":
+        report = Report(name="OWNERSHIP-SNAPSHOT", target=str(root))
+        if not args.phase:
+            report.error("INVALID_ARG", "`snapshot` exige `--phase`", fix="nommer la phase qui va s'ouvrir")
+            return finish(report, args)
+        manifest = take_snapshot(root, args.mission, str(args.phase))
+        report.data.update({"files": len(manifest["files"]),
+                            "path": paths.rel(root, snapshot_dir(root, args.mission, str(args.phase)))})
+        return finish(report, args)
+    report = run(root, agent=args.agent, wrote=args.wrote, declared_only=args.declared_only,
+                 since_snapshot=args.since_snapshot, mission=args.mission, phase=args.phase,
+                 agents=_csv(args.agents), instances=_csv(args.instances), frozen=args.frozen,
+                 restore=args.restore)
 
     if not args.no_report:
         try:
