@@ -70,9 +70,57 @@ def latest_report(root: Path, number: int) -> Path | None:
     return found[-1] if found else None
 
 
+def reports_for_run(root: Path, number: int, run_id: str) -> list[Path]:
+    """Tous les rapports d'UN run, dans l'ordre où `eval_runner` les a écrits.
+
+    Un `/sdda-full` propage un seul `RUN_ID` à toutes ses sous-commandes, et
+    `eval_runner` est appelé plusieurs fois dans ce run (G5, G6, PHASE 6, L8,
+    G8). Le premier écrit `{n}-{RUN_ID}.json`, les suivants `{n}-{RUN_ID}-2.json`,
+    `-3`… (`unique_report_path`). Chercher le seul `{n}-{RUN_ID}.json` rendait
+    donc à `check-regression --run` et `promote-baseline --run` le rapport L4
+    de la PHASE 4 — jamais celui de l'acceptation.
+    """
+    d = reports_dir(root)
+    if not d.is_dir():
+        return []
+    stem = f"{number}-{run_id}"
+    found: list[tuple[int, Path]] = []
+    base = d / f"{stem}{REPORT_SUFFIX}"
+    if base.is_file():
+        found.append((1, base))
+    for p in d.glob(f"{stem}-*{REPORT_SUFFIX}"):
+        tail = p.name[len(stem) + 1:-len(REPORT_SUFFIX)]
+        if tail.isdigit() and p.is_file():
+            found.append((int(tail), p))
+    return [p for _, p in sorted(found)]
+
+
 def report_by_run_id(root: Path, number: int, run_id: str) -> Path | None:
-    p = reports_dir(root) / f"{number}-{run_id}{REPORT_SUFFIX}"
-    return p if p.is_file() else None
+    """Le DERNIER rapport écrit par ce run (cf. `reports_for_run`)."""
+    found = reports_for_run(root, number, run_id)
+    return found[-1] if found else None
+
+
+def merged_run_report(root: Path, number: int, run_id: str) -> dict[str, Any] | None:
+    """Les rapports d'un run réunis en un : chaque suite à sa DERNIÈRE mesure du run.
+
+    Ce que `check-regression --run` et `promote-baseline --run` comparent ou
+    promeuvent : le système tel que ce run l'a mesuré, suite par suite. Le
+    dernier rapport seul (l'acceptation, L9) ne porte que la suite holdout —
+    promouvoir « le run » depuis lui laissait toutes les autres suites sans
+    baseline, donc sans régression mesurable.
+    """
+    datas = [(p, load_json(p)) for p in reports_for_run(root, number, run_id)]
+    datas = [(p, d) for p, d in datas if d is not None]
+    if not datas:
+        return None
+    merged = dict(datas[-1][1])
+    suites: dict[str, dict[str, Any]] = {}
+    for _, data in datas:
+        suites.update(report_suites(data))
+    merged["suites"] = [suites[sid] for sid in sorted(suites)]
+    merged["sourceReports"] = [paths.rel(root, p) for p, _ in datas]
+    return merged
 
 
 def load_json(path: Path) -> dict[str, Any] | None:

@@ -425,7 +425,8 @@ CAP sont advisory → la CAP ne peut pas être verte → 🟡 au mieux, WARN
 `[JUDGE_UNCALIBRATED]`.
 
 ```bash
-python .sdda/sdda.py eval-runner --mission {n} --level L4 --isolated \n  --executor {module}:{InProcessExecutor} --json \
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
+  --executor {module}:{InProcessExecutor} --json \
   > workspace/.sys/.validation/{n}-G5-agent.json
 ```
 
@@ -543,7 +544,8 @@ rien n'a évaluée, que la divergence de schémas soit assumée ou non.
 ### 5.4 — ORCH GATE (G6)
 
 ```bash
-python .sdda/sdda.py eval-runner --mission {n} --level L5,L7 \n  --executor {module}:{CliExecutor} --json \
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
+  --executor {module}:{CliExecutor} --json \
   > workspace/.sys/.validation/{n}-G6-orch.json
 ```
 

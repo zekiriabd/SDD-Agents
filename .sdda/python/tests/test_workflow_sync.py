@@ -124,3 +124,84 @@ def test_the_loop_budget_follows_the_item_across_resumes(project: Path) -> None:
     assert code == 1 and "BUILD_LOOP_BUDGET_EXHAUSTED" in out
     # Le plafond de RUN, lui, ne cumule pas la lignée : la facture de chaque run reste la sienne.
     assert sdda_state.load_run(project, rid)["costUsd"] == 6.0
+
+
+# ---------------------------------------------------------------------------
+# A5 — un RUN_ID propagé porte plusieurs rapports d'eval : --run les lit tous
+# ---------------------------------------------------------------------------
+def _eval(root: Path, ir: dict, score: float, run_id: str, suite: str) -> None:
+    from sdda_lib.layered_config import read_layered_config
+    from sdda_scripts.eval_runner import Filters, run_evals
+
+    class _Scored:
+        name = "scored"
+
+        def run(self, item, *, suite, run_index, seed):
+            return {"output": {"score": score}, "cost_usd": 0.0, "latency_ms": 0.0, "trace": {}}
+
+    graders = {"exact": lambda item, output, trace, m: float(output["score"])}
+    run_evals(root, ir, _Scored(), config=read_layered_config(root), filters=Filters(suites={suite}),
+              graders=graders, run_id=run_id, write_gates=False)
+
+
+def test_regression_and_promotion_by_run_read_every_report_of_that_run(project: Path) -> None:
+    """`/sdda-full` propage UN RUN_ID ; eval-runner y écrit `{n}-{RID}.json`, puis
+    `-2`, `-3`… `--run` ne lisait que le premier : le rapport de la PHASE 4."""
+    from sdda_lib import paths
+    from sdda_lib.eval_reports import merged_run_report, report_by_run_id
+    from sdda_scripts import check_regression, ir_compiler, promote_baseline
+
+    ir_compiler.compile_to_file(project, 1, compiled_at="2026-09-20T10:00:00Z")
+    ir = ir_compiler.load_ir(paths.ir_path(project, 1))
+    routing, citations = "1-1-routing_accuracy", "1-2-citation_resolve_rate"
+    _eval(project, ir, 1.0, "RID", routing)          # PHASE 4 : 1-RID.json
+    _eval(project, ir, 1.0, "RID", citations)        # PHASE 6 : 1-RID-2.json
+    assert report_by_run_id(project, 1, "RID").name == "1-RID-2.json"
+    assert {s["suiteId"] for s in merged_run_report(project, 1, "RID")["suites"]} == {routing, citations}
+
+    code, out = run_main(promote_baseline.main, ["--root", str(project), "--mission", "1", "--run", "RID",
+                                                 "--label", "premier run accepté", "--json"])
+    assert code == 0, out
+    assert sorted(json.loads(out)["data"]["promoted"]) == sorted([routing, citations])
+
+    _eval(project, ir, 0.5, "RID2", routing)
+    _eval(project, ir, 1.0, "RID2", citations)
+    code, out = run_main(check_regression.main, ["--root", str(project), "--mission", "1", "--run", "RID2", "--json"])
+    assert code == 1 and routing in json.loads(out)["data"]["regressions"]
+
+
+# ---------------------------------------------------------------------------
+# A6 — k se résout depuis la config quand la commande ne le surcharge pas
+# ---------------------------------------------------------------------------
+def test_k_comes_from_evalruns_or_evalrunscritical_without_override(project: Path) -> None:
+    from sdda_lib.layered_config import read_layered_config
+    from sdda_scripts.eval_runner import plan_suite
+
+    cfg = read_layered_config(project)
+    normal = plan_suite(project, {"id": "x-normal", "level": "L4"}, cfg)
+    critical = plan_suite(project, {"id": "x-critical", "level": "L4", "capRef": "1-1-ClassifyIntent"}, cfg)
+    assert normal.runs == cfg.get_int("EvalRuns", 3)
+    assert critical.runs == cfg.get_int("EvalRunsCritical", 5) and critical.criticality == "critical"
+
+
+def _command_invocations(script: str) -> list[tuple[str, str]]:
+    """(commande, invocation) pour chaque appel de `script` dans les blocs bash des commandes."""
+    import re
+
+    out = []
+    for md in sorted((Path(__file__).resolve().parents[2] / "commands").glob("*.md")):
+        for block in re.findall(r"```bash\n(.*?)```", md.read_text(encoding="utf-8"), flags=re.S):
+            joined = re.sub(r"\\\n\s*", " ", block)
+            out.extend((md.name, line) for line in joined.splitlines() if f"sdda.py {script}" in line)
+    return out
+
+
+def test_every_command_propagates_the_run_id_and_never_sends_a_literal_k() -> None:
+    """`--runs ${RUNS:-EvalRuns}` envoyait le TEXTE `EvalRuns` à argparse, et une
+    valeur unique aurait écrasé `EvalRunsCritical`. Sans `--run-id`, chaque
+    rapport prenait un horodatage et `check-regression --run $RUN_ID` ne trouvait rien."""
+    calls = _command_invocations("eval-runner") + _command_invocations("run-adversarial-suite")
+    assert calls
+    for command, line in calls:
+        assert "--run-id" in line, f"{command} : {line.strip()}"
+        assert "EvalRuns" not in line and "${RUNS" not in line, f"{command} : {line.strip()}"
