@@ -95,6 +95,50 @@ def test_wrapper_carries_pii_and_untrusted_fields(sources_project: Path) -> None
     assert "as_of" in text and "stale" in text
 
 
+def _require_customer(project: Path) -> None:
+    path = project / MANIFEST
+    text = path.read_text(encoding="utf-8")
+    old = "    filters: [order_id, customer_id, carrier, status]\n"
+    assert old in text
+    path.write_text(text.replace(old, old + "    required_filter: [customer_id]\n", 1), encoding="utf-8")
+
+
+def _input_block(text: str) -> str:
+    return text.split("class Input(BaseModel):", 1)[1].split("class Record(BaseModel):", 1)[0]
+
+
+def test_the_identity_field_is_never_a_parameter_the_model_fills(sources_project: Path) -> None:
+    """`customer_id` vient de l'appelant (`ToolContext.identity`), pas du modèle.
+
+    Le proposer en paramètre OBLIGATOIRE demandait au modèle d'inventer une
+    valeur que le runtime jette — l'invitation exacte qu'un message hostile
+    attend. Il disparaît donc du wrapper ET du schéma d'entrée du contrat.
+    """
+    _require_customer(sources_project)
+    assert gst.run(sources_project, mode="write").ok
+    for kind in ("search", "count"):
+        block = _input_block((sources_project / TOOLS / f"order_tracking_{kind}.py").read_text(encoding="utf-8"))
+        assert "customer_id" not in block, kind
+        assert "carrier:" in block, kind
+    src = {"key": "order_id", "filters": ["order_id", "customer_id", "carrier"], "required_filter": ["customer_id"]}
+    schema = {"properties": {"customer_id": {"type": "string"}, "carrier": {"type": "string"}}}
+    inputs, _ = gst._tool_schemas(src, schema, "search", 50)
+    assert "customer_id" not in inputs["properties"] and inputs["required"] == []
+
+
+def test_a_closed_filter_is_typed_with_its_admitted_values(sources_project: Path) -> None:
+    """Le modèle voit `DPD | UPS` dans le schéma, au lieu de deviner `FedEx`."""
+    assert gst.run(sources_project, mode="write").ok
+    text = (sources_project / TOOLS / "order_tracking_search.py").read_text(encoding="utf-8")
+    block = _input_block(text)
+    assert 'carrier: Literal["DPD", "UPS"] | None' in block
+    assert "from typing import" in text and "Literal" in text.split("from pydantic", 1)[0]
+    ast.parse(text)
+    # En SORTIE, la donnée reste typée large : une valeur hors enum est signalée, pas refusée.
+    record = text.split("class Record(BaseModel):", 1)[1].split("class Output(BaseModel):", 1)[0]
+    assert "Literal" not in record
+
+
 def test_count_tool_exists_so_the_model_never_counts(sources_project: Path) -> None:
     """« Combien ? » est un outil, pas 200 lignes tronquées que le modèle additionne."""
     gst.run(sources_project, mode="write")

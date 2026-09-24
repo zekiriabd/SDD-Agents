@@ -537,15 +537,34 @@ class Output(BaseModel):
 
 
 async def order_tracking_lookup(params: Input, *, ctx: ToolContext) -> Output:
-    return await lookup_record(
+    result: Output = await lookup_record(
         source="order_tracking",
         key=params.order_id,
         record_model=Record,
-        ctx=ctx,                     # porte run_id, tracer, horloge
+        output_model=Output,
+        ctx=ctx,                     # porte run_id, tracer, horloge ET l'identité de l'appelant
         pii_fields={"recipient_name"},
         untrusted_fields={"carrier_message"},
     )
+    return result
 ```
+
+La variante `search` montre les deux règles des PARAMÈTRES d'appel :
+
+```python
+class Input(BaseModel):                                   # order_tracking_search
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    carrier: Literal["DPD", "UPS"] | None = Field(default=None, description="…")   # enum -> Literal
+    status: Literal["in_transit", "delivered", "exception", "returned"] | None = Field(default=None, description="…")
+    # PAS de `customer_id` : champ de `required_filter`, imposé par le runtime depuis
+    # ctx.identity. Un paramètre que le modèle remplit est un paramètre qu'un texte hostile remplit.
+```
+
+Un filtre à choix fermé porte son `enum` dans le schéma de l'outil : le modèle
+voit les valeurs admises au lieu d'en deviner une, et une valeur hors liste qui
+passerait quand même est refusée par le runtime (`INVALID_FILTER`, valeurs
+admises dans le détail). En sortie (`Record`), les champs restent typés large :
+une donnée qui dérive est signalée par `schema_guard`, pas rejetée à la lecture.
 
 `lookup_record` et `search_records` sont écrits **une fois** et testés en L2 ;
 ils délèguent au connecteur du store et appliquent, pour tous, la même chaîne :
