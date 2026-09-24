@@ -269,6 +269,30 @@ def discover_hook_wirings() -> list[tuple[str, dict[str, str] | None]]:
     return out
 
 
+#: Refus NATIFS de lecture des fichiers de secrets du workspace — un filet non
+#: lexical sous les hooks.
+#:
+#: Les hooks de lecture jugent un chemin qu'ils savent lire ; le harnais, lui,
+#: applique ses règles `permissions.deny` à `Read` (et, selon la documentation,
+#: à `Grep` et `Glob`) AVANT tout hook, sans analyse de commande et sans
+#: dépendre d'un interpréteur Python présent sur la machine. Syntaxe des règles
+#: (docs Claude Code, « permissions ») : `/chemin` est relatif à la RACINE DU
+#: PROJET, `./chemin` au répertoire courant, `//chemin` absolu ; motifs à la
+#: gitignore. Les deux premières formes sont écrites, parce que la seconde
+#: couvre une session lancée depuis la racine même si la première était lue
+#: autrement par une version du harnais.
+#:
+#: `.env.example` n'est PAS refusé : c'est un gabarit de noms, que `dev-backend`
+#: édite (et `Edit` exige un `Read` préalable). Ce que ce filet ne couvre pas :
+#: le shell (`cat .env`) — c'est le hook `preflight_bash_ownership` qui le tient.
+SECRET_READ_DENY = tuple(
+    f"Read({prefix}workspace/{where}/{name})"
+    for prefix in ("/", "./")
+    for where in ("assets", "src/**")
+    for name in (".env", ".env.local", ".env.production", ".env.development")
+)
+
+
 class ClaudeAdapter(Adapter):
     """Harnais de référence (niveau A) : tout est natif."""
 
@@ -367,7 +391,8 @@ class ClaudeAdapter(Adapter):
             BUILD_NOTES.setdefault(self.harness.name, []).append(
                 f"{len(undeclared)} hook(s) sans WIRING — non câblé(s) : " + ", ".join(sorted(undeclared))
             )
-        plan.add(out / "settings.json", json.dumps({"hooks": hooks}, indent=2, ensure_ascii=False) + "\n")
+        settings = {"permissions": {"deny": list(SECRET_READ_DENY)}, "hooks": hooks}
+        plan.add(out / "settings.json", json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
 
 class CodexAdapter(Adapter):

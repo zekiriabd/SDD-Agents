@@ -24,7 +24,11 @@ HOOK = "preflight_ownership"
 #: Câblage — lu par `harness_build.py`. `applies_to` vide : la matrice
 #: d'ownership vaut pour chaque écriture, quel qu'en soit l'auteur. Le hook
 #: laisse lui-même passer le fil principal (voir `check`).
-WIRING = {"event": "PreToolUse", "matcher": "Write|Edit", "applies_to": ()}
+#:
+#: `NotebookEdit` et `MultiEdit` écrivent un fichier aussi sûrement que `Write` :
+#: absents du matcher, un sous-agent pouvait réécrire un notebook — ou, par
+#: `MultiEdit`, n'importe quel fichier — sans qu'aucun hook ne s'exécute.
+WIRING = {"event": "PreToolUse", "matcher": "Write|Edit|MultiEdit|NotebookEdit", "applies_to": ()}
 
 
 #: Zones protégées : `pipeline/baselines/`, `.sys/.validation/`, `.sys/.audit/`.
