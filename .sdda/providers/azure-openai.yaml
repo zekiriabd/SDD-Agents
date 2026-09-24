@@ -23,6 +23,10 @@ base_url_env: AZURE_OPENAI_ENDPOINT   # https://{resource}.openai.azure.com — 
 auth_env: AZURE_OPENAI_API_KEY        # ou Entra ID : AZURE_OPENAI_USE_ENTRA_ID=1 (DefaultAzureCredential), recommandé en production
 api_version_env: AZURE_OPENAI_API_VERSION
 
+# SDK que `models.provider_client` importe (le client OpenAI sert Azure) ;
+# `gen_app_skeleton` l'épingle. Relevé sur PyPI le 2026-09-24.
+runtime_sdk: {package: openai, version: "3.19.2"}
+
 deployment_env:                       # nom du déploiement Azure par tier — valeurs dans STACK.md, jamais ici
   deep: AZURE_OPENAI_DEPLOYMENT_DEEP
   balanced: AZURE_OPENAI_DEPLOYMENT_BALANCED

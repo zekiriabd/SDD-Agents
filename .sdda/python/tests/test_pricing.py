@@ -120,6 +120,59 @@ def test_staleness_warning_names_the_stalest_models_and_stays_a_warn() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 3 bis. Les fiches providers sont LUES, et le repli concorde avec elles
+# ---------------------------------------------------------------------------
+def test_every_provider_sheet_is_readable_and_the_catalog_has_no_problem() -> None:
+    """Chaque fiche se lit (y compris les tags Ollama `qwen3:32b`, clés entre guillemets)."""
+    catalog, meta, problems = pricing.load_provider_pricing()
+    assert problems == []
+    assert pricing.CATALOG_PROBLEMS == []
+    for model in ("claude-opus-5", "gpt-5.4", "gemini-3.8-flash", "qwen3:32b"):
+        assert model in catalog, model
+        assert meta[model]["source"].startswith("providers/")
+    assert catalog["qwen3:32b"] == {"input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_creation": 0.0}
+
+
+def test_the_catalog_prices_models_the_hardcoded_table_never_had() -> None:
+    """Avant : `gpt-5.4` était « inconnu » alors que `providers/openai.yaml` le tarifait."""
+    assert pricing.get_pricing("gpt-5.4") == {"input": 2.5, "output": 15.0, "cache_read": 0.25, "cache_creation": 2.5}
+    assert pricing.PRICING_SOURCES["gpt-5.4"] == "providers"
+    assert pricing.PRICING_SOURCES["claude-sonnet-4-6"] == "fallback"   # aucune fiche ne le porte
+
+
+def test_fallback_table_agrees_with_the_provider_sheets_where_they_overlap() -> None:
+    """La concordance : un tarif révisé dans une fiche et oublié dans le repli se voit ici."""
+    catalog, _, _ = pricing.load_provider_pricing()
+    overlap = sorted(set(catalog) & set(pricing.FALLBACK_TABLE))
+    assert overlap, "le repli et le catalogue doivent se recouvrir au moins sur les modèles Anthropic"
+    diverging = {m: (pricing.FALLBACK_TABLE[m], catalog[m]) for m in overlap if pricing.FALLBACK_TABLE[m] != catalog[m]}
+    assert diverging == {}
+
+
+def test_the_hardcoded_table_is_a_tested_fallback_when_sheets_are_missing(tmp_path: Path) -> None:
+    table, meta, problems = pricing.build_table(tmp_path / "no-providers-here")
+    assert table == pricing.FALLBACK_TABLE and meta == pricing.FALLBACK_META
+    assert problems and "repli" in problems[0]
+    pricing._check_table(table, meta)
+
+
+def test_a_broken_sheet_is_a_named_problem_not_a_silent_guess(tmp_path: Path) -> None:
+    (tmp_path / "a.yaml").write_text(
+        "pricing_last_reviewed: 2026-09-01\npricing:\n  m-1: {input: 1.0, output: 2.0, cache_read: 0.1, cache_creation: 1.0}\n"
+        "  m-bad: {input: 1.0}\n", encoding="utf-8")
+    (tmp_path / "b.yaml").write_text(
+        "pricing_last_reviewed: 2026-09-02\npricing:\n  m-1: {input: 9.0, output: 2.0, cache_read: 0.1, cache_creation: 1.0}\n",
+        encoding="utf-8")
+    (tmp_path / "c.yaml").write_text("pricing:\n  m-2: {input: 1.0, output: 1.0, cache_read: 1.0, cache_creation: 1.0}\n",
+                                     encoding="utf-8")
+    catalog, meta, problems = pricing.load_provider_pricing(tmp_path)
+    assert catalog == {"m-1": {"input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_creation": 1.0}}
+    assert meta["m-1"]["reviewed"] == "2026-09-01"
+    text = " | ".join(problems)
+    assert "m-bad" in text and "m-1" in text and "c.yaml" in text
+
+
+# ---------------------------------------------------------------------------
 # 4. Modèle inconnu : strict lève, non-strict replie
 # ---------------------------------------------------------------------------
 def test_strict_get_pricing_raises_for_unknown_model() -> None:

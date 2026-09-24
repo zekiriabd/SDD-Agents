@@ -8,6 +8,18 @@ Languages: *
 > **Obligatoire** dès qu'une source non maîtrisée existe (`STACK.md` →
 > `Trust Boundaries` de la MISSION non vide).
 
+> **Code (Python)** : `.sdda/templates/runtime/python/app/guardrails/injection.py`,
+> émis par `gen-app-skeleton` sous `workspace/src/{App}/guardrails/` et **actif
+> seulement si cette fiche est listée** sous `## Active Guardrails`. Couche
+> « motifs » + décodage (base64, caractères tags, largeur nulle) et re-scan ;
+> règles pondérées, score en OU bruité, seuil `InjectionThreshold` (0.5 par
+> défaut), règles désactivables ou ajoutables (`guardrails.injection` d'
+> `app_config.json`). Câblée dans `RunService` (entrée utilisateur : bloque ou
+> neutralise selon `OnGuardrailTrip`) et `BoundedLoop` (sortie d'outil
+> `untrusted` : neutralise, jamais bloquant). Mesurée contre l'amorce
+> `.sdda/templates/datasets/adversarial-seed.jsonl` (`test_runtime_guardrails.py`) ;
+> les attaques qu'elle ne voit pas y sont nommées, pas cachées.
+
 ---
 
 ## 1. Ce que ce guardrail est — et n'est pas

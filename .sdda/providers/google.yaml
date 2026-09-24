@@ -16,7 +16,14 @@ schema: sdda.provider/v1
 name: google
 endpoint_kind: native                 # API Gemini native (generativelanguage)
 base_url_env: GOOGLE_GEMINI_BASE_URL  # défaut SDK : https://generativelanguage.googleapis.com
+default_base_url: https://generativelanguage.googleapis.com   # lu par graders/judge_clients.py si la variable est absente
 auth_env: GEMINI_API_KEY
+
+# SDK que `models.provider_client` importe : l'application générée parle à
+# Gemini par son API COMPATIBLE OpenAI (un seul client, une seule traduction
+# des appels d'outils) — c'est donc `openai` qu'on épingle, pas `google-genai`.
+# Relevé sur PyPI le 2026-09-24.
+runtime_sdk: {package: openai, version: "3.19.2"}
 
 tier_map:
   # Résolution 2026-09-20 depuis ai.google.dev/gemini-api/docs/models et /pricing.

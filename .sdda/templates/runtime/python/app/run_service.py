@@ -31,6 +31,7 @@ from typing import Any, Callable
 
 from .bounds import Bounds
 from .config import ConfigError, Settings
+from .guardrails import Guardrails, GuardrailTripped
 from .models import LLMClient, RecordingClient, StubClient, provider_client, resolve
 from .orchestration.base import AgentResult, BoundedLoop, DictToolset
 from .tracing import Tracer, new_run_id
@@ -124,8 +125,10 @@ class RunService:
                  toolset: DictToolset | None = None,
                  bounds: Bounds | None = None,
                  system_prompt: str = "",
-                 tracer_factory: Callable[[str], Tracer] | None = None) -> None:
+                 tracer_factory: Callable[[str], Tracer] | None = None,
+                 guardrails: Guardrails | None = None) -> None:
         self.settings = settings or Settings.load()
+        self._guardrails = guardrails
         self._client = client
         self._agent_factory = agent_factory
         self._toolset = toolset or DictToolset()
@@ -150,6 +153,12 @@ class RunService:
         if isinstance(inner, RecordingClient):
             return inner
         return RecordingClient(inner=inner, pricing=self.settings.pricing)
+
+    def guardrails(self) -> Guardrails:
+        """Les guardrails DÉCLARÉS (`app_config.json` <- `## Active Guardrails`)."""
+        if self._guardrails is None:
+            self._guardrails = Guardrails.from_settings(self.settings)
+        return self._guardrails
 
     def tracer(self, run_id: str) -> Tracer:
         if self._tracer_factory is not None:
@@ -181,6 +190,15 @@ class RunService:
                      mission_id=self.settings.mission_id,
                      bounds=bounds.to_dict())
 
+                # Le texte non maîtrisé ENTRE ici : injection directe, puis PII,
+                # AVANT que le modèle — donc la trace et le fournisseur — ne le
+                # voie. Un refus lève `GuardrailTripped`, traduit plus bas.
+                guards = self.guardrails()
+                text, verdict = guards.check_input(text, tracer=tracer)
+                if verdict is not None and verdict.hits:
+                    emit("guardrail", guardrail="injection-detection", point="user_input",
+                         **verdict.to_dict())
+
                 agent = self._build_agent(bounds, tracer)
                 emit("agent_started", agent_id=getattr(agent, "agent_id", "agent"))
                 outcome = agent.run(untrusted(text), thread_id=request.thread_id)
@@ -189,6 +207,21 @@ class RunService:
                 agent_result: AgentResult = outcome
                 emit("agent_finished", agent_id=getattr(agent, "agent_id", "agent"),
                      iterations=agent_result.iterations)
+
+                # La sortie SORT ici : validée contre l'`outputSchema` de l'IR
+                # avant d'être rendue. Une sortie non conforme n'est pas une
+                # réponse dégradée, c'est une réponse fausse dans sa forme.
+                if agent_result.status == "ok":
+                    checked, violations = guards.check_output(
+                        agent_result.output, agent_id=str(getattr(agent, "agent_id", "")), tracer=tracer)
+                    if violations:
+                        agent_result.status = "failed"
+                        agent_result.error_class = "AGENT_OUTPUT_INVALID"
+                        agent_result.message = "sortie non conforme au schéma : " + "; ".join(violations[:5])
+                        emit("guardrail", guardrail="schema-validation", point="final_output",
+                             violations=violations[:10])
+                    else:
+                        agent_result.output = checked
 
                 self._absorb(result, agent_result, tracer)
                 if agent_result.bound_exceeded:
@@ -204,6 +237,16 @@ class RunService:
                                      "message": agent_result.message})
                 else:
                     emit("final", output=agent_result.output, degraded=agent_result.degraded)
+            except GuardrailTripped as exc:
+                # Un refus est le résultat ATTENDU d'une attaque (L8) : statut
+                # `failed` et classe `SAFETY_GUARDRAIL_TRIPPED`, que `exit_codes`
+                # traduit en 4 (REFUSED) — jamais en 1, qui compterait le refus
+                # comme une panne.
+                root.error(exc.cls)
+                result.status, result.error_class, result.message = "failed", exc.cls, str(exc)
+                emit("guardrail", guardrail=exc.guardrail, point="user_input", action="blocked",
+                     **exc.verdict.to_dict())
+                emit("error", **{"class": exc.cls, "message": str(exc)})
             except ConfigError as exc:
                 root.error(exc.cls)
                 result.status, result.error_class, result.message = "failed", exc.cls, str(exc)
@@ -286,7 +329,7 @@ class RunService:
             agent_id="agent", agent_name="agent", bounds=bounds, client=client,
             model=resolve(self.settings.default_tier, self.settings),
             tier=self.settings.default_tier, system_prompt=self._system_prompt,
-            toolset=self._toolset, tracer=tracer)
+            toolset=self._toolset, tracer=tracer, guardrails=self.guardrails())
 
     def _absorb(self, result: RunResult, agent: AgentResult, tracer: Tracer) -> None:
         result.output = agent.output
