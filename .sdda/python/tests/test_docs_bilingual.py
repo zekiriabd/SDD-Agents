@@ -179,10 +179,14 @@ def test_divergent_pair_fails(tmp_path: Path, findings) -> None:
     assert "fail" in _levels(findings, "docs.parity")
 
 
-def test_missing_twin_warns_by_default(tmp_path: Path, findings) -> None:
-    assert framework_smoke.MISSING_TWIN_IS_FAILURE is False
+def test_missing_twin_fails_by_default() -> None:
+    """Depuis la fin du lot 2 de traduction, une page sans jumeau n'entre plus."""
+    assert framework_smoke.MISSING_TWIN_IS_FAILURE is True
+
+
+def test_missing_twin_can_still_be_a_warning(tmp_path: Path, findings) -> None:
     _docs_tree(tmp_path, twin=None)
-    framework_smoke.check_docs_parity(tmp_path)
+    framework_smoke.check_docs_parity(tmp_path, missing_is_failure=False)
     twins = [f for f in findings if f.check == "docs.twins"]
     assert [f.level for f in twins] == ["warn"]
     assert "listé par le hub" in twins[0].message
