@@ -229,3 +229,50 @@ def test_a_project_key_in_the_wrong_section_is_said(tmp_path: Path) -> None:
                           "OnGuardrailTrip: block-and-log\nMaxIterations: 99\n")
     found = [i for i in issues(project) if i.cls == "CONFIG_KEY_MISPLACED"]
     assert found and found[0].blocking, "99 n'est pas la valeur appliquée (12) : réglage ignoré en silence"
+
+
+# ---------------------------------------------------------------------------
+# C4 — le juge n'est pas le modèle qu'il note
+# ---------------------------------------------------------------------------
+def judge(project: Path) -> list:
+    from sdda_lib.layered_config import judge_issues
+
+    return judge_issues(project)
+
+
+def with_ir(project: Path, *tiers: str) -> Path:
+    ir_dir = project / "workspace" / ".sys" / ".ir"
+    ir_dir.mkdir(parents=True, exist_ok=True)
+    agents = [{"id": f"a{i}", "modelTier": t} for i, t in enumerate(tiers)]
+    (ir_dir / "1-system.ir.json").write_text(json.dumps({"agents": agents}), encoding="utf-8")
+    return project
+
+
+def test_a_judge_that_is_one_tier_among_others_is_said_before_the_ir(tmp_path: Path) -> None:
+    """Fixture : `JudgeModel: claude-sonnet-5` = `balanced`, sans IR — on ne sait pas encore."""
+    found = judge(make_project(tmp_path))
+    assert [i.cls for i in found] == ["JUDGE_SAME_AS_EVALUATED"] and not found[0].blocking
+
+
+def test_a_judge_that_every_tier_resolves_to_is_blocking_without_ir(tmp_path: Path) -> None:
+    """Tous les tiers sur un seul modèle, juge compris : la réponse est déjà connue."""
+    project = patch_stack(make_project(tmp_path), "  deep: claude-opus-5\n  balanced: claude-sonnet-5\n  fast: claude-haiku-4-5\n",
+                          "  deep: claude-sonnet-5\n  balanced: claude-sonnet-5\n  fast: claude-sonnet-5\n")
+    code, out = run_hook(project)
+    assert code == 2 and "JUDGE_SAME_AS_EVALUATED" in out, out
+
+
+def test_the_ir_decides_which_models_are_evaluated(tmp_path: Path) -> None:
+    assert [i.blocking for i in judge(with_ir(make_project(tmp_path), "fast", "balanced"))] == [True]
+    assert judge(with_ir(make_project(tmp_path / "b"), "fast", "deep")) == []
+
+
+def test_a_tier_name_as_judge_is_resolved(tmp_path: Path) -> None:
+    project = patch_stack(with_ir(make_project(tmp_path), "deep"), "JudgeModel: claude-sonnet-5", "JudgeModel: deep")
+    assert [i.blocking for i in judge(project)] == [True]
+
+
+def test_the_rule_can_be_lifted_explicitly(tmp_path: Path) -> None:
+    project = patch_stack(with_ir(make_project(tmp_path), "balanced"), "AdversarialSetMinItems: 2\n",
+                          "AdversarialSetMinItems: 2\nJudgeMustDifferFromEvaluated: false\n")
+    assert judge(project) == []

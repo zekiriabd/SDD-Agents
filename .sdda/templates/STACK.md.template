@@ -75,9 +75,15 @@ RerankModel: none                     # IDENTIFIANT du modèle seulement. La fic
                                       # Deux sources de vérité sur le même sujet,
                                       # c'est celle que personne ne relit qui
                                       # gouverne le code.
-JudgeModel: claude-sonnet-5           # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
-# Règle : JudgeModel != le modèle évalué quand c'est possible. Un modèle qui
-# se note lui-même mesure sa propre complaisance.
+JudgeModel: claude-opus-5             # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
+# Règle APPLIQUÉE (`JudgeMustDifferFromEvaluated: true`) : le juge ne résout
+# vers le modèle d'AUCUN tier porté par un agent du produit. Un modèle qui se
+# note lui-même mesure sa propre complaisance -> [JUDGE_SAME_AS_EVALUATED],
+# bloquant au preflight dès que l'IR dit quels tiers sont portés (avant l'IR :
+# bloquant si tous les tiers résolvent vers le juge, avertissement sinon).
+# Le défaut `claude-opus-5` suppose que les agents tournent en `balanced` /
+# `fast` ; un agent `deep` exige un autre juge. `JudgeModel` accepte aussi un
+# nom de tier (`deep`), résolu par RuntimeTierMap.
 
 
 ## Project Config

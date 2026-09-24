@@ -468,3 +468,83 @@ def validate_config(root: Path, lc: LayeredConfig | None = None) -> list[ConfigI
                     "la retirer, ou la déclarer dans x-stackSections de templates/project-config.schema.json",
                     sloc, blocking=False))
     return issues
+
+
+# --------------------------------------------------------------------------
+# Juge ≠ évalué (JudgeMustDifferFromEvaluated)
+# --------------------------------------------------------------------------
+def _ir_tiers(root: Path) -> set[str] | None:
+    """Tiers des agents du PRODUIT, lus dans les IR compilés ; `None` si aucun IR.
+
+    C'est l'IR qui sait quel modèle est évalué : un agent déclare un tier, et
+    seuls les tiers réellement portés par des agents font tourner un modèle
+    que le juge notera. Avant l'IR, la question n'a pas de réponse complète.
+    """
+    import json
+
+    irs = sorted(paths.ir_dir(root).glob("*-system.ir.json")) if paths.ir_dir(root).is_dir() else []
+    if not irs:
+        return None
+    tiers: set[str] = set()
+    for p in irs:
+        try:
+            ir = json.loads(markdown_io.read_text(p))
+        except (OSError, ValueError):
+            continue
+        for agent in ir.get("agents") or []:
+            if isinstance(agent, dict) and agent.get("modelTier"):
+                tiers.add(str(agent["modelTier"]))
+    return tiers
+
+
+def judge_issues(root: Path, lc: LayeredConfig | None = None) -> list[ConfigIssue]:
+    """`JudgeMustDifferFromEvaluated: true` appliqué — il n'était que noté.
+
+    `llm_judge.py` enregistrait `judge_equals_evaluated` dans son rapport, et
+    rien ne le refusait : un Gemini qui note Gemini rendait un verdict
+    bloquant comme un autre. Le contrôle se fait ici, sur la configuration,
+    parce que c'est là que la décision se prend — avant que 50 items × k runs
+    aient été payés pour mesurer une complaisance.
+
+    - Avec un IR : les modèles évalués sont ceux des tiers que portent les
+      agents. `JudgeModel` parmi eux -> `[JUDGE_SAME_AS_EVALUATED]`, bloquant.
+    - Sans IR : on ne sait pas encore quels tiers seront portés. Si TOUS les
+      tiers résolvent vers le modèle juge, la réponse est déjà connue —
+      bloquant. Sinon, un juge présent dans la table est un avertissement.
+    """
+    if lc is None:
+        try:
+            lc = read_layered_config(root, warn_stream=io.StringIO())
+        except SddaError:
+            return []
+    flag = lc.config.get("JudgeMustDifferFromEvaluated", True)
+    if flag is False or str(flag).strip().lower() in ("false", "no", "off", "0"):
+        return []
+    judge = str(read_stack_section_kv(root, "Runtime Models").get("JudgeModel") or "").strip()
+    if not judge or judge.lower() == "none":
+        return []
+    tier_map = read_runtime_tier_map(root)
+    judge_model = tier_map.get(judge, judge)
+    loc = f"{STACK_LOC} ## Runtime Models"
+    fix = ("choisir un `JudgeModel` qu'aucun tier porté par un agent ne résout (un modèle plus fort, ou d'un autre "
+           "fournisseur) ; ou, si c'est impossible, `JudgeMustDifferFromEvaluated: false` dans `## Project Config`, "
+           "et le juge ne rendra que des verdicts à assumer")
+    used = _ir_tiers(root)
+    if used is not None:
+        same = sorted(t for t in used if tier_map.get(t, t) == judge_model)
+        if same:
+            return [ConfigIssue("JUDGE_SAME_AS_EVALUATED",
+                                f"`JudgeModel: {judge}` résout vers `{judge_model}`, le modèle des agents en tier "
+                                f"{', '.join(f'`{t}`' for t in same)} (IR) : le juge noterait sa propre sortie",
+                                fix, loc)]
+        return []
+    hit = sorted(t for t, m in tier_map.items() if m == judge_model)
+    if not hit:
+        return []
+    if set(tier_map.values()) == {judge_model}:
+        return [ConfigIssue("JUDGE_SAME_AS_EVALUATED",
+                            f"`JudgeModel: {judge}` : TOUS les tiers de `RuntimeTierMap` résolvent vers `{judge_model}` — "
+                            "quel que soit l'agent, le juge se notera lui-même", fix, loc)]
+    return [ConfigIssue("JUDGE_SAME_AS_EVALUATED",
+                        f"`JudgeModel: {judge}` = `RuntimeTierMap.{hit[0]}` : bloquant dès que l'IR affecte ce tier à un agent",
+                        fix, loc, blocking=False)]
