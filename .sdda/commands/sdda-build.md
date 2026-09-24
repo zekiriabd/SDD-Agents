@@ -15,7 +15,8 @@ une gate par couche** (PHILOSOPHY P5) :
 ```
 PHASE 3   SOCLE           dev-tools ∥ dev-retrieval ∥ dev-data            (parallèle, MaxParallel)
                           [TOOL GATE G3]  [RETRIEVAL GATE G4]
-PHASE 4   PROMPTS+AGENTS  dev-prompt (seul)  →  dev-agent × N   (1 instance / agent, parallèle)
+PHASE 4   PROMPTS+AGENTS  dev-orchestration --prepass (shared/ + memory/interface, gelés)
+                          →  dev-prompt (seul)  →  dev-agent × N   (1 instance / agent, parallèle)
                           [AGENT GATE G5]
 PHASE 5   ORCHESTRATION   dev-orchestration  →  dev-api
                           [ORCH GATE G6]
@@ -151,6 +152,20 @@ Wrappers `src/{App}/data/tools/`, runtime `data/`, `sources.json`,
 `[DATA_TOOL_MISSING]`, jamais créé après coup — il décrirait un outil que l'IR
 et G2 n'ont pas vu. `dev-data` complète autour, n'édite pas ce qui est généré,
 et finit par `gen-source-tools --check --scope code`.
+
+**Instantané AVANT la vague, écart APRÈS** — ce que les hooks ne voient pas (un
+script qui écrit de l'intérieur) se voit sur le disque :
+
+```bash
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 3        # avant le message multi-Agent
+# … la vague …
+python .sdda/sdda.py audit-ownership --mission {n} --phase 3 --since-snapshot   # après, avant les gates
+```
+
+Exit ≠ 0 → `--restore` (révoque chaque écriture hors de la zone de
+`dev-tools`/`dev-retrieval`/`dev-data` : restaure depuis l'instantané, supprime
+une création), puis **STOP** avec la classe rendue — la couche fautive se
+rejoue, les gates ne se jouent pas sur un arbre qu'un agent a débordé.
 
 **Garde par couche** (reprise à la granularité de l'item, `sdda_state.py`) —
 avant d'ajouter une couche au `BATCH` :
@@ -294,7 +309,49 @@ FIX: revoir le contrat de retrieval (chunking, hybridWeights, topK, rerank) via 
 
 ---
 
-## STEP 4 — PHASE 4 : prompts puis agents
+## STEP 4 — PHASE 4 : pré-passe, prompts, puis agents
+
+### 4.0 — `dev-orchestration --prepass` (SEUL — barrière de la phase 4)
+
+Agent : `dev-orchestration` (`.sdda/agents/dev-orchestration.md`, mode
+pré-passe). Tier **`deep`**. Il pose ce que les instances de `dev-agent`
+partagent, AVANT qu'elles partent en parallèle : les types partagés
+(`workspace/src/{App}/shared/`, états de handoff et schémas croisés) et
+l'**interface** mémoire (`workspace/src/{App}/memory/interface.{ext}`, une
+opération par scope du contrat de mémoire). L'implémentation de la mémoire
+vient en phase 5, derrière cette interface.
+
+Sans elle, `dev-agent` implémentait ses `memoryScopes` contre une mémoire que
+`dev-orchestration` n'écrirait qu'APRÈS lui, et chaque instance inventait ses
+propres types de handoff : la pré-passe annoncée par la matrice (`shared/**`)
+n'était ordonnancée nulle part.
+
+```bash
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 4.0
+```
+
+Prompt d'invocation :
+```
+SDDA-PREPASS
+MISSION {n} — pré-passe. IR : workspace/.sys/.ir/{n}-system.ir.json. Contrats : agents §13
+(handoffs), workspace/pipeline/contracts/memory/{n}-memory.md. Écrire UNIQUEMENT
+workspace/src/{App}/shared/ (types, aucune logique) et workspace/src/{App}/memory/interface.{ext}
+(signatures par scope, aucune implémentation). Rien sous orchestration/. Une ligne de confirmation.
+```
+
+Post-step :
+```bash
+python .sdda/sdda.py audit-ownership --mission {n} --phase 4.0 --since-snapshot \
+  --frozen 'workspace/src/**/orchestration/**'
+```
+
+Exit ≠ 0 → `--restore`, STOP : **la phase 4 dépend de cette sortie**. Les
+zones posées ici sont ensuite GELÉES — `shared/**` et `memory/**` pendant la
+phase 4 (4.2), `shared/**` et `memory/interface.*` pendant la phase 5 (5.1) —
+et l'audit de chaque phase le vérifie sur le disque
+(`[OWNERSHIP_FROZEN_ZONE_CHANGED]`). Un type manquant découvert par un
+`dev-agent` est `[SHARED_TYPE_MISSING]` : la pré-passe se rejoue, puis les
+agents qui en dépendent.
 
 ### 4.1 — `dev-prompt` (SEUL — barrière)
 
@@ -368,29 +425,54 @@ pas. Sans cette garde, `--resume` après un `[AGENT_GATE_FAILED]` sur un agent
 repayait les N-1 autres. `--agent {id}` court-circuite la garde : c'est une
 demande explicite de re-matérialiser.
 
-Prompt par instance :
+Prompt par instance — **la première ligne n'est pas facultative** :
 ```
+SDDA-INSTANCE: {agent}
 Implémenter l'agent {agent} de la MISSION {n}. IR : agents[{agent}] (bornes, outils, retrievers,
 schémas, trustPosture, refusalPolicy). Prompt : workspace/src/{App}/prompts/{agent}.system.md — CHARGÉ AU
 RUNTIME par chemin, jamais copié dans le code (P1, [PROMPT_INLINE_DETECTED]). Stack : {framework}.md.
 Bornes obligatoires : maxIterations, maxToolCalls, maxDelegationDepth, timeoutSec, budgetUsd +
-onBoundExceeded implémenté (P12). Tests L1 avec LLM mocké. Interdiction absolue d'écrire sous
+onBoundExceeded implémenté (P12). Types partagés et mémoire : importer workspace/src/{App}/shared/
+et memory/interface.{ext} (gelés par la pré-passe 4.0), ne rien y écrire. Tests L1 avec LLM mocké. Interdiction absolue d'écrire sous
 workspace/pipeline/datasets/ et workspace/src/{App}/prompts/ ([OWNERSHIP_VIOLATION]).
 ```
 
-Post-step déterministe par vague :
+`SDDA-INSTANCE: {agent}` est lu par le hook `preflight_instance_bind` au spawn :
+il DÉCLARE l'instance, et la première écriture de l'instance la lie à son
+`agent_id` (`_instances`). Sans cette ligne, le spawn est refusé
+(`[OWNERSHIP_INSTANCE_UNDECLARED]`) ; avec elle, une instance qui écrit sous
+`agents/{autre}/` est refusée (`[OWNERSHIP_INSTANCE_ESCAPE]`). Les N instances
+d'une vague tournent en parallèle : c'est la seule chose qui garde leurs
+répertoires disjoints pendant qu'elles écrivent, et non après.
+
+Avant CHAQUE vague, l'instantané ; après elle, l'écart jugé contre les
+instances de CETTE vague :
 
 ```bash
-python .sdda/sdda.py audit-ownership --mission {n} --phase 4
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 4        # avant le message multi-Agent
+# … la vague …
+python .sdda/sdda.py audit-ownership --mission {n} --phase 4 --since-snapshot \
+  --instances {agents de la vague, séparés par des virgules} \
+  --frozen 'workspace/src/**/shared/**' --frozen 'workspace/src/**/memory/**'
 python .sdda/sdda.py postflight-no-inline-prompt --mission {n}
 python .sdda/sdda.py preflight-agent-bounds --mission {n}
 ```
 
-`[OWNERSHIP_VIOLATION]` (un `dev-agent` a touché `datasets/` ou `prompts/`) →
-**STOP immédiat**, révocation du fichier écrit (restauré depuis le hash
-précédent), ERROR. C'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de
-SDD_Pro : l'agent qui écrit le code ne modifie ni le jeu qui le juge ni le
-prompt qu'il implémente.
+L'audit juge les fichiers RÉELLEMENT créés, modifiés ou supprimés pendant la
+vague — pas la cohérence de `loader.yml`, que `--declared-only` vérifie à part.
+Il attrape ce que les hooks ne voient pas (un script qui écrit de l'intérieur,
+un payload sans `agent_id`, deux instances qui s'échangent leurs répertoires dès
+leur première écriture) : chaque fichier sous `agents/` doit être sous le
+répertoire d'une instance DÉCLARÉE de la vague, et les zones gelées par la
+pré-passe (4.0) n'ont pas bougé.
+
+`[OWNERSHIP_VIOLATION]`, `[DATASET_OWNERSHIP_VIOLATION]`,
+`[PROMPT_OWNERSHIP_VIOLATION]`, `[OWNERSHIP_INSTANCE_ESCAPE]` ou
+`[OWNERSHIP_FROZEN_ZONE_CHANGED]` → **STOP immédiat**, révocation par
+`--restore` (chaque fichier fautif restauré depuis l'instantané, chaque création
+fautive supprimée), ERROR. C'est le pendant agentic du
+`[QA_OWNERSHIP_VIOLATION]` de SDD_Pro : l'agent qui écrit le code ne modifie ni
+le jeu qui le juge ni le prompt qu'il implémente.
 
 Puis, **par instance** de la vague :
 
@@ -491,8 +573,19 @@ pattern : .sdda/stacks/orchestration/{pattern}.md. Chaque hop émet un span de t
 celui déclaré. Aucun agent instancié hors agents[] ; aucun outil câblé hors agents[].tools.
 ```
 
-Post-step : `audit_ownership.py --phase 5`, `preflight_agent_bounds.py`
-(bornes du graphe), vérification que le graphe codé est **isomorphe** à l'IR :
+Instantané avant 5.1 (`audit-ownership snapshot --mission {n} --phase 5`) ;
+post-step après 5.2bis :
+
+```bash
+python .sdda/sdda.py audit-ownership --mission {n} --phase 5 --since-snapshot \
+  --frozen 'workspace/src/**/shared/**' --frozen 'workspace/src/**/memory/interface.*'
+```
+
+— les types partagés et l'interface mémoire gelés par la pré-passe (4.0) ne
+bougent plus : les agents de la phase 4 ont été construits contre eux ; la
+mémoire s'implémente DERRIÈRE l'interface. Puis `preflight_agent_bounds.py`
+(bornes du graphe), et la vérification que le graphe codé est **isomorphe** à
+l'IR :
 
 ```bash
 python .sdda/sdda.py diff-code-vs-ir --mission {n} --scope orchestration

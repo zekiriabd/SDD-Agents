@@ -470,15 +470,14 @@ deux derniers est l'erreur la plus fréquente des frameworks concurrents : elle
 rend le budget d'exécution incalculable.
 
 **Les agents déclarent un tier** (`fast` / `balanced` / `deep`), jamais un nom de
-modèle. Pour la construction, la résolution tier -> modèle vient de
-`capability-matrix.yml` (le harnais actif) ; pour l'application, de
-`STACK.md ## Runtime Models` (`RuntimeTierMap`) — c'est ce que
-`layered_config.read_runtime_tier_map` et le squelette généré consomment. Les
-fiches `.sdda/providers/*.yaml` sont le **catalogue de référence** par
-fournisseur, et elles sont désormais lues : `sdda_lib/pricing.py` y prend les
-tarifs (la table en dur n'est plus qu'un repli testé), `graders/judge_clients.py`
-l'URL et le nom de la variable de clé du juge, `gen_app_skeleton` le SDK
-(`runtime_sdk`) à épingler. Ajouter un provider ne touche aucun agent. Les bornes `tier_floor` /
+modèle. La résolution tier -> modèle se lit dans `STACK.md` : `## Build Models`
+(`TierMap`) pour la construction, `## Runtime Models` (`RuntimeTierMap`) pour
+l'application — c'est ce que `layered_config.read_runtime_tier_map` et le
+squelette généré consomment. Les fiches `.sdda/providers/*.yaml` sont le
+**catalogue de référence** par fournisseur (identifiants de modèles, tarifs,
+noms de variables) que ces sections recopient ; aucun script ne les lit encore
+à l'exécution 🟡 — ce document l'a longtemps affirmé, et c'était faux sur
+disque. Ajouter un provider ne touche aucun agent. Les bornes `tier_floor` /
 `tier_ceiling` de `agent-bounds.yaml` sont des invariants de qualité : le
 Project Config ne peut pas les relâcher.
 
@@ -573,7 +572,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->427<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->440<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

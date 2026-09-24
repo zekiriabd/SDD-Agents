@@ -24,15 +24,26 @@ Les chemins sont comparés en glob, avec `**` matchant **zéro segment ou plus**
 la profondeur du chemin applicatif appartient à la fiche de langage, pas à cette
 matrice (cf. `rules/ownership.md`).
 
+Et une troisième, qui est la seule à regarder le disque :
+
+    3. **Écriture réelle hors zone** — un instantané pris AVANT une phase
+       (`snapshot`), puis l'écart après elle (`--since-snapshot`) : chaque
+       fichier créé, modifié ou supprimé est attribué à la zone d'un agent de
+       la phase, et, pour `dev-agent`, au répertoire d'une instance déclarée.
+       `--restore` révoque ce qui ne l'est pas.
+
 Usage :
-    python .sdda/sdda.py audit-ownership --mission 1 --phase 4
     python .sdda/sdda.py audit-ownership --declared-only --json   # cohérence de loader.yml seule
+    python .sdda/sdda.py audit-ownership snapshot --mission 1 --phase 4
+    python .sdda/sdda.py audit-ownership --mission 1 --phase 4 --since-snapshot --instances billing,triage
     python .sdda/sdda.py audit-ownership --agent dev-agent --wrote workspace/src/prompts/x.system.md
 """
 from __future__ import annotations
 
 import argparse
-import fnmatch
+import functools
+import os
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -76,22 +87,120 @@ def _sacred_class(path: str) -> tuple[str, str]:
     « a modifié le jeu qui le juge » ne se corrige pas du tout — la mesure est
     perdue, et il faut la refaire.
     """
-    normalized = path.replace("\\", "/").lstrip("./")
+    normalized = normalize(path)
     for zone, (cls, why) in SACRED.items():
         if matches(zone, normalized) or matches(zone, normalized + "/x"):
             return cls, why
     return "", ""
 
 
-def _to_regex(pattern: str) -> re.Pattern[str]:
-    """Glob de `loader.yml` -> regex. `**` matche zéro segment ou plus.
+#: Systèmes de fichiers insensibles à la casse : Windows, et macOS par défaut.
+#: Sur eux, `Workspace/Pipeline/Datasets/x` EST `workspace/pipeline/datasets/x` —
+#: un matcher sensible à la casse laissait le shell écrire le golden sous un
+#: autre nom, et le fichier atterrissait au même endroit. Ailleurs, deux casses
+#: sont deux fichiers, et les confondre refuserait à tort.
+CASE_INSENSITIVE = os.name == "nt" or sys.platform == "darwin"
+
+_GLOB_CHARS = "*?{["
+
+
+def normalize(path: str) -> str:
+    """Forme canonique LEXICALE d'un chemin relatif : `/`, sans `./`, `..` résolu.
+
+    `path.lstrip("./")`, la forme d'avant, retirait des CARACTÈRES et non un
+    préfixe : `.sdda/loader.yml` devenait `sdda/loader.yml`, `.sys/` devenait
+    `sys/`. Et `workspace/src/../pipeline/datasets/x` n'était ramené à rien —
+    le chemin réel était pourtant celui du golden.
+    """
+    p = str(path).replace("\\", "/")
+    p = re.sub(r"/{2,}", "/", p)
+    while p.startswith("./"):
+        p = p[2:]
+    if not p:
+        return "."
+    return posixpath.normpath(p)
+
+
+_GIT_BASH_DRIVE_RE = re.compile(r"^/(?:mnt/|cygdrive/)?([A-Za-z])(?=/|$)")
+
+
+def _native(path: str) -> str:
+    """`/g/Dev/x` (Git Bash, MSYS), `/mnt/g/…` (WSL), `/cygdrive/g/…` -> `G:/Dev/x`.
+
+    Sous Windows, le shell du harnais est Git Bash : un agent y écrit
+    naturellement `/g/Developement/SDD-Agents/workspace/…`. `Path` ne sait pas
+    le lire, le chemin semblait hors projet, et l'écriture passait.
+    """
+    p = str(path).replace("\\", "/")
+    if os.name == "nt" or CASE_INSENSITIVE:
+        m = _GIT_BASH_DRIVE_RE.match(p)
+        if m:
+            p = m.group(1).upper() + ":" + (p[m.end():] or "/")
+    return p
+
+
+def _is_absolute(p: str) -> bool:
+    return p.startswith("/") or bool(re.match(r"^[A-Za-z]:/", p)) or p.startswith("//")
+
+
+def relative_to_root(root: Path, target: str, cwd: Path | str | None = None) -> str:
+    """Un chemin tel que l'agent l'a écrit -> relatif à la racine du projet.
+
+    LEXICAL d'abord (`..` résolu sans toucher au disque, casse du système de
+    fichiers respectée) : c'est ce qui rend `./src/../workspace/…` et
+    `Workspace/…` comparables à la matrice. Un chemin hors projet est rendu
+    absolu, tel quel : aucune zone ne le régit.
+    """
+    t = _native(str(target).strip())
+    base = _native(Path(cwd).as_posix()) if cwd else _native(Path(root).as_posix())
+    if not _is_absolute(t):
+        t = base.rstrip("/") + "/" + t
+    t = posixpath.normpath(t)
+    r = posixpath.normpath(_native(Path(root).as_posix()))
+    tf, rf = (t.casefold(), r.casefold()) if CASE_INSENSITIVE else (t, r)
+    if tf == rf:
+        return "."
+    if tf.startswith(rf.rstrip("/") + "/"):
+        return t[len(r.rstrip("/")) + 1:]
+    return t
+
+
+def real_relative_to_root(root: Path, target: str, cwd: Path | str | None = None) -> str | None:
+    """Comme `relative_to_root`, liens symboliques et jonctions RÉSOLUS — ou None.
+
+    Un lien `src/App/vendor -> ../../pipeline/datasets` rend lexicalement un
+    chemin anodin et physiquement le golden. On rend l'autre lecture quand elle
+    diffère ; l'appelant juge les deux.
+    """
+    lexical = relative_to_root(root, target, cwd)
+    try:
+        absolute = Path(root) / lexical if not _is_absolute(lexical) else Path(lexical)
+        real = Path(os.path.realpath(absolute))
+        real_root = Path(os.path.realpath(root))
+        rel = real.relative_to(real_root).as_posix() if real != real_root else "."
+    except (OSError, ValueError):
+        return None
+    if (rel.casefold() if CASE_INSENSITIVE else rel) == (lexical.casefold() if CASE_INSENSITIVE else lexical):
+        return None
+    return rel
+
+
+@functools.lru_cache(maxsize=4096)
+def _to_regex(pattern: str, bindings: tuple[tuple[str, str], ...] = (),
+              fold: bool = False) -> re.Pattern[str]:
+    """Glob de `loader.yml` -> regex, SEGMENTÉ : `*` = dans un segment, `**` = n segments.
 
     `workspace/src/**/data/**` doit matcher `workspace/src/data/x.py` ET
     `workspace/src/App/src/App/data/x.py` : un enforcer qui exigerait au moins
     un segment déclarerait hors zone toutes les écritures d'un projet à
     arborescence plate — et un enforcer qui dit l'inverse de la vérité est pire
     qu'aucun enforcer.
+
+    `bindings` fixe la valeur d'un placeholder (`{agent}` -> `billing`) : c'est
+    la liaison d'instance de `dev-agent`. Sans liaison, `{x}` vaut un segment
+    non vide quelconque — donc N'IMPORTE QUELLE instance.
     """
+    bound = dict(bindings)
     out: list[str] = []
     i = 0
     while i < len(pattern):
@@ -114,22 +223,134 @@ def _to_regex(pattern: str) -> re.Pattern[str]:
                 i += 1
             else:
                 inner = pattern[i + 1:end]
-                out.append("(?:" + "|".join(re.escape(p) for p in inner.split(",")) + ")"
-                           if "," in inner else r"[^/]+")
+                if "," in inner:
+                    out.append("(?:" + "|".join(re.escape(p) for p in inner.split(",")) + ")")
+                elif inner in bound:
+                    out.append(re.escape(bound[inner]))
+                else:
+                    out.append(r"[^/]+")
                 i = end + 1
         else:
             out.append(re.escape(pattern[i]))
             i += 1
-    return re.compile("^" + "".join(out) + "$")
+    return re.compile("^" + "".join(out) + "$", re.IGNORECASE if fold else 0)
 
 
-def matches(pattern: str, path: str) -> bool:
-    normalized = path.replace("\\", "/").lstrip("./")
-    if _to_regex(pattern).match(normalized):
+def matches(pattern: str, path: str, bindings: dict[str, str] | None = None) -> bool:
+    """Le chemin est-il dans la zone que le motif désigne ?
+
+    Le matching est SEGMENTÉ, sans repli. Le repli d'avant —
+    `fnmatch(path, pattern.rstrip("/*") + "/*")` — employait `fnmatch`, dont
+    le `*` traverse les `/` : `workspace/src/*/*` de `dev-backend`, censé
+    désigner les fichiers à la racine du projet applicatif, devenait
+    `workspace/src/*` au sens de fnmatch, c'est-à-dire TOUT `src/` — skills,
+    rules, memory, shared, et les agents eux-mêmes.
+
+    Ce que le repli voulait dire reste vrai, restreint à ce qu'il signifiait :
+    un motif dont le dernier segment est LITTÉRAL nomme un répertoire (ou un
+    fichier), et couvre ce qu'il contient — `workspace/pipeline/datasets` et
+    `workspace/pipeline/datasets/**` désignent la même zone pour un humain. Un
+    dernier segment à joker (`*`, `{n}-*.md`) ne nomme rien de tel.
+    """
+    normalized = normalize(path)
+    key = tuple(sorted((bindings or {}).items()))
+    regex = _to_regex(pattern, key, CASE_INSENSITIVE)
+    if regex.match(normalized):
         return True
-    # Un motif de répertoire couvre ce qu'il contient : `workspace/pipeline/datasets/**`
-    # et `workspace/pipeline/datasets` désignent la même zone pour un humain.
-    return fnmatch.fnmatch(normalized, pattern.rstrip("/*") + "/*")
+    last = pattern.rstrip("/").rsplit("/", 1)[-1]
+    if last and not any(ch in last for ch in _GLOB_CHARS):
+        return bool(_to_regex(pattern.rstrip("/") + "/**", key, CASE_INSENSITIVE).match(normalized))
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Zones protégées — écrites par des SCRIPTS, jamais par un outil d'édition
+# ---------------------------------------------------------------------------
+#: Trois répertoires ne sont écrits que par des scripts, en E/S Python. Un
+#: `Write` sur l'un d'eux est fautif sans qu'on ait besoin de savoir QUI le
+#: tente — sauf une exception, déclarée et étroite (cf. `protected_write`).
+#:
+#:   pipeline/baselines/  `promote_baseline.py` — retouchée à la main, la
+#:                        référence rend toute non-régression tautologique ;
+#:   .sys/.validation/    les rapports de gate. Ils sont du JSON en clair, non
+#:                        signé, et `gate_status` ne lit que leur `ok` : un
+#:                        rapport `{"ok": true}` déposé par `Write` rendait
+#:                        n'importe quelle gate verte, et `.sys/` est gitignoré,
+#:                        donc la contrefaçon n'atteignait jamais une revue ;
+#:   .sys/.audit/         `bypasses.jsonl`, append-only « hooks framework ».
+#:
+#: Nommées en constantes pour que `sync_error_registry` les voie : il ne lit que
+#: les littéraux (`deny(HOOK, "CLASS", …)` ou `CLS_X = "CLASS"`).
+CLS_GATE_REPORT_FORGERY = "GATE_REPORT_FORGERY"
+CLS_BASELINE_OWNERSHIP_VIOLATION = "BASELINE_OWNERSHIP_VIOLATION"
+
+PROTECTED_ZONES: dict[str, tuple[str, str]] = {
+    "workspace/pipeline/baselines": (
+        CLS_BASELINE_OWNERSHIP_VIOLATION,
+        "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
+        "déplacer la référence rend toute non-régression tautologique"),
+    "workspace/.sys/.validation": (
+        CLS_GATE_REPORT_FORGERY,
+        "un rapport de gate est écrit par le script de la gate, jamais par Write/Edit : "
+        "un `{\"ok\": true}` déposé à la main rend verte une gate que rien n'a mesurée"),
+    "workspace/.sys/.audit": (
+        CLS_GATE_REPORT_FORGERY,
+        "le journal des bypasses est append-only et n'est écrit que par les scripts : "
+        "un audit qu'on peut réécrire n'est pas un audit"),
+}
+
+#: Ce qui, dans `.sys/.validation/`, est un RAPPORT DE GATE — ce que
+#: `gate_status` lit. Aucun agent ne l'écrit par un outil d'édition, même si un
+#: motif de ses `writes:` le couvrait : c'est la ligne qui ne se négocie pas.
+_GATE_REPORT_SUFFIXES = (".json",)
+
+
+def protected_zone(path: str) -> tuple[str, str, str] | None:
+    """`(zone, classe, fix)` si `path` est dans une zone protégée, sinon None."""
+    rel = normalize(path)
+    folded = rel.casefold() if CASE_INSENSITIVE else rel
+    for zone, (cls, fix) in PROTECTED_ZONES.items():
+        z = zone.casefold() if CASE_INSENSITIVE else zone
+        if folded == z or folded.startswith(z + "/"):
+            return zone, cls, fix
+    return None
+
+
+def protected_write(loader: dict[str, Any], agent: str, path: str,
+                    bindings: dict[str, str] | None = None) -> tuple[str, str] | None:
+    """Verdict d'une écriture en zone protégée : None si permise, sinon `(classe, fix)`.
+
+    La règle était « personne », jouée AVANT l'identité — or `loader.yml` y
+    déclare les rapports des six reviewers (`reports/*-{n}.md`,
+    `adversarial-findings/{n}.jsonl`) : la phase 7 ne pouvait rien écrire. Le
+    refus aveugle protégeait les gates en rendant la revue impossible.
+
+    La règle devient étroite et nommée :
+
+    - le fil principal (pas d'agent) reste refusé : un humain qui écrit un
+      rapport de gate à la main fabrique une gate verte ;
+    - un agent l'est aussi, SAUF pour un chemin qu'un motif de SES `writes:`
+      couvre ET dont le préfixe littéral est DANS la zone — un motif large
+      (`workspace/**`) n'ouvre pas une zone protégée par accident ;
+    - un rapport de gate (`.json` sous `.sys/.validation/`) reste refusé à
+      tous, déclaré ou non. Les `.md` des reviewers ne sont pas lus par
+      `gate_status` ; le `.json` est ce qu'il lit.
+    """
+    found = protected_zone(path)
+    if found is None:
+        return None
+    zone, cls, fix = found
+    rel = normalize(path)
+    if not agent or not isinstance(loader.get(agent), dict):
+        return cls, fix
+    if zone.endswith("/.validation") and rel.lower().endswith(_GATE_REPORT_SUFFIXES):
+        return cls, fix
+    for pattern in writes_of(loader, agent):
+        literal = _zone_root(pattern)
+        if (literal == zone or literal.startswith(zone + "/")) and matches(pattern, rel, bindings):
+            if not any(matches(f, rel, bindings) for f in forbidden_of(loader, agent)):
+                return None
+    return cls, fix
 
 
 def load_loader(root: Path) -> dict[str, Any]:
@@ -166,8 +387,54 @@ def is_secret_file(path: str) -> bool:
     CONSTRUCTION paie ses tokens avec son propre compte : il n'a aucune raison
     de voir la clé du RUNTIME, et `install-env` la copie sans LLM.
     """
-    name = str(path).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    return _secret_name(str(path).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1])
+
+
+def _secret_name(name: str) -> bool:
+    """Le NOM désigne-t-il un fichier de secrets, tel que le système de fichiers le lira ?
+
+    La comparaison était sensible à la casse : `.ENV` passait, alors que sous
+    Windows et macOS c'est le même fichier. Trois autres graphies ouvrent le
+    même fichier sous Windows et sont normalisées ici : les points et espaces
+    finaux (`.env.`, `.env `), et le flux de données NTFS (`.env::$DATA`,
+    `.env:x`). Ce qui n'est PAS couvert, et qu'il faut dire : le nom court 8.3
+    (`ENV~1`), et un lien dont le nom ne dit rien — le second est rattrapé par
+    la lecture du chemin résolu (`real_relative_to_root`), le premier non.
+    """
+    name = name.split(":", 1)[0] if ":" in name else name   # flux NTFS
+    name = name.rstrip(" .").casefold()
+    if not name:
+        return False
     return name == ".env" or (name.startswith(".env.") and name not in _ENV_TEMPLATES)
+
+
+#: Où vivent les fichiers de secrets d'un workspace — pour savoir si une
+#: recherche récursive dans un répertoire rend le contenu de l'un d'eux.
+SECRET_LOCATIONS = ("workspace/assets/.env*", "workspace/src/*/.env*", ".env*")
+
+
+def secret_files(root: Path) -> list[str]:
+    """Les fichiers de secrets EXISTANTS aux emplacements connus (chemins relatifs)."""
+    out: list[str] = []
+    for pattern in SECRET_LOCATIONS:
+        try:
+            for p in Path(root).glob(pattern):
+                if p.is_file() and is_secret_file(p.name):
+                    out.append(p.relative_to(root).as_posix())
+        except OSError:
+            continue
+    return sorted(set(out))
+
+
+def secrets_under(root: Path, directory: str) -> list[str]:
+    """Les fichiers de secrets qu'une lecture RÉCURSIVE de `directory` rendrait."""
+    d = normalize(directory)
+    fold = (lambda s: s.casefold()) if CASE_INSENSITIVE else (lambda s: s)
+    out = []
+    for secret in secret_files(root):
+        if d == "." or fold(secret).startswith(fold(d).rstrip("/") + "/"):
+            out.append(secret)
+    return out
 
 
 def forbidden_reads_of(loader: dict[str, Any], agent: str) -> list[str]:
@@ -194,6 +461,166 @@ def _covers(broad: str, narrow: str) -> bool:
 
 def agent_names(loader: dict[str, Any]) -> list[str]:
     return sorted(k for k, v in loader.items() if k not in NON_AGENT_KEYS and isinstance(v, dict))
+
+
+# ---------------------------------------------------------------------------
+# Recouvrement RÉEL entre deux motifs
+# ---------------------------------------------------------------------------
+# `check_declaration` comparait des CHAÎNES : deux agents qui déclaraient
+# `contracts/tools/{n}-*.tool.md` et `contracts/tools/{n}-data-*.tool.md`
+# n'étaient pas « le même chemin », donc pas contestés — alors que le premier
+# englobe le second, et que les deux tournent en même temps (phase 2). Idem
+# `src/**/tools/**` (dev-tools) contre `src/**/data/**` (dev-data) : le
+# répertoire `data/tools/` appartenait aux deux, en pleine phase 3 parallèle.
+#
+# Ce qui suit calcule si deux globs désignent un chemin COMMUN, et en exhibe
+# des exemples : un recouvrement se juge sur un chemin qu'on peut montrer, pas
+# sur une ressemblance de texte.
+_SEG_ANY = "\x00any"      # un segment non vide quelconque ({n}, dernier `**`)
+_DOUBLE = "**"
+
+
+def _segment_alternatives(seg: str) -> list[list[tuple[str, str]]]:
+    """Un segment de glob -> ses alternatives, chacune une suite d'atomes.
+
+    Atomes : `("lit", c)`, `("any", "")` (un caractère), `("star", "")`.
+    `{a,b}` démultiplie ; un placeholder `{n}` vaut « au moins un caractère ».
+    """
+    variants: list[list[tuple[str, str]]] = [[]]
+    i = 0
+    while i < len(seg):
+        ch = seg[i]
+        if ch == "{":
+            end = seg.find("}", i)
+            if end != -1:
+                inner = seg[i + 1:end]
+                if "," in inner:
+                    variants = [v + [("lit", c) for c in alt] for v in variants for alt in inner.split(",")]
+                else:
+                    variants = [v + [("any", ""), ("star", "")] for v in variants]
+                i = end + 1
+                continue
+        if ch == "*":
+            variants = [v + [("star", "")] for v in variants]
+        elif ch == "?":
+            variants = [v + [("any", "")] for v in variants]
+        else:
+            variants = [v + [("lit", ch.casefold() if CASE_INSENSITIVE else ch)] for v in variants]
+        i += 1
+    return variants
+
+
+def _segments(pattern: str) -> list[Any]:
+    """Motif -> segments. Un `**` final désigne un FICHIER sous le répertoire :
+    au moins un segment (le `.*` de la regex exige le `/` qui le précède)."""
+    parts = normalize(pattern).split("/")
+    out: list[Any] = []
+    for k, part in enumerate(parts):
+        if part == _DOUBLE:
+            if k == len(parts) - 1:
+                out.extend([_SEG_ANY, _DOUBLE])
+            else:
+                out.append(_DOUBLE)
+        else:
+            out.append(part)
+    return out
+
+
+def _atoms_witness(a: list[tuple[str, str]], b: list[tuple[str, str]]) -> str | None:
+    """Une chaîne reconnue par les deux suites d'atomes, ou None (DP mémoïsé)."""
+    memo: dict[tuple[int, int], str | None] = {}
+
+    def f(i: int, j: int) -> str | None:
+        key = (i, j)
+        if key in memo:
+            return memo[key]
+        memo[key] = None  # coupe les cycles star/star
+        res: str | None = None
+        if i == len(a) and j == len(b):
+            res = ""
+        if res is None and i < len(a) and a[i][0] == "star":
+            res = f(i + 1, j)
+            if res is None and j < len(b) and b[j][0] != "star":
+                tail = f(i, j + 1)
+                if tail is not None:
+                    res = (b[j][1] if b[j][0] == "lit" else "x") + tail
+        if res is None and j < len(b) and b[j][0] == "star":
+            res = f(i, j + 1)
+            if res is None and i < len(a) and a[i][0] != "star":
+                tail = f(i + 1, j)
+                if tail is not None:
+                    res = (a[i][1] if a[i][0] == "lit" else "x") + tail
+        if res is None and i < len(a) and j < len(b) and a[i][0] != "star" and b[j][0] != "star":
+            ca = a[i][1] if a[i][0] == "lit" else None
+            cb = b[j][1] if b[j][0] == "lit" else None
+            if ca is None or cb is None or ca == cb:
+                tail = f(i + 1, j + 1)
+                if tail is not None:
+                    res = (ca or cb or "x") + tail
+        memo[key] = res
+        return res
+
+    return f(0, 0)
+
+
+def _segment_witness(sa: str, sb: str) -> str | None:
+    """Un nom de segment reconnu par les deux segments de glob, ou None."""
+    alts_a = [[("any", ""), ("star", "")]] if sa == _SEG_ANY else _segment_alternatives(sa)
+    alts_b = [[("any", ""), ("star", "")]] if sb == _SEG_ANY else _segment_alternatives(sb)
+    for x in alts_a:
+        for y in alts_b:
+            w = _atoms_witness(x, y)
+            if w:
+                return w
+    return None
+
+
+def _sample(seg: str) -> str:
+    """Un nom concret pour un segment seul (absorbé par le `**` d'en face)."""
+    return _segment_witness(seg, _SEG_ANY) or "x"
+
+
+def overlap_witnesses(a: str, b: str, limit: int = 64) -> list[str]:
+    """Des chemins que les DEUX motifs désignent — vide s'ils sont disjoints.
+
+    Chaque branche où un `**` absorbe les segments d'en face donne une forme
+    différente (`src/data/tools/x` ET `src/tools/data/x`) : c'est ce qui permet
+    à l'appelant d'écarter les formes qu'un `forbidden_writes` retire, et de ne
+    signaler que celles qui restent réellement à deux propriétaires.
+    """
+    A, B = _segments(a), _segments(b)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def walk(i: int, j: int, acc: tuple[str, ...], depth: int) -> None:
+        if len(out) >= limit or depth > len(A) + len(B) + 4:
+            return
+        if i == len(A) and j == len(B):
+            path = "/".join(acc)
+            if path not in seen:
+                seen.add(path)
+                out.append(path)
+            return
+        if i < len(A) and A[i] == _DOUBLE:
+            walk(i + 1, j, acc, depth + 1)
+            if j < len(B) and B[j] != _DOUBLE:
+                walk(i, j + 1, acc + (_sample(B[j]),), depth + 1)
+        if j < len(B) and B[j] == _DOUBLE:
+            walk(i, j + 1, acc, depth + 1)
+            if i < len(A) and A[i] != _DOUBLE:
+                walk(i + 1, j, acc + (_sample(A[i]),), depth + 1)
+        if i < len(A) and j < len(B) and A[i] != _DOUBLE and B[j] != _DOUBLE:
+            name = _segment_witness(A[i], B[j])
+            if name:
+                walk(i + 1, j + 1, acc + (name,), depth + 1)
+
+    walk(0, 0, (), 0)
+    # Filet : un exemple doit être reconnu par la regex elle-même des deux côtés.
+    return [w for w in out if matches(a, w) and matches(b, w)]
+
+
+def overlaps(a: str, b: str) -> bool:
+    return bool(overlap_witnesses(a, b, limit=1))
 
 
 # ---------------------------------------------------------------------------
@@ -306,23 +733,90 @@ def check_declaration(loader: dict[str, Any], report: Report) -> dict[str, Any]:
                 location=".sdda/loader.yml",
             )
 
+    overlapping = real_overlaps(loader, shared)
+    for item in overlapping:
+        report.error(
+            "OWNERSHIP_ZONE_CONTESTED",
+            f"`{item['a']}` ({item['patternA']}) et `{item['b']}` ({item['patternB']}) désignent "
+            f"tous deux `{item['example']}`",
+            fix="deux motifs différents peuvent désigner le même fichier : retirer la zone commune "
+                "chez l'un des deux (`forbidden_writes:`), ancrer le motif, ou DÉCLARER le partage "
+                "dans `shared_writes:` avec son mode — un recouvrement non déclaré est une course "
+                "en pleine phase parallèle",
+            location=".sdda/loader.yml",
+        )
+
     # Un agent qui n'écrit nulle part est un reviewer : c'est légitime, et c'est
     # une information — pas un défaut.
     return {"agents": len(agents), "readOnlyAgents": without,
-            "contested": sorted(contested), "sharedZones": sorted(shared)}
+            "contested": sorted(contested), "sharedZones": sorted(shared),
+            "overlaps": overlapping}
+
+
+def _forbidden_for(loader: dict[str, Any], agent: str, path: str) -> bool:
+    return any(matches(f, path) for f in forbidden_of(loader, agent))
+
+
+def _shared_excuses(shared: dict[str, dict[str, Any]], a: str, b: str, path: str) -> bool:
+    """Le chemin commun est-il dans une zone partagée DÉCLARÉE pour ces deux agents ?"""
+    for zone, entry in shared.items():
+        declared = {str(x) for x in (entry.get("agents") or [])}
+        if {a, b} <= declared and matches(zone, path):
+            return True
+    return False
+
+
+def real_overlaps(loader: dict[str, Any], shared: dict[str, dict[str, Any]] | None = None) -> list[dict[str, str]]:
+    """Les recouvrements RÉELS non déclarés entre les `writes:` de deux agents.
+
+    Global, et non par vague : l'ordre des phases vit dans les commandes, pas
+    dans `loader.yml`, et une sérialisation qu'on ne peut pas lire ici ne peut
+    pas servir d'excuse ici. Un partage voulu (phases sérialisées, couches
+    disjointes) se DÉCLARE dans `shared_writes:` — avec son mode, qui dit
+    pourquoi il n'y a pas de course.
+
+    Un chemin commun que l'un des deux s'interdit (`forbidden_writes:`) n'est
+    pas contesté : il n'a qu'un propriétaire. Les exemples viennent de
+    `overlap_witnesses`, donc un signalement montre toujours un chemin réel.
+    """
+    if shared is None:
+        shared = shared_writes(loader, Report(name="tmp", target="."))
+    agents = agent_names(loader)
+    found: list[dict[str, str]] = []
+    for x, a in enumerate(agents):
+        for b in agents[x + 1:]:
+            for pa in writes_of(loader, a):
+                for pb in writes_of(loader, b):
+                    if pa == pb:
+                        continue  # même chaîne : jugée par le contrôle des revendications
+                    for w in overlap_witnesses(pa, pb):
+                        if _forbidden_for(loader, a, w) or _forbidden_for(loader, b, w):
+                            continue
+                        if _shared_excuses(shared, a, b, w):
+                            continue
+                        found.append({"a": a, "b": b, "patternA": pa, "patternB": pb, "example": w})
+                        break
+    return found
 
 
 # ---------------------------------------------------------------------------
 # 2. Une écriture donnée est-elle autorisée ?
 # ---------------------------------------------------------------------------
-def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -> bool:
+def check_write(loader: dict[str, Any], agent: str, path: str, report: Report,
+                bindings: dict[str, str] | None = None) -> bool:
+    """L'écriture de `path` par `agent` est-elle dans sa zone ?
+
+    `bindings` lie les placeholders d'INSTANCE (`{agent}` de `dev-agent`) à la
+    valeur de l'instance qui écrit : sans elle, `agents/{agent}/**` autorise
+    le répertoire de n'importe quelle autre instance.
+    """
     if not isinstance(loader.get(agent), dict):
         report.error("OWNERSHIP_AGENT_UNKNOWN", f"agent `{agent}` absent de loader.yml",
                      fix=f"agents déclarés : {', '.join(agent_names(loader))}")
         return False
 
     for pattern in forbidden_of(loader, agent):
-        if matches(pattern, path):
+        if matches(pattern, path, bindings):
             cls, why = _sacred_class(path)
             report.error(cls or "OWNERSHIP_VIOLATION",
                          f"`{agent}` a écrit `{path}` — interdit explicitement",
@@ -331,7 +825,7 @@ def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -
             return False
 
     allowed = writes_of(loader, agent)
-    if any(matches(pattern, path) for pattern in allowed):
+    if any(matches(pattern, path, bindings) for pattern in allowed):
         return True
 
     cls, why = _sacred_class(path)
@@ -347,6 +841,56 @@ def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -
         location=".sdda/loader.yml",
     )
     return False
+
+
+#: Au-delà, un répertoire est jugé sur ce qu'on en a vu : une commande
+#: récursive sur un arbre de cette taille n'est de toute façon pas un geste de
+#: `dev-*`, et le hook doit répondre vite.
+_RECURSIVE_WALK_LIMIT = 20000
+
+
+def check_recursive_write(loader: dict[str, Any], agent: str, path: str, report: Report,
+                          bindings: dict[str, str] | None = None, root: Path | None = None) -> bool:
+    """Une écriture qui porte sur un RÉPERTOIRE et tout ce qu'il contient.
+
+    `rm -rf workspace/src/App/agents` par `dev-backend` : le chemin lui-même
+    matche `workspace/src/*/*`, donc `check_write` l'autorisait — et la
+    commande effaçait le code de `dev-agent`. Un répertoire détruit, déplacé ou
+    réécrit est autorisé seulement s'il est dans la zone de l'agent ET que
+    chaque fichier EXISTANT dessous l'est aussi : c'est ce que la commande
+    touchera, ni plus ni moins.
+    """
+    rel = normalize(path)
+    if rel == ".":
+        report.error("OWNERSHIP_VIOLATION", f"`{agent}` réécrit tout le projet (`{path}`)",
+                     fix="une commande qui porte sur tout l'arbre (`git reset --hard`, `git stash`, "
+                         "`rm -rf .`) touche la zone de chaque agent : la limiter à SA zone",
+                     location=".sdda/loader.yml")
+        return False
+    probe = Report(name="probe", target=".")
+    if not (check_write(loader, agent, rel, probe, bindings)
+            or check_write(loader, agent, rel + "/x", Report(name="probe", target="."), bindings)):
+        return check_write(loader, agent, rel, report, bindings)
+    base = Path(root) / rel if root is not None else None
+    if base is None or not base.is_dir():
+        return True
+    seen = 0
+    for dirpath, _dirs, files in os.walk(base):
+        for name in files:
+            seen += 1
+            if seen > _RECURSIVE_WALK_LIMIT:
+                return True
+            child = (Path(dirpath) / name).relative_to(root).as_posix()  # type: ignore[arg-type]
+            sub = Report(name="probe", target=".")
+            if not check_write(loader, agent, child, sub, bindings):
+                first = sub.errors[0] if sub.errors else None
+                report.error(first.cls if first else "OWNERSHIP_VIOLATION",
+                             f"`{agent}` touche `{rel}` récursivement, et `{child}` dessous n'est pas à lui",
+                             fix=(first.fix if first and first.fix else "")
+                                 or "viser les fichiers de SA zone, pas le répertoire qui contient ceux des autres",
+                             location=".sdda/loader.yml")
+                return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +921,7 @@ def read_violation(loader: dict[str, Any], agent: str, path: str, *, scope: str 
       refuse et dit où restreindre `path` : un agent qui grep tout le
       workspace cherche en réalité ce que `forbidden_reads` lui cache.
     """
-    normalized = path.replace("\\", "/").lstrip("./").rstrip("/") or "."
+    normalized = normalize(path)
     allowed = reads_of(loader, agent)
     for pattern in forbidden_reads_of(loader, agent):
         # `{other}` veut dire « tout AUTRE que le mien ». Le compilateur de motifs
@@ -429,8 +973,229 @@ def check_read(loader: dict[str, Any], agent: str, path: str, report: Report, *,
     return False
 
 
+# ---------------------------------------------------------------------------
+# 4. Ce qui a RÉELLEMENT été écrit pendant une phase — instantané, puis écart
+# ---------------------------------------------------------------------------
+# `/sdda-build` appelait `audit-ownership --phase 4` sans `--agent` ni
+# `--wrote` : seule la cohérence de loader.yml était vérifiée, jamais une
+# écriture. Et la « révocation du fichier écrit (restauré depuis le hash
+# précédent) » que la commande promettait n'avait aucun hash précédent où
+# puiser. Ce qui suit la rend réelle : un instantané AVANT la phase (empreinte
+# de chaque fichier, et copie de ceux qu'on pourra devoir restaurer), puis le
+# calcul de ce qui a été créé, modifié, supprimé — attribué aux zones des
+# agents de la phase. C'est le filet de tout ce que les hooks ne voient pas :
+# un script qui écrit de l'intérieur, un `agent_id` absent du payload, deux
+# instances qui s'échangent leurs répertoires.
+
+#: Les agents qui écrivent pendant chaque phase de `/sdda-build` (et des
+#: phases voisines), pour ne pas avoir à les lister à chaque appel.
+PHASE_AGENTS: dict[str, tuple[str, ...]] = {
+    "2": ("architect-topology", "architect-rag", "architect-data", "architect-memory", "architect-tools"),
+    "3.0": ("dev-backend",),
+    "3": ("dev-tools", "dev-retrieval", "dev-data"),
+    "4.0": ("dev-orchestration",),
+    "4.1": ("dev-prompt",),
+    "4": ("dev-agent",),
+    "5": ("dev-orchestration", "dev-api", "dev-backend"),
+    "6": ("qa-evals", "qa-tests"),
+    "7": ("review-spec", "review-safety", "review-cost", "review-orchestration", "review-rag",
+          "review-adversarial"),
+}
+
+#: Hors instantané : l'état interne (écrit par les scripts que les agents
+#: lancent — gates, traces, packs), et les caches d'outillage régénérables. Les
+#: zones protégées de `.sys/` sont tenues par les hooks ; ce qu'un script y
+#: écrit pendant la phase est, par construction, le fait des scripts.
+_SNAPSHOT_SKIP_TOP = ("workspace/.sys",)
+_SNAPSHOT_NOISE = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules",
+                             ".venv", "venv", ".gradle", "bin", "obj", "build", "dist", ".git", ".idea"})
+#: Copie gardée pour restauration : tout fichier sous ce seuil, hors données
+#: déposées par l'humain (`assets/`, que personne ne restaure depuis une copie).
+_BLOB_MAX_BYTES = 2_000_000
+CLS_FROZEN_ZONE_CHANGED = "OWNERSHIP_FROZEN_ZONE_CHANGED"
+
+
+def snapshot_dir(root: Path, mission: str | None, phase: str) -> Path:
+    return paths.workspace(root) / ".sys" / ".state" / "ownership-snapshots" / f"{mission or 'x'}-phase-{phase}"
+
+
+def _walk_workspace(root: Path):
+    base = paths.workspace(root)
+    if not base.is_dir():
+        return
+    for dirpath, dirs, files in os.walk(base):
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        if any(rel_dir == s or rel_dir.startswith(s + "/") for s in _SNAPSHOT_SKIP_TOP):
+            dirs[:] = []
+            continue
+        dirs[:] = [d for d in dirs if d not in _SNAPSHOT_NOISE and not d.endswith(".egg-info")]
+        for name in files:
+            yield Path(dirpath) / name
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def take_snapshot(root: Path, mission: str | None, phase: str) -> dict[str, Any]:
+    """Empreinte de chaque fichier du workspace (hors `.sys/`), et copie des
+    fichiers restaurables. Écrit atomiquement ; rend le manifeste."""
+    import json
+    import shutil
+
+    target = snapshot_dir(root, mission, phase)
+    tmp = target.with_name(target.name + ".tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    (tmp / "blobs").mkdir(parents=True, exist_ok=True)
+    files: dict[str, dict[str, Any]] = {}
+    for path in _walk_workspace(root):
+        rel = path.relative_to(root).as_posix()
+        try:
+            digest = _sha(path)
+            size = path.stat().st_size
+        except OSError:
+            continue
+        entry: dict[str, Any] = {"sha256": digest, "bytes": size}
+        restorable = size <= _BLOB_MAX_BYTES and not rel.startswith("workspace/assets/") and not is_secret_file(rel)
+        if restorable:
+            blob = tmp / "blobs" / digest
+            if not blob.exists():
+                shutil.copyfile(path, blob)
+            entry["blob"] = True
+        files[rel] = entry
+    manifest = {"mission": mission, "phase": phase, "files": files}
+    (tmp / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True), encoding="utf-8")
+    shutil.rmtree(target, ignore_errors=True)
+    os.replace(tmp, target)
+    return manifest
+
+
+def load_snapshot(root: Path, mission: str | None, phase: str) -> dict[str, Any] | None:
+    import json
+
+    path = snapshot_dir(root, mission, phase) / "manifest.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def changes_since(root: Path, manifest: dict[str, Any]) -> dict[str, list[str]]:
+    before = manifest.get("files") or {}
+    now: dict[str, str] = {}
+    for path in _walk_workspace(root):
+        try:
+            now[path.relative_to(root).as_posix()] = _sha(path)
+        except OSError:
+            continue
+    created = sorted(p for p in now if p not in before)
+    modified = sorted(p for p in now if p in before and before[p].get("sha256") != now[p])
+    deleted = sorted(p for p in before if p not in now)
+    return {"created": created, "modified": modified, "deleted": deleted}
+
+
+def _owners(loader: dict[str, Any], agents: tuple[str, ...], path: str,
+            instances: list[str] | None) -> tuple[list[str], str]:
+    """Les agents de la phase dont la zone couvre `path` — et, pour un agent à
+    instances, `""` si l'instance est déclarée, sinon le nom de l'instance fautive."""
+    owners: list[str] = []
+    escaped = ""
+    for agent in agents:
+        spec = loader.get(agent)
+        placeholder = str(spec.get("instance_placeholder") or "") if isinstance(spec, dict) else ""
+        probe = Report(name="probe", target=".")
+        if not check_write(loader, agent, path, probe):
+            continue
+        if placeholder and instances is not None:
+            if any(check_write(loader, agent, path, Report(name="probe", target="."), {placeholder: i})
+                   for i in instances):
+                owners.append(agent)
+            else:
+                escaped = path
+            continue
+        owners.append(agent)
+    return owners, escaped
+
+
+def check_since_snapshot(root: Path, loader: dict[str, Any], report: Report, *, mission: str | None,
+                         phase: str, agents: tuple[str, ...], instances: list[str] | None = None,
+                         frozen: list[str] | None = None, restore: bool = False) -> dict[str, Any]:
+    """Chaque fichier créé, modifié ou supprimé depuis l'instantané est-il dans
+    la zone d'un agent de la phase — et, par instance, sous SON répertoire ?"""
+    import shutil
+
+    manifest = load_snapshot(root, mission, phase)
+    if manifest is None:
+        report.error("OWNERSHIP_SNAPSHOT_MISSING",
+                     f"aucun instantané pour la MISSION {mission or '?'} phase {phase}",
+                     fix=f"`python .sdda/sdda.py audit-ownership snapshot --mission {mission or '{n}'} "
+                         f"--phase {phase}` AVANT la vague — sans lui, aucune écriture réelle n'est vérifiable")
+        return {}
+    changes = changes_since(root, manifest)
+    violations: list[dict[str, str]] = []
+    for kind in ("created", "modified", "deleted"):
+        for path in changes[kind]:
+            if frozen and any(matches(f, path) for f in frozen):
+                violations.append({"path": path, "kind": kind, "class": CLS_FROZEN_ZONE_CHANGED})
+                report.error(CLS_FROZEN_ZONE_CHANGED, f"`{path}` {kind} alors que sa zone est GELÉE pour la phase {phase}",
+                             fix="un type partagé ou une interface gelée par la pré-passe ne change pas pendant "
+                                 "la phase qui en dépend : relancer la pré-passe, puis la phase",
+                             location=path)
+                continue
+            owners, escaped = _owners(loader, agents, path, instances)
+            if owners:
+                continue
+            if escaped:
+                cls, why = "OWNERSHIP_INSTANCE_ESCAPE", (
+                    f"`{path}` est sous le répertoire d'une instance que la vague n'a pas déclarée "
+                    f"({', '.join(instances or []) or 'aucune'})")
+            else:
+                cls, why = _sacred_class(path)
+                cls = cls or "OWNERSHIP_VIOLATION"
+                why = why or f"hors de la zone de {', '.join(agents)}"
+            violations.append({"path": path, "kind": kind, "class": cls})
+            report.error(cls, f"phase {phase} : `{path}` {kind} — {why}",
+                         fix="révoquer (`--restore`) puis relancer l'agent fautif ; si l'écriture est "
+                             "légitime, c'est la matrice (`loader.yml`) qui est fausse, pas l'audit",
+                         location=path)
+
+    restored: list[str] = []
+    if restore and violations:
+        blobs = snapshot_dir(root, mission, phase) / "blobs"
+        before = manifest.get("files") or {}
+        for v in violations:
+            path, kind = v["path"], v["kind"]
+            target = root / path
+            if kind == "created":
+                try:
+                    target.unlink()
+                    restored.append(path)
+                except OSError:
+                    pass
+                continue
+            entry = before.get(path) or {}
+            blob = blobs / str(entry.get("sha256", ""))
+            if entry.get("blob") and blob.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(blob, target)
+                restored.append(path)
+            else:
+                report.warn("OWNERSHIP_RESTORE_IMPOSSIBLE", f"`{path}` : aucune copie dans l'instantané",
+                            fix="fichier trop gros ou sous assets/ : le restaurer à la main", location=path)
+    return {"changes": changes, "violations": violations, "restored": restored,
+            "agents": list(agents), "instances": instances}
+
+
 def run(root: Path, *, agent: str | None = None, wrote: list[str] | None = None,
-        declared_only: bool = False) -> Report:
+        declared_only: bool = False, since_snapshot: bool = False, mission: str | None = None,
+        phase: str | None = None, agents: list[str] | None = None, instances: list[str] | None = None,
+        frozen: list[str] | None = None, restore: bool = False) -> Report:
     report = Report(name="OWNERSHIP", target=str(root))
     loader = load_loader(root)
 
@@ -438,22 +1203,54 @@ def run(root: Path, *, agent: str | None = None, wrote: list[str] | None = None,
     if declared_only:
         return report
 
+    if since_snapshot:
+        if not phase:
+            report.error("INVALID_ARG", "`--since-snapshot` exige `--phase`",
+                         fix="la phase nomme l'instantané ET les agents dont les zones sont jugées")
+            return report
+        chosen = tuple(agents or ([agent] if agent else PHASE_AGENTS.get(str(phase), ())))
+        if not chosen:
+            report.error("INVALID_ARG", f"phase `{phase}` : aucun agent connu",
+                         fix=f"passer `--agents` ; phases connues : {sorted(PHASE_AGENTS)}")
+            return report
+        report.data["sinceSnapshot"] = check_since_snapshot(
+            root, loader, report, mission=mission, phase=str(phase), agents=chosen,
+            instances=instances, frozen=frozen, restore=restore)
+        return report
+
     if agent and wrote:
         verdict = {p: check_write(loader, agent, p, report) for p in wrote}
         report.data["checked"] = verdict
     elif agent or wrote:
         report.error("INVALID_ARG", "`--agent` et `--wrote` vont ensemble",
-                     fix="passer les deux, ou `--declared-only`")
+                     fix="passer les deux, `--since-snapshot`, ou `--declared-only`")
     return report
+
+
+def _csv(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    return [v.strip() for v in value.split(",") if v.strip()]
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Matrice d'écriture : qui a le droit d'écrire quoi (0 token)")
+    p.add_argument("action", nargs="?", choices=("check", "snapshot"), default="check",
+                   help="`snapshot` : instantané AVANT une phase ; `check` (défaut) : l'audit")
     p.add_argument("--mission", default=None, help="numéro de mission (contexte du rapport de gate)")
-    p.add_argument("--phase", default=None, help="phase du pipeline (contexte du rapport de gate)")
+    p.add_argument("--phase", default=None, help="phase du pipeline (nomme l'instantané et ses agents)")
     p.add_argument("--agent", default=None, help="agent dont on vérifie les écritures")
     p.add_argument("--wrote", nargs="*", default=None, help="chemins écrits, relatifs à la racine")
     p.add_argument("--declared-only", action="store_true", help="ne vérifier que la cohérence de loader.yml")
+    p.add_argument("--since-snapshot", action="store_true",
+                   help="juger les fichiers RÉELLEMENT créés/modifiés/supprimés depuis l'instantané de la phase")
+    p.add_argument("--agents", default=None, help="agents de la phase, séparés par des virgules (défaut : table)")
+    p.add_argument("--instances", default=None,
+                   help="instances déclarées de la vague (`dev-agent`), séparées par des virgules")
+    p.add_argument("--frozen", action="append", default=None,
+                   help="motif d'une zone GELÉE pendant la phase (répétable)")
+    p.add_argument("--restore", action="store_true",
+                   help="révoquer les écritures fautives depuis l'instantané (restaure, ou supprime une création)")
     add_common_args(p)
     return p
 
@@ -462,7 +1259,19 @@ def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdout()
     args = build_parser().parse_args(argv)
     root = resolve_root(args)
-    report = run(root, agent=args.agent, wrote=args.wrote, declared_only=args.declared_only)
+    if args.action == "snapshot":
+        report = Report(name="OWNERSHIP-SNAPSHOT", target=str(root))
+        if not args.phase:
+            report.error("INVALID_ARG", "`snapshot` exige `--phase`", fix="nommer la phase qui va s'ouvrir")
+            return finish(report, args)
+        manifest = take_snapshot(root, args.mission, str(args.phase))
+        report.data.update({"files": len(manifest["files"]),
+                            "path": paths.rel(root, snapshot_dir(root, args.mission, str(args.phase)))})
+        return finish(report, args)
+    report = run(root, agent=args.agent, wrote=args.wrote, declared_only=args.declared_only,
+                 since_snapshot=args.since_snapshot, mission=args.mission, phase=args.phase,
+                 agents=_csv(args.agents), instances=_csv(args.instances), frozen=args.frozen,
+                 restore=args.restore)
 
     if not args.no_report:
         try:

@@ -1,12 +1,32 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(/workspace/assets/.env)",
+      "Read(/workspace/assets/.env.local)",
+      "Read(/workspace/assets/.env.production)",
+      "Read(/workspace/assets/.env.development)",
+      "Read(/workspace/src/**/.env)",
+      "Read(/workspace/src/**/.env.local)",
+      "Read(/workspace/src/**/.env.production)",
+      "Read(/workspace/src/**/.env.development)",
+      "Read(./workspace/assets/.env)",
+      "Read(./workspace/assets/.env.local)",
+      "Read(./workspace/assets/.env.production)",
+      "Read(./workspace/assets/.env.development)",
+      "Read(./workspace/src/**/.env)",
+      "Read(./workspace/src/**/.env.local)",
+      "Read(./workspace/src/**/.env.production)",
+      "Read(./workspace/src/**/.env.development)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_bash_ownership.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_bash_ownership.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_bash_ownership.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           }
         ]
       },
@@ -15,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_forbidden_reads.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_forbidden_reads.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_forbidden_reads.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           }
         ]
       },
@@ -24,48 +44,52 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_agent_bounds.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_agent_bounds.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_agent_bounds.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_agent_budget.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_agent_budget.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_agent_budget.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_cap_gate.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_cap_gate.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_cap_gate.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_cost_cap.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_cost_cap.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_cost_cap.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_db_envelope.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_db_envelope.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_db_envelope.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_judge_calibration.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_instance_bind.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_instance_bind.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_retrieval_gate.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_judge_calibration.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_judge_calibration.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_stack_combo.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_retrieval_gate.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_retrieval_gate.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_tool_gate.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_stack_combo.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_stack_combo.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
+          },
+          {
+            "type": "command",
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_tool_gate.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_tool_gate.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           }
         ]
       },
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_ownership.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_ownership.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_ownership.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           }
         ]
       }
@@ -76,11 +100,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/postflight_no_inline_prompt.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/postflight_no_inline_prompt.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] postflight_no_inline_prompt.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/postflight_trace_present.py\""
+            "command": "${SDDA_PYTHON:-python} \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/postflight_trace_present.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] postflight_trace_present.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
           }
         ]
       }

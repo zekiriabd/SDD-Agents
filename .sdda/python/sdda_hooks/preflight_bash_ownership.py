@@ -1,39 +1,28 @@
 #!/usr/bin/env python3
-"""Le trou `Bash` de la matrice d'ownership — fermé sur les canaux ordinaires.
+"""Le trou du shell dans la matrice d'ownership — `Bash` et `PowerShell`.
 
-`preflight_ownership` s'exécute sur `Write` et `Edit`. Un agent qui écrit
-`echo … > workspace/pipeline/datasets/golden/x.jsonl` ou `rm workspace/src/{App}/prompts/a.system.md`
-ne passe par aucun des deux : la matrice était contournable par le shell, et
-c'est par là qu'un `dev-agent` peut retoucher le jeu qui le juge sans qu'aucun
-hook ne le voie.
+`preflight_ownership` s'exécute sur `Write`, `Edit`, `NotebookEdit`. Un agent qui
+écrit `echo … > workspace/pipeline/datasets/golden/x.jsonl` ou
+`Remove-Item workspace/src/{App}/prompts/a.system.md` ne passe par aucun des
+trois : la matrice était contournable par le shell, et c'est par là qu'un
+`dev-agent` peut retoucher le jeu qui le juge sans qu'aucun hook ne le voie.
 
-Ce hook lit la commande et en extrait ce qu'elle ÉCRIT et ce qu'elle LIT :
+La commande est analysée par `_shell.analyze` (cf. son docstring : ce qu'il
+résout, ce qu'il déclare opaque, ce qui reste hors de portée), puis chaque
+chemin régi est confronté à `loader.yml` — écritures via `check_write` (et
+`check_recursive_write` pour un répertoire entier), lectures via `check_read`.
 
-    écritures : redirections `>` `>>`, `tee`, `rm` `rmdir` `mv` `cp` `mkdir`
-                `touch` `truncate` `sed -i`, `dd of=`, et les verbes PowerShell
-                `Set-Content` `Add-Content` `Out-File` `Remove-Item` `Move-Item`
-                `Copy-Item` `New-Item`
-    lectures  : `cat` `type` `head` `tail` `less` `more` `Get-Content`,
-                `grep` `rg` `Select-String` (racine de recherche), redirection `<`
+L'outil `PowerShell` n'était surveillé par AUCUN hook : un sous-agent sous
+Windows écrivait le golden par `Set-Content` sans que rien ne s'y oppose. Il
+passe désormais par ce hook, avec le dialecte PowerShell (alias `sc`, `gc`,
+`ni`, `ri`…, paramètres `-Path`/`-Destination`, `iex`, `-EncodedCommand`).
 
-puis confronte chaque chemin sous `workspace/` ou `.sdda/` à `loader.yml` —
-écritures via `audit_ownership.check_write`, lectures via `check_read`.
-
-**Ce que le hook ne prétend pas.** Un `python -c "open(p,'w')"` ou un script
-qui écrit de l'intérieur lui échappent : l'analyse est lexicale, pas
-sémantique. Il ferme les canaux *ordinaires*, ceux qu'un agent emploie quand il
-veut « juste corriger vite » ; le reste est rattrapé après coup par
-`audit_ownership.py --agent … --wrote …` en post-step de commande. Un hook qui
-essaierait d'interpréter le shell se tromperait, et un hook qui se trompe en
-refusant se fait désactiver — avec tous les invariants qu'il portait.
-
-Le fil principal (aucun `subagent_type`) passe : la matrice ne régit que les
-agents.
+Le fil principal (aucun `agent_type`) passe, sauf sur les zones protégées que
+même lui n'écrit pas au shell (baseline, journal d'audit) : la matrice ne régit
+que les agents. Les formes OPAQUES ne sont refusées qu'aux sous-agents.
 """
 from __future__ import annotations
 
-import re
-import shlex
 import sys
 from pathlib import Path
 
@@ -44,227 +33,161 @@ from _hook import ALLOW, agent_of, deny, run, unknown_subagent  # noqa: E402
 HOOK = "preflight_bash_ownership"
 
 #: Câblage — lu par `harness_build.py`. `applies_to` vide : la matrice vaut
-#: pour chaque commande shell, quel qu'en soit l'auteur agent.
-WIRING = {"event": "PreToolUse", "matcher": "Bash", "applies_to": ()}
+#: pour chaque commande shell, quel qu'en soit l'auteur agent. `PowerShell`
+#: est l'outil shell de Claude Code sous Windows : sans lui dans le matcher, un
+#: sous-agent y avait un shell sans aucun hook.
+WIRING = {"event": "PreToolUse", "matcher": "Bash|PowerShell", "applies_to": ()}
 
-#: Verbes dont TOUS les arguments-chemins sont des écritures (ou destructions).
-WRITE_ALL = {
-    "rm", "rmdir", "mkdir", "touch", "truncate", "unlink",
-    "remove-item", "new-item", "set-content", "add-content", "out-file", "clear-content",
-}
-#: Verbes dont le DERNIER argument-chemin est l'écriture (la destination) ; les
-#: autres sont des lectures — et pour `mv`, la source disparaît : écriture aussi.
-WRITE_LAST = {"cp", "copy", "move-item", "copy-item"}
-WRITE_ALL_MOVE = {"mv", "move", "rename-item"}
-#: `tee` écrit dans chaque fichier nommé.
-WRITE_TEE = {"tee"}
-#: `sed -i` réécrit ses fichiers en place ; sans `-i`, il lit.
-SED = {"sed"}
-#: Verbes de lecture : chaque chemin rend du contenu.
-READ_FILE = {"cat", "type", "head", "tail", "less", "more", "get-content", "gc", "strings", "wc", "diff"}
-#: Recherches : la racine rend le contenu de tout ce qu'elle contient.
-READ_TREE = {"grep", "rg", "egrep", "fgrep", "ag", "ack", "select-string", "sls", "findstr"}
-#: Recherches par NOM seulement.
-LIST_TREE = {"ls", "find", "dir", "get-childitem", "gci", "tree"}
+#: Une écriture dont la cible ne se résout pas sans exécuter la commande.
+CLS_SHELL_OPAQUE = "OWNERSHIP_SHELL_OPAQUE"
 
-#: Préfixes de commande à ignorer avant le verbe : environnement, sudo, time.
-SKIP_PREFIX_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
-SKIP_WORDS = {"sudo", "time", "nice", "env", "command", "builtin", "exec", "nohup"}
-
-#: Séparateurs de sous-commandes. `|` sépare aussi : `cat a | tee b` sont deux
-#: verbes, et chacun doit être jugé.
-SPLIT_RE = re.compile(r"\s*(?:\|\||&&|;|\||\n)\s*")
-
-#: Seules les zones que la matrice régit sont jugées. Un `pip install` ou un
-#: `git status` ne nomment aucun chemin de ces zones et passent sans frais.
-GOVERNED_PREFIXES = ("workspace/", ".sdda/")
+#: Zones protégées que le fil principal lui-même n'écrit pas au shell. Pas
+#: `.sys/.validation/` : les commandes y redirigent la sortie JSON de leurs
+#: scripts (`eval-runner … > workspace/.sys/.validation/{n}-G5-agent.json`),
+#: c'est le mécanisme documenté par lequel un rapport de gate est déposé. Le
+#: fil principal y reste refusé à `Write`/`Edit` — la contrefaçon à la main —
+#: et les sous-agents y sont refusés au shell comme à l'éditeur.
+MAIN_THREAD_SHELL_PROTECTED = ("workspace/pipeline/baselines", "workspace/.sys/.audit")
 
 
-def _split_commands(command: str) -> list[str]:
-    return [c for c in SPLIT_RE.split(command) if c.strip()]
-
-
-#: Un chemin Windows dans la commande : `C:\Users\…` ou `\\serveur\…`.
-_WINDOWS_PATH_RE = re.compile(r"(?:^|[\s=\"'>])(?:[A-Za-z]:\\|\\\\)")
-
-
-def _tokens(fragment: str) -> list[str]:
-    """Découpe shell d'un fragment de commande.
-
-    `shlex` en mode POSIX traite `\\` comme un caractère d'échappement :
-    `echo x > C:\\Users\\me\\workspace\\pipeline\\datasets\\g.jsonl` sortait le jeton
-    `C:Usersmeworkspacepipelinedatasetsg.jsonl` — plus un chemin, donc plus rien de
-    régi, donc ALLOW. Tout chemin absolu tapé à la façon de Windows échappait au
-    hook, alors que c'est la forme que le harnais lui-même emploie. On bascule
-    les séparateurs en `/` avant la découpe quand la commande en contient : la
-    normalisation en aval ne fait pas la différence, et le sens de la commande
-    est intact pour ce qui nous regarde, c'est-à-dire QUELS chemins elle nomme.
-    """
-    if _WINDOWS_PATH_RE.search(fragment):
-        fragment = fragment.replace("\\", "/")
-    try:
-        return shlex.split(fragment, posix=True)
-    except ValueError:
-        return fragment.split()
-
-
-def _normalize(root: Path, token: str) -> str | None:
-    """Un jeton -> chemin relatif sous une zone régie, ou None s'il n'en est pas.
-
-    Les chemins sont pris tels que l'agent les a écrits ; un chemin absolu est
-    ramené à la racine du projet quand il s'y trouve. Un jeton qui ne contient
-    ni `/` ni `\\` n'est pas un chemin — sauf s'il nomme une zone régie à la
-    racine (`workspace`), ce qui n'arrive qu'aux commandes qui la détruisent.
-    """
-    tok = token.strip().strip("'\"")
-    if not tok or tok.startswith("-"):
-        return None
-    tok = tok.replace("\\", "/")
-    if re.match(r"^[A-Za-z]:/", tok) or tok.startswith("/"):
-        try:
-            tok = Path(tok).resolve().relative_to(root).as_posix()
-        except (ValueError, OSError):
-            return None
-    while tok.startswith("./"):
-        tok = tok[2:]
-    if tok in ("workspace", ".sdda"):
-        return tok
-    if tok.startswith(GOVERNED_PREFIXES):
-        return tok
-    return None
-
-
-def _paths(root: Path, tokens: list[str]) -> list[str]:
-    out: list[str] = []
-    for tok in tokens:
-        p = _normalize(root, tok)
-        if p is not None:
-            out.append(p)
-    return out
-
-
-def classify(root: Path, command: str) -> tuple[list[str], list[tuple[str, str]]]:
+def classify(root: Path, command: str, cwd: str | None = None, dialect: str = "bash") -> tuple[list[str], list[tuple[str, str]]]:
     """(écritures, lectures) nommées par la commande — chemins sous zones régies.
 
-    Une lecture est `(chemin, portée)` : `file` pour un fichier, `content` pour
-    une recherche dans un arbre, `names` pour un simple listage.
+    Conservé pour les appelants et les tests d'avant ; l'analyse complète
+    (opacité, récursivité, recherches qui lisent les fichiers cachés) est
+    `_shell.analyze`.
     """
-    writes: list[str] = []
-    reads: list[tuple[str, str]] = []
+    import _shell  # noqa: E402
 
-    for fragment in _split_commands(command):
-        tokens = _tokens(fragment)
+    res = _shell.analyze(root, command, cwd, dialect)
+    return res.writes, res.reads
 
-        # Redirections : `> f`, `>> f`, `>f`, `2> f`, `< f`.
-        rest: list[str] = []
-        i = 0
-        while i < len(tokens):
-            tok = tokens[i]
-            m = re.match(r"^(\d?)(>>?|<)(.*)$", tok)
-            if m and not tok.startswith("-"):
-                op, inline = m.group(2), m.group(3)
-                target = inline or (tokens[i + 1] if i + 1 < len(tokens) else "")
-                if not inline:
-                    i += 1
-                p = _normalize(root, target)
-                if p is not None:
-                    if op == "<":
-                        reads.append((p, "file"))
-                    else:
-                        writes.append(p)
-                i += 1
-                continue
-            rest.append(tok)
-            i += 1
-        tokens = rest
 
-        # Le verbe : après les assignations d'environnement et les préfixes.
-        while tokens and (SKIP_PREFIX_RE.match(tokens[0]) or tokens[0].lower() in SKIP_WORDS):
-            tokens = tokens[1:]
-        if not tokens:
+def _protected_verdict(ao, loader: dict, agent: str, writes: list[str]) -> int:
+    """Les zones protégées (`audit_ownership.PROTECTED_ZONES`) — les MÊMES que
+    `preflight_ownership`. Une redirection `>` vers `.sys/.validation/` passait
+    le shell alors que l'éditeur la refusait : la protection tenait à l'outil
+    choisi, c'est-à-dire à rien."""
+    for path in writes:
+        found = ao.protected_zone(path)
+        if found is None:
             continue
-        verb = Path(tokens[0].replace("\\", "/")).name.lower()
-        for ext in (".exe", ".cmd", ".bat"):
-            if verb.endswith(ext):
-                verb = verb[: -len(ext)]
-        args = tokens[1:]
-        named = _paths(root, args)
+        zone = found[0]
+        if not agent and zone not in MAIN_THREAD_SHELL_PROTECTED:
+            continue
+        verdict = ao.protected_write(loader, agent, path)
+        if verdict is not None:
+            cls, fix = verdict
+            return deny(HOOK, cls, f"via le shell — `{path}` écrit{f' par `{agent}`' if agent else ''}", fix)
+    return ALLOW
 
-        if verb in WRITE_ALL or verb in WRITE_ALL_MOVE or verb in WRITE_TEE:
-            writes.extend(named)
-        elif verb in WRITE_LAST:
-            if named:
-                writes.append(named[-1])
-                reads.extend((p, "file") for p in named[:-1])
-        elif verb in SED:
-            in_place = any(a == "-i" or a.startswith("-i") or a == "--in-place" for a in args)
-            (writes.extend(named) if in_place else reads.extend((p, "file") for p in named))
-        elif verb in READ_FILE:
-            reads.extend((p, "file") for p in named)
-        elif verb in READ_TREE:
-            # Pas de racine nommée : la recherche part du répertoire courant,
-            # c'est-à-dire de tout le projet.
-            reads.extend((p, "content") for p in (named or ["."]))
-        elif verb in LIST_TREE:
-            reads.extend((p, "names") for p in named)
-        elif verb == "dd":
-            for a in args:
-                if a.startswith("of="):
-                    p = _normalize(root, a[3:])
-                    if p is not None:
-                        writes.append(p)
 
-    return writes, reads
+def _deny_secret(agent: str, what: str, fix: str = "") -> int:
+    return deny(HOOK, "SECRET_READ_FORBIDDEN",
+                f"via le shell — `{agent}` a voulu lire `{what}` : un fichier de secrets n'est lu par aucun agent",
+                fix or "`python .sdda/sdda.py install-env` copie assets/.env vers src/{App}/.env, sans LLM")
 
 
 def check(root: Path, data: dict) -> int:
-    agent = agent_of(data)
-    if not agent:
-        return ALLOW
+    import _shell  # noqa: E402
 
+    agent = agent_of(data)
     tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
     command = str(tool_input.get("command") or data.get("command") or "")
     if not command.strip():
         return ALLOW
+    dialect = "powershell" if str(data.get("tool_name") or "").lower() == "powershell" else "bash"
 
-    writes, reads = classify(root, command)
-    if not writes and not reads:
+    res = _shell.analyze(root, command, data.get("cwd"), dialect)
+    if not (res.writes or res.reads or res.opaque or res.unresolved_reads or res.hidden_content_reads):
         return ALLOW
 
     from sdda_lib.errors import Report  # noqa: E402  (import tardif : coût de démarrage du hook)
     from sdda_scripts import audit_ownership as ao  # noqa: E402
 
-    for path, _scope in reads:
-        if ao.is_secret_file(str(path)):
-            return deny(HOOK, "SECRET_READ_FORBIDDEN",
-                        f"via Bash — `{agent}` a voulu lire `{path}` : un fichier de secrets n'est lu par aucun agent",
-                        "`python .sdda/sdda.py install-env` copie assets/.env vers src/{App}/.env, sans LLM")
+    loader = ao.load_loader(root) if agent else {}
+    verdict = _protected_verdict(ao, loader, agent, res.writes)
+    if verdict != ALLOW or not agent:
+        return verdict
 
-    loader = ao.load_loader(root)
-    if not isinstance(loader.get(agent), dict):
+    # 1. Secrets — nommés, ou devinés derrière une variable.
+    for path, _scope in res.reads:
+        if ao.is_secret_file(str(path)):
+            return _deny_secret(agent, path)
+    for token in res.unresolved_reads:
+        if ".env" in token.casefold():
+            return _deny_secret(agent, token)
+
+    known = isinstance(loader.get(agent), dict)
+    if not known:
         # Sous-agent hors matrice : rien sous workspace/, ni en écriture ni en
         # lecture. Voir `_hook.unknown_subagent` pour le pourquoi.
-        for path in [*writes, *(p for p, _scope in reads)]:
+        for path in [*res.writes, *(p for p, _scope in res.reads)]:
             verdict = unknown_subagent(HOOK, agent, str(path))
             if verdict != ALLOW:
                 return verdict
+
+    # 2. L'opaque : une écriture qu'on ne sait pas nommer. Refusée à tout
+    #    sous-agent — l'analyse ne l'a retenue que si elle PEUT toucher une zone
+    #    régie (variable, substitution, code obscurci, entrée standard).
+    if res.opaque:
+        return deny(HOOK, CLS_SHELL_OPAQUE,
+                    f"via le shell — `{agent}` : {res.opaque[0]}",
+                    "écrire avec un chemin LITTÉRAL (ou par Write/Edit) : une cible que le hook ne peut "
+                    "pas nommer sans exécuter la commande est une cible qu'il ne peut pas juger. "
+                    "`bash -c`, `eval`, `$(…)`, `python -c` restent permis tant que ce qu'ils écrivent se lit")
+    if not known:
         return ALLOW
 
+    # 3. La matrice : écritures (répertoires entiers compris), puis lectures.
     report = Report(name="BASH-HOOK", target=str(root))
-    for path in writes:
-        if not ao.check_write(loader, agent, path, report):
+    # Un répertoire CRÉÉ se juge sur ce qu'il contiendra : `mkdir -p
+    # agents/billing` est à l'instance qui écrira `agents/billing/x`.
+    mkdirs = set(res.mkdirs)
+    judged = [(p + "/x" if p in mkdirs else p) for p in res.writes]
+    bindings, verdict = _bindings(root, loader, agent, judged, data)
+    if verdict != ALLOW:
+        return verdict
+    recursive = set(res.recursive_writes)
+    for original, path in zip(res.writes, judged):
+        ok = (ao.check_recursive_write(loader, agent, path, report, bindings, root) if original in recursive
+              else ao.check_write(loader, agent, path, report, bindings))
+        if not ok:
             break
     else:
         if ao.forbidden_reads_of(loader, agent):
-            for path, scope in reads:
+            for path, scope in res.reads:
                 if not ao.check_read(loader, agent, path, report, scope=scope):
                     break
 
-    if report.ok:
-        return ALLOW
-    first = report.errors[0]
-    return deny(HOOK, first.cls, f"via Bash — {first.message}",
-                first.fix or "passer par Write/Edit dans ta zone, ou élargir la matrice explicitement")
+    if not report.ok:
+        first = report.errors[0]
+        return deny(HOOK, first.cls, f"via le shell — {first.message}",
+                    first.fix or "passer par Write/Edit dans ta zone, ou élargir la matrice explicitement")
+
+    # 4. Une recherche récursive qui lit les fichiers cachés rend le `.env`
+    #    qui dort dessous : GNU `grep -r` n'a pas les exclusions de ripgrep.
+    for directory in res.hidden_content_reads:
+        found = ao.secrets_under(root, directory)
+        if found:
+            return _deny_secret(agent, f"{found[0]} (via une recherche récursive de `{directory}`)",
+                                "exclure les secrets de la recherche (`--exclude='.env*'`), ou employer "
+                                "`rg`, qui saute les fichiers cachés")
+    return ALLOW
+
+
+def _bindings(root: Path, loader: dict, agent: str, writes: list[str], data: dict):
+    """Liaison d'instance (`{agent}` de `dev-agent`) — cf. `_instances`."""
+    try:
+        import _instances  # noqa: E402
+    except ImportError:  # pragma: no cover
+        return None, ALLOW
+    bindings = None
+    for path in writes:
+        bindings, verdict = _instances.bindings_for_write(root, loader, agent, path, data, HOOK)
+        if verdict != ALLOW:
+            return None, verdict
+    return bindings, ALLOW
 
 
 def main() -> int:

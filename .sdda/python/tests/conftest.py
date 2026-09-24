@@ -82,6 +82,9 @@ def _isolated_team_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     """Aucune couche `~/.sdda/config.team.yml` de la machine ne doit influencer les tests."""
     monkeypatch.setenv("SDDA_TEAM_CONFIG", str(tmp_path / "no-team-config.yml"))
     monkeypatch.delenv("SDDA_BYPASS_BUDGET_ESTIMATE", raising=False)
+    # La CI tourne en `SDDA_HOOKS_STRICT=1` ; les tests unitaires fixent eux-mêmes
+    # le mode qu'ils exercent, sinon les tests de dégradation deviendraient faux.
+    monkeypatch.delenv("SDDA_HOOKS_STRICT", raising=False)
     monkeypatch.delenv("SDDA_BYPASS_REASON", raising=False)
     monkeypatch.delenv("SOURCE_DATE_EPOCH", raising=False)
     # Le runner construit un juge RÉEL dès que la clé nommée par la fiche

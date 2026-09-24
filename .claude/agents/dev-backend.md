@@ -202,7 +202,7 @@ vert avant de rendre la main.
 ```bash
 python .sdda/sdda.py gen-app-skeleton --check                  # Python : le squelette n'a pas dérivé
 python .sdda/sdda.py validate-packaging --json                 # le livrable est cohérent (G2, part packaging)
-python .sdda/sdda.py audit-ownership --agent dev-backend       # tu n'as écrit que chez toi
+python .sdda/sdda.py audit-ownership --agent dev-backend --wrote {chaque fichier écrit ou modifié}   # tu n'as écrit que chez toi
 <smoke de la fiche de langage / backend>
 ```
 
