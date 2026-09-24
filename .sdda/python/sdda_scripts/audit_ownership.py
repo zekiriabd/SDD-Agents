@@ -32,7 +32,9 @@ Usage :
 from __future__ import annotations
 
 import argparse
-import fnmatch
+import functools
+import os
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -76,22 +78,56 @@ def _sacred_class(path: str) -> tuple[str, str]:
     « a modifié le jeu qui le juge » ne se corrige pas du tout — la mesure est
     perdue, et il faut la refaire.
     """
-    normalized = path.replace("\\", "/").lstrip("./")
+    normalized = normalize(path)
     for zone, (cls, why) in SACRED.items():
         if matches(zone, normalized) or matches(zone, normalized + "/x"):
             return cls, why
     return "", ""
 
 
-def _to_regex(pattern: str) -> re.Pattern[str]:
-    """Glob de `loader.yml` -> regex. `**` matche zéro segment ou plus.
+#: Systèmes de fichiers insensibles à la casse : Windows, et macOS par défaut.
+#: Sur eux, `Workspace/Pipeline/Datasets/x` EST `workspace/pipeline/datasets/x` —
+#: un matcher sensible à la casse laissait le shell écrire le golden sous un
+#: autre nom, et le fichier atterrissait au même endroit. Ailleurs, deux casses
+#: sont deux fichiers, et les confondre refuserait à tort.
+CASE_INSENSITIVE = os.name == "nt" or sys.platform == "darwin"
+
+_GLOB_CHARS = "*?{["
+
+
+def normalize(path: str) -> str:
+    """Forme canonique LEXICALE d'un chemin relatif : `/`, sans `./`, `..` résolu.
+
+    `path.lstrip("./")`, la forme d'avant, retirait des CARACTÈRES et non un
+    préfixe : `.sdda/loader.yml` devenait `sdda/loader.yml`, `.sys/` devenait
+    `sys/`. Et `workspace/src/../pipeline/datasets/x` n'était ramené à rien —
+    le chemin réel était pourtant celui du golden.
+    """
+    p = str(path).replace("\\", "/")
+    p = re.sub(r"/{2,}", "/", p)
+    while p.startswith("./"):
+        p = p[2:]
+    if not p:
+        return "."
+    return posixpath.normpath(p)
+
+
+@functools.lru_cache(maxsize=4096)
+def _to_regex(pattern: str, bindings: tuple[tuple[str, str], ...] = (),
+              fold: bool = False) -> re.Pattern[str]:
+    """Glob de `loader.yml` -> regex, SEGMENTÉ : `*` = dans un segment, `**` = n segments.
 
     `workspace/src/**/data/**` doit matcher `workspace/src/data/x.py` ET
     `workspace/src/App/src/App/data/x.py` : un enforcer qui exigerait au moins
     un segment déclarerait hors zone toutes les écritures d'un projet à
     arborescence plate — et un enforcer qui dit l'inverse de la vérité est pire
     qu'aucun enforcer.
+
+    `bindings` fixe la valeur d'un placeholder (`{agent}` -> `billing`) : c'est
+    la liaison d'instance de `dev-agent`. Sans liaison, `{x}` vaut un segment
+    non vide quelconque — donc N'IMPORTE QUELLE instance.
     """
+    bound = dict(bindings)
     out: list[str] = []
     i = 0
     while i < len(pattern):
@@ -114,22 +150,44 @@ def _to_regex(pattern: str) -> re.Pattern[str]:
                 i += 1
             else:
                 inner = pattern[i + 1:end]
-                out.append("(?:" + "|".join(re.escape(p) for p in inner.split(",")) + ")"
-                           if "," in inner else r"[^/]+")
+                if "," in inner:
+                    out.append("(?:" + "|".join(re.escape(p) for p in inner.split(",")) + ")")
+                elif inner in bound:
+                    out.append(re.escape(bound[inner]))
+                else:
+                    out.append(r"[^/]+")
                 i = end + 1
         else:
             out.append(re.escape(pattern[i]))
             i += 1
-    return re.compile("^" + "".join(out) + "$")
+    return re.compile("^" + "".join(out) + "$", re.IGNORECASE if fold else 0)
 
 
-def matches(pattern: str, path: str) -> bool:
-    normalized = path.replace("\\", "/").lstrip("./")
-    if _to_regex(pattern).match(normalized):
+def matches(pattern: str, path: str, bindings: dict[str, str] | None = None) -> bool:
+    """Le chemin est-il dans la zone que le motif désigne ?
+
+    Le matching est SEGMENTÉ, sans repli. Le repli d'avant —
+    `fnmatch(path, pattern.rstrip("/*") + "/*")` — employait `fnmatch`, dont
+    le `*` traverse les `/` : `workspace/src/*/*` de `dev-backend`, censé
+    désigner les fichiers à la racine du projet applicatif, devenait
+    `workspace/src/*` au sens de fnmatch, c'est-à-dire TOUT `src/` — skills,
+    rules, memory, shared, et les agents eux-mêmes.
+
+    Ce que le repli voulait dire reste vrai, restreint à ce qu'il signifiait :
+    un motif dont le dernier segment est LITTÉRAL nomme un répertoire (ou un
+    fichier), et couvre ce qu'il contient — `workspace/pipeline/datasets` et
+    `workspace/pipeline/datasets/**` désignent la même zone pour un humain. Un
+    dernier segment à joker (`*`, `{n}-*.md`) ne nomme rien de tel.
+    """
+    normalized = normalize(path)
+    key = tuple(sorted((bindings or {}).items()))
+    regex = _to_regex(pattern, key, CASE_INSENSITIVE)
+    if regex.match(normalized):
         return True
-    # Un motif de répertoire couvre ce qu'il contient : `workspace/pipeline/datasets/**`
-    # et `workspace/pipeline/datasets` désignent la même zone pour un humain.
-    return fnmatch.fnmatch(normalized, pattern.rstrip("/*") + "/*")
+    last = pattern.rstrip("/").rsplit("/", 1)[-1]
+    if last and not any(ch in last for ch in _GLOB_CHARS):
+        return bool(_to_regex(pattern.rstrip("/") + "/**", key, CASE_INSENSITIVE).match(normalized))
+    return False
 
 
 def load_loader(root: Path) -> dict[str, Any]:
@@ -315,14 +373,21 @@ def check_declaration(loader: dict[str, Any], report: Report) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # 2. Une écriture donnée est-elle autorisée ?
 # ---------------------------------------------------------------------------
-def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -> bool:
+def check_write(loader: dict[str, Any], agent: str, path: str, report: Report,
+                bindings: dict[str, str] | None = None) -> bool:
+    """L'écriture de `path` par `agent` est-elle dans sa zone ?
+
+    `bindings` lie les placeholders d'INSTANCE (`{agent}` de `dev-agent`) à la
+    valeur de l'instance qui écrit : sans elle, `agents/{agent}/**` autorise
+    le répertoire de n'importe quelle autre instance.
+    """
     if not isinstance(loader.get(agent), dict):
         report.error("OWNERSHIP_AGENT_UNKNOWN", f"agent `{agent}` absent de loader.yml",
                      fix=f"agents déclarés : {', '.join(agent_names(loader))}")
         return False
 
     for pattern in forbidden_of(loader, agent):
-        if matches(pattern, path):
+        if matches(pattern, path, bindings):
             cls, why = _sacred_class(path)
             report.error(cls or "OWNERSHIP_VIOLATION",
                          f"`{agent}` a écrit `{path}` — interdit explicitement",
@@ -331,7 +396,7 @@ def check_write(loader: dict[str, Any], agent: str, path: str, report: Report) -
             return False
 
     allowed = writes_of(loader, agent)
-    if any(matches(pattern, path) for pattern in allowed):
+    if any(matches(pattern, path, bindings) for pattern in allowed):
         return True
 
     cls, why = _sacred_class(path)
@@ -377,7 +442,7 @@ def read_violation(loader: dict[str, Any], agent: str, path: str, *, scope: str 
       refuse et dit où restreindre `path` : un agent qui grep tout le
       workspace cherche en réalité ce que `forbidden_reads` lui cache.
     """
-    normalized = path.replace("\\", "/").lstrip("./").rstrip("/") or "."
+    normalized = normalize(path)
     allowed = reads_of(loader, agent)
     for pattern in forbidden_reads_of(loader, agent):
         # `{other}` veut dire « tout AUTRE que le mien ». Le compilateur de motifs
