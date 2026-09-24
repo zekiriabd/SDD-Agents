@@ -10,19 +10,18 @@ lots d'implémentation, pas une liste de bugs.
 six endroits est un besoin établi ; un script réclamé une seule fois a pu
 être inventé au fil de la plume et mérite une question avant d'être écrit.
 
-- **66** écrits · **2** à écrire · **0** cité(s) sans déclaration
+- **67** écrits · **1** à écrire · **0** cité(s) sans déclaration
 
 **Déclaré** : le prompt qui appelle le script dit « Planifié » à la ligne
 suivante, avec la conduite à tenir tant qu'il manque. Un script absent cité
 sans le dire fait croire à l'agent qu'il dispose d'un outil — il en invente
 la sortie. `framework_smoke` échoue sur toute référence muette.
 
-## `sdda_scripts/` — 2 à écrire
+## `sdda_scripts/` — 1 à écrire
 
 | Script | Appelants | Déclaré | Réclamé par |
 |---|---:|:-:|---|
 | `adversarial_target_check.py` | 1 | ✅ | `agents\review-adversarial.md` |
-| `trajectory_report.py` | 1 | ✅ | `agents\review-orchestration.md` |
 
 ## Noms cités sans chemin
 
