@@ -116,6 +116,9 @@ class Settings:
     trace_enabled: bool = True
     trace_redact: bool = True
     max_input_bytes: int = 262144
+    #: Les guardrails ACTIFS (`## Active Guardrails` de STACK.md, résolus par
+    #: `gen_app_skeleton`) et leur configuration — lus par `guardrails.Guardrails`.
+    guardrails: Mapping[str, Any] = field(default_factory=dict)
     tenant_id: str = ""
     workspace_root: Path = field(default_factory=Path)
     secret_env: Mapping[str, str] = field(default_factory=dict)
@@ -163,6 +166,7 @@ class Settings:
             trace_enabled=bool((raw.get("tracing") or {}).get("enabled", True)),
             trace_redact=bool((raw.get("tracing") or {}).get("redact", True)),
             max_input_bytes=int(raw.get("maxInputBytes") or 262144),
+            guardrails=dict(raw.get("guardrails") or {}),
             # L'identité de l'appelant vient du transport (`--tenant`, en-tête,
             # variable). Un défaut en dur ferait filtrer les vues SQL et le
             # retrieval sur un locataire que personne n'a établi.

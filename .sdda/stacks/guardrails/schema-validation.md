@@ -8,6 +8,15 @@ Languages: *
 > **Le guardrail le moins cher et le plus efficace du catalogue.** Actif par
 > défaut ; le désactiver demande une raison.
 
+> **Code (Python)** : `.sdda/templates/runtime/python/app/guardrails/schema.py`,
+> émis par `gen-app-skeleton`, actif si cette fiche est listée sous
+> `## Active Guardrails`. Les schémas viennent de l'IR (`agents[].outputSchema`,
+> et celui du nœud terminal pour la sortie finale), recopiés dans
+> `app_config.json` — jamais écrits à la main. `RunService` valide la sortie
+> finale : non conforme -> `AGENT_OUTPUT_INVALID` (code de sortie 9). Un
+> mot-clé de schéma hors du sous-ensemble supporté est une VIOLATION, pas un
+> silence : un validateur qui saute une contrainte la déclare satisfaite.
+
 ---
 
 ## 1. Rôle

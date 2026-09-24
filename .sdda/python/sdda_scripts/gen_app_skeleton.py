@@ -376,6 +376,53 @@ def render_pyproject(template: str, deps: Dependencies) -> str:
                     .replace("{DevDependencies}", _toml_list(deps.dev, multiline=False)))
 
 
+def _guardrails(ctx: Context) -> dict[str, Any]:
+    """`guardrails` d'`app_config.json` : les fiches ACTIVES et ce que l'IR dit des sorties.
+
+    Rien n'est actif par défaut : un guardrail que STACK.md ne déclare pas
+    n'a été mesuré par aucune eval. Les schémas de sortie viennent de l'IR
+    (`agents[].outputSchema`), jamais d'une recopie : le contrat est la source,
+    le schéma validé au runtime en est la projection.
+    """
+    section = _section(ctx.root, "Active Guardrails")
+    active = sorted(active_stacks(ctx.root, "Active Guardrails"))
+
+    def names(key: str) -> list[str]:
+        raw = section.get(key)
+        return [str(v) for v in raw] if isinstance(raw, list) else ([str(raw)] if raw else [])
+
+    config: dict[str, Any] = {
+        "active": active,
+        "input": names("InputGuardrails"),
+        "output": names("OutputGuardrails"),
+        "onTrip": str(section.get("OnGuardrailTrip") or "block-and-log"),
+        "injection": {"threshold": float(section.get("InjectionThreshold") or 0.5)},
+        "pii": {},
+        "outputSchema": None,
+        "outputSchemas": {},
+    }
+    ir_file = paths.ir_path(ctx.root, ctx.mission) if ctx.mission else None
+    if ir_file is not None and ir_file.is_file():
+        try:
+            ir = json.loads(markdown_io.read_text(ir_file))
+        except ValueError:
+            ir = {}
+        agents = {str(a.get("id")): a for a in ir.get("agents") or [] if isinstance(a, dict)}
+        schemas: dict[str, Any] = {}
+        for agent_id, agent in sorted(agents.items()):
+            if isinstance(agent.get("outputSchema"), dict) and agent["outputSchema"]:
+                schemas[agent_id] = agent["outputSchema"]
+                schemas.setdefault(re.sub(r"^\d+-", "", agent_id), agent["outputSchema"])
+        config["outputSchemas"] = schemas
+        orchestration = ir.get("orchestration") or {}
+        nodes = {str(n.get("id")): n for n in orchestration.get("nodes") or [] if isinstance(n, dict)}
+        terminals = [nodes.get(str(t)) or {"ref": str(t)} for t in orchestration.get("terminalNodes") or []]
+        finals = {str(t.get("ref") or t.get("id") or "") for t in terminals}
+        if len(finals) == 1:
+            config["outputSchema"] = schemas.get(finals.pop())
+    return config
+
+
 def render_app_config(ctx: Context, template: str) -> str:
     """`app_config.json` — ce que l'application lit au démarrage.
 
@@ -404,6 +451,7 @@ def render_app_config(ctx: Context, template: str) -> str:
         "{ServingSurface}": ctx.surfaces[0] if ctx.surfaces else "cli",
         "{Streaming}": "true" if ctx.streaming else "false",
         "{SecretEnv}": _json(secrets),
+        "{Guardrails}": _json(_guardrails(ctx)),
     }
     text = template
     for needle, value in substitutions.items():
