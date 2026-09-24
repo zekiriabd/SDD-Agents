@@ -466,7 +466,7 @@ constat corrigé. Ce qu'il a trouvé :
   d'ownership lisaient l'identité du sous-agent au mauvais endroit du payload
   (toute écriture de sous-agent passait) ; les hooks de spawn ne matchaient que
   `Task`, jamais `Agent` ; les façades portaient `model_tier` mais aucune clé
-  `model:` (les 22 agents héritaient du modèle parent) ; `MaxCostPerRun` n'avait
+  `model:` (tous les agents héritaient du modèle parent) ; `MaxCostPerRun` n'avait
   aucun appelant qui alimente le cumul ; les bornes du `build_loop` ne vivaient
   que dans le prompt qu'elles devaient borner ;
 - les commandes de hook étaient relatives au répertoire courant : un `cd`
