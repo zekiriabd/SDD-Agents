@@ -91,8 +91,18 @@ shared_writes:
     mode: serialized
     why: squelette en phase 2, section `## Prompt` en phase 4 — jamais simultanés
 
+  - path: workspace/pipeline/caps/{n}-*-*.md
+    agents: [po-capabilities, architect-topology]
+    mode: serialized
+    why: |
+      po-capabilities crée les CAPs en phase 1 ; architect-topology n'y
+      écrit qu'en phase 2, et seulement le champ `Allocated To` (Edit
+      narrow). Les deux motifs (`{n}-{m}-*.md`, `{n}-*-*.md`) désignent les
+      mêmes fichiers : la détection de recouvrement le voyait, la
+      comparaison de chaînes d'avant non.
+
   - path: workspace/src/**/tests/**
-    agents: [qa-tests, dev-tools, dev-retrieval, dev-data, dev-agent, dev-orchestration, dev-api]
+    agents: [qa-tests, dev-tools, dev-retrieval, dev-data, dev-agent, dev-orchestration, dev-api, dev-backend]
     mode: disjoint-by-layer
     why: |
       G3 exige des tests de contrat d'outil en PHASE 3, quand `qa-tests` ne
@@ -106,6 +116,9 @@ shared_writes:
       les tests TRANSVERSES (`src/tests/`), ceux qui traversent les couches et
       qu'aucun dev ne peut écrire sans voir le tout.
       Les chemins sont donc disjoints par couche, et le mode le dit.
+      `dev-backend` y figure pour les tests de SA couche (`app/tests/`) : sans
+      lui, `src/**/app/**` et `src/**/tests/**` se recouvraient sans
+      déclaration, et `real_overlaps` le signale.
 
 # ============================================================================
 # Budget de contexte par agent
@@ -221,6 +234,12 @@ architect-tools:
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile
   writes:
     - workspace/pipeline/contracts/tools/{n}-*.tool.md
+  forbidden_writes:
+    # Le préfixe `data-` est RÉSERVÉ à architect-data, qui écrit dans le même
+    # répertoire EN PARALLÈLE (phase 2). Sans cet interdit, `{n}-*.tool.md`
+    # englobait `{n}-data-*.tool.md` : deux agents, un fichier, une course —
+    # et la réservation n'existait que dans un commentaire.
+    - workspace/pipeline/contracts/tools/{n}-data-*.tool.md
   forbidden_reads:
     - workspace/src/**
 
@@ -325,6 +344,17 @@ dev-prompt:
 # ---------------------------------------------------------------------------
 # Phases 3-5 — implémentation
 # ---------------------------------------------------------------------------
+# RÈGLE DE LA COUCHE EXTERNE. Chaque `dev-*` possède `src/**/{sa couche}/**`,
+# et `**` traverse les couches : `agents/billing/tools/` était à dev-agent ET à
+# dev-tools, `data/tools/` à dev-data ET à dev-tools, `agents/x/memory/` à
+# dev-agent ET à dev-orchestration — en pleine phase parallèle.
+# `audit_ownership.real_overlaps` le détecte ; la règle qui le résout : un
+# chemin appartient à la couche la PLUS EXTERNE qu'il traverse. Chaque `dev-*`
+# s'interdit donc sa couche quand elle est NICHÉE sous une autre :
+#     workspace/src/**/{autres couches}/**/{sa couche}/**
+# Les tests (`tests/`) ne sont pas une couche : zone partagée par couche,
+# déclarée dans `shared_writes:`. Les prompts, skills et rules sont interdits à
+# tout `dev-*` (§2.2 de rules/ownership.md), en une ligne.
 dev-tools:
   model_tier: balanced
   budget_bytes: 360000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
@@ -344,8 +374,10 @@ dev-tools:
     - workspace/src/**/tools/**
   forbidden_writes:
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
-    - workspace/src/*/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION]
+    - workspace/src/*/{prompts,skills,rules}/**      # [PROMPT_OWNERSHIP_VIOLATION]
     - workspace/pipeline/baselines/**
+    # Couche externe : `agents/x/tools/` est à dev-agent, `data/tools/` à dev-data.
+    - workspace/src/**/{agents,orchestration,memory,shared,retrieval,data,serving,app}/**/tools/**
 
 dev-retrieval:
   model_tier: balanced
@@ -368,8 +400,9 @@ dev-retrieval:
     - workspace/src/**/retrieval/**
   forbidden_writes:
     - workspace/pipeline/datasets/**
-    - workspace/src/*/prompts/**
+    - workspace/src/*/{prompts,skills,rules}/**
     - workspace/pipeline/baselines/**
+    - workspace/src/**/{agents,orchestration,memory,shared,tools,data,serving,app}/**/retrieval/**
 
 dev-data:
   model_tier: balanced
@@ -389,7 +422,11 @@ dev-data:
     - workspace/src/**/data/**
   forbidden_writes:
     - workspace/pipeline/datasets/**
-    - workspace/src/*/prompts/**
+    - workspace/src/*/{prompts,skills,rules}/**
+    - workspace/pipeline/baselines/**
+    # `data/tools/` reste à dev-data (data est la couche externe) ; `tools/data/`
+    # ou `agents/x/data/` ne le sont pas.
+    - workspace/src/**/{agents,orchestration,memory,shared,tools,retrieval,serving,app}/**/data/**
 
 dev-agent:
   model_tier: deep
@@ -412,11 +449,12 @@ dev-agent:
     - workspace/src/**/agents/{agent}/**                # répertoire DISJOINT par agent
   forbidden_writes:
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION] — sans bypass
-    - workspace/src/*/prompts/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
+    - workspace/src/*/{prompts,skills,rules}/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
     - workspace/pipeline/suites/**       # ce qui JUGE, comme datasets/ : jamais un dev-*
     - workspace/pipeline/baselines/**
     - workspace/pipeline/calibration/**
     - workspace/pipeline/fixtures/**
+    - workspace/src/**/{orchestration,memory,shared,tools,retrieval,data,serving,app}/**/agents/**
     # PAS de `workspace/src/**/agents/{other}/**` ici. Le motif se compilait en
     # `[^/]+`, donc EXACTEMENT comme `{agent}` de `writes:` — et les interdits
     # étant testés en premier, `dev-agent` était refusé dans sa PROPRE zone :
@@ -453,7 +491,11 @@ dev-orchestration:
     - workspace/src/**/shared/**                        # pré-passe : types partagés, puis gelés
   forbidden_writes:
     - workspace/pipeline/datasets/**
-    - workspace/src/*/prompts/**
+    - workspace/src/*/{prompts,skills,rules}/**
+    - workspace/pipeline/baselines/**
+    # `agents/x/memory/` ou `agents/x/shared/` sont à dev-agent : `**/shared/**`
+    # et `**/memory/**` les capturaient sous ses répertoires.
+    - workspace/src/**/{agents,tools,retrieval,data,serving,app}/**/{orchestration,memory,shared}/**
 
 dev-api:
   model_tier: balanced
@@ -479,6 +521,11 @@ dev-api:
     - .sdda/stacks/observability/otel-genai.md
   writes:
     - workspace/src/**/serving/**
+  forbidden_writes:
+    - workspace/pipeline/datasets/**
+    - workspace/src/*/{prompts,skills,rules}/**
+    - workspace/pipeline/baselines/**
+    - workspace/src/**/{agents,orchestration,memory,shared,tools,retrieval,data,app}/**/serving/**
 
 dev-backend:
   model_tier: balanced
@@ -504,9 +551,11 @@ dev-backend:
     - workspace/src/*/*
     - workspace/src/**/app/**
   forbidden_writes:
-    - workspace/src/*/prompts/**        # [PROMPT_OWNERSHIP_VIOLATION]
+    - workspace/src/*/{prompts,skills,rules}/**        # [PROMPT_OWNERSHIP_VIOLATION] — dev-prompt
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
     - workspace/pipeline/baselines/**
+    - workspace/src/**/memory/**      # dev-orchestration — `src/*/*` couvrait `memory/x`
+    - workspace/src/**/shared/**      # dev-orchestration — idem `shared/x`
     - workspace/src/**/agents/**      # dev-agent
     - workspace/src/**/orchestration/**   # dev-orchestration
     - workspace/src/**/tools/**       # dev-tools
@@ -566,6 +615,7 @@ qa-tests:
     # `writes:` EST l'allowlist : tout chemin qui n'y figure pas est déjà
     # refusé, donc `src/tools/crm.py` reste interdit sans qu'on ait à le dire.
     - workspace/pipeline/datasets/**
+    - workspace/src/*/{prompts,skills,rules}/**   # une application nommée `tests` n'ouvre pas ses prompts
 
 # ---------------------------------------------------------------------------
 # Phase 7 — revue (aucun reviewer n'écrit ailleurs que dans son rapport)
