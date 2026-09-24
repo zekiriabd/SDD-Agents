@@ -77,7 +77,10 @@ pricing:                              # USD par million de tokens — 0 : le co�
   # honnête, déclarer un coût d'infrastructure amorti dans STACK.md
   # (clé à définir — cf. rapport de conception : `LocalComputeCostPerHourUsd`
   # n'existe pas encore dans config.base.yml).
-  qwen3:32b:   {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
-  gpt-oss:20b: {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
-  llama3.2:3b: {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
+  # Clés ENTRE GUILLEMETS : un tag Ollama contient `:`, et une clé nue
+  # `qwen3:32b:` rendait toute la fiche illisible par yaml_mini — donc ces
+  # tarifs n'existaient pour aucun script.
+  "qwen3:32b":   {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
+  "gpt-oss:20b": {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
+  "llama3.2:3b": {input: 0.0, output: 0.0, cache_read: 0.0, cache_creation: 0.0}
 pricing_last_reviewed: 2026-09-20

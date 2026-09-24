@@ -17,7 +17,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-_KEY_RE = re.compile(r"^([A-Za-z_][^:#]*?)\s*:(?:\s+(.*))?$")
+#: Clé nue, ou clé ENTRE GUILLEMETS — la seule façon d'écrire une clé qui
+#: contient `:`. Les tags Ollama (`qwen3:32b`) sont des identifiants de modèle, et
+#: `providers/local-ollama.yaml` les porte en clé de sa table de tarifs : sans
+#: cette forme, le fichier était illisible et ses tarifs n'existaient pour aucun
+#: script.
+_KEY_RE = re.compile(r"^(\"[^\"]+\"|'[^']+'|[A-Za-z_][^:#]*?)\s*:(?:\s+(.*))?$")
 _INT_RE = re.compile(r"^[-+]?\d+$")
 _FLOAT_RE = re.compile(r"^[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$")
 
