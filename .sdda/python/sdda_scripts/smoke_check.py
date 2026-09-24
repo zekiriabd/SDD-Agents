@@ -26,7 +26,8 @@ Ce qu'il vérifie :
     8. (v3+) `stack/` ne contient que STACK.md (+ manifestes déclarés)
                                                          [STACK_DIR_UNEXPECTED_FILE]
     9. (v3+) aucune valeur de secret en clair dans STACK.md — des `${NOM}`,
-       les valeurs dans `workspace/src/{App}/.env`        [STACK_SECRET_IN_CLEAR]
+       les valeurs dans `workspace/assets/.env`, que `install-env` copie
+       vers `workspace/src/{App}/.env`                    [STACK_SECRET_IN_CLEAR]
 
 Une ligne activée pour une fiche absente ne charge rien (ARCHITECTURE §2) : la
 détecter ici, avant le premier spawn, coûte cinquante millisecondes ; la
@@ -249,7 +250,7 @@ def check_stack_dir(root: Path, report: Report, stack_text: str | None) -> list[
         report.error("STACK_DIR_UNEXPECTED_FILE",
                      f"{len(strays)} fichier(s) inattendu(s) sous workspace/stack/ : " + ", ".join(strays[:5]),
                      f"{MIGRATE_CMD} rapatrie roster et sources dans leurs sections ; la configuration tient dans STACK.md, "
-                     "les valeurs dans workspace/src/{App}/.env",
+                     "les valeurs dans workspace/assets/.env (copié vers src/{App}/.env par install-env)",
                      "workspace/stack/")
     return strays
 
@@ -278,7 +279,8 @@ def check_secrets_not_in_clear(stack_text: str | None, report: Report) -> list[s
     if leaks:
         report.error("STACK_SECRET_IN_CLEAR",
                      f"{len(leaks)} secret(s) en clair dans workspace/stack/STACK.md : " + ", ".join(leaks[:4]),
-                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans workspace/src/{{App}}/.env (gitignoré) — {MIGRATE_CMD} le fait",
+                     f"écrire `NAME: ${{NAME}}` dans STACK.md et `NAME=valeur` dans workspace/assets/.env (gitignoré), "
+                     f"puis `python .sdda/sdda.py install-env` — {MIGRATE_CMD} le fait",
                      "workspace/stack/STACK.md")
     return leaks
 
