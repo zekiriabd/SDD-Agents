@@ -16,8 +16,8 @@ from sdda_lib import paths
 from sdda_scripts import ir_compiler, run_adversarial_suite
 from sdda_scripts.run_adversarial_suite import ReplayExecutor
 
-BILLING = "workspace/proof/datasets/adversarial/billing-specialist.jsonl"
-CLASSIFIER = "workspace/proof/datasets/adversarial/intent-classifier.jsonl"
+BILLING = "workspace/pipeline/datasets/adversarial/billing-specialist.jsonl"
+CLASSIFIER = "workspace/pipeline/datasets/adversarial/intent-classifier.jsonl"
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:

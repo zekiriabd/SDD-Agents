@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sdd-agents.dev/schemas/golden-set.schema.json",
   "title": "Golden set item",
-  "description": "Schéma d'UN item d'un jeu de données d'évaluation SDD_Agents. Les jeux sont des fichiers JSONL (un item JSON par ligne) sous workspace/proof/datasets/{golden|holdout|calibration|adversarial}/. Le même schéma sert aux quatre rôles ; `expected` porte la vérité attendue d'une réponse, `expected_documents` la vérité de retrieval (niveau document, RAG-PATTERNS.md §1). Owner exclusif : qa-evals — aucun dev-* n'écrit dans datasets/ (ARCHITECTURE §7). Les hashes de fichiers entiers servent à la disjonction golden/holdout (HoldoutDisjointCheck) et au tuple d'épinglage des baselines (P10).",
+  "description": "Schéma d'UN item d'un jeu de données d'évaluation SDD_Agents. Les jeux sont des fichiers JSONL (un item JSON par ligne) sous workspace/pipeline/datasets/{golden|holdout|calibration|adversarial}/. Le même schéma sert aux quatre rôles ; `expected` porte la vérité attendue d'une réponse, `expected_documents` la vérité de retrieval (niveau document, RAG-PATTERNS.md §1). Owner exclusif : qa-evals — aucun dev-* n'écrit dans datasets/ (ARCHITECTURE §7). Les hashes de fichiers entiers servent à la disjonction golden/holdout (HoldoutDisjointCheck) et au tuple d'épinglage des baselines (P10).",
   "type": "object",
   "required": ["id", "input", "metadata"],
   "additionalProperties": false,

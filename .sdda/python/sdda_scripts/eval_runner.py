@@ -553,7 +553,7 @@ def run_evals(
         report.error("EVAL_SUITE_NOT_FOUND", f"aucune suite de `{mid}` ne correspond aux filtres {filters.to_dict()}",
                      "vérifier --suite / --level / --cap / --agent contre `evaluation.suites` de l'IR", mid)
 
-    bpath = baseline_path or paths.resolve_rel(root, str((ir.get("evaluation") or {}).get("baselineRef") or f"workspace/proof/baselines/{number}-system.json"))
+    bpath = baseline_path or paths.resolve_rel(root, str((ir.get("evaluation") or {}).get("baselineRef") or f"workspace/pipeline/baselines/{number}-system.json"))
     baselines: dict[str, Baseline] = load_baselines(bpath)
     policy = str(config.get("EvalSeedPolicy", "vary") if config else "vary").strip().lower()
     if policy == "fixed":

@@ -163,7 +163,7 @@ def test_every_run_calls_the_executor_again_no_cache(compiled) -> None:
     root, ir, cfg = compiled
     ex = PerfectExecutor()
     _, payload = run_evals(root, ir, ex, config=cfg, filters=Filters(suites={sid_routing}), write_report=False, write_gates=False)
-    items = len(eval_runner.load_items(root / "workspace/proof/datasets/golden/routing-v1.jsonl"))
+    items = len(eval_runner.load_items(root / "workspace/pipeline/datasets/golden/routing-v1.jsonl"))
     assert len(ex.calls) == 5 * items
     assert len({(i, r) for i, r, _ in ex.calls}) == 5 * items       # chaque (item, run) exactement une fois
     seeds = {seed for _, _, seed in ex.calls}
@@ -204,7 +204,7 @@ def test_single_run_is_warned_and_refused_in_ci(compiled, monkeypatch: pytest.Mo
 # ---------------------------------------------------------------------------
 def test_critical_class_below_threshold_is_red_even_if_global_mean_passes(compiled) -> None:
     root, ir, cfg = compiled
-    items = eval_runner.load_items(root / "workspace/proof/datasets/golden/routing-v1.jsonl")
+    items = eval_runner.load_items(root / "workspace/pipeline/datasets/golden/routing-v1.jsonl")
     bad = eval_runner.item_class(items[0])
     n_bad = sum(1 for i in items if eval_runner.item_class(i) == bad)
     expected_mean = 1 - n_bad / len(items)
@@ -225,7 +225,7 @@ def test_normal_cap_class_failure_is_not_a_critical_class(compiled) -> None:
     for s in ir["evaluation"]["suites"]:
         if s["id"] == sid_citations:
             s["threshold"] = 0.5
-    items = eval_runner.load_items(root / "workspace/proof/datasets/golden/billing-v1.jsonl")
+    items = eval_runner.load_items(root / "workspace/pipeline/datasets/golden/billing-v1.jsonl")
     bad = eval_runner.item_class(items[0])
 
     class Wrong(PerfectExecutor):

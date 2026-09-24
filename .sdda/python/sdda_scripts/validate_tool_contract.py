@@ -126,7 +126,7 @@ def check_contract_tests(root: Path, tool: dict[str, Any], ir: dict[str, Any], r
     """La suite L2 est-elle déclarée, présente, et rattachée à une suite de l'IR ?
 
     En mode `static` (PHASE 2, juste après les architectes), la suite est
-    exigée DÉCLARÉE mais pas PRÉSENTE : `workspace/proof/suites/**` appartient
+    exigée DÉCLARÉE mais pas PRÉSENTE : `workspace/pipeline/suites/**` appartient
     à `qa-evals` et `qa-tests`, qui n'écrivent qu'en PHASE 6. Exiger le fichier
     ici rendait le post-step de `/sdda-topology` rouge sur tout contrat
     correct — 21 fois sur 21 au premier run réel — et apprenait au lecteur que

@@ -33,7 +33,7 @@ from sdda_lib import __version__ as _LIB_VERSION
 #:   2 — quatre entrées : feats/ · stack/ · src/ · proof/ · .sys/.
 #:   3 — l'entrée de l'utilisateur tient en trois choses : `STACK.md` versionné
 #:       (secrets dans `.env`), du Markdown seul sous `feats/` (roster en
-#:       `{n}-roster.md`, graphe inline), la vérité terrain sous `proof/seed/`.
+#:       `{n}-roster.md`, graphe inline), la vérité terrain sous `seed/`.
 #:       Les schémas figés partent avec le code (`src/{App}/.../data/schemas/`),
 #:       les manifestes de sources rentrent dans STACK.md.
 #:   4 — layout PLAT de l'application, comme SDD_Pro : `workspace/src/{App}/` EST
@@ -44,7 +44,13 @@ from sdda_lib import __version__ as _LIB_VERSION
 #:   5 — les prompts vivent DANS l'application (`src/{App}/prompts/`), avec
 #:       `skills/`, `rules/` et `memory/` : une application agentic se lit dans
 #:       son arbre. `src/prompts/` à côté de l'application ne partait pas avec elle.
-WORKSPACE_VERSION: int = 5
+#:   6 — ce que l'HUMAIN fournit est à la racine : `stack/`, `feats/` (brief et
+#:       roster, Markdown à plat), `assets/` (données et `.env`), `seed/`. Tout
+#:       ce que le FRAMEWORK produit est sous `pipeline/` : l'ancien `feats/`
+#:       (missions, caps, topology, contracts, decisions) et l'ancien `proof/`
+#:       (datasets, suites, baselines, calibration). L'humain ne savait pas, en
+#:       ouvrant `feats/` ou `proof/`, ce qu'il devait remplir.
+WORKSPACE_VERSION: int = 6
 
 WORKSPACE_JSON_REL = "workspace/.sys/workspace.json"
 

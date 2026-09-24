@@ -188,8 +188,8 @@ def test_the_reference_project_has_no_secret(project: Path) -> None:
     "postgres://app:s3cr3tp4ssw0rd@db.internal:5432/prod",
 ])
 def test_known_secret_shapes_are_caught(project: Path, secret: str) -> None:
-    write(project, "workspace/proof/datasets/golden/leak.jsonl", '{"input": "x", "note": "%s"}\n' % secret)
-    assert "SECRET_LEAK" in errors(ss.run(project, targets=["workspace/proof/datasets"]))
+    write(project, "workspace/pipeline/datasets/golden/leak.jsonl", '{"input": "x", "note": "%s"}\n' % secret)
+    assert "SECRET_LEAK" in errors(ss.run(project, targets=["workspace/pipeline/datasets"]))
 
 
 @pytest.mark.parametrize("benign", [
@@ -224,7 +224,7 @@ def test_an_absent_directory_downgrades_the_verdict(project: Path) -> None:
 # pii-not-in-vector-store
 # ---------------------------------------------------------------------------
 def test_pii_in_a_dataset_is_reported(project: Path) -> None:
-    write(project, "workspace/proof/datasets/golden/real.jsonl",
+    write(project, "workspace/pipeline/datasets/golden/real.jsonl",
           '{"input": "contacter marie.dupont@clientreel.fr au 06 12 34 56 78"}\n')
     assert "PII_DETECTED" in errors(scan_pii.run(project, targets=["datasets"]))
 
@@ -236,7 +236,7 @@ def test_pii_in_the_corpus_blocks_before_indexing(project: Path) -> None:
 
 def test_example_values_are_not_pii(project: Path) -> None:
     """Signaler les exemples noierait le vrai signal, donc ferait ignorer le scan."""
-    write(project, "workspace/proof/datasets/golden/doc.jsonl",
+    write(project, "workspace/pipeline/datasets/golden/doc.jsonl",
           '{"input": "écrire à support@example.com depuis 127.0.0.1"}\n')
     assert not scan_pii.run(project, targets=["datasets"]).errors
 
@@ -247,7 +247,7 @@ def test_a_long_number_is_not_a_card_without_luhn(project: Path) -> None:
     Le rapport cesse alors d'être lu — ce qui revient exactement à ne pas avoir
     de scan, en plus coûteux.
     """
-    write(project, "workspace/proof/datasets/golden/ids.jsonl", '{"order_id": "9999888877776666"}\n')
+    write(project, "workspace/pipeline/datasets/golden/ids.jsonl", '{"order_id": "9999888877776666"}\n')
     assert "PII_DETECTED" not in errors(scan_pii.run(project, targets=["datasets"]))
 
 
@@ -256,7 +256,7 @@ def test_raw_policy_downgrades_but_never_silences(project: Path) -> None:
     stack.write_text(stack.read_text(encoding="utf-8").replace("TraceLevel: full",
                                                                "TraceLevel: full\nTracePIIPolicy: raw"),
                      encoding="utf-8")
-    write(project, "workspace/proof/datasets/golden/real.jsonl", '{"input": "marie.dupont@clientreel.fr"}\n')
+    write(project, "workspace/pipeline/datasets/golden/real.jsonl", '{"input": "marie.dupont@clientreel.fr"}\n')
     report = scan_pii.run(project, targets=["datasets"])
     assert report.data["tracePiiPolicy"] == "raw"
     assert "PII_POLICY_PERMISSIVE" in classes(report)
@@ -282,7 +282,7 @@ def test_the_shipped_matrix_is_coherent(project: Path) -> None:
 
 def test_a_dev_agent_writing_a_dataset_is_blocked(project: Path) -> None:
     """Modifier le jeu qui vous juge rend la note invérifiable."""
-    report = ao.run(project, agent="dev-agent", wrote=["workspace/proof/datasets/golden/billing-v1.jsonl"])
+    report = ao.run(project, agent="dev-agent", wrote=["workspace/pipeline/datasets/golden/billing-v1.jsonl"])
     assert "DATASET_OWNERSHIP_VIOLATION" in errors(report)
 
 

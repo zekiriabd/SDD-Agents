@@ -166,10 +166,10 @@ flowchart TD
 
 | Type | Fichier |
 |---|---|
-| agent | `workspace/feats/contracts/agents/{n}-{agent}.agent.md` |
-| tool | `workspace/feats/contracts/tools/{n}-{tool}.tool.md` |
-| retrieval | `workspace/feats/contracts/retrieval/{n}-{index}.retrieval.md` |
-| memory | `workspace/feats/contracts/memory/{n}-memory.md` |
+| agent | `workspace/pipeline/contracts/agents/{n}-{agent}.agent.md` |
+| tool | `workspace/pipeline/contracts/tools/{n}-{tool}.tool.md` |
+| retrieval | `workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md` |
+| memory | `workspace/pipeline/contracts/memory/{n}-memory.md` |
 
 ---
 

@@ -70,30 +70,38 @@ composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
 
 ## Où vit votre travail — le workspace
 
-Quatre entrées, quatre natures. L'arbre a porté douze répertoires au même
-niveau, sans que rien ne dise que `caps/` se relit en revue quand `traces/` se
-supprime sans perte.
+Ce que vous fournissez est à la racine ; ce que le framework produit est sous
+`pipeline/`. Jusqu'à la v5, `feats/` mêlait votre brief et votre roster aux
+MISSION, CAPs et contrats que les agents génèrent, et `proof/` mêlait votre
+vérité terrain aux jeux d'évaluation : en ouvrant l'un ou l'autre, impossible
+de savoir ce qu'il vous revenait de remplir.
 
 ```
 workspace/
-├── stack/     ce qu'on CONFIGURE — STACK.md, seul, versionné (noms de variables ; valeurs dans src/{App}/.env)
-├── feats/     ce qu'on SPÉCIFIE  — Markdown seul : briefs · missions · caps · roster + topology · contracts · decisions (ADR)
-├── assets/    ce qu'on DÉPOSE    — fichiers statiques (exports JSON/CSV, corpus) : la racine des stores `kind: local` (l'assets/ de SDD_Pro)
-├── src/       ce qu'on PRODUIT   — l'application générée, prompts et schémas figés compris
-├── proof/     ce qui JUGE        — seed (votre vérité terrain) · datasets · suites · baselines · calibration
+│ ── ce que VOUS fournissez ────────────────────────────────────────────────
+├── stack/     STACK.md, seul, versionné — les choix techniques, des noms de variables seulement
+├── feats/     vos specs, Markdown seul, à plat — {n}-{Name}.md (le brief) · {n}-roster.md (le roster)
+├── assets/    vos données (racine des stores `kind: local`) et .env — les VALEURS des secrets de l'app
+├── seed/      votre vérité terrain — scénarios annotés, labels
+│ ── ce que le FRAMEWORK produit ───────────────────────────────────────────
+├── pipeline/  missions · caps · topology · contracts · decisions (ADR) · datasets · suites · baselines · calibration
+├── src/       l'application générée, prompts et schémas figés compris ; .env copié depuis assets/
 └── .sys/      état interne et sorties de run — IR, validation, rapports, traces (régénérable)
 ```
 
-Vous écrivez trois choses : `stack/STACK.md` (les choix techniques — langage,
-framework, pattern, sources de données, URL d'API, serveurs MCP ; les valeurs des
-secrets vont dans un `src/{App}/.env` gitignoré, avec l'application qui les
-consomme — le harnais de construction ne le lit jamais), des fichiers Markdown sous `feats/` (ce
-que le système doit faire), et votre vérité terrain sous `proof/seed/`. Tout le
-reste est produit. **Aucun agent `dev-*` n'écrit jamais sous
-`proof/`** : l'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni
-à la référence contre laquelle sa régression est mesurée. C'est la seule
-frontière du framework sans exception, et elle est tenue au runtime par le hook
-d'ownership, pas par convention.
+Vous fournissez quatre choses : `stack/STACK.md` (langage, framework, pattern,
+sources de données, URL d'API, serveurs MCP), des fichiers Markdown sous
+`feats/` (ce que le système doit faire, puis le roster qui dit comment), vos
+données et votre `.env` sous `assets/`, et votre vérité terrain sous `seed/`.
+`python .sdda/sdda.py install-env` copie `assets/.env` vers `src/{App}/.env`
+sans LLM : l'application générée le lit, le harnais de construction jamais, et
+aucun agent ne peut le lire — les hooks de lecture refusent
+`[SECRET_READ_FORBIDDEN]`. **Aucun agent `dev-*` n'écrit jamais sous
+`pipeline/datasets`, `suites`, `baselines` ni `calibration`** : l'agent qui écrit
+le code ne peut toucher ni au jeu qui le note, ni à la référence contre laquelle
+sa régression est mesurée. C'est la seule frontière du framework sans
+exception, et elle est tenue au runtime par le hook d'ownership, pas par
+convention.
 
 Un workspace plus ancien passe à cet arbre par
 `python .sdda/sdda.py migrate-workspace`, qui déplace le contenu au lieu de
@@ -245,7 +253,7 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 ## Statut
 
 **Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1158<!--/sdda:count--> fonctions de test) :
+existent et sont testés (<!--sdda:count tests-->1166<!--/sdda:count--> fonctions de test) :
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification

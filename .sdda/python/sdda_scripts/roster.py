@@ -5,7 +5,7 @@ Le roster est la décision d'architecture : combien d'agents, lesquels, qui port
 quelle CAP, avec quels outils et quel tier. C'est l'**architecte** qui l'écrit ;
 ce script fait les deux choses qu'un humain n'a pas à faire lui-même :
 
-    scaffold   écrit `workspace/feats/topology/{n}-roster.md` depuis la MISSION,
+    scaffold   écrit `workspace/feats/{n}-roster.md` depuis la MISSION,
                les CAPs et le pattern actif de STACK.md — tout ce qui se DÉRIVE
                est pré-rempli, tout ce qui se DÉCIDE reste `<à préciser>`.
     validate   vérifie que la déclaration est complète pour le pattern actif
@@ -14,7 +14,7 @@ ce script fait les deux choses qu'un humain n'a pas à faire lui-même :
                une CAP ou dit pourquoi il existe, qu'aucun trou ne reste et
                qu'aucune API de framework n'y est nommée (P11).
 
-Emplacement et forme : `workspace/feats/topology/{n}-roster.md`, un document
+Emplacement et forme : `workspace/feats/{n}-roster.md`, un document
 Markdown dont le PREMIER bloc ```yaml est la déclaration (`paths.roster_path`).
 `feats/` ne contient que du Markdown, et le roster est la première ligne de la
 spécification, pas une configuration : il se relit en revue à côté de la
@@ -66,7 +66,7 @@ _ANGLE_RE = re.compile(r"^<[^>]*>$")
 def manifest_path(root: Path, mission: int | str) -> Path:
     """Le chemin du roster de la MISSION — même résolution que `validate_architecture`.
 
-    Une convention, aucune clé de STACK.md : `feats/topology/{n}-roster.md`. Le
+    Une convention, aucune clé de STACK.md : `feats/{n}-roster.md`. Le
     roster a eu une racine configurable (`RosterManifestRoot`) ; une décision
     d'architecture qu'on peut ranger n'importe où est une décision qu'on ne
     retrouve pas en revue.
@@ -102,7 +102,7 @@ def find_mission(root: Path, mission: int | str, report: Report):
     """La MISSION `{n}-*.md`, parsée. None (et un finding) si absente ou ambiguë."""
     found = sorted(paths.missions_dir(root).glob(f"{mission}-*.md"))
     if not found:
-        report.error("MISSION_NOT_FOUND", f"aucune MISSION `{mission}-*.md` dans workspace/feats/missions/",
+        report.error("MISSION_NOT_FOUND", f"aucune MISSION `{mission}-*.md` dans workspace/pipeline/missions/",
                      fix="créer la MISSION : /sdda-mission {Name}", location=paths.rel(root, paths.missions_dir(root)))
         return None
     if len(found) > 1:
@@ -194,7 +194,7 @@ def render_scaffold(number: int, name: str, pattern: str, caps: list[str], requi
             out.append(f"  - cap: {cap}")
             out.append(f"    agent: {PLACEHOLDER}")
     else:
-        out.append(f"  # aucune CAP `{number}-*.md` dans workspace/feats/caps/ — lancer /sdda-caps {number} puis re-scaffold")
+        out.append(f"  # aucune CAP `{number}-*.md` dans workspace/pipeline/caps/ — lancer /sdda-caps {number} puis re-scaffold")
     out += [
         "",
         "# Les relations — qui appelle qui, à quelle condition. Une condition vide est refusée :",
@@ -446,7 +446,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Manifeste de roster : gabarit pré-rempli puis vérification (P7, 0 token, aucun rapport de gate)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sc = sub.add_parser("scaffold", help="écrire feats/topology/{n}-roster.md pré-rempli ; idempotent, --force écrase (bypass audité)")
+    sc = sub.add_parser("scaffold", help="écrire feats/{n}-roster.md pré-rempli ; idempotent, --force écrase (bypass audité)")
     sc.add_argument("--mission", required=True, help="numéro de MISSION")
     sc.add_argument("--force", action="store_true", help="écraser un manifeste existant — exige --reason ou SDDA_BYPASS_REASON")
     sc.add_argument("--reason", default=None, help="pourquoi écraser, en une phrase (défaut : $SDDA_BYPASS_REASON)")

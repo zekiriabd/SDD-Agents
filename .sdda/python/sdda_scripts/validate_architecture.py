@@ -159,7 +159,7 @@ class Roster:
 
     Deux sources possibles, **jamais les deux à la fois** :
 
-      1. `workspace/feats/topology/{n}-roster.md` — un Markdown dont le premier
+      1. `workspace/feats/{n}-roster.md` — un Markdown dont le premier
          bloc ```yaml est la déclaration ; écrit par l'HUMAIN, lu par
          `architect-topology`. C'est la forme recommandée : la décision
          d'architecture existe alors AVANT l'artefact de topologie, et se relit
@@ -305,7 +305,7 @@ def read_roster_yaml(path: Path) -> dict[str, Any]:
 
 
 def _roster_manifest(root: Path, mission: int | str | None, report: Report) -> Roster | None:
-    """`feats/topology/{n}-roster.md` s'il existe. Une convention, aucune clé de STACK.md.
+    """`feats/{n}-roster.md` s'il existe. Une convention, aucune clé de STACK.md.
 
     Sans numéro de mission, un roster unique dans le répertoire est pris ; deux
     ou plus, aucun — deviner lequel serait décider à la place de l'architecte.
@@ -586,8 +586,8 @@ def run(root: Path, mission: int | str | None = None, explain: bool = False) -> 
     if not roster.present:
         report.error(
             "ARCH_ROSTER_MISSING",
-            "aucun roster déclaré — ni `feats/topology/{n}-roster.md`, ni `## 2. Roster déclaré` dans la topologie",
-            fix="écrire `workspace/feats/topology/{n}-roster.md` — `python .sdda/sdda.py roster scaffold --mission {n}` "
+            "aucun roster déclaré — ni `feats/{n}-roster.md`, ni `## 2. Roster déclaré` dans la topologie",
+            fix="écrire `workspace/feats/{n}-roster.md` — `python .sdda/sdda.py roster scaffold --mission {n}` "
                 "le pré-remplit (recommandé), ou remplir la "
                 "section `## 2. Roster déclaré` du template de topologie. C'est l'architecte qui déclare "
                 "les agents, leurs rôles et leurs outils — le framework les vérifie, il ne les invente "
@@ -610,7 +610,7 @@ def run(root: Path, mission: int | str | None = None, explain: bool = False) -> 
                 report.warn(
                     "ARCH_ADR_REQUIRED",
                     f"`{axis}/{one}` exige un ADR nominatif en plus de la déclaration",
-                    fix="écrire l'ADR dans workspace/feats/decisions/ et le citer dans `## 9. Décisions à ADR`",
+                    fix="écrire l'ADR dans workspace/pipeline/decisions/ et le citer dans `## 9. Décisions à ADR`",
                     location=loc,
                 )
 

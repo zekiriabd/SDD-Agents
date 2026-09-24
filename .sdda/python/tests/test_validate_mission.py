@@ -22,7 +22,7 @@ Status: Draft
 
 def _with_broken_second_mission(tmp_path: Path) -> Path:
     root = make_project(tmp_path)
-    (root / "workspace" / "feats" / "missions" / "2-Autre.md").write_text(BROKEN_MISSION, encoding="utf-8")
+    (root / "workspace" / "pipeline" / "missions" / "2-Autre.md").write_text(BROKEN_MISSION, encoding="utf-8")
     return root
 
 
@@ -60,7 +60,7 @@ def test_cap_and_topology_accept_the_same_flag(tmp_path: Path) -> None:
 def test_positional_paths_still_work_for_manual_use(tmp_path: Path) -> None:
     root = _with_broken_second_mission(tmp_path)
     ok = run_main(validate_mission.main, ["--root", str(root), "--no-report",
-                                          str(root / "workspace/feats/missions/1-SupportAssistant.md")])
+                                          str(root / "workspace/pipeline/missions/1-SupportAssistant.md")])
     broken = run_main(validate_mission.main, ["--root", str(root), "--no-report",
-                                              str(root / "workspace/feats/missions/2-Autre.md")])
+                                              str(root / "workspace/pipeline/missions/2-Autre.md")])
     assert ok[0] == 0 and broken[0] == 1

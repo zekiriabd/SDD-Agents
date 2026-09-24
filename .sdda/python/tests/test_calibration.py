@@ -131,7 +131,7 @@ def test_summary_form_without_labels_is_flagged_declared_only(tmp_path: Path) ->
     path = tmp_path / "groundedness.json"
     path.write_text(json.dumps({
         "grader": "groundedness", "items": 52, "kappa": 0.71,
-        "labelsRef": "workspace/proof/datasets/calibration/absent.jsonl",
+        "labelsRef": "workspace/pipeline/datasets/calibration/absent.jsonl",
     }), encoding="utf-8")
 
     dataset = load_calibration_set(path)

@@ -105,9 +105,9 @@ def test_dev_agent_may_write_in_its_own_directory(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("forbidden", [
-    "workspace/proof/datasets/golden/items.jsonl",
+    "workspace/pipeline/datasets/golden/items.jsonl",
     "workspace/src/SupportAssistant/prompts/billing.system.md",
-    "workspace/proof/suites/s.yml",
+    "workspace/pipeline/suites/s.yml",
     "workspace/src/tools/crm.py",
 ])
 def test_dev_agent_is_still_confined(forbidden: str, tmp_path: Path) -> None:

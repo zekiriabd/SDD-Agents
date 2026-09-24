@@ -6,7 +6,7 @@ et chaque `Edit`. Le parallélisme des `dev-*` n'est sûr que parce que leurs
 répertoires sont disjoints ; rien au runtime ne l'impose — sinon ce contrôle.
 
 Le cas qui coûte le plus cher n'est pas la collision, qui se voit : c'est le
-`dev-agent` qui retouche `workspace/proof/datasets/` ou `workspace/src/{App}/prompts/`,
+`dev-agent` qui retouche `workspace/pipeline/datasets/` ou `workspace/src/{App}/prompts/`,
 c'est-à-dire qui modifie le jeu qui le juge ou le prompt qu'il implémente. La
 note devient invérifiable, et personne ne s'en aperçoit avant l'acceptation.
 """
@@ -34,7 +34,7 @@ WIRING = {"event": "PreToolUse", "matcher": "Write|Edit", "applies_to": ()}
 #: qu'on ait besoin de savoir QUI le tente — c'est le seul contrôle d'ownership
 #: qui ne dépend pas de l'identification de l'auteur, et il est joué avant elle.
 #:
-#:   proof/baselines/    `promote_baseline.py` — retouchée à la main, la
+#:   pipeline/baselines/    `promote_baseline.py` — retouchée à la main, la
 #:                       référence rend toute non-régression tautologique ;
 #:   .sys/.validation/   les rapports de gate. Ils sont du JSON en clair, non
 #:                       signé, et `gate_status` ne lit que leur `ok` : un
@@ -57,7 +57,7 @@ CLS_GATE_REPORT_FORGERY = "GATE_REPORT_FORGERY"
 CLS_BASELINE_OWNERSHIP_VIOLATION = "BASELINE_OWNERSHIP_VIOLATION"
 
 IDENTITY_FREE_ZONES: dict[str, tuple[str, str]] = {
-    "workspace/proof/baselines": (
+    "workspace/pipeline/baselines": (
         CLS_BASELINE_OWNERSHIP_VIOLATION,
         "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
         "déplacer la référence rend toute non-régression tautologique"),

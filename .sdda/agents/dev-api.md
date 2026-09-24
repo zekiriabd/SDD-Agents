@@ -36,7 +36,7 @@ Read **uniquement** :
 - `workspace/stack/STACK.md` — `## Active Serving Surface` (`ServingLocalPort`,
   `StreamingEnabled`, `HumanInTheLoopEnabled`), `## Active Language & Runtime`,
   `## Active Observability`, `## Active Secrets` (**noms**).
-- `workspace/feats/missions/{n}-*.md` — `## Actors` : qui appelle, avec quelle identité.
+- `workspace/pipeline/missions/{n}-*.md` — `## Actors` : qui appelle, avec quelle identité.
 - `.sdda/stacks/serving/{surface}.md` + `.libs.json`, `.sdda/stacks/lang/{lang}.md`.
 - `workspace/src/{App}/orchestration/**` — **en lecture** : le point d'entrée du run.
 - `workspace/src/{App}/serving/**` existant — Edit-augment.
@@ -125,7 +125,7 @@ schéma + `run_id` ; requête sans identité → refus ; run qui lève
 - **Tu n'appelles jamais un outil, un retriever ou un LLM directement.** Tout
   passe par le run d'orchestration ; une surface qui « raccourcit » contourne
   toutes les bornes et tous les guardrails.
-- **Tu n'écris ni dans `workspace/src/{App}/prompts/`, ni dans `workspace/proof/datasets/`.**
+- **Tu n'écris ni dans `workspace/src/{App}/prompts/`, ni dans `workspace/pipeline/datasets/`.**
 - **Tu n'introduis aucun mode « debug » qui désactive l'identité** ou le
   schéma, même derrière un flag.
 

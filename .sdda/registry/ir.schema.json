@@ -61,7 +61,7 @@
           "description": "Empreinte de CHAQUE contrat compile (agents, outils, retrieval, memoire), par chemin relatif. Sans elle, editer un contrat laisse l'IR se declarer frais alors qu'il ne reflete plus sa source - et c'est precisement le cas que `/sdda-topology --recompile-only` existe pour traiter.",
           "propertyNames": {
             "type": "string",
-            "pattern": "^workspace/feats/contracts/.+\\.md$"
+            "pattern": "^workspace/pipeline/contracts/.+\\.md$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/sha256"

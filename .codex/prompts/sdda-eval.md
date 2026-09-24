@@ -69,7 +69,14 @@ Invalide → ERROR `[INVALID_ARG]`.
    ```
    KO → ERROR `[CAP_GATE_NOT_PASSED]` ou `[ORCH_GATE_NOT_PASSED]` (FIX :
    `/sdda-caps {n}` ou `/sdda-build {n}`).
-3. Lire `## Project Config` : `EvalRuns`, `EvalVarianceWarnPct`,
+3. Les clés de l'application sont là — c'est ici qu'elle appelle vraiment ses
+   modèles (0 token, aucune valeur affichée) :
+   ```bash
+   python .sdda/sdda.py install-env --require      # sauf --datasets-only
+   ```
+   `workspace/assets/.env` absent → ERROR `[SECRET_FILE_MISSING]` ; une variable
+   déclarée dans STACK.md mais absente → ERROR `[SECRET_VAR_UNDECLARED]`.
+4. Lire `## Project Config` : `EvalRuns`, `EvalVarianceWarnPct`,
    `JudgeCalibrationMinKappa`, `JudgeCalibrationMinItems`,
    `HoldoutDisjointCheck`, `RegressionTolerancePct`, `AdversarialSetMinItems`,
    `MaxParallel`. Lire `## Runtime Models` (`JudgeModel`) et `## Active Eval`.
@@ -87,14 +94,14 @@ Si `--run-only` → STEP 5. Si `--acceptance` → STEP 7.
 
 | Agent | Tier | Écrit dans (Create exclusif) | Skippé si |
 |---|:-:|---|---|
-| `qa-evals` | **deep** | `workspace/proof/datasets/**`, `workspace/proof/{suites,calibration}/**` | jamais |
+| `qa-evals` | **deep** | `workspace/pipeline/datasets/**`, `workspace/pipeline/{suites,calibration}/**` | jamais |
 | `qa-tests` | balanced | `workspace/src/**/tests/**` (L0→L2) | `--datasets-only` |
 
 Un seul message multi-`Agent` (2 ≤ `MaxParallel`). Chemins disjoints.
 
 Prompt `qa-evals` :
 ```
-MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/feats/caps/{n}-*.md), produire :
+MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/pipeline/caps/{n}-*.md), produire :
 - golden/{dataset}.jsonl  (≥ 50 items, schéma .sdda/templates/golden-set.schema.json)
 - holdout/mission-{n}-v{k}.jsonl  (≥ 30 items, DISJOINT du golden — vérifié par hash)
 - calibration/{grader}.jsonl  (≥ {JudgeCalibrationMinItems} items labellisés HUMAINEMENT — signaler
@@ -149,7 +156,7 @@ Pour chaque grader `llm-judge` des suites :
 
 ```bash
 python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json \
-  > workspace/proof/calibration/{g}.json
+  > workspace/pipeline/calibration/{g}.json
 ```
 
 | Résultat | Effet |
@@ -260,7 +267,7 @@ franchies (`--require-gate G7`) ; sinon ERROR `[SAFETY_GATE_NOT_PASSED]`.
 python .sdda/sdda.py check-baseline-freshness --mission {n} --strict
 python .sdda/sdda.py eval-runner --mission {n} --level L9 --dataset holdout \
   --executor {module}:{Executor} --runs ${RUNS:-EvalRuns} \
-  --baseline workspace/proof/baselines/{n}-system.json --json \
+  --baseline workspace/pipeline/baselines/{n}-system.json --json \
   > workspace/.sys/.validation/{n}-G8-acceptance.recap.json
 python .sdda/sdda.py check-regression --mission {n} --run {RUN_ID} --json \
   > workspace/.sys/.validation/regression-{n}.json
@@ -314,7 +321,7 @@ FIX: NE PAS itérer contre le holdout ; corriger sur le golden (/sdda-build, /sd
 ## Règles de cette commande
 
 - **Deux agents au plus**, en parallèle, chemins disjoints ; aucun spawn imbriqué.
-- **`qa-evals` est le seul** à écrire sous `workspace/proof/datasets/`. Jamais un `dev-*`.
+- **`qa-evals` est le seul** à écrire sous `workspace/pipeline/datasets/`. Jamais un `dev-*`.
 - **Datasets figés avant exécution** — barrière AGENT-ROSTER.md §4.
 - **k runs, jamais 1** hors dev local ; **variance rapportée**, jamais aplatie.
 - **Juge non calibré = advisory**, dit explicitement.

@@ -50,7 +50,7 @@ FIX: recloner le dépôt depuis le template SDD_Agents (intact), vérifier Pytho
 
 ## STEP 2 — Détection de l'état du projet
 
-Glob `workspace/feats/missions/*.md` et test `workspace/stack/STACK.md` :
+Glob `workspace/pipeline/missions/*.md` et test `workspace/stack/STACK.md` :
 
 | État | Conditions | Action |
 |---|---|---|
@@ -98,7 +98,7 @@ Lancer : python bootstrap.py --force
 
 **Cas partial :**
 ```
-🟡 [BOOTSTRAP/WARN] {M} MISSION(s) dans workspace/feats/missions/ mais aucun STACK.md.
+🟡 [BOOTSTRAP/WARN] {M} MISSION(s) dans workspace/pipeline/missions/ mais aucun STACK.md.
 Toutes les commandes du pipeline émettront [STACK_MISSING].
 Lancer : python bootstrap.py (sans --force : les MISSIONs sont conservées)
 ```
@@ -111,22 +111,20 @@ Lancer : python bootstrap.py (sans --force : les MISSIONs sont conservées)
 
 ```
 workspace/
-├── stack/                         # CE QU'ON CONFIGURE
-│   └── STACK.md                   #   VERSIONNÉ — noms de variables (${LLM_API_KEY}), jamais de valeur
-├── src/{AppName}/.env             # les VALEURS des secrets du RUNTIME — gitignoré, avec l'application
-│                                  #   qui les consomme ; le harnais de construction ne le lit jamais
-├── feats/                         # CE QU'ON SPÉCIFIE — du Markdown, seul
-│   ├── briefs/                    #   ce que l'humain dépose (specs, --from-brief)
-│   ├── missions/  caps/
-│   ├── topology/                  #   {n}-roster.md (humain) · {n}-topology.md (architecte, graphe inclus)
+│ ── ce que l'HUMAIN fournit ──────────────────────────────────────────────
+├── stack/STACK.md                 # VERSIONNÉ — les choix techniques, noms de variables (${LLM_API_KEY})
+├── feats/                         # ses spécifications en Markdown, à plat :
+│                                  #   {n}-{Name}.md (le brief) · {n}-roster.md (le roster, P7)
+├── assets/                        # les données (racine des stores `kind: local`)
+│   └── .env                       #   les VALEURS des secrets du runtime — gitignoré, lu par AUCUN agent
+├── seed/                          # la vérité terrain (scénarios annotés, labels)
+│ ── ce que le FRAMEWORK produit ──────────────────────────────────────────
+├── pipeline/
+│   ├── missions/  caps/  topology/  decisions/
 │   ├── contracts/{agents,tools,retrieval,memory}/
-│   └── decisions/                 #   ADR — un seul endroit
-├── src/                           # CE QU'ON PRODUIT — prompts et schémas figés compris
-│   └── prompts/
-├── proof/                         # CE QUI JUGE — jamais écrit par un dev-*
-│   ├── seed/                      #   la vérité terrain de l'HUMAIN (scénarios annotés, labels)
-│   ├── datasets/{golden,holdout,calibration,adversarial}/
-│   └── suites/  baselines/  calibration/
+│   ├── datasets/{golden,holdout,calibration,adversarial}/   # ce qui JUGE —
+│   └── suites/  baselines/  calibration/                    #   jamais écrit par un dev-*
+├── src/{AppName}/                 # l'application générée ; .env copié par `install-env`
 ├── .sys/                          # ÉTAT INTERNE ET SORTIES DE RUN — régénérable
 │   ├── .ir/  .context/  .state/  .validation/  .audit/
 │   ├── reports/  traces/runs/
@@ -134,7 +132,7 @@ workspace/
 ```
 
 La SSoT de cet arbre est `sdda_scripts.smoke_check.WORKSPACE_TREE` ; ce dessin
-n'en est que la lecture. Le sens des cinq entrées : `ARCHITECTURE.md §2.ter`.
+n'en est que la lecture. Qui écrit quoi : `ARCHITECTURE.md §2.ter`.
 
 Les trois blocs de `STACK.md` qui doivent être **vérifiés par l'humain** après
 rendu — les confondre rend le budget d'exécution incalculable

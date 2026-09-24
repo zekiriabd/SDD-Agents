@@ -180,7 +180,7 @@ workspace/src/{AppName}/tests/retrieval/
 ├── test_fusion.py              # L1 : RRF sur cas connus, égalités stables, poids invalides, doc dans les 2 jambes remonte
 └── test_query_prep.py          # L1 : 'INV-2024-0093' survit à la préparation lexicale
 
-workspace/proof/suites/
+workspace/pipeline/suites/
 └── retrieval-{index_slug}.yaml # L3 : golden set, recall@k / nDCG par jambe et fusionné (cf. §5)
 workspace/.sys/reports/
 └── retrieval-{index_slug}-{run-id}.json
@@ -212,7 +212,7 @@ workspace/.sys/reports/
 
 ### 5.2 Mesurer — protocole de la RETRIEVAL GATE (G4), 0 token
 
-Sur `workspace/proof/datasets/golden/retrieval-{index}.jsonl`
+Sur `workspace/pipeline/datasets/golden/retrieval-{index}.jsonl`
 (`{query, relevant_doc_ids[], relevant_chunk_ids[]?, tags[]}`, ≥ `GoldenSetMinItems`) :
 
 | Étape | Mesure | Pourquoi |
@@ -255,7 +255,7 @@ uv run python -m {AppName}.retrieval.{index_slug} smoke --query "facture INV-202
 Puis, en L3 (coûte l'embedding des requêtes du golden, pas de LLM) :
 
 ```bash
-uv run python -m sdda_scripts.eval_retrieval --suite workspace/proof/suites/retrieval-{index_slug}.yaml --ablation
+uv run python -m sdda_scripts.eval_retrieval --suite workspace/pipeline/suites/retrieval-{index_slug}.yaml --ablation
 ```
 
 ---

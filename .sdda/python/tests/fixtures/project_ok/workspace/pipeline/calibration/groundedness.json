@@ -1,0 +1,6 @@
+{
+  "grader": "groundedness",
+  "items": 52,
+  "kappa": 0.71,
+  "labelsRef": "workspace/pipeline/datasets/calibration/groundedness-v1.jsonl"
+}

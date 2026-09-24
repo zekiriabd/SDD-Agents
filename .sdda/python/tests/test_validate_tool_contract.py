@@ -93,7 +93,7 @@ def test_a_parameter_without_a_usable_description_warns(compiled: Path) -> None:
 # Suite de contrat
 # ---------------------------------------------------------------------------
 def test_a_declared_suite_absent_from_disk_is_refused(compiled: Path) -> None:
-    (compiled / "workspace/proof/suites/tool-1-invoice-lookup.yaml").unlink()
+    (compiled / "workspace/pipeline/suites/tool-1-invoice-lookup.yaml").unlink()
     report, payload = _run(compiled, write_report=False)
     assert payload["verdict"] == "red" and report.has("TOOL_CONTRACT_FAILED")
 
@@ -201,7 +201,7 @@ def test_the_bypass_never_covers_an_unsafe_destructive_tool(compiled: Path, monk
 def test_the_bypass_downgrades_what_it_is_allowed_to(compiled: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SDDA_BYPASS_TOOL_GATE", "1")
     monkeypatch.setenv("SDDA_BYPASS_REASON", "suite en cours d'écriture")
-    (compiled / "workspace/proof/suites/tool-1-invoice-lookup.yaml").unlink()
+    (compiled / "workspace/pipeline/suites/tool-1-invoice-lookup.yaml").unlink()
     report, payload = _run(compiled, write_report=False)
     assert payload["verdict"] == "red" and report.ok  # dégradé en avertissement, verdict conservé
     assert any(f.cls == "TOOL_CONTRACT_FAILED" for f in report.warnings)
@@ -209,7 +209,7 @@ def test_the_bypass_downgrades_what_it_is_allowed_to(compiled: Path, monkeypatch
 
 def test_static_mode_requires_the_suite_declared_not_present(compiled: Path) -> None:
     """PHASE 2 : la suite L2 appartient à qa-evals/qa-tests (PHASE 6) — déclarée, pas encore sur disque."""
-    (compiled / "workspace/proof/suites/tool-1-invoice-lookup.yaml").unlink()
+    (compiled / "workspace/pipeline/suites/tool-1-invoice-lookup.yaml").unlink()
     code, out = run_main(validate_tool_contract.main, ["--root", str(compiled), "--mission", "1", "--static"])
     assert code == 0, out
     assert "absente du disque" not in out

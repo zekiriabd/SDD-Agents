@@ -10,7 +10,7 @@ Il attrape deux fautes de nature différente :
 
     1. **Hors zone** — un agent a écrit là où `loader.yml writes:` ne l'autorise
        pas. Le cas qui coûte le plus cher n'est pas la collision (elle se voit) :
-       c'est le `dev-agent` qui retouche `workspace/proof/datasets/` ou
+       c'est le `dev-agent` qui retouche `workspace/pipeline/datasets/` ou
        `workspace/src/{App}/prompts/`, c'est-à-dire qui modifie le jeu qui le juge ou le
        prompt qu'il implémente. `[DATASET_OWNERSHIP_VIOLATION]`,
        `[PROMPT_OWNERSHIP_VIOLATION]` — la note devient invérifiable.
@@ -54,7 +54,7 @@ NON_AGENT_KEYS = frozenset({"version", "updated", "cross_agent_reads", "shared_w
 #: rules vivent DANS l'application (`workspace/src/{App}/…`), et le nom de
 #: l'application n'est pas connu ici.
 SACRED: dict[str, tuple[str, str]] = {
-    "workspace/proof/datasets/**": ("DATASET_OWNERSHIP_VIOLATION",
+    "workspace/pipeline/datasets/**": ("DATASET_OWNERSHIP_VIOLATION",
                                     "un `dev-*` qui modifie le jeu qui le juge produit une note invérifiable"),
     "workspace/src/*/prompts/**": ("PROMPT_OWNERSHIP_VIOLATION",
                                    "un `dev-*` qui réécrit le prompt qu'il implémente efface la spécification "
@@ -63,7 +63,7 @@ SACRED: dict[str, tuple[str, str]] = {
                                   "une skill est une consigne du prompt : la réécrire depuis le code, c'est réécrire le prompt"),
     "workspace/src/*/rules/**": ("PROMPT_OWNERSHIP_VIOLATION",
                                  "une rule est une consigne du prompt : la réécrire depuis le code, c'est réécrire le prompt"),
-    "workspace/proof/baselines/**": ("BASELINE_OWNERSHIP_VIOLATION",
+    "workspace/pipeline/baselines/**": ("BASELINE_OWNERSHIP_VIOLATION",
                                      "déplacer la baseline de référence rend toute non-régression tautologique"),
 }
 
@@ -127,8 +127,8 @@ def matches(pattern: str, path: str) -> bool:
     normalized = path.replace("\\", "/").lstrip("./")
     if _to_regex(pattern).match(normalized):
         return True
-    # Un motif de répertoire couvre ce qu'il contient : `workspace/proof/datasets/**`
-    # et `workspace/proof/datasets` désignent la même zone pour un humain.
+    # Un motif de répertoire couvre ce qu'il contient : `workspace/pipeline/datasets/**`
+    # et `workspace/pipeline/datasets` désignent la même zone pour un humain.
     return fnmatch.fnmatch(normalized, pattern.rstrip("/*") + "/*")
 
 
@@ -149,6 +149,25 @@ def writes_of(loader: dict[str, Any], agent: str) -> list[str]:
 def forbidden_of(loader: dict[str, Any], agent: str) -> list[str]:
     spec = loader.get(agent)
     return [str(w) for w in (spec.get("forbidden_writes") or [])] if isinstance(spec, dict) else []
+
+
+#: Fichiers de secrets : aucun agent ne les lit, quel qu'il soit. Les gabarits
+#: (`.env.example`) ne portent que des noms, et restent lisibles.
+_ENV_TEMPLATES = frozenset({".env.example", ".env.sample", ".env.template"})
+
+
+def is_secret_file(path: str) -> bool:
+    """`.env`, `.env.local`… : les VALEURS des secrets de l'application générée.
+
+    La règle « aucun agent ne lit `.env` » n'existait qu'en prose : aucune
+    matrice ne la portait, aucun hook ne la tenait. Elle devient nécessaire dès
+    que l'humain dépose son `.env` dans `assets/`, que `architect-data` et les
+    générateurs parcourent pour inférer les schémas des sources. Le harnais de
+    CONSTRUCTION paie ses tokens avec son propre compte : il n'a aucune raison
+    de voir la clé du RUNTIME, et `install-env` la copie sans LLM.
+    """
+    name = str(path).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    return name == ".env" or (name.startswith(".env.") and name not in _ENV_TEMPLATES)
 
 
 def forbidden_reads_of(loader: dict[str, Any], agent: str) -> list[str]:

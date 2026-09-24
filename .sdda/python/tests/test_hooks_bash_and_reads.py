@@ -69,7 +69,7 @@ def test_wiring_covers_bash_and_the_three_readers() -> None:
 # Bash : écritures
 # ---------------------------------------------------------------------------
 def test_a_redirection_into_the_dataset_is_a_dataset_violation(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "echo '{}' >> workspace/proof/datasets/golden/billing-v1.jsonl")
+    code, err = bash(project, "dev-agent", "echo '{}' >> workspace/pipeline/datasets/golden/billing-v1.jsonl")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err and "FIX:" in err
 
 
@@ -83,7 +83,7 @@ def test_tee_sed_in_place_and_mv_are_writes(project: Path) -> None:
         "cat x | tee workspace/src/SupportAssistant/prompts/a.system.md",
         "sed -i 's/a/b/' workspace/src/SupportAssistant/prompts/a.system.md",
         "mv workspace/src/agents/x.py workspace/src/SupportAssistant/prompts/a.system.md",
-        "cp workspace/src/agents/x.py workspace/proof/datasets/golden/y.jsonl",
+        "cp workspace/src/agents/x.py workspace/pipeline/datasets/golden/y.jsonl",
     ):
         code, err = bash(project, "dev-agent", command)
         assert code == DENY, command
@@ -91,7 +91,7 @@ def test_tee_sed_in_place_and_mv_are_writes(project: Path) -> None:
 
 
 def test_powershell_verbs_are_understood(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "Set-Content -Path workspace/proof/datasets/golden/x.jsonl -Value '{}'")
+    code, err = bash(project, "dev-agent", "Set-Content -Path workspace/pipeline/datasets/golden/x.jsonl -Value '{}'")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
     code, err = bash(project, "dev-agent", "Remove-Item workspace/src/SupportAssistant/prompts/a.system.md -Force")
     assert code == DENY and "PROMPT_OWNERSHIP_VIOLATION" in err
@@ -111,21 +111,21 @@ def test_a_command_naming_no_governed_path_is_free(project: Path) -> None:
 def test_the_main_thread_is_free_but_an_unknown_subagent_is_not(project: Path) -> None:
     """Le fil principal est l'humain : libre. Un sous-agent que la matrice ne
     connaît pas n'a ni droits ni interdits — donc rien sous `workspace/`."""
-    assert bash(project, None, "rm -rf workspace/proof/datasets")[0] == ALLOW
-    code, err = bash(project, "un-agent-tiers", "rm -rf workspace/proof/datasets")
+    assert bash(project, None, "rm -rf workspace/pipeline/datasets")[0] == ALLOW
+    code, err = bash(project, "un-agent-tiers", "rm -rf workspace/pipeline/datasets")
     assert code == DENY and "OWNERSHIP_AGENT_UNKNOWN" in err
-    assert bash(project, "un-agent-tiers", "cat workspace/proof/datasets/holdout/mission-1-v1.jsonl")[0] == DENY
+    assert bash(project, "un-agent-tiers", "cat workspace/pipeline/datasets/holdout/mission-1-v1.jsonl")[0] == DENY
     assert bash(project, "un-agent-tiers", "pip install rich")[0] == ALLOW
 
 
 def test_chained_commands_are_each_judged(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "cd workspace && ls && echo x > workspace/proof/datasets/golden/z.jsonl")
+    code, err = bash(project, "dev-agent", "cd workspace && ls && echo x > workspace/pipeline/datasets/golden/z.jsonl")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
 
 
 def test_a_sed_without_in_place_is_a_read_not_a_write(project: Path) -> None:
     # dev-tools n'a pas de forbidden_reads : lire un dataset n'est pas une faute pour lui.
-    code, err = bash(project, "dev-tools", "sed 's/a/b/' workspace/proof/datasets/golden/billing-v1.jsonl")
+    code, err = bash(project, "dev-tools", "sed 's/a/b/' workspace/pipeline/datasets/golden/billing-v1.jsonl")
     assert code == ALLOW, err
 
 
@@ -143,7 +143,7 @@ def test_grep_over_the_whole_workspace_leaks_forbidden_content(project: Path) ->
 
 
 def test_grep_inside_the_readable_zone_passes(project: Path) -> None:
-    code, err = bash(project, "po-elicitor", "grep -rn Objective workspace/feats/missions/")
+    code, err = bash(project, "po-elicitor", "grep -rn Objective workspace/pipeline/missions/")
     assert code == ALLOW, err
 
 
@@ -156,7 +156,7 @@ def test_read_of_a_forbidden_file_is_refused(project: Path) -> None:
 
 
 def test_read_of_a_declared_source_passes(project: Path) -> None:
-    code, err = read_tool(project, "po-elicitor", "Read", file_path=str(project / "workspace/feats/missions/1-SupportAssistant.md"))
+    code, err = read_tool(project, "po-elicitor", "Read", file_path=str(project / "workspace/pipeline/missions/1-SupportAssistant.md"))
     assert code == ALLOW, err
 
 
@@ -182,7 +182,7 @@ def test_grep_from_an_ancestor_of_a_forbidden_zone_is_refused(project: Path) -> 
 
 
 def test_grep_inside_the_readable_zone_passes_the_read_hook(project: Path) -> None:
-    code, err = read_tool(project, "po-elicitor", "Grep", pattern="Objective", path=str(project / "workspace/feats/missions"))
+    code, err = read_tool(project, "po-elicitor", "Grep", pattern="Objective", path=str(project / "workspace/pipeline/missions"))
     assert code == ALLOW, err
 
 
@@ -200,14 +200,14 @@ def test_main_thread_and_unknown_agent_pass_the_read_hook(project: Path) -> None
 # La brique partagée : audit_ownership.read_violation
 # ---------------------------------------------------------------------------
 def test_read_violation_distinguishes_the_three_scopes() -> None:
-    loader = {"a": {"reads": ["workspace/feats/missions/**"], "forbidden_reads": ["workspace/stack/STACK.md", "workspace/src/**"]}}
+    loader = {"a": {"reads": ["workspace/pipeline/missions/**"], "forbidden_reads": ["workspace/stack/STACK.md", "workspace/src/**"]}}
     assert ao.read_violation(loader, "a", "workspace/stack/STACK.md") == "workspace/stack/STACK.md"
     assert ao.read_violation(loader, "a", "workspace/stack/other.md") is None
     assert ao.read_violation(loader, "a", "workspace/src", scope="names") == "workspace/src/**"
     assert ao.read_violation(loader, "a", "workspace", scope="names") is None
     assert ao.read_violation(loader, "a", "workspace", scope="content") in {"workspace/stack/STACK.md", "workspace/src/**"}
     assert ao.read_violation(loader, "a", ".", scope="content") is not None
-    assert ao.read_violation(loader, "a", "workspace/feats/missions", scope="content") is None
+    assert ao.read_violation(loader, "a", "workspace/pipeline/missions", scope="content") is None
 
 
 def test_other_placeholder_spares_what_reads_declares() -> None:
@@ -218,19 +218,19 @@ def test_other_placeholder_spares_what_reads_declares() -> None:
     qu'il découpe — la phase 1 était impossible dès que le hook recevait
     l'identité de l'agent. Un interdit sans `{other}` reste absolu.
     """
-    loader = {"a": {"reads": ["workspace/feats/missions/{n}-*.md"],
-                    "forbidden_reads": ["workspace/feats/missions/{other}-*.md", "workspace/stack/STACK.md"]}}
-    assert ao.read_violation(loader, "a", "workspace/feats/missions/1-Demo.md") is None
+    loader = {"a": {"reads": ["workspace/pipeline/missions/{n}-*.md"],
+                    "forbidden_reads": ["workspace/pipeline/missions/{other}-*.md", "workspace/stack/STACK.md"]}}
+    assert ao.read_violation(loader, "a", "workspace/pipeline/missions/1-Demo.md") is None
     assert ao.read_violation(loader, "a", "workspace/stack/STACK.md") == "workspace/stack/STACK.md"
     # Un interdit ABSOLU sur la même zone n'est pas adouci par `reads:`.
-    strict = {"a": {"reads": ["workspace/feats/missions/{n}-*.md"],
-                    "forbidden_reads": ["workspace/feats/missions/*-*.md"]}}
-    assert ao.read_violation(strict, "a", "workspace/feats/missions/1-Demo.md") == "workspace/feats/missions/*-*.md"
+    strict = {"a": {"reads": ["workspace/pipeline/missions/{n}-*.md"],
+                    "forbidden_reads": ["workspace/pipeline/missions/*-*.md"]}}
+    assert ao.read_violation(strict, "a", "workspace/pipeline/missions/1-Demo.md") == "workspace/pipeline/missions/*-*.md"
 
 
 def test_po_capabilities_reads_its_own_mission(project: Path) -> None:
     """Le cas réel de la matrice : la MISSION `{n}` est lisible, STACK.md ne l'est pas."""
-    mission = project / "workspace/feats/missions/1-Demo.md"
+    mission = project / "workspace/pipeline/missions/1-Demo.md"
     mission.parent.mkdir(parents=True, exist_ok=True)
     mission.write_text("# MISSION: Demo\n", encoding="utf-8")
     code, err = read_tool(project, "po-capabilities", "Read", file_path=str(mission))

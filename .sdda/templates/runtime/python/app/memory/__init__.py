@@ -1,4 +1,4 @@
-"""memory/ — l'implémentation du contrat de mémoire (`feats/contracts/memory/{n}-memory.md`).
+"""memory/ — l'implémentation du contrat de mémoire (`pipeline/contracts/memory/{n}-memory.md`).
 
 Fenêtre de conversation (`ShortTermPolicy`, `ShortTermMaxTurns`), état partagé
 entre agents (`CrossAgentSharedState`, matrice d'ownership du contrat, appliquée

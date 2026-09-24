@@ -134,32 +134,37 @@ SDD-Agents/
 │       │                              #   les câble TOUS, aucune table en dur
 │       └── tests/
 │
-└── workspace/                         # ── LE PROJET — quatre entrées, cf. §2.ter
+└── workspace/                         # ── LE PROJET — l'humain fournit, le framework produit (§2.ter)
     │
-    ├── stack/                         # ── CE QU'ON CONFIGURE ─────────────────
-    │   ├── STACK.md                   # VERSIONNÉ — noms de variables (${LLM_API_KEY}), jamais de valeur.
-    │   │                              #   Stores/Sources inline, URL d'API et serveurs MCP compris.
+    │   ═══ CE QUE L'HUMAIN FOURNIT ════════════════════════════════════════
+    ├── stack/
+    │   ├── STACK.md                   # VERSIONNÉ — les choix techniques, des NOMS de variables
+    │   │                              #   (${LLM_API_KEY}), jamais de valeur. Sources inline, API, MCP.
     │   └── mcp.json                   # optionnel — config MCP standard importée telle quelle
+    ├── feats/                         # ses spécifications — du MARKDOWN, à plat
+    │   ├── {n}-{Name}.md              #   le brief (--from-brief)
+    │   └── {n}-roster.md              #   le ROSTER : combien d'agents, lesquels, qui porte quoi (P7)
+    ├── assets/                        # les données (racine des stores `kind: local`)
+    │   └── .env                       #   les VALEURS des secrets du runtime — gitignoré, lu par AUCUN agent
+    ├── seed/                          # la vérité terrain : scénarios annotés, labels
     │
-    ├── feats/                         # ── CE QU'ON SPÉCIFIE — du MARKDOWN, seul ─
-    │   ├── briefs/      {n}-{Name}.md       # ce que l'humain dépose (specs, --from-brief)
-    │   ├── missions/    {n}-{Name}.md
-    │   ├── caps/        {n}-{m}-{Name}.md
-    │   ├── topology/    {n}-roster.md       # le ROSTER de l'architecte (humain) — bloc yaml
-    │   │                {n}-topology.md     # la topologie (architect-topology), graphe Mermaid inclus
-    │   ├── contracts/
-    │   │   ├── agents/      {n}-{agent}.agent.md
-    │   │   ├── tools/       {n}-{tool}.tool.md
-    │   │   ├── retrieval/   {n}-{index}.retrieval.md
-    │   │   └── memory/      {n}-memory.md
-    │   └── decisions/  ADR-{ts}-{slug}.md   # UN seul endroit (cf. §2.ter)
+    │   ═══ CE QUE LE FRAMEWORK PRODUIT ════════════════════════════════════
+    ├── pipeline/                      # tout ce que le pipeline génère avant et autour du code
+    │   ├── missions/    {n}-{Name}.md          # po-elicitor
+    │   ├── caps/        {n}-{m}-{Name}.md      # po-capabilities
+    │   ├── topology/    {n}-topology.md        # architect-topology, graphe Mermaid inclus
+    │   ├── contracts/   agents/ · tools/ · retrieval/ · memory/   # les architectes
+    │   ├── decisions/   ADR-{ts}-{slug}.md     # UN seul endroit (cf. §2.ter)
+    │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/   ┐ ce qui JUGE :
+    │   ├── suites/      les suites d'évaluation                            │ qa-evals et les
+    │   ├── baselines/   la référence de non-régression                     │ scripts, JAMAIS
+    │   └── calibration/ κ de chaque juge LLM                               ┘ un `dev-*`
     │
-    ├── src/                           # ── CE QU'ON PRODUIT ───────────────────
+    ├── src/
     │   └── {AppName}/                       # l'application agentic générée — layout PLAT (SDD_Pro) :
     │       │                                #   ce répertoire EST le paquet, un seul niveau
     │       ├── pyproject.toml · README.md   # le projet (dev-backend)
-    │       ├── .env                         # les VALEURS des secrets du RUNTIME — gitignoré,
-    │       │                                #   avec l'application qui les consomme (comme SDD_Pro)
+    │       ├── .env                         # copié depuis assets/.env par `install-env`, sans LLM
     │       ├── app/                         # composition, config, Domaine (dev-backend)
     │       ├── agents/{agent}/              # un agent du produit (dev-agent)
     │       ├── prompts/{agent}.system.md    # l'exécutable hashé de chaque agent (dev-prompt)
@@ -168,15 +173,7 @@ SDD-Agents/
     │       ├── memory/                      # l'implémentation du contrat de mémoire (dev-orchestration)
     │       ├── orchestration/ · serving/    # graphe et surface (dev-orchestration, dev-api)
     │       ├── data/schemas/                # schémas figés des sources — actif d'EXÉCUTION
-    │       └── tests/                       # L0→L2 (qa-tests)
-    │
-    ├── proof/                         # ── CE QUI JUGE ────────────────────────
-    │   ├── seed/        la vérité terrain de l'HUMAIN (scénarios annotés, labels)
-    │   ├── datasets/    golden/ · holdout/ · calibration/ · adversarial/
-    │   ├── suites/      les suites d'évaluation
-    │   ├── baselines/   la référence de non-régression
-    │   └── calibration/ κ de chaque juge LLM
-    │                    # AUCUN `dev-*` n'écrit ici. Jamais.
+    │       └── **/tests/                    # L0→L2 (qa-tests), à côté de ce qu'ils testent
     │
     └── .sys/                          # ── ÉTAT INTERNE ET SORTIES DE RUN ─────
         ├── .ir/         {n}-system.ir.json  # Agentic IR compilé depuis les contrats
@@ -187,44 +184,52 @@ SDD-Agents/
                                              #   monté par sdda_scripts/migrate_workspace.py
 ```
 
-### 2.ter Quatre entrées, quatre natures
+### 2.ter Ce que l'humain fournit, ce que le framework produit
 
-L'arbre a porté douze répertoires au même niveau. Rien n'y disait qu'ils ne sont
-pas de même nature : un lecteur voyait `caps/` et `traces/` côte à côte sans
-pouvoir deviner que l'un se relit en revue et que l'autre se supprime sans
-perte.
+Jusqu'à la v5, `feats/` rangeait côte à côte le brief et le roster que l'humain
+écrit, et la MISSION, les CAPs et les contrats que les agents génèrent ;
+`proof/` rangeait sa vérité terrain à côté des jeux de `qa-evals`. En ouvrant
+l'un ou l'autre, l'humain ne pouvait pas savoir ce qu'il devait remplir et ce
+qu'il devait laisser au framework. La v6 le dit par l'arbre.
 
 | Entrée | Nature | Écrite par | Régénérable |
 |---|---|---|---|
-| `stack/` | configuration — `STACK.md`, seul, versionné | l'humain | non |
-| `assets/` | fichiers statiques déposés (exports, corpus) — la racine des stores `kind: local` ; l'`assets/` de SDD_Pro | l'humain | non |
-| `feats/` | **spécification** — l'ENTRÉE de la génération, **Markdown seul** | humain, PO, architectes | non |
-| `src/` | code généré, prompts et schémas figés compris | les sept `dev-*` (six pour le moteur, `dev-backend` pour la coquille), `qa-tests`, les générateurs | oui |
-| `proof/` | **ce qui juge** — `seed/` fourni par l'humain, le reste dérivé | l'humain (`seed/`), `qa-evals` et les scripts, **jamais** un `dev-*` | non |
+| `stack/` | les choix techniques — `STACK.md`, seul, versionné | **l'humain** | non |
+| `feats/` | ses spécifications — brief et roster, **Markdown seul**, à plat | **l'humain** | non |
+| `assets/` | les données (racine des stores `kind: local`, l'`assets/` de SDD_Pro) et `.env` | **l'humain** | non |
+| `seed/` | la vérité terrain — scénarios annotés, labels | **l'humain** | non |
+| `pipeline/` | tout ce que le pipeline génère : MISSION, CAPs, topologie, contrats, ADR, jeux, suites, baselines, calibration | les agents `po-*`, `architect-*`, `qa-evals`, les scripts — **jamais un `dev-*`** sous datasets/suites/baselines/calibration | en partie |
+| `src/` | l'application générée, prompts et schémas figés compris | les sept `dev-*`, `qa-tests`, les générateurs | oui |
 | `.sys/` | état interne et sorties de run | les scripts | oui |
 
-**L'entrée de l'utilisateur tient en trois choses**, et c'est voulu : `STACK.md`
+**L'entrée de l'utilisateur tient en quatre dépôts**, et c'est voulu : `STACK.md`
 (les choix techniques — langage, framework, pattern, sources de données, URL
-d'API, serveurs MCP), des fichiers Markdown sous `feats/` (ce que le système
-doit faire — écrits à la main ou par questions-réponses avec `po-elicitor`), et
-sa vérité terrain sous `proof/seed/`. Les valeurs des secrets vont dans
-`src/{AppName}/.env`, gitignoré, **avec l'application qui les consomme** — même
-mécanisme que SDD_Pro. Ce fichier porte la clé des *Runtime Models* (§6) : le
-harnais de construction ne le lit jamais, il paie ses tokens avec son propre
-compte. Le placer à la racine du dépôt le mettrait hors du livrable, qui part
-de `src/{AppName}/` en exécutable ou en conteneur. Trois règles le tiennent,
-vérifiées par `smoke-check` et non racontées : `feats/` ne contient que du
-Markdown (`[FEATS_NOT_MARKDOWN]`), `stack/` ne contient que `STACK.md`
-(`[STACK_DIR_UNEXPECTED_FILE]`), aucune valeur de secret n'entre dans STACK.md
-(`[STACK_SECRET_IN_CLEAR]`). Un workspace d'une version antérieure monte par
-`python .sdda/sdda.py migrate-workspace`, qui range chaque fichier à sa place.
+d'API, serveurs MCP), ses fichiers Markdown sous `feats/` (ce que le système
+doit faire, puis le roster qui dit comment), ses données et son `.env` sous
+`assets/`, et sa vérité terrain sous `seed/`. Le `.env` porte la clé des
+*Runtime Models* (§6) : l'application générée le lit, le harnais de
+construction jamais — il paie ses tokens avec son propre compte. Il est déposé
+dans `assets/` et **copié** vers `src/{AppName}/.env` par
+`python .sdda/sdda.py install-env`, sans LLM, parce que c'est de
+`src/{AppName}/` que l'application part en exécutable ou en conteneur. Aucun
+agent ne lit l'un ou l'autre fichier : `preflight_forbidden_reads` et
+`preflight_bash_ownership` refusent `[SECRET_READ_FORBIDDEN]`, y compris à
+`architect-data` qui parcourt `assets/` pour inférer les schémas. Trois règles
+tiennent l'entrée, vérifiées par `smoke-check` et non racontées : `feats/` ne
+contient que du Markdown (`[FEATS_NOT_MARKDOWN]`), `stack/` ne contient que
+`STACK.md` (`[STACK_DIR_UNEXPECTED_FILE]`), aucune valeur de secret n'entre dans
+STACK.md (`[STACK_SECRET_IN_CLEAR]`). Un workspace d'une version antérieure
+monte par `python .sdda/sdda.py migrate-workspace`, qui range chaque fichier à
+sa place et réécrit les références qui le citaient.
 
-**La seule frontière qui ne souffre aucune exception est celle de `proof/`.**
+**La seule frontière qui ne souffre aucune exception est celle du jugement.**
 L'agent qui écrit le code ne peut toucher ni au jeu qui le note, ni à la
-référence contre laquelle sa régression est mesurée. Ranger ces jeux sous
-`src/` les ferait tomber dans la zone d'écriture des agents développeurs, et
-il faudrait creuser une exception à l'intérieur de leur propre périmètre. Une
-exception dans un glob d'ownership est une exception qu'on oublie.
+référence contre laquelle sa régression est mesurée : `pipeline/datasets/`,
+`suites/`, `baselines/` et `calibration/` sont interdits en écriture à tout
+`dev-*`. La fusion de l'ancien `feats/` et de l'ancien `proof/` sous `pipeline/`
+ne la desserre pas : elle tient aux zones de la matrice d'ownership, pas au nom
+du répertoire parent. Ranger ces jeux sous `src/`, en revanche, les ferait
+tomber dans la zone d'écriture des agents développeurs.
 
 Deux conséquences se lisent directement dans l'arbre :
 
@@ -238,7 +243,7 @@ Deux conséquences se lisent directement dans l'arbre :
   de mémoire) : une application agentic se lit dans son arbre — agents, prompts,
   skills, rules, tools, memory, orchestration — pas dans le framework qui l'a
   produite.
-- **Les ADR ont UN emplacement**, `feats/decisions/`. Ils en avaient deux —
+- **Les ADR ont UN emplacement**, `pipeline/decisions/`. Ils en avaient deux —
   `docs/adr/` que citait le gabarit, `.sys/.context/adrs/` que déclarait la
   matrice d'ownership — et le script des tâches humaines cherchait dans les
   deux. La question « cet ADR a-t-il été écrit ? » avait donc deux réponses
@@ -329,12 +334,12 @@ compilée, régénérable, jamais éditée à la main. Détail et schéma :
 ## 3. Le pipeline forward
 
 ```
- PHASE 0   ELICITATION        po-elicitor            -> feats/missions/{n}-{Name}.md
+ PHASE 0   ELICITATION        po-elicitor            -> pipeline/missions/{n}-{Name}.md
    |                                                         [MISSION GATE]
- PHASE 1   CAPABILITIES       po-capabilities        -> feats/caps/{n}-{m}-*.md
+ PHASE 1   CAPABILITIES       po-capabilities        -> pipeline/caps/{n}-{m}-*.md
    |                                                         [CAP GATE]
- PHASE 2   TOPOLOGIE          architect-topology          -> feats/topology/{n}-topology.md
-   |         + architect-rag, architect-data,          + feats/contracts/**
+ PHASE 2   TOPOLOGIE          architect-topology          -> pipeline/topology/{n}-topology.md
+   |         + architect-rag, architect-data,          + pipeline/contracts/**
    |           architect-memory, architect-tools  (parallèle)
    | PHASE 2.9 COMPILATION IR  ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
    |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
@@ -485,11 +490,11 @@ artefacts agentic. Extrait :
 
 | Chemin | Owner exclusif | Mode |
 |---|---|---|
-| `workspace/feats/missions/{n}-*.md` | `po-elicitor` | Create puis append-only |
-| `workspace/feats/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) |
-| `workspace/feats/topology/{n}-*.md` | `architect-topology` | Create exclusif |
-| `workspace/feats/contracts/tools/*` | `architect-tools` | Create exclusif |
-| `workspace/feats/contracts/retrieval/*` | `architect-rag` | Create exclusif |
+| `workspace/pipeline/missions/{n}-*.md` | `po-elicitor` | Create puis append-only |
+| `workspace/pipeline/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) |
+| `workspace/pipeline/topology/{n}-*.md` | `architect-topology` | Create exclusif |
+| `workspace/pipeline/contracts/tools/*` | `architect-tools` | Create exclusif |
+| `workspace/pipeline/contracts/retrieval/*` | `architect-rag` | Create exclusif |
 | `workspace/src/{App}/prompts/{agent}.system.md` | `dev-prompt` | Create + Edit exclusif |
 | `workspace/src/**/agents/{agent}/**` | `dev-agent` (1 instance par agent) | Edit-augment exclusif |
 | `workspace/src/**/tools/**` | `dev-tools` | Edit-augment exclusif |
@@ -497,11 +502,11 @@ artefacts agentic. Extrait :
 | `workspace/src/**/orchestration/**` | `dev-orchestration` | Create + Edit exclusif |
 | `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif |
 | `workspace/src/{App}/*` · `workspace/src/**/app/**` | `dev-backend` | la coquille : projet, composition, config, Domaine, packaging — rien du moteur |
-| `workspace/proof/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
-| `workspace/proof/baselines/**` | script déterministe uniquement | Write atomique |
+| `workspace/pipeline/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
+| `workspace/pipeline/baselines/**` | script déterministe uniquement | Write atomique |
 
 > **Règle critique, propre à l'agentic** : `dev-agent` n'a **aucun** droit
-> d'écriture sur `workspace/proof/datasets/` ni sur `workspace/src/{App}/prompts/`. L'agent qui
+> d'écriture sur `workspace/pipeline/datasets/` ni sur `workspace/src/{App}/prompts/`. L'agent qui
 > écrit le code ne peut ni modifier le jeu qui le juge, ni réécrire le prompt qu'il
 > est censé implémenter. Sans cette séparation, l'auto-confirmation est garantie —
 > c'est le pendant agentic du `[QA_OWNERSHIP_VIOLATION]` de SDD_Pro.
@@ -567,7 +572,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->394<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->397<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :

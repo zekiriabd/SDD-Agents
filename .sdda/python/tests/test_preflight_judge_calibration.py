@@ -22,7 +22,7 @@ from sdda_hooks import _hook
 from sdda_hooks import preflight_judge_calibration as hook
 
 ALLOW, DENY = _hook.ALLOW, _hook.DENY
-CAL_DIR = "workspace/proof/calibration"
+CAL_DIR = "workspace/pipeline/calibration"
 STACK = "workspace/stack/STACK.md"
 
 

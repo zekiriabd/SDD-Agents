@@ -57,37 +57,38 @@ MIGRATE_CMD = "python .sdda/sdda.py migrate-workspace"
 #: ce script vérifie qu'elle est là. Un répertoire retiré d'ici devient un
 #: fantôme : il se retire dans une migration, pas en silence.
 WORKSPACE_TREE: tuple[str, ...] = (
-    # stack/ — la CONFIGURATION : STACK.md, seul. Versionné ; les valeurs des
-    # secrets vivent dans `src/{App}/.env`, avec l'application qui les consomme.
+    # ── CE QUE L'HUMAIN FOURNIT ─────────────────────────────────────────────
+    # stack/ — les choix techniques : STACK.md, seul, des NOMS de variables.
     "stack",
-    # assets/ — les FICHIERS STATIQUES que l'humain dépose (exports JSON/CSV,
-    # documents d'un corpus) : le `assets/` de SDD_Pro. C'est la racine des
-    # stores `kind: local` de `## Active Data Sources`. Aucun agent n'y écrit.
-    "assets",
-    # feats/ — la SPÉCIFICATION : ce qu'on écrit et qu'on relit en revue.
+    # feats/ — ses spécifications en Markdown, à plat : brief et roster.
     # Du MARKDOWN, et rien d'autre (`check_feats_markdown_only`).
-    "feats/briefs",
-    "feats/missions",
-    "feats/caps",
-    "feats/topology",
-    "feats/contracts/agents",
-    "feats/contracts/tools",
-    "feats/contracts/retrieval",
-    "feats/contracts/memory",
-    "feats/decisions",
+    "feats",
+    # assets/ — les données (racine des stores `kind: local`) et `.env`, les
+    # VALEURS des secrets de l'application, copiées par `install-env`.
+    "assets",
+    # seed/ — la vérité terrain : scénarios annotés, labels.
+    "seed",
+    # ── CE QUE LE FRAMEWORK PRODUIT ─────────────────────────────────────────
+    # pipeline/ — tout ce que le pipeline génère. Les zones qui JUGENT
+    # (datasets, suites, baselines, calibration) ne sont jamais écrites par un dev-*.
+    "pipeline/missions",
+    "pipeline/caps",
+    "pipeline/topology",
+    "pipeline/contracts/agents",
+    "pipeline/contracts/tools",
+    "pipeline/contracts/retrieval",
+    "pipeline/contracts/memory",
+    "pipeline/decisions",
+    "pipeline/datasets/golden",
+    "pipeline/datasets/holdout",
+    "pipeline/datasets/calibration",
+    "pipeline/datasets/adversarial",
+    "pipeline/suites",
+    "pipeline/baselines",
+    "pipeline/calibration",
     # src/ — le CODE GÉNÉRÉ : `src/{App}/` est l'application, layout plat, prompts,
     # skills, rules et schémas figés DEDANS (créés par gen-app-skeleton, pas ici).
     "src",
-    # proof/ — ce qui JUGE : aucun `dev-*` n'y écrit jamais.
-    # `seed/` est la vérité terrain de l'HUMAIN ; `datasets/` sa dérivation par qa-evals.
-    "proof/seed",
-    "proof/datasets/golden",
-    "proof/datasets/holdout",
-    "proof/datasets/calibration",
-    "proof/datasets/adversarial",
-    "proof/suites",
-    "proof/baselines",
-    "proof/calibration",
     # .sys/ — l'ÉTAT INTERNE et les sorties de run : régénérable, effaçable
     ".sys/.ir",
     ".sys/.context/packs",
@@ -210,7 +211,7 @@ def check_feats_markdown_only(root: Path, report: Report) -> list[str]:
     """`feats/` est la spécification, et une spécification se relit : du Markdown, seul.
 
     Un YAML, un JSONL, un `.mmd` posés là sont soit une configuration (-> STACK.md),
-    soit de la vérité terrain (-> `proof/seed/`), soit un actif d'exécution
+    soit de la vérité terrain (-> `seed/`), soit un actif d'exécution
     (-> `src/`). La migration sait les ranger ; ce contrôle dit qu'ils sont là.
     """
     feats = root / "workspace" / "feats"
@@ -225,7 +226,7 @@ def check_feats_markdown_only(root: Path, report: Report) -> list[str]:
         report.error("FEATS_NOT_MARKDOWN",
                      f"{len(strays)} fichier(s) non-Markdown sous workspace/feats/ : " + ", ".join(strays[:5]),
                      f"{MIGRATE_CMD} range roster, graphe, schémas et vérité terrain à leur place ; "
-                     "sinon déplacer à la main (config -> STACK.md, ground truth -> proof/seed/, schémas -> src/)",
+                     "sinon déplacer à la main (config -> STACK.md, données -> assets/, ground truth -> seed/, schémas -> src/)",
                      "workspace/feats/")
     return strays
 
@@ -309,7 +310,24 @@ def run(root: Path) -> Report:
         report.data["feats_strays"] = check_feats_markdown_only(root, report)
         report.data["stack_strays"] = check_stack_dir(root, report, stack_text)
         report.data["secrets_in_clear"] = check_secrets_not_in_clear(stack_text, report)
+    if (report.data["workspaceVersion"] or 0) >= 6:
+        report.data["env"] = check_env_installed(root, report)
     return report
+
+
+def check_env_installed(root: Path, report: Report) -> dict[str, object]:
+    """`assets/.env` (source humaine) et `src/{App}/.env` (lu par l'application) disent-ils la même chose ?
+
+    Avertissements seulement : le smoke d'un projet qui vient d'être amorcé ne
+    doit pas rougir parce que la clé n'est pas encore fournie. `install-env
+    --require`, lui, bloque avant les évaluations.
+    """
+    from sdda_scripts import install_env  # import tardif : bootstrap importe ce module avant sys.path complet
+
+    sub = install_env.run(root, write=False, require=False)
+    for finding in sub.findings:
+        report.warn(finding.cls, finding.message, finding.fix, finding.location)
+    return {k: sub.data.get(k) for k in ("source", "target", "upToDate")}
 
 
 def problems(root: Path) -> list[str]:

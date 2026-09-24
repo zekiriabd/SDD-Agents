@@ -16,12 +16,12 @@ Trois règles non négociables (AGENTIC-IR.md §1, §5) :
    - id de suite d'AC : `{n}-{m}-{metric}` ; niveau L4 si la CAP est portée par
      un agent, L3 par un retriever seul, L2 par un outil seul ;
    - `judgeCalibrationRef` d'un `llm-judge` sans `calibration:` :
-     `workspace/proof/calibration/{metric}.json` (annoncé par validate_cap.py) ;
+     `workspace/pipeline/calibration/{metric}.json` (annoncé par validate_cap.py) ;
    - suite d'injection d'un agent à entrées non maîtrisées :
      `{agentId}-injection`, L8, grader `trajectory`, seuil 1.0 (toute attaque
      réussie est bloquante), `runs` = `EvalRunsCritical` ;
-   - `baselineRef` : `workspace/proof/baselines/{n}-system.json` ;
-   - `holdout` : l'unique fichier `workspace/proof/datasets/holdout/mission-{n}-*.jsonl` ;
+   - `baselineRef` : `workspace/pipeline/baselines/{n}-system.json` ;
+   - `holdout` : l'unique fichier `workspace/pipeline/datasets/holdout/mission-{n}-*.jsonl` ;
    - `promptHash` : hash du fichier prompt s'il existe, sinon le hash épinglé
      dans le contrat (`- Hash :`) ; ni l'un ni l'autre => erreur ;
    - `onBoundExceeded` d'un agent : le comportement majoritaire de sa table de
@@ -411,7 +411,7 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
         posture["injectionSuiteRef"] = suite_ref
     elif untrusted:
         ctx.fail(f"agent `{aid}` : entrées non maîtrisées {untrusted} sans `Suite d'injection`",
-                 "déclarer `- **Suite d'injection** : workspace/proof/datasets/adversarial/{slug}.jsonl` (invariant injection-suite-mandatory)", f"{loc}:8")
+                 "déclarer `- **Suite d'injection** : workspace/pipeline/datasets/adversarial/{slug}.jsonl` (invariant injection-suite-mandatory)", f"{loc}:8")
     agent["trustPosture"] = posture
 
     # §9 Politique de refus ---------------------------------------------------------
@@ -589,7 +589,7 @@ def compile_tool(ctx: CompileContext, path: Path) -> dict[str, Any]:
     # §8 Tests de contrat ---------------------------------------------------------------------
     m = re.search(r"Fichier\s*:\s*`([^`]+)`", sec("Tests de contrat (L2)") or sec("Tests de contrat") or "")
     if not m or markdown_io.is_placeholder(m.group(1)):
-        ctx.fail(f"outil `{tid}` : `## 8. Tests de contrat (L2)` ne nomme pas de fichier", "écrire `Fichier : `workspace/proof/suites/tool-{id}.yaml``", f"{loc}:8")
+        ctx.fail(f"outil `{tid}` : `## 8. Tests de contrat (L2)` ne nomme pas de fichier", "écrire `Fichier : `workspace/pipeline/suites/tool-{id}.yaml``", f"{loc}:8")
     else:
         tool["contractTestsRef"] = m.group(1).strip()
     return tool
@@ -788,7 +788,7 @@ def _names(value: str | None) -> list[str]:
 
 
 def compile_orchestration(ctx: CompileContext, topo: TopologySpec, mmd_text: str) -> dict[str, Any]:
-    loc = f"workspace/feats/topology/{ctx.number}-topology.md"
+    loc = f"workspace/pipeline/topology/{ctx.number}-topology.md"
     orch: dict[str, Any] = {}
     if topo.root_pattern:
         orch["rootPattern"] = topo.root_pattern
@@ -869,7 +869,7 @@ def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, ru
     # La valeur est le PREMIER mot : une puce peut continuer sur les lignes
     # suivantes avec son explication (« regex (motifs déterministes…) »).
     grader = (str(goal.get("Grader", "")).strip().lower().split() or [""])[0].strip("`*,;:.")
-    mloc = f"workspace/feats/missions/{getattr(mission, 'id', ctx.number)}.md"
+    mloc = f"workspace/pipeline/missions/{getattr(mission, 'id', ctx.number)}.md"
     if not grader or markdown_io.is_placeholder(grader):
         return None
     if grader not in GRADERS:
@@ -894,7 +894,7 @@ def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, ru
     }
     if grader == "llm-judge":
         cal = str(goal.get("Calibration", "")).strip()
-        suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/proof/calibration/{ctx.number}-acceptance.json"
+        suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/pipeline/calibration/{ctx.number}-acceptance.json"
     return suite
 
 
@@ -908,14 +908,14 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
     critical_runs = ctx.config.get_int("EvalRunsCritical", 5) if ctx.config else 5
 
     for cap in caps:
-        loc = f"workspace/feats/caps/{cap.id}.md"
+        loc = f"workspace/pipeline/caps/{cap.id}.md"
         alloc_agents = sorted({ctx.qualified(a) for a in cap.allocated.get("agents", [])} | set(agents_by_cap.get(cap.id, [])))
         alloc_tools = sorted({ctx.canonical_tool(t) for t in cap.allocated.get("tools", [])})
         alloc_retr = sorted({ctx.qualified(r) for r in cap.allocated.get("retrievers", [])})
         for kind, ids, known in (("agent", alloc_agents, ctx.agent_ids), ("outil", alloc_tools, ctx.tool_ids), ("retriever", alloc_retr, ctx.retriever_ids)):
             for i in ids:
                 if i not in known:
-                    ctx.fail(f"CAP `{cap.id}` : `## Allocated To` référence le {kind} `{i}` sans contrat", f"écrire le contrat `workspace/feats/contracts/…/{i}.*.md` ou corriger l'allocation", f"{loc}:Allocated To")
+                    ctx.fail(f"CAP `{cap.id}` : `## Allocated To` référence le {kind} `{i}` sans contrat", f"écrire le contrat `workspace/pipeline/contracts/…/{i}.*.md` ou corriger l'allocation", f"{loc}:Allocated To")
         level = "L4" if alloc_agents else ("L3" if alloc_retr else "L2")
         evaluated_by: list[str] = []
         for ac in cap.acs:
@@ -936,7 +936,7 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
                 suite["agentRef"] = alloc_agents[0]
             if grader == "llm-judge":
                 cal = f.get("calibration", "").strip()
-                suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/proof/calibration/{metric}.json"
+                suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/pipeline/calibration/{metric}.json"
                 if f.get("advisory", "").strip().lower() in ("true", "oui", "yes"):
                     suite["advisory"] = True
             suites.append(suite)
@@ -979,9 +979,9 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
     #   - `validate_ir` refuse un holdout sans suite d'acceptation.
     # L'exigence n'est pas levée : elle est déplacée là où elle est actionnable.
     holdouts = sorted(paths.datasets_dir(ctx.root, "holdout").glob(f"mission-{ctx.number}-*.jsonl"))
-    evaluation: dict[str, Any] = {"suites": sorted(suites, key=lambda s: s["id"]), "baselineRef": f"workspace/proof/baselines/{ctx.number}-system.json"}
+    evaluation: dict[str, Any] = {"suites": sorted(suites, key=lambda s: s["id"]), "baselineRef": f"workspace/pipeline/baselines/{ctx.number}-system.json"}
     if len(holdouts) > 1:
-        ctx.fail(f"{len(holdouts)} holdouts candidats pour la mission {ctx.number} : {[p.name for p in holdouts]}", "un seul `mission-{n}-v*.jsonl` par mission", "workspace/proof/datasets/holdout/")
+        ctx.fail(f"{len(holdouts)} holdouts candidats pour la mission {ctx.number} : {[p.name for p in holdouts]}", "un seul `mission-{n}-v*.jsonl` par mission", "workspace/pipeline/datasets/holdout/")
     elif len(holdouts) == 1:
         evaluation["holdout"] = paths.rel(ctx.root, holdouts[0])
         acceptance = compile_acceptance_suite(ctx, mission, evaluation["holdout"], critical_runs)
@@ -993,9 +993,9 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
     # le compilateur n'en émettait donc aucune. Or `eval-runner` ne lit que
     # `evaluation.suites` de l'IR : G6 (ORCH) n'avait AUCUNE exécution à rendre
     # verte, sur aucune mission. Leur auteur est `qa-evals`
-    # (`workspace/proof/suites/{n}-*.yaml`, niveau L5/L7) ; l'IR les projette.
+    # (`workspace/pipeline/suites/{n}-*.yaml`, niveau L5/L7) ; l'IR les projette.
     existing = {s["id"] for s in suites}
-    for path in sorted(paths.proof_dir(ctx.root).joinpath("suites").glob(f"{ctx.number}-*.yaml")):
+    for path in sorted(paths.suites_dir(ctx.root).glob(f"{ctx.number}-*.yaml")):
         try:
             spec = yaml_mini.parse_mapping(markdown_io.read_text(path))
         except (yaml_mini.YamlMiniError, OSError):
@@ -1155,11 +1155,11 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
 
     missions = sorted(paths.missions_dir(root).glob(f"{number}-*.md"))
     if not missions:
-        ctx.fail(f"aucune MISSION `workspace/feats/missions/{number}-*.md`", "créer la MISSION (G0) avant de compiler", str(paths.missions_dir(root)))
+        ctx.fail(f"aucune MISSION `workspace/pipeline/missions/{number}-*.md`", "créer la MISSION (G0) avant de compiler", str(paths.missions_dir(root)))
         raise CompileError(report)
     mission: MissionSpec = load_mission(root, missions[0].stem)  # type: ignore[assignment]
     report.target = mission.id
-    mloc = f"workspace/feats/missions/{mission.id}.md"
+    mloc = f"workspace/pipeline/missions/{mission.id}.md"
     for key in ("CostPerRunTargetUsd", "CostPerRunHardCapUsd", "LatencyP95TargetMs", "TokenCeilingPerRun"):
         if mission.budget.get(key) is None:
             ctx.fail(f"MISSION `{mission.id}` : `{key}` absent de `## Execution Budget`", "déclarer le budget d'exécution (P6) — G0 le refuse aussi", f"{mloc}:Execution Budget")
@@ -1174,13 +1174,13 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
 
     caps = load_caps_for_mission(root, number)
     if not caps:
-        ctx.fail(f"aucune CAP `workspace/feats/caps/{number}-*.md`", "produire les CAPs (G1) avant la topologie", str(paths.caps_dir(root)))
+        ctx.fail(f"aucune CAP `workspace/pipeline/caps/{number}-*.md`", "produire les CAPs (G1) avant la topologie", str(paths.caps_dir(root)))
 
     agents = [a for a in (compile_agent(ctx, p) for p in sorted(paths.contracts_dir(root, "agents").glob(f"{number}-*.agent.md"))) if a]
     tools = [compile_tool(ctx, p) for p in sorted(paths.contracts_dir(root, "tools").glob(f"{number}-*.tool.md"))]
     retrievers = [compile_retriever(ctx, p) for p in sorted(paths.contracts_dir(root, "retrieval").glob(f"{number}-*.retrieval.md"))]
     if not agents:
-        ctx.fail(f"aucun contrat d'agent `workspace/feats/contracts/agents/{number}-*.agent.md`", "la topologie produit au moins un contrat d'agent", str(paths.contracts_dir(root, "agents")))
+        ctx.fail(f"aucun contrat d'agent `workspace/pipeline/contracts/agents/{number}-*.agent.md`", "la topologie produit au moins un contrat d'agent", str(paths.contracts_dir(root, "agents")))
     ctx.agent_ids = {a["id"] for a in agents}
     ctx.tool_ids = {t["id"] for t in tools}
     ctx.tool_names = {str(t["name"]): t["id"] for t in tools if t.get("name")}
@@ -1192,7 +1192,7 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         for kind, ids, known in (("outil", a.get("tools", []), ctx.tool_ids), ("retriever", a.get("retrievers", []), ctx.retriever_ids)):
             for i in ids:
                 if i not in known:
-                    ctx.fail(f"agent `{a['id']}` : {kind} `{i}` câblé sans contrat", f"écrire le contrat de `{i}` ou retirer la ligne", f"workspace/feats/contracts/agents/{a['id']}.agent.md")
+                    ctx.fail(f"agent `{a['id']}` : {kind} `{i}` câblé sans contrat", f"écrire le contrat de `{i}` ou retirer la ligne", f"workspace/pipeline/contracts/agents/{a['id']}.agent.md")
 
     topo_path = paths.topology_dir(root) / f"{number}-topology.md"
     if not topo_path.is_file():
@@ -1298,7 +1298,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(root, combined)
     numbers = [args.mission] if args.mission is not None else mission_numbers(root)
     if not numbers:
-        combined.error("IR_COMPILE_FAILED", "aucune MISSION dans workspace/feats/missions/", "créer une MISSION avant de compiler", str(paths.missions_dir(root)))
+        combined.error("IR_COMPILE_FAILED", "aucune MISSION dans workspace/pipeline/missions/", "créer une MISSION avant de compiler", str(paths.missions_dir(root)))
     if args.out and len(numbers) != 1:
         combined.error("INVALID_ARG", "`--out` exige `--mission {n}`", "préciser la mission")
         return emit(combined, args.json)

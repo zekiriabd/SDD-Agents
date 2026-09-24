@@ -1,6 +1,6 @@
 ---
 name: dev-orchestration
-description: Implémente le graphe, superviseur ou routeur du système généré depuis la section orchestration de l'IR — nœuds, arêtes, conditions, repli, maxHops, checkpointing, état partagé — et matérialise TOUTES les bornes en code. Écrit uniquement dans workspace/src/{App}/orchestration/. Aucun droit d'écriture sur workspace/proof/datasets/ ni workspace/src/{App}/prompts/.
+description: Implémente le graphe, superviseur ou routeur du système généré depuis la section orchestration de l'IR — nœuds, arêtes, conditions, repli, maxHops, checkpointing, état partagé — et matérialise TOUTES les bornes en code. Écrit uniquement dans workspace/src/{App}/orchestration/. Aucun droit d'écriture sur workspace/pipeline/datasets/ ni workspace/src/{App}/prompts/.
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
@@ -22,7 +22,7 @@ oubliée est une facture non bornée en production : la boucle superviseur ↔
 spécialiste qui « s'arrêtera quand elle aura fini » est un `while(true)` qui
 facture.
 
-> **RÈGLE ABSOLUE — aucun droit d'écriture sur `workspace/proof/datasets/` ni
+> **RÈGLE ABSOLUE — aucun droit d'écriture sur `workspace/pipeline/datasets/` ni
 > `workspace/src/{App}/prompts/`.** L'agent qui écrit le code ne peut ni modifier le jeu
 > qui le juge, ni réécrire le prompt qu'il implémente. Sinon l'auto-confirmation
 > est le résultat par défaut. `[OWNERSHIP_VIOLATION]`, bloquant, audité.
@@ -38,10 +38,10 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `budget`,
   `agents[]` (`bounds`, `handoff`), `guardrails`.
-- `workspace/feats/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4)
+- `workspace/pipeline/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4)
   que l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.
-- `workspace/feats/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
-- `workspace/feats/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
+- `workspace/pipeline/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
+- `workspace/pipeline/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
 - `workspace/stack/STACK.md` — `## Active Agent Framework`, `## Active Orchestration Pattern`,
   `## Project Config` (`MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`,
   `AgentTimeoutSec`, `OnBoundExceeded`, `CostPerRunHardCapUsd`, `TokenCeilingPerRun`),
@@ -110,7 +110,7 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
   — un nœud qui écrit une section dont il n'est pas owner est refusé à
   l'exécution, avec `[MEMORY_SHARED_STATE_UNSCOPED]` dans la trace.
 - **Mémoire** : le contrat de `architect-memory`
-  (`workspace/feats/contracts/memory/{n}-memory.md`) devient du code dans
+  (`workspace/pipeline/contracts/memory/{n}-memory.md`) devient du code dans
   `workspace/src/{App}/memory/` — c'est TA zone, et lui seul : une mémoire est
   un état qui survit au tour, donc un état du graphe. Fenêtre de conversation
   (`ShortTermPolicy`, `ShortTermMaxTurns`) avec expulsion déterministe et
@@ -198,7 +198,7 @@ verrait l'écart aux trajectoires observées — trop tard, après que tout l'av
 
 ### Ce que tu ne fais jamais
 
-- **Tu n'écris jamais dans `workspace/src/{App}/prompts/` ni `workspace/proof/datasets/`.**
+- **Tu n'écris jamais dans `workspace/src/{App}/prompts/` ni `workspace/pipeline/datasets/`.**
   Le prompt du superviseur ou du routeur est celui de `dev-prompt`, hash
   vérifié comme pour tout agent.
 - **Tu n'ajoutes aucune arête, aucun nœud.** Un manque se signale

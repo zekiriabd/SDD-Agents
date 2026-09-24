@@ -35,7 +35,7 @@ n'est pas un problème de RAG** — vectoriser des lignes pour ensuite ne pas
 savoir compter est l'erreur classique.
 
 Tes contrats sont des tool contracts (un accès base **est** un outil pour
-l'agent) : tu écris sous `workspace/feats/contracts/tools/` avec le préfixe
+l'agent) : tu écris sous `workspace/pipeline/contracts/tools/` avec le préfixe
 `{n}-data-`, espace de noms disjoint de celui de `architect-tools`.
 
 ---
@@ -47,9 +47,9 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/feats/topology/{n}-topology.md` — accès base déclarés, agent exposé, CAP exigeante.
-- `workspace/feats/missions/{n}-*.md` — `## Actors` (**qui a le droit de voir quoi**), `## Business Rules`.
-- `workspace/feats/caps/{n}-*-*.md` — inputs/outputs, lecture ou écriture impliquée.
+- `workspace/pipeline/topology/{n}-topology.md` — accès base déclarés, agent exposé, CAP exigeante.
+- `workspace/pipeline/missions/{n}-*.md` — `## Actors` (**qui a le droit de voir quoi**), `## Business Rules`.
+- `workspace/pipeline/caps/{n}-*-*.md` — inputs/outputs, lecture ou écriture impliquée.
 - `workspace/stack/STACK.md` — `## Active Data Access` : `DatabaseType`,
   `DbAgentRole`, `DbStatementTimeoutMs`, `DbMaxRowsReturned`, `DbAllowedSchemas`,
   `DbForbiddenStatements`, `DbQueryLogging`. Et, si `declared-sources` est
@@ -160,7 +160,7 @@ réplica, allowlist de schémas/tables, statements interdits, timeout serveur,
 préalable avec refus au-delà d'un coût, journalisation intégrale, schéma servi
 restreint et annoté.
 
-Et un ADR : `workspace/feats/decisions/ADR-{timestamp}-text-to-sql-{slug}.md`, qui dit
+Et un ADR : `workspace/pipeline/decisions/ADR-{timestamp}-text-to-sql-{slug}.md`, qui dit
 honnêtement que le mode d'échec dominant n'est pas l'erreur SQL mais **la
 réponse plausible et fausse**, et quelle CAP mesure ce risque (`exact_match` ou
 `numeric_tolerance` contre une vérité terrain SQL, jamais un juge LLM seul).
@@ -202,11 +202,11 @@ exception.
 
 ## STEP 8 — Écrire
 
-- Un contrat par accès : `workspace/feats/contracts/tools/{n}-data-{slug}.tool.md`,
+- Un contrat par accès : `workspace/pipeline/contracts/tools/{n}-data-{slug}.tool.md`,
   depuis le template tool-contract, `Status: Draft`, avec une section
   `## Data Access` (stratégie, enveloppe, chemin d'identité, SQL de la vue à
   matérialiser par `dev-data` dans `workspace/src/{App}/data/views/`).
-- Les ADR exigés dans `workspace/feats/decisions/`.
+- Les ADR exigés dans `workspace/pipeline/decisions/`.
 
 ---
 

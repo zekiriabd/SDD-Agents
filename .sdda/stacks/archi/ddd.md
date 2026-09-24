@@ -106,7 +106,7 @@ Conséquences, toutes vérifiables :
 - la règle se teste en L1 (`app/domain/tests/`), l'outil en L2 (contrat), la
   décision de l'agent d'appeler l'outil en L5 — trois niveaux, trois causes
   d'erreur distinctes ;
-- le contrat de l'outil vit dans `feats/contracts/tools/{n}-*.tool.md` comme
+- le contrat de l'outil vit dans `pipeline/contracts/tools/{n}-*.tool.md` comme
   tout outil : `architect-tools` le déclare, `dev-tools` câble l'appel vers le
   Domaine, `dev-backend` écrit la fonction.
 

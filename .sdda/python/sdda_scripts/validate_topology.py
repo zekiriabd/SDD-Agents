@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G2 (côté Markdown) — TOPOLOGY GATE sur `workspace/feats/topology/{n}-topology.md`.
+"""G2 (côté Markdown) — TOPOLOGY GATE sur `workspace/pipeline/topology/{n}-topology.md`.
 
 Le contrôle du GRAPHE (atteignabilité, bornes, références) se fait sur l'IR
 (`validate_ir.py`). La COMPLÉTUDE de la déclaration d'architecture — roster,
@@ -156,7 +156,7 @@ def load_mermaid(root: Path | None, spec: TopologySpec) -> str:
 
     Il a eu un fichier à côté, `{n}-topology.mmd`, qui « faisait foi » quand il
     existait. Deux artefacts pour un graphe, c'est celui que personne ne relit
-    qui gouverne l'IR — et `feats/` ne porte que du Markdown. Le graphe EST une
+    qui gouverne l'IR — et une spécification ne porte que du Markdown. Le graphe EST une
     section de la topologie, et son hash est celui du fichier qui la contient.
     """
     del root  # conservé pour la signature ; la source est unique désormais
@@ -341,7 +341,7 @@ def build_parser() -> argparse.ArgumentParser:
     # connaissent qu'un numéro, jamais un chemin. Le positionnel reste pour
     # l'usage manuel et pour les tests.
     p.add_argument("--mission", type=int, default=None, help="numéro de MISSION ; restreint aux fichiers de cette MISSION")
-    p.add_argument("files", nargs="*", type=Path, help="fichiers topology ; défaut : workspace/feats/topology/*-topology.md")
+    p.add_argument("files", nargs="*", type=Path, help="fichiers topology ; défaut : workspace/pipeline/topology/*-topology.md")
     p.add_argument("--pre", action="store_true",
                    help="passe PRÉ-CONTRATS : tout sauf l'existence des contrats sur disque. "
                         "C'est l'état nominal juste après architect-topology, avant de payer les architectes")
@@ -361,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.topology_dir(root).glob("*-topology.md"))
     if not files:
-        combined.error("TOPOLOGY_INCOMPLETE", "aucune topologie trouvée", "créer workspace/feats/topology/{n}-topology.md", str(paths.topology_dir(root)))
+        combined.error("TOPOLOGY_INCOMPLETE", "aucune topologie trouvée", "créer workspace/pipeline/topology/{n}-topology.md", str(paths.topology_dir(root)))
     for f in files:
         combined.extend(validate_topology_file(f, root, config, write_report=not args.no_report, pre=args.pre))
     return finish(combined, args)

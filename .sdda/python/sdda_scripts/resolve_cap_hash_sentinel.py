@@ -10,7 +10,7 @@ Ce que le script fait, et rien d'autre :
 
     - lit la MISSION `{n}` et calcule son hash (`validate_mission.parse_mission`,
       le MÊME calcul que la CAP GATE — deux calculs seraient deux vérités) ;
-    - dans chaque `workspace/feats/caps/{n}-*-*.md`, remplace le sentinel (ou un
+    - dans chaque `workspace/pipeline/caps/{n}-*-*.md`, remplace le sentinel (ou un
       `<placeholder>`) par `sha256:{8}` ; un hash déjà posé n'est PAS touché,
       même périmé — c'est `validate_cap` qui juge `[CAP_PARENT_HASH_STALE]`,
       et réécrire ici masquerait exactement ce qu'il cherche ;
@@ -80,7 +80,7 @@ def run(root: Path, number: int, *, write: bool = True) -> tuple[Report, int]:
     report = Report(name="CAP.hash-sentinel", target=f"mission {number}")
     short_hash, where = mission_hash(root, number)
     if short_hash is None:
-        report.error("INFRA_BLOCKED", where, "vérifier workspace/feats/missions/ ; /sdda-mission écrit `{n}-{Name}.md`")
+        report.error("INFRA_BLOCKED", where, "vérifier workspace/pipeline/missions/ ; /sdda-mission écrit `{n}-{Name}.md`")
         return report, EXIT_INFRA
     report.data.update({"mission": where, "hash": short_hash, "files": []})
 

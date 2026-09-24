@@ -38,7 +38,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `retrievers[]`, et les `agents[]`
   qui les consomment (`trustPosture`).
-- `workspace/feats/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif,
+- `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif,
   config retenue, contraintes de filtrage, fraîcheur, PII.
 - `workspace/stack/STACK.md` — `## Active RAG Pattern`, `## Active Retrieval Stack`
   (vectorstore, embedding, `VectorStoreConnection`, `IngestionMode`,
@@ -152,7 +152,7 @@ le golden set de `qa-evals`.
 - **Tu ne changes aucune valeur de chunking, de poids ou de top-k.** Un écart
   observé se signale (`[RETRIEVAL_CONFIG_DRIFT]`) à `architect-rag`, avec ta
   mesure ; il n'est pas corrigé en silence.
-- **Tu n'écris pas dans `workspace/proof/datasets/`**, même un golden « pour tester ».
+- **Tu n'écris pas dans `workspace/pipeline/datasets/`**, même un golden « pour tester ».
 - **Tu n'ingères jamais un document hors du corpus déclaré** pour améliorer le recall.
 
 ### Le biais que tu dois combattre chez toi-même

@@ -227,7 +227,7 @@ def expand(root: Path, pattern: str, *, mission: str | None, target: str | None,
         # lockfiles) : jamais du contexte. Un `src/**` les comptait — 5 Mo de
         # `.mypy_cache` pour qa-tests au premier projet réel.
         found = [p for p in found if not (_NOISE_DIRS & set(p.parts)) and p.name not in _NOISE_FILES
-                 and p.suffix not in _NOISE_SUFFIXES]
+                 and p.suffix not in _NOISE_SUFFIXES and not _is_secret(p)]
         for path in found:
             if wired is not None and path.name.endswith(".tool.md") and path.name[: -len(".tool.md")] not in wired:
                 # Un contrat d'outil qu'aucun agent ne câble n'est pas du contexte :
@@ -243,6 +243,13 @@ def expand(root: Path, pattern: str, *, mission: str | None, target: str | None,
 
 _NOISE_DIRS = frozenset({".mypy_cache", ".ruff_cache", ".pytest_cache", "__pycache__", ".venv", "venv",
                          "node_modules", "build", "dist", ".git"})
+def _is_secret(path: Path) -> bool:
+    """Un fichier de secrets n'entre dans AUCUN pack : c'est le contenu qu'on donne à lire à un agent."""
+    from sdda_scripts.audit_ownership import is_secret_file  # import tardif : évite un cycle au chargement
+
+    return is_secret_file(path.name)
+
+
 _NOISE_FILES = frozenset({"uv.lock", "poetry.lock", "package-lock.json", "pnpm-lock.yaml", ".env"})
 _NOISE_SUFFIXES = frozenset({".pyc", ".db", ".sqlite", ".whl", ".so", ".dll", ".exe"})
 

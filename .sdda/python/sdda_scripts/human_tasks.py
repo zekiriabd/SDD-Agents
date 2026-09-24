@@ -46,11 +46,11 @@ KIND_ORDER: tuple[str, ...] = ("roster", "labels", "adr", "findings")
 #: instables (P3) que `/sdda-full --force` assume nominativement.
 YELLOW_GATES: tuple[str, ...] = ("G5", "G6", "G8")
 
-#: Où vivent les ADR : UN endroit, `feats/decisions/`, celui que nomme
+#: Où vivent les ADR : UN endroit, `pipeline/decisions/`, celui que nomme
 #: `paths.decisions_dir`. Ils en avaient deux (`.sys/.context/adrs/` pour la
 #: matrice, `docs/adr/` pour le gabarit), et ce script lisait les deux — la
 #: question « cet ADR a-t-il été écrit ? » avait deux réponses possibles.
-ADR_DIRS: tuple[str, ...] = ("workspace/feats/decisions",)
+ADR_DIRS: tuple[str, ...] = ("workspace/pipeline/decisions",)
 
 
 def task(kind: str, mission: int | None, title: str, why: str, how: str, *, blocking: bool, ref: str) -> dict[str, Any]:
@@ -133,7 +133,7 @@ def labels_tasks(root: Path, number: int, config: LayeredConfig) -> list[dict[st
         report_path = paths.resolve_rel(root, ref) if ref else None
         dataset = calibration.load_calibration_set(report_path) if report_path else None
 
-        labels_ref = f"workspace/proof/datasets/calibration/{grader}-v1.jsonl"
+        labels_ref = f"workspace/pipeline/datasets/calibration/{grader}-v1.jsonl"
         if report_path and report_path.is_file():
             try:
                 declared_ref = json.loads(report_path.read_text(encoding="utf-8-sig")).get("labelsRef")

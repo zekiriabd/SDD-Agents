@@ -43,7 +43,7 @@ def test_the_agent_is_read_at_the_root_for_an_action_inside_a_subagent() -> None
     AUTORISE. Toutes les écritures de tous les sous-agents passaient.
     """
     payload = {"tool_name": "Write", "agent_type": "dev-agent",
-               "tool_input": {"file_path": "workspace/proof/datasets/golden/x.jsonl"}}
+               "tool_input": {"file_path": "workspace/pipeline/datasets/golden/x.jsonl"}}
     assert _hook.agent_of(payload) == "dev-agent"
 
 
@@ -60,7 +60,7 @@ def test_a_payload_naming_nobody_is_still_the_main_thread() -> None:
 
 def test_a_dev_agent_can_no_longer_write_the_dataset_that_judges_it(project: Path) -> None:
     payload = {"tool_name": "Write", "agent_type": "dev-agent",
-               "tool_input": {"file_path": str(project / "workspace/proof/datasets/golden/billing-v1.jsonl")}}
+               "tool_input": {"file_path": str(project / "workspace/pipeline/datasets/golden/billing-v1.jsonl")}}
     assert preflight_ownership.check(project, payload) == _hook.DENY
 
 
@@ -80,7 +80,7 @@ def test_the_baseline_is_refused_to_everyone_including_the_main_thread(project: 
     """Le seul contrôle d'ownership qui ne dépend d'aucune identification :
     `promote_baseline` écrit en E/S Python, jamais par l'outil Write."""
     payload = {"tool_name": "Write",
-               "tool_input": {"file_path": str(project / "workspace/proof/baselines/1-system.json")}}
+               "tool_input": {"file_path": str(project / "workspace/pipeline/baselines/1-system.json")}}
     assert _hook.agent_of(payload) == ""
     assert preflight_ownership.check(project, payload) == _hook.DENY
 

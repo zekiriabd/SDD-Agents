@@ -230,7 +230,7 @@ workspace/src/{AppName}/
     └── tools/test_{tool_slug}.py
 ```
 
-Les evals (L3+) vivent dans `workspace/proof/`, hors du package — ownership
+Les evals (L3+) vivent dans `workspace/pipeline/`, hors du package — ownership
 `qa-evals`, jamais `dev-*` (ARCHITECTURE §7).
 
 ---
@@ -262,7 +262,7 @@ Les evals (L3+) vivent dans `workspace/proof/`, hors du package — ownership
 | `print(...)` | ruff `T20` | `[LOG_PRINT_FORBIDDEN]` |
 | `eval`, `exec`, `subprocess(shell=True)` | ruff `S` | `[SEC_DANGEROUS_CALL]` |
 | Dépendance non listée dans le `.libs.json` d'une stack active | diff `uv.lock` vs catalogues | `[STACK_LIBRARY_MISSING]` |
-| Écriture dans `workspace/proof/datasets/` ou `workspace/src/{App}/prompts/` depuis `src/` | scan d'imports/`open(...)` | `[EVAL_OWNERSHIP_VIOLATION]` |
+| Écriture dans `workspace/pipeline/datasets/` ou `workspace/src/{App}/prompts/` depuis `src/` | scan d'imports/`open(...)` | `[EVAL_OWNERSHIP_VIOLATION]` |
 | `time.sleep` en code async | ruff `ASYNC` | — |
 | `from x import *` | ruff `F403` | — |
 

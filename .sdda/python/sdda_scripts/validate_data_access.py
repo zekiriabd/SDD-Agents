@@ -864,7 +864,7 @@ def check_sql(root: Path, strategy: str, report: Report) -> dict[str, Any]:
                      fix="readonly | scoped-write | full", location=loc)
     elif role == "full":
         report.warn("DATA_ACCESS_ADR_REQUIRED", "`DbAgentRole: full` exige un ADR explicite",
-                    fix="écrire l'ADR dans workspace/feats/decisions/, ou restreindre le rôle", location=loc)
+                    fix="écrire l'ADR dans workspace/pipeline/decisions/, ou restreindre le rôle", location=loc)
 
     for key in ("DbStatementTimeoutMs", "DbMaxRowsReturned"):
         if _positive_int(section.get(key)) is None:

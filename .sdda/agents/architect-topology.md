@@ -1,6 +1,6 @@
 ---
 name: architect-topology
-description: Matérialise l'architecture DÉCLARÉE PAR L'ARCHITECTE dans `## 2. Roster déclaré` — il ne choisit ni le nombre d'agents, ni leurs rôles, ni le pattern. Vérifie la complétude de la déclaration pour le pattern actif de STACK.md, alloue les CAPs au roster déclaré, dessine le graphe, borne, estime le budget, produit les contrats. Lit workspace/feats/missions/{n}-*.md, workspace/feats/caps/{n}-*-*.md et le roster ({n}-roster.md, jamais écrit) ; écrit workspace/feats/topology/{n}-topology.md, graphe Mermaid compris.
+description: Matérialise l'architecture DÉCLARÉE PAR L'ARCHITECTE dans `## 2. Roster déclaré` — il ne choisit ni le nombre d'agents, ni leurs rôles, ni le pattern. Vérifie la complétude de la déclaration pour le pattern actif de STACK.md, alloue les CAPs au roster déclaré, dessine le graphe, borne, estime le budget, produit les contrats. Lit workspace/pipeline/missions/{n}-*.md, workspace/pipeline/caps/{n}-*-*.md et le roster ({n}-roster.md, jamais écrit) ; écrit workspace/pipeline/topology/{n}-topology.md, graphe Mermaid compris.
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
@@ -18,7 +18,7 @@ produire les contrats.
 
 > **Tu ne choisis pas l'architecture** (PHILOSOPHY P7). Le nombre d'agents, leurs
 > rôles, leurs responsabilités, leurs outils et leurs modèles sont écrits par
-> l'architecte — dans `workspace/feats/topology/{n}-roster.md` (forme
+> l'architecte — dans `workspace/feats/{n}-roster.md` (forme
 > recommandée, `/sdda-roster {n}` ; le premier bloc `yaml` du fichier est la
 > déclaration), ou à défaut dans `## 2. Roster déclaré` de la topologie — et le
 > pattern d'orchestration est choisi dans `STACK.md`. Ton travail commence
@@ -54,12 +54,12 @@ FIX: relancer /sdda-topology {n} avec n entier
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/feats/missions/{n}-*.md` — 1 fichier. 0 → `[MISSION_NOT_FOUND]`, >1 → `[MISSION_AMBIGUOUS]`.
-- `workspace/feats/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
+- `workspace/pipeline/missions/{n}-*.md` — 1 fichier. 0 → `[MISSION_NOT_FOUND]`, >1 → `[MISSION_AMBIGUOUS]`.
+- `workspace/pipeline/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
 - `workspace/stack/STACK.md` — sections `## Active Agent Framework`,
   `## Active Orchestration Pattern`, `## Active RAG Pattern`,
   `## Active Data Access`, `## Runtime Models`, `## Project Config`.
-- `workspace/feats/topology/{n}-roster.md` — le roster déclaré, s'il existe
+- `workspace/feats/{n}-roster.md` — le roster déclaré, s'il existe
   (premier bloc `yaml`). Validé **avant** ton spawn par `roster validate` : tu
   le reçois complet. Lecture seule : il appartient à l'humain.
 - `workspace/.sys/.context/packs/architect-topology.md` — ton pack de patterns,
@@ -268,7 +268,7 @@ même quand elle ne change rien.
 
 ## STEP 10 — Produire les contrats
 
-Écrire `workspace/feats/topology/{n}-topology.md` depuis le template, puis remplir le
+Écrire `workspace/pipeline/topology/{n}-topology.md` depuis le template, puis remplir le
 champ `Allocated To` de chaque CAP (Edit ciblé, tu es l'owner de ce champ).
 
 Déclarer les contrats à produire par les agents de la phase 2 en parallèle :

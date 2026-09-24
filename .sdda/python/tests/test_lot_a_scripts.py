@@ -166,7 +166,7 @@ def test_a_missing_section_is_named(booted: Path) -> None:
 
 
 def test_a_missing_directory_is_reported(booted: Path) -> None:
-    shutil.rmtree(booted / "workspace/proof/datasets/holdout")
+    shutil.rmtree(booted / "workspace/pipeline/datasets/holdout")
     code, out = run_main(smoke_check.main, ["--root", str(booted), "--json"])
     assert code == 1 and "WORKSPACE_TREE_INCOMPLETE" in out and "datasets/holdout" in out
 
@@ -190,7 +190,7 @@ SENTINEL = "Parent MISSION hash: sha256:COMPUTE_REQUIRED"
 
 
 def _cap(project: Path) -> Path:
-    return project / "workspace/feats/caps/1-1-ClassifyIntent.md"
+    return project / "workspace/pipeline/caps/1-1-ClassifyIntent.md"
 
 
 def _plant_sentinel(project: Path, path: Path | None = None) -> None:
@@ -215,7 +215,7 @@ def test_the_sentinel_is_replaced_by_the_missions_short_hash(project: Path) -> N
 
 
 def test_resolution_is_idempotent_and_leaves_other_hashes_alone(project: Path) -> None:
-    other = project / "workspace/feats/caps/1-2-ExplainInvoiceLine.md"
+    other = project / "workspace/pipeline/caps/1-2-ExplainInvoiceLine.md"
     before = other.read_text(encoding="utf-8")
     _plant_sentinel(project)
     assert run_main(resolve_cap_hash_sentinel.main, ["--root", str(project), "--mission", "1"])[0] == 0

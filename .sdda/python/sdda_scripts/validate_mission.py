@@ -7,7 +7,7 @@ Vérifie qu'une MISSION est SPÉCIFIÉE au sens de LIFECYCLE.md : objectif chiff
 failure policy, et cohérence de `## Required Stack` avec `STACK.md`.
 
 Usage :
-    python .sdda/sdda.py validate-mission workspace/feats/missions/1-SupportAssistant.md [--json]
+    python .sdda/sdda.py validate-mission workspace/pipeline/missions/1-SupportAssistant.md [--json]
     python .sdda/sdda.py validate-mission            # toutes les missions du workspace
 
 Écrit `workspace/.sys/.validation/G0-{missionId}.json` (sauf --no-report).
@@ -302,7 +302,7 @@ def build_parser() -> argparse.ArgumentParser:
     # connaissent qu'un numéro, jamais un chemin. Le positionnel reste pour
     # l'usage manuel et pour les tests.
     p.add_argument("--mission", type=int, default=None, help="numéro de MISSION ; restreint aux fichiers de cette MISSION")
-    p.add_argument("files", nargs="*", type=Path, help="fichiers MISSION ; défaut : workspace/feats/missions/*.md")
+    p.add_argument("files", nargs="*", type=Path, help="fichiers MISSION ; défaut : workspace/pipeline/missions/*.md")
     add_common_args(p)
     return p
 
@@ -319,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.missions_dir(root).glob("*.md"))
     if not files:
-        combined.error("MISSION_INCOMPLETE", "aucune MISSION trouvée", f"créer workspace/feats/missions/{{n}}-{{Name}}.md depuis le template", str(paths.missions_dir(root)))
+        combined.error("MISSION_INCOMPLETE", "aucune MISSION trouvée", f"créer workspace/pipeline/missions/{{n}}-{{Name}}.md depuis le template", str(paths.missions_dir(root)))
     for f in files:
         combined.extend(validate_mission_file(f, root, config, write_report=not args.no_report))
     return finish(combined, args)

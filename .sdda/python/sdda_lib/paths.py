@@ -33,97 +33,106 @@ def workspace(root: Path) -> Path:
     return root / "workspace"
 
 
-#: Les quatre entrées du workspace, et ce qui les sépare.
+#: Le workspace sépare ce que l'HUMAIN fournit de ce que le FRAMEWORK produit.
 #:
-#: L'arbre portait douze répertoires au même niveau, qui mélangeaient quatre
-#: NATURES sans le dire : ce qu'on spécifie, ce qu'on configure, ce qu'on
-#: produit, et ce qui juge. Un lecteur ne pouvait pas deviner, en regardant
-#: `caps/` et `traces/` côte à côte, que l'un se relit en revue et que l'autre
-#: se supprime sans perte.
+#: La v5 rangeait côte à côte, sous `feats/` et `proof/`, des fichiers que
+#: l'humain écrit (brief, roster, vérité terrain) et d'autres que le pipeline
+#: génère (MISSION, CAPs, contrats, jeux, suites). Un lecteur ne pouvait pas
+#: savoir, en ouvrant `feats/`, ce qu'il devait remplir et ce qu'il devait
+#: laisser au framework. La v6 le dit par l'arbre :
 #:
-#:   feats/   la SPÉCIFICATION — briefs, missions, caps, topologie, roster,
-#:            contrats, décisions. **Du Markdown, et rien d'autre.** Éditée par
-#:            l'humain et les agents de spécification, relue en revue,
-#:            versionnée. C'est l'ENTRÉE de la génération, jamais sa sortie.
-#:   stack/   la CONFIGURATION technique : `STACK.md`, seul. Versionné — il ne
-#:            porte que des NOMS de variables ; les valeurs vivent dans
-#:            `src/{App}/.env`, gitignoré, avec l'application qui les consomme
-#:            (même mécanisme que SDD_Pro).
-#:   src/     le CODE GÉNÉRÉ, prompts et schémas figés compris. Un prompt est
-#:            un actif d'exécution : hors du paquet, l'application livrée part
-#:            sans lui. Un schéma figé aussi : c'est contre lui que l'application
-#:            valide sa donnée au démarrage.
-#:   proof/   ce qui JUGE — la vérité terrain fournie par l'humain (`seed/`),
-#:            puis les jeux, suites, baselines, calibration. Aucun `dev-*` n'y
-#:            écrit jamais. C'est la seule frontière du framework qui ne souffre
-#:            aucune exception : l'agent qui écrit le code ne peut pas toucher
-#:            au jeu qui le note ni à la référence qui mesure sa régression.
-#:   .sys/    l'ÉTAT INTERNE et les sorties de run — IR, validation, traces,
-#:            rapports. Intégralement régénérable, donc effaçable.
+#:   CE QUE L'HUMAIN FOURNIT
+#:   stack/     `STACK.md`, seul : les choix techniques, des NOMS de variables.
+#:   feats/     ses spécifications en Markdown, à plat : le brief
+#:              `{n}-{Name}.md` et le roster `{n}-roster.md`. Rien d'autre.
+#:   assets/    les données (exports, corpus) — racine des stores `kind: local` —
+#:              et `.env`, les VALEURS des secrets de l'application générée.
+#:   seed/      la vérité terrain : scénarios annotés, labels.
 #:
-#: L'entrée de l'utilisateur tient donc en trois choses : `STACK.md` (les choix
-#: techniques), des fichiers Markdown sous `feats/` (ce que le système doit
-#: faire), et sa vérité terrain sous `proof/seed/`. Les URL d'API et les
-#: serveurs MCP sont des choix techniques : ils vont dans `STACK.md`, leurs
-#: identifiants dans `src/{App}/.env`.
+#:   CE QUE LE FRAMEWORK PRODUIT
+#:   pipeline/  tout ce que le pipeline génère pour préparer, concevoir et
+#:              prouver : missions/, caps/, topology/, contracts/, decisions/,
+#:              datasets/, suites/, baselines/, calibration/, fixtures/.
+#:   src/       l'application générée, `.env` copié depuis `assets/` compris.
+#:   .sys/      l'état interne et les sorties de run — effaçable.
+#:
+#: La frontière qui ne souffre aucune exception reste celle du JUGEMENT :
+#: aucun `dev-*` n'écrit sous `pipeline/datasets|suites|baselines|calibration/`.
+#: Elle tient aux zones de la matrice d'ownership, pas au nom du parent.
 FEATS = "feats"
-PROOF = "proof"
+SEED = "seed"
+ASSETS = "assets"
+PIPELINE = "pipeline"
+
+#: Ce que le pipeline range sous `pipeline/`, et que la migration v6 y déplace.
+PIPELINE_SPEC_DIRS: tuple[str, ...] = ("missions", "caps", "topology", "contracts", "decisions")
+PIPELINE_PROOF_DIRS: tuple[str, ...] = ("datasets", "suites", "baselines", "calibration", "fixtures")
 
 
 def feats_dir(root: Path) -> Path:
+    """`workspace/feats/` : les spécifications de l'HUMAIN, en Markdown, à plat."""
     return workspace(root) / FEATS
 
 
+def briefs_dir(root: Path) -> Path:
+    """Le brief de l'humain vit à la racine de `feats/` : `feats/{n}-{Name}.md`."""
+    return feats_dir(root)
+
+
+def pipeline_dir(root: Path) -> Path:
+    """`workspace/pipeline/` : tout ce que le framework génère avant et autour du code."""
+    return workspace(root) / PIPELINE
+
+
+def assets_dir(root: Path) -> Path:
+    return workspace(root) / ASSETS
+
+
 def missions_dir(root: Path) -> Path:
-    return feats_dir(root) / "missions"
+    return pipeline_dir(root) / "missions"
 
 
 def caps_dir(root: Path) -> Path:
-    return feats_dir(root) / "caps"
+    return pipeline_dir(root) / "caps"
 
 
 def topology_dir(root: Path) -> Path:
-    return feats_dir(root) / "topology"
+    return pipeline_dir(root) / "topology"
 
 
 def roster_path(root: Path, mission_number: int | str) -> Path:
-    """Le roster déclaré par l'architecte : `feats/topology/{n}-roster.md`.
+    """Le roster déclaré par l'architecte HUMAIN : `feats/{n}-roster.md`.
 
-    Un fichier Markdown dont le premier bloc ```yaml est la déclaration. Il a
-    vécu en `stack/topology/{n}-roster.yml` : un YAML dans la zone de
-    configuration, à côté d'un STACK.md gitignoré. Or le roster n'est pas une
-    configuration, c'est la première décision de la SPÉCIFICATION (P7) — il se
-    relit en revue avec la topologie qu'il commande. `feats/` ne contient que du
-    Markdown, et un YAML dans un bloc clôturé reste lisible par un humain autant
-    que par `yaml_mini`.
-
-    Il appartient à l'HUMAIN : `architect-topology` le lit, ne l'écrit jamais
-    (`loader.yml`). Le voisin `{n}-topology.md` appartient à l'agent. Deux
-    fichiers, deux owners, un même répertoire.
+    Un fichier Markdown dont le premier bloc ```yaml est la déclaration :
+    combien d'agents, lesquels, qui porte quelle CAP (P7). Il a vécu à côté de
+    la topologie que l'agent écrit (`pipeline/topology/`) — deux owners dans un
+    même répertoire, et l'humain ne savait pas lequel des deux fichiers était
+    le sien. Il est désormais avec ses autres spécifications. `architect-topology`
+    le lit, ne l'écrit jamais (`loader.yml`).
     """
-    return topology_dir(root) / f"{mission_number}-roster.md"
+    return feats_dir(root) / f"{mission_number}-roster.md"
 
 
 def seed_dir(root: Path) -> Path:
-    """La vérité terrain fournie par l'HUMAIN : `proof/seed/`.
+    """La vérité terrain fournie par l'HUMAIN : `workspace/seed/`.
 
-    Scénarios annotés, labels, exemples de référence — tout ce que `po-elicitor`
+    Scénarios annotés, labels, exemples de référence — ce que `po-elicitor`
     demande sous le nom de « ground truth » et que `qa-evals` étend en golden,
-    holdout et adversarial. Sous `proof/` parce que c'est ce qui JUGE, hors de
-    `datasets/` parce que `datasets/` appartient à `qa-evals` seul : la graine
-    est humaine, sa dérivation est de l'agent, et la frontière entre les deux
-    se lit dans l'arbre. Aucun `dev-*` n'y touche, comme partout sous `proof/`.
+    holdout et adversarial sous `pipeline/datasets/`. La graine est humaine, sa
+    dérivation est de l'agent : la première est à la racine avec les autres
+    entrées humaines, la seconde avec ce que le framework produit. Aucun `dev-*`
+    n'y touche.
     """
-    return proof_dir(root) / "seed"
+    return workspace(root) / SEED
 
 
 def contracts_dir(root: Path, kind: str) -> Path:
     """kind ∈ {agents, tools, retrieval, memory}."""
-    return feats_dir(root) / "contracts" / kind
+    return pipeline_dir(root) / "contracts" / kind
 
 
 def decisions_dir(root: Path) -> Path:
-    """Les ADR. UN seul endroit.
+    """Les ADR. UN seul endroit : `pipeline/decisions/`.
 
     Ils vivaient à deux : `docs/adr/` que citait le gabarit, et
     `.sys/.context/adrs/` que déclarait la matrice d'ownership. Le script des
@@ -131,7 +140,7 @@ def decisions_dir(root: Path) -> Path:
     « cet ADR a-t-il été écrit ? » avait deux réponses possibles, et que celle
     qui gouvernait était celle que personne ne relisait.
     """
-    return feats_dir(root) / "decisions"
+    return pipeline_dir(root) / "decisions"
 
 
 def prompts_dir(root: Path, app_name: str) -> Path:
@@ -176,7 +185,7 @@ def rules_dir(root: Path, app_name: str) -> Path:
 def memory_dir(root: Path, app_name: str) -> Path:
     """`workspace/src/{App}/memory/` : l'implémentation du contrat de mémoire.
 
-    `architect-memory` écrit le contrat (`feats/contracts/memory/`) ; ce module
+    `architect-memory` écrit le contrat (`pipeline/contracts/memory/`) ; ce module
     le réalise — fenêtre de conversation, état partagé entre agents, politique
     PII à l'écriture. Il n'avait aucun owner : le contrat existait, rien ne le
     devenait. Owner : `dev-orchestration`, qui possède déjà l'état du graphe.
@@ -184,17 +193,21 @@ def memory_dir(root: Path, app_name: str) -> Path:
     return app_dir(root, app_name) / "memory"
 
 
-def proof_dir(root: Path) -> Path:
-    return workspace(root) / PROOF
-
-
 def datasets_dir(root: Path, kind: str | None = None) -> Path:
-    base = proof_dir(root) / "datasets"
+    base = pipeline_dir(root) / "datasets"
     return base / kind if kind else base
 
 
-def evals_dir(root: Path) -> Path:
-    return proof_dir(root)
+def suites_dir(root: Path) -> Path:
+    return pipeline_dir(root) / "suites"
+
+
+def baselines_dir(root: Path) -> Path:
+    return pipeline_dir(root) / "baselines"
+
+
+def calibration_dir(root: Path) -> Path:
+    return pipeline_dir(root) / "calibration"
 
 
 def reports_dir(root: Path) -> Path:
@@ -247,6 +260,23 @@ def app_dir(root: Path, app_name: str) -> Path:
 def env_rel(app_name: str) -> str:
     """Le chemin de `.env` tel qu'on l'écrit dans un message : `workspace/src/{App}/.env`."""
     return f"workspace/src/{app_name}/.env"
+
+
+#: Là où l'HUMAIN dépose les valeurs des secrets. `install-env` les copie dans
+#: `src/{App}/.env`, avec l'application qui les consomme.
+ENV_SOURCE_REL = "workspace/assets/.env"
+
+
+def env_source_path(root: Path) -> Path:
+    """`workspace/assets/.env` : le fichier de secrets que l'humain fournit.
+
+    L'humain dépose ses entrées à trois endroits — `stack/`, `feats/`,
+    `assets/` — et non dans l'arbre généré. Le runtime, lui, lit `src/{App}/.env`
+    (l'application part de là en exécutable ou en conteneur) : `install-env`
+    fait la copie, sans LLM. Aucun agent ne lit l'un ou l'autre fichier
+    (`audit_ownership.is_secret_file`, appliqué par les hooks de lecture).
+    """
+    return workspace(root) / ENV_SOURCE_REL.split("/", 1)[1]
 
 
 def env_path(root: Path, app_name: str) -> Path:

@@ -31,7 +31,7 @@ def _phase_2_workspace(project: Path) -> Path:
     contrat au gabarit. La fixture livre ses prompts, donc aucun test ne le voyait."""
     for p in (project / "workspace/src/SupportAssistant/prompts").glob("*.md"):
         p.unlink()
-    for c in (project / "workspace/feats/contracts/agents").glob("*.agent.md"):
+    for c in (project / "workspace/pipeline/contracts/agents").glob("*.agent.md"):
         c.write_text(re.sub(r"(Hash\s*:\s*)sha256:[0-9a-f]+", r"\1sha256:…",
                             c.read_text(encoding="utf-8")), encoding="utf-8")
     return project
@@ -142,7 +142,7 @@ def test_every_bypass_writer_uses_the_field_the_readers_expect(project: Path) ->
 # 6. La section de justification est lue sous le titre que le gabarit donne
 # ---------------------------------------------------------------------------
 def test_the_simplicity_section_is_parsed_under_the_template_heading(project: Path) -> None:
-    topo = project / "workspace/feats/topology/1-topology.md"
+    topo = project / "workspace/pipeline/topology/1-topology.md"
     text = topo.read_text(encoding="utf-8")
     assert "## 3. Alternative plus simple considérée" in text
     spec = validate_topology.parse_topology(text, topo)

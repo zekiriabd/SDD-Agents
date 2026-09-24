@@ -12,7 +12,7 @@
 > Utilisateur final : préférer `/sdda-full {n}` (pré-conditions, idempotence, état).
 
 Invoque l'agent `po-capabilities` pour découper la MISSION `{n}` en
-CAPABILITYs (`workspace/feats/caps/{n}-{m}-{Name}.md`, 1 fichier = 1 CAP), puis
+CAPABILITYs (`workspace/pipeline/caps/{n}-{m}-{Name}.md`, 1 fichier = 1 CAP), puis
 applique la **CAP GATE (G1)** : chaque AC nomme **métrique + seuil + dataset +
 grader + k runs** ; chaque `BR-i` / `AC-i` de la MISSION est couvert par ≥ 1 CAP.
 
@@ -34,7 +34,7 @@ C'est la règle la plus structurante du framework (PHILOSOPHY P2) : elle force
 
 Si `{n}` absent → demander :
 ```
-Quel est le numéro de la MISSION à découper ? (ex. : 1 pour workspace/feats/missions/1-SupportAssistant.md)
+Quel est le numéro de la MISSION à découper ? (ex. : 1 pour workspace/pipeline/missions/1-SupportAssistant.md)
 ```
 
 Si non numérique → ERROR :
@@ -59,7 +59,7 @@ fi
 
 ## STEP 2 — Vérifier la MISSION et son état
 
-Glob `workspace/feats/missions/{n}-*.md` :
+Glob `workspace/pipeline/missions/{n}-*.md` :
 - 0 fichier → ERROR `[MISSION_NOT_FOUND]` — FIX : `/sdda-mission {Name}`
 - > 1 fichier → ERROR `[MISSION_AMBIGUOUS]` — FIX : renommer
 
@@ -84,7 +84,7 @@ MISSION (8 premiers caractères → `Parent MISSION hash` des CAPs).
 
 ## STEP 3 — Idempotence et CAPs existantes
 
-Glob `workspace/feats/caps/{n}-*.md` :
+Glob `workspace/pipeline/caps/{n}-*.md` :
 
 | Situation | Action |
 |---|---|
@@ -111,7 +111,7 @@ RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
 ## STEP 5 — Invoquer `po-capabilities`
 
 Agent : `po-capabilities` (`.sdda/agents/po-capabilities.md`). Tier
-`balanced`. Owner exclusif de `workspace/feats/caps/{n}-*.md` (Create exclusif).
+`balanced`. Owner exclusif de `workspace/pipeline/caps/{n}-*.md` (Create exclusif).
 
 Prompt d'invocation :
 ```
@@ -120,7 +120,7 @@ Découper la MISSION {n}-{MissionName} en capabilities. Template :
 Cible CapGranularityTarget={…}, warn à {CapGranularityWarnAt}, hard cap {CapGranularityHardCap}
 {(bypass SDDA_ALLOW_LARGE_MISSION actif)}.
 Parent MISSION hash : sha256:{hash-8}. Confidence plafond : {MissionConfidence} (R4).
-Chaque AC : metric + threshold + dataset (chemin sous workspace/proof/datasets/) + grader + runs
+Chaque AC : metric + threshold + dataset (chemin sous workspace/pipeline/datasets/) + grader + runs
 (3, ou 5 si Criticality: critical). Laisser ## Allocated To vide (décision de PHASE 2).
 Couvrir chaque BR-i et AC-i de la MISSION dans ## Covers d'au moins une CAP.
 ```
@@ -168,7 +168,7 @@ Contrôles (INVARIANTS `cap-ac-must-be-evaluable`, G1) :
 | 2 | `threshold` est un comparateur numérique (`>= 0.85`, `<= 1200`, `== 0`) | `[AC_NOT_EVALUABLE]` |
 | 3 | `grader` ∈ liste close ; `llm-judge` ⇒ la CAP nomme la grille (`notes` ou `Metadata.judgeRubric`) | `[AC_GRADER_UNKNOWN]` |
 | 4 | `runs ≥ EvalRuns` ; `runs ≥ 5` si `Criticality: critical` | `[AC_RUNS_INSUFFICIENT]` |
-| 5 | `dataset` pointe sous `workspace/proof/datasets/golden/` (jamais `holdout/`) | `[AC_DATASET_IS_HOLDOUT]` |
+| 5 | `dataset` pointe sous `workspace/pipeline/datasets/golden/` (jamais `holdout/`) | `[AC_DATASET_IS_HOLDOUT]` |
 | 6 | Chaque `BR-i` / `AC-i` de la MISSION apparaît dans ≥ 1 `## Covers` | `[TRACEABILITY_GAP]` |
 | 7 | Chaque `Covers` référence un identifiant existant dans la MISSION | `[TRACEABILITY_DANGLING]` |
 | 8 | `Parent MISSION hash` == hash courant de la MISSION | `[MISSION_HASH_MISMATCH]` |
@@ -207,9 +207,9 @@ python .sdda/sdda.py compute-status --mission {n}
 ```
 ✅ MISSION {n}-{MissionName} — PHASE 1 terminée · G1 🟢
 
-CAPs générées    : {C} fichiers dans workspace/feats/caps/  ({K} critical → k=5)
+CAPs générées    : {C} fichiers dans workspace/pipeline/caps/  ({K} critical → k=5)
 AC mesurables    : {A} (graders : llm-judge {x} · exact {y} · trajectory {z} · …)
-Datasets nommés  : {D} sous workspace/proof/datasets/golden/  (à produire par qa-evals, PHASE 6)
+Datasets nommés  : {D} sous workspace/pipeline/datasets/golden/  (à produire par qa-evals, PHASE 6)
 Juges LLM à calibrer : {J} (invariant llm-judge-calibrated)
 Couverture       : {B}/{B} BR · {S}/{S} AC système
 

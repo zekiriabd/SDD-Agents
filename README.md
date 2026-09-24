@@ -70,29 +70,37 @@ component is `untested` until a measured run has taken place (Lot 6).
 
 ## Where your work lives — the workspace
 
-Four entries, four natures. The tree used to have twelve directories at the
-same level, and nothing said that `caps/` is reviewed by humans while
-`traces/` can be deleted without loss.
+What you provide sits at the root; what the framework produces sits under
+`pipeline/`. Up to v5, `feats/` mixed your brief and roster with the missions,
+capabilities and contracts the agents generate, and `proof/` mixed your ground
+truth with the eval sets: opening either, you could not tell what was yours to
+fill.
 
 ```
 workspace/
-├── stack/     what you CONFIGURE — STACK.md, alone, versioned (names of variables; values in src/{App}/.env)
-├── feats/     what you SPECIFY  — Markdown only: briefs · missions · caps · roster + topology · contracts · decisions (ADR)
-├── assets/    what you DROP       — static files (JSON/CSV exports, corpus): the root of `kind: local` stores (SDD_Pro's assets/)
-├── src/       what gets PRODUCED — the generated application, prompts and frozen schemas included
-├── proof/     what JUDGES        — seed (your ground truth) · datasets · suites · baselines · calibration
+│ ── what YOU provide ───────────────────────────────────────────────────────
+├── stack/     STACK.md, alone, versioned — technical choices, names of variables only
+├── feats/     your specs, Markdown only, flat — {n}-{Name}.md (the brief) · {n}-roster.md (the roster)
+├── assets/    your data (root of `kind: local` stores) and .env — the secret VALUES of the generated app
+├── seed/      your ground truth — annotated scenarios, labels
+│ ── what the FRAMEWORK produces ─────────────────────────────────────────────
+├── pipeline/  missions · caps · topology · contracts · decisions (ADR) · datasets · suites · baselines · calibration
+├── src/       the generated application, prompts and frozen schemas included; .env copied from assets/
 └── .sys/      internal state and run output — IR, validation, reports, traces (regenerable)
 ```
 
-You write three things: `stack/STACK.md` (the technical choices — language,
-framework, pattern, data sources, API URLs, MCP servers; secret values go in a
-gitignored `src/{App}/.env`, next to the application that consumes them — the
-build harness never reads it), Markdown files under `feats/` (what the system must do),
-and your ground truth under `proof/seed/`. Everything else is produced. **No `dev-*` agent may ever write under
-`proof/`**: the agent that writes the code cannot touch the dataset that grades
-it, nor the baseline its regression is measured against. That is the one
-boundary of the framework with no exception, and it is enforced at runtime by
-the ownership hook, not by convention.
+You provide four things: `stack/STACK.md` (language, framework, pattern, data
+sources, API URLs, MCP servers), Markdown files under `feats/` (what the system
+must do, then the roster that says how), your data and `.env` under `assets/`,
+and your ground truth under `seed/`. `python .sdda/sdda.py install-env` copies
+`assets/.env` into `src/{App}/.env` without an LLM: the generated application
+reads it, the build harness never does, and no agent may read it — the read
+hooks refuse `[SECRET_READ_FORBIDDEN]`. **No `dev-*` agent may ever write under
+`pipeline/datasets`, `suites`, `baselines` or `calibration`**: the agent that
+writes the code cannot touch the dataset that grades it, nor the baseline its
+regression is measured against. That is the one boundary of the framework with
+no exception, and it is enforced at runtime by the ownership hook, not by
+convention.
 
 An older workspace moves to this layout with
 `python .sdda/sdda.py migrate-workspace`, which relocates content instead of
@@ -247,7 +255,7 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 ## Status
 
 **Lots 1 and 2 written.** The deterministic base and the evaluation engine exist
-and are tested (<!--sdda:count tests-->1158<!--/sdda:count--> test functions):
+and are tested (<!--sdda:count tests-->1166<!--/sdda:count--> test functions):
 
 - `bootstrap.py` end to end; G0 (mission), G1 (capabilities) and G2 (topology,
   IR, budget) actually **refuse** a defective specification — a non-measurable

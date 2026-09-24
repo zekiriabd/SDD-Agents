@@ -153,7 +153,7 @@ que les gates amont sont vertes.
 
 Mode création → exécuter `/sdda-mission {Name}` (STEP 3.0), puis continuer.
 
-Mode existant → Glob `workspace/feats/missions/{n}-*.md` :
+Mode existant → Glob `workspace/pipeline/missions/{n}-*.md` :
 `[MISSION_NOT_FOUND]` / `[MISSION_AMBIGUOUS]` → STOP.
 
 ```bash

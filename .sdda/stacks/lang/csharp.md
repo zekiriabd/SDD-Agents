@@ -208,7 +208,7 @@ workspace/src/{AppName}/
     └── Tools/{ToolSlug}Tests.cs
 ```
 
-Les evals (L3+) vivent dans `workspace/proof/`, hors de la solution — ownership
+Les evals (L3+) vivent dans `workspace/pipeline/`, hors de la solution — ownership
 `qa-evals`, jamais `dev-*` (ARCHITECTURE §7).
 
 ---
