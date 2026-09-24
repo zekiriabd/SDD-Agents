@@ -320,7 +320,10 @@ class LlmJudgeGrader(BaseGrader):
         status = calibration_status(config)
         prompt = build_prompt(rubric, item, output)
         if getattr(client, "accepts_schema", False):
-            response = client.judge(prompt, schema=response_schema(rubric))
+            # Le protocole minimal `JudgeClient` ne connaît que `judge(prompt)` ;
+            # un client réel (judge_clients.py) s'annonce par `accepts_schema`.
+            schema_client: Any = client
+            response = schema_client.judge(prompt, schema=response_schema(rubric))
         else:
             response = client.judge(prompt)
 

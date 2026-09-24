@@ -110,8 +110,8 @@ def merged_run_report(root: Path, number: int, run_id: str) -> dict[str, Any] | 
     promouvoir « le run » depuis lui laissait toutes les autres suites sans
     baseline, donc sans régression mesurable.
     """
-    datas = [(p, load_json(p)) for p in reports_for_run(root, number, run_id)]
-    datas = [(p, d) for p, d in datas if d is not None]
+    loaded = [(p, load_json(p)) for p in reports_for_run(root, number, run_id)]
+    datas: list[tuple[Path, dict[str, Any]]] = [(p, d) for p, d in loaded if d is not None]
     if not datas:
         return None
     merged = dict(datas[-1][1])
