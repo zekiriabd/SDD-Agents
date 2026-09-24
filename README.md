@@ -441,3 +441,10 @@ Remaining: the six generator agents and their stacks (Lot 4), then review
 measured by a real run. C1 is the MVP target, in `design-phase`. Announcing
 anything else would be precisely the false green this framework exists to
 prevent.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). The same terms cover the framework sources under
+`.sdda/` and the `sdda` Python package built from `.sdda/python/`.
