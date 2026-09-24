@@ -1,12 +1,12 @@
 # SDD_Agents — Domain Model
 
-Le vocabulaire clos du framework. Toute entité manipulée par un agent, un script,
-un template ou une gate est l'une de celles-ci. Un concept absent de ce document
-n'existe pas dans SDD_Agents.
+The framework's closed vocabulary. Every entity handled by an agent, a script,
+a template or a gate is one of these. A concept absent from this document does
+not exist in SDD_Agents.
 
 ---
 
-## 1. Vue d'ensemble
+## 1. Overview
 
 ```
 MISSION  1 ─── n  CAPABILITY
@@ -14,9 +14,12 @@ MISSION  1 ─── n  CAPABILITY
    │                  ├── n  ACCEPTANCE CRITERION  (métrique + seuil + DATASET)
    │                  └── allouée à ──► AGENT  et/ou  TOOL  et/ou  RETRIEVER
    │
+   ├── 1 ─── 1  ROSTER  (déclaré par l'architecte)
+   │
    └── 1 ─── 1  TOPOLOGY
                   ├── n  AGENT ─── n  TOOL
                   │        ├── 1  PROMPT
+                  │        ├── n  SKILL · n  RULE
                   │        ├── 1  MODEL BINDING (tier)
                   │        ├── 1  BOUNDS
                   │        └── n  MEMORY SCOPE
@@ -28,152 +31,194 @@ MISSION  1 ─── n  CAPABILITY
                   EVAL SUITE ─── n  EVALUATION ─── 1  GRADER
                             └── 1  BASELINE
                   RUN ─── n  TRACE SPAN
+                  ADR ─── couvre ──► une décision refusée par défaut
 ```
 
 ---
 
-## 2. Entités de spécification
+## 2. Specification entities
 
 ### MISSION
-*L'équivalent de la FEAT de SDD_Pro.* Ce que le système agentic doit accomplir,
-en termes métier.
+*The equivalent of SDD_Pro's FEAT.* What the agentic system must accomplish,
+in business terms.
 
-| Champ | Nature | Obligatoire |
+| Field | Nature | Mandatory |
 |---|---|:---:|
-| `id` | `{n}-{Name}` — stable, jamais renuméroté | oui |
-| `context` / `objective` | prose bornée | oui |
-| `quantified_goal` | métrique + cible + échéance | oui (G0) |
-| `budget` | `cost_per_run`, `latency_p95`, `token_ceiling` | oui (G0) |
-| `actors` | humains et systèmes en interaction | oui |
-| `ground_truth` | d'où vient la vérité contre laquelle on évalue | oui (G0) |
-| `trust_boundaries` | quelles sources sont non maîtrisées | oui |
-| `business_rules` | `BR-{i}` | oui |
-| `acceptance_criteria` | `AC-{i}` niveau système | oui |
-| `out_of_scope` | explicite | oui |
-| `failure_policy` | que fait le système quand il ne sait pas | oui |
+| `id` | `{n}-{Name}` — stable, never renumbered | yes |
+| `context` / `objective` | bounded prose | yes |
+| `quantified_goal` | metric + target + deadline | yes (G0) |
+| `budget` | `cost_per_run`, `latency_p95`, `token_ceiling` | yes (G0) |
+| `actors` | humans and systems interacting | yes |
+| `ground_truth` | where the truth we evaluate against comes from | yes (G0) |
+| `trust_boundaries` | which sources are uncontrolled | yes |
+| `business_rules` | `BR-{i}` | yes |
+| `acceptance_criteria` | system-level `AC-{i}` | yes |
+| `out_of_scope` | explicit | yes |
+| `failure_policy` | what the system does when it does not know | yes |
 
-> `failure_policy` n'a pas d'équivalent SDD_Pro et est obligatoire ici : un
-> système agentic *aura* des cas hors compétence. Ne pas décider quoi en faire,
-> c'est décider qu'il inventera.
+> `failure_policy` has no SDD_Pro equivalent and is mandatory here: an agentic
+> system *will* meet cases outside its competence. Not deciding what to do with
+> them is deciding it will make things up.
 
 ### CAPABILITY (CAP)
-*L'équivalent de la User Story.* **Une** compétence discrète et évaluable.
+*The equivalent of the User Story.* **One** discrete, evaluable capability.
 
-| Champ | Nature |
+| Field | Nature |
 |---|---|
 | `id` | `{n}-{m}-{Name}` — stable |
-| `parent_mission_hash` | `sha256:…` — détecte une MISSION modifiée sous les pieds |
-| `statement` | « Le système doit pouvoir <action observable> » |
-| `acceptance_criteria` | chacun : **métrique + seuil + dataset + k runs** |
-| `covers` | `BR-i`, `AC-i` de la MISSION — traçabilité montante |
-| `inputs` / `outputs` | schémas, pas de la prose |
-| `allocated_to` | agent(s), outil(s), retriever(s) — rempli en PHASE 2 |
-| `criticality` | `normal` \| `critical` — pilote k runs et les seuils |
-| `failure_behavior` | ce que fait le système quand cette CAP échoue |
+| `parent_mission_hash` | `sha256:…` — detects a MISSION modified underneath |
+| `statement` | "The system must be able to <observable action>" |
+| `acceptance_criteria` | each: **metric + threshold + dataset + k runs** |
+| `covers` | the MISSION's `BR-i`, `AC-i` — upward traceability |
+| `inputs` / `outputs` | schemas, not prose |
+| `allocated_to` | agent(s), tool(s), retriever(s) — filled in PHASE 2 by `architect-topology` |
+| `criticality` | `normal` \| `critical` — drives k runs and thresholds |
+| `failure_behavior` | what the system does when this CAP fails |
 
-**Une CAP n'est pas un agent.** L'allocation CAP -> agent est une décision
-d'architecture prise en PHASE 2, révisable sans toucher les CAPs. Confondre les
-deux est l'erreur qui fige une topologie avant de l'avoir pensée.
+**A CAP is not an agent.** The CAP -> agent allocation is an architecture
+decision taken in PHASE 2, revisable without touching the CAPs. Confusing the
+two is the mistake that freezes a topology before it has been thought through.
+
+The separation shows even in the hashes. G1 pins the CAP **without** its
+`## Allocated To` section (key `capspec:`): PHASE 2 writes the allocation, and it
+must not make PHASE 1 stale. G2 and the IR pin the **whole** CAP (key `cap:`): a
+reallocation, on the other hand, does make the topology stale.
 
 ---
 
-## 3. Entités d'architecture
+## 3. Architecture entities
+
+### ROSTER
+The architect's declaration, **human** (PHILOSOPHY P7): how many agents, which
+ones, their roles, their tools, their tiers, their skills and their rules.
+Written in `workspace/feats/{n}-roster.md` (the first `yaml` block is
+authoritative), validated by `python .sdda/sdda.py roster validate`, never
+written by an agent. `architect-topology` copies it verbatim into the topology
+and materialises it; it does not modify it (`[ARCH_ROSTER_MUTATED]`).
 
 ### TOPOLOGY
-La décision d'architecture agentic : quels agents, quels outils, quel pattern,
-quel budget estimé, et **quelle alternative plus simple a été écartée et pourquoi**.
+The materialisation of the declared architecture: CAPs allocated to the roster,
+the graph, the bounds, the **estimated budget** — and, as advice, the **simpler
+topology considered** and how much less it would have cost.
 
-### AGENT (entité du produit généré — à ne pas confondre avec les Developer Agents)
+### AGENT (an entity of the generated product — not to be confused with the Developer Agents)
 
-| Champ | Nature |
+| Field | Nature |
 |---|---|
-| `id`, `role` | identité |
-| `serves_caps` | les CAPs dont il porte la responsabilité |
-| `prompt_ref` | `workspace/src/{App}/prompts/{agent}.system.md` + son hash |
-| `model_tier` | `fast` \| `balanced` \| `deep` — jamais un nom de modèle (P11) |
-| `tools` | références de TOOL — le minimum exigé par ses CAPs (P8) |
-| `retrievers` | références de RETRIEVER |
-| `memory_scopes` | ce qu'il lit et écrit en mémoire |
-| `input_schema` / `output_schema` | contrats structurés |
+| `id`, `role` | identity |
+| `serves_caps` | the CAPs it is responsible for (at least one) |
+| `prompt_ref` | `workspace/src/{App}/prompts/{agent}.system.md` + its hash |
+| `model_tier` | `fast` \| `balanced` \| `deep` — never a model name (P11) |
+| `tools` | TOOL references — what it has the **right to call**, the minimum its CAPs require (P8) |
+| `skills` | what it **knows how to do** — a named competence, with no schema and no side effect, carried by the prompt |
+| `rules` | what it **must respect** — a named constraint, carried by the prompt, twin of `skills` |
+| `retrievers` | RETRIEVER references |
+| `memory_scopes` | what it reads and writes in memory |
+| `input_schema` / `output_schema` | structured contracts |
 | `bounds` | `max_iterations`, `max_tool_calls`, `max_delegation_depth`, `timeout_s`, `budget_usd` (P12) |
 | `on_bound_exceeded` | `fail-explicit` \| `degrade` \| `escalate-human` |
-| `handoff_contract` | à qui il passe la main, avec quel état, à quelle condition |
-| `refusal_policy` | ce qu'il refuse de faire, explicitement |
-| `trust_posture` | quelles entrées il traite comme hostiles |
+| `handoff_contract` | whom it hands over to, with which state, under which condition |
+| `refusal_policy` | what it refuses to do, explicitly |
+| `trust_posture` | which inputs it treats as hostile |
+
+> **A skill or a rule is not a tool.** Least privilege is never inferred from a
+> skill: only `tools` grants a right. Since neither has a schema, no gate can
+> execute them; their only check is contract ↔ prompt symmetry
+> (`lint_prompts.py`: `[SKILL_NOT_IMPLEMENTED]`, `[SKILL_UNDECLARED]`,
+> `[RULE_NOT_IMPLEMENTED]`, `[RULE_UNDECLARED]`), and their effect is measured in
+> G5, through the ACs of the CAPs served.
 
 ### TOOL
 
-| Champ | Nature |
+| Field | Nature |
 |---|---|
-| `name`, `description` | **la description est du prompt** : c'est sur elle que le modèle décide d'appeler ou non |
+| `name`, `description` | **the description is prompt**: it is what the model decides on whether to call it |
 | `input_schema` / `output_schema` | JSON Schema |
 | `side_effect_class` | `read-only` \| `write-scoped` \| `write-destructive` \| `external-side-effect` |
-| `safety_strategy` | obligatoire si != `read-only` : dry-run, clé d'idempotence, confirmation, allowlist, plafond |
-| `errors` | chaque erreur déclarée, avec son comportement attendu côté agent |
-| `auth` | référence d'env, jamais la valeur |
-| `rate_limit`, `timeout_s`, `retry_policy` | bornes |
-| `trust` | `trusted` \| `untrusted` — la sortie est-elle du texte hostile (P8) |
-| `contract_tests` | référence de la suite L2 |
+| `safety_strategy` | mandatory if != `read-only`: dry-run, idempotency key, confirmation, allowlist, cap |
+| `errors` | every declared error, with its expected behaviour on the agent side |
+| `auth` | an env reference, never the value |
+| `rate_limit`, `timeout_s`, `retry_policy` | bounds |
+| `trust` | `trusted` \| `untrusted` — is the output hostile text (P8) |
+| `contract_tests` | reference to the L2 suite |
 
-> **La `description` d'un outil est un artefact de prompt engineering**, pas de la
-> documentation. Une description vague est la cause première des « l'agent
-> n'appelle pas le bon outil ». Elle est revue comme du prompt, hashée comme du
-> prompt.
+> **A tool's `description` is a prompt-engineering artefact**, not
+> documentation. A vague description is the first cause of "the agent doesn't
+> call the right tool". It is reviewed like prompt, hashed like prompt.
 
 ### RETRIEVER / INDEX / CORPUS
-`CORPUS` (les sources) -> ingestion + chunking -> `INDEX` (le store) ->
-`RETRIEVER` (la stratégie de requête). Les trois sont distincts parce qu'ils
-échouent différemment et se mesurent séparément : un corpus incomplet, un index
-mal découpé et une stratégie de requête inadaptée produisent le même symptôme.
+`CORPUS` (the sources) -> ingestion + chunking -> `INDEX` (the store) ->
+`RETRIEVER` (the query strategy). The three are distinct because they fail
+differently and are measured separately: an incomplete corpus, a badly chunked
+index and an ill-suited query strategy produce the same symptom.
 
 ### DATA ACCESS
-Comment un agent touche une base : `view-per-agent`, `repository-tools`,
-`semantic-layer`, `text-to-sql`, `graphql`. Porte toujours son **enveloppe de
-sûreté** (rôle, timeout, plafond de lignes, schémas autorisés, statements
-interdits).
+How an agent touches structured data: `view-per-agent`, `repository-tools`,
+`semantic-layer`, `text-to-sql`, `graphql` on a database (`DATA-ACCESS.md`), or
+`declared-sources` on files, APIs and MCP servers (`DATA-SOURCES.md`). It
+always carries its **safety envelope** (role, timeout, row cap, allowed schemas
+or sources, forbidden operations). `dataaccess/none` produces no entry: absence
+is its representation. Only `view-per-agent` and `declared-sources` have a
+stack fiche today; the others are in the catalogue.
 
 ### MEMORY SCOPE
-`short-term` (fenêtre + politique de résumé) · `long-term` (store, politique
-d'écriture, rétention, PII) · `shared` (état inter-agents, qui lit quoi).
+`short-term` (window + summary policy) · `long-term` (store, write policy,
+retention, PII) · `shared` (inter-agent state, who reads what). The `long-term`
+scope exists in the vocabulary and in the IR, but nothing executes it yet:
+`LongTermEnabled: true` is refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`).
+Details: `MEMORY-PATTERNS.md`.
 
 ### GUARDRAIL
-Contrôle en ligne à l'entrée ou à la sortie : validation de schéma, détection
-d'injection, redaction PII, juge de qualité. Porte un `on_trip`.
+An inline check at input or output: schema validation, injection detection, PII
+redaction, quality judge. Carries an `on_trip`. The first three exist in code
+(`templates/runtime/python/app/guardrails/`), active according to
+`## Active Guardrails`; a guardrail named without an active fiche is refused at
+preflight.
 
 ---
 
-## 4. Entités d'évaluation
+## 4. Evaluation entities
 
 ### DATASET
-`golden/` (ajustement) · `holdout/` (verdict, disjoint par hash) ·
-`calibration/` (labels humains pour les juges) · `adversarial/` (sécurité).
-Owned par `qa-evals` — **jamais** accessible en écriture aux `dev-*` (P2, §7
-d'ARCHITECTURE).
+`golden/` (tuning) · `holdout/` (verdict, disjoint by hash) · `calibration/`
+(human labels for judges) · `adversarial/` (security), under
+`workspace/pipeline/datasets/`. Owned by `qa-evals` — **never** writable by the
+`dev-*` agents (P2, ARCHITECTURE §7).
 
 ### EVALUATION
-`(dataset, grader, seuil, k runs)` -> `(score, variance, verdict)`.
+`(dataset, grader, threshold, k runs)` -> `(score, variance, verdict)`.
 
 ### GRADER
 `exact` · `regex` · `schema` · `numeric-tolerance` · `semantic-similarity` ·
-`llm-judge` (exige calibration, P9) · `trajectory` (l'ordre et la nature des
-appels) · `cost` · `latency`.
+`llm-judge` (requires calibration, P9) · `trajectory` (the order and nature of
+calls) · `cost` · `latency`.
 
 ### BASELINE
-Résultat de référence épinglé au tuple
+A reference result pinned to the tuple
 `(prompt_hash, model_id, index_hash, tool_schema_hash, dataset_hash)` (P10).
+Written **only** by the `promote-baseline` script, under
+`workspace/pipeline/baselines/`: a baseline moves through a traced action, never
+by overwrite, and no agent touches it.
 
 ### RUN / TRACE SPAN
-Une exécution et ses spans : tour d'agent, appel d'outil, requête de retrieval,
-appel LLM (tokens, coût, latence), franchissement de gate.
+An execution and its spans: agent turn, tool call, retrieval query, LLM call
+(tokens, cost, latency), gate crossing.
+
+### ADR
+A refused-by-default decision, assumed in writing
+(`workspace/pipeline/decisions/ADR-{timestamp}-{slug}.md`). The decisions that
+require one are listed in `registry/adr-requirements.yml`. An ADR only counts
+if it carries `Status: Accepted` and a `Covers: Key=value` line naming the
+decision; a `Proposed` ADR authorises nothing.
 
 ---
 
-## 5. Convention d'identifiants
+## 5. Identifier convention
 
-Stables, jamais renumérotés, jamais réordonnés. Ajouter = nouvel index en fin de
-liste. Toute la traçabilité montante en dépend.
+Stable, never renumbered, never reordered. Adding = a new index at the end of
+the list. All upward traceability depends on it.
 
-| Entité | Forme | Exemple |
+| Entity | Form | Example |
 |---|---|---|
 | Mission | `{n}-{Name}` | `1-SupportAssistant` |
 | Capability | `{n}-{m}-{Name}` | `1-3-RouteByIntent` |
