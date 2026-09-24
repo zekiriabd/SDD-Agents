@@ -116,3 +116,19 @@ def test_a_broad_write_pattern_does_not_open_a_protected_zone() -> None:
     assert ao.protected_write(loader, "r", "workspace/.sys/.validation/reports/r-1.json") is not None
     assert ao.protected_write(loader, "", "workspace/.sys/.validation/reports/r-1.md") is not None
     assert ao.protected_write(loader, "r", "workspace/pipeline/missions/1-X.md") is None  # hors zone : pas l'affaire
+
+
+@pytest.mark.parametrize("agent,script,out", [
+    ("review-cost", "cost-report", "workspace/.sys/.validation/cost-1.json"),
+    ("review-orchestration", "trajectory-report", "workspace/.sys/.validation/trajectories-1.json"),
+])
+def test_script_written_review_measures_are_declared_but_not_editable(project: Path, agent: str, script: str,
+                                                                      out: str) -> None:
+    """Le script que le reviewer LANCE écrit la mesure ; le reviewer ne l'écrit pas à la main."""
+    loader = ao.load_loader(project)
+    assert any(ao.matches(p, out) for p in ao.writes_of(loader, agent)), "absent des writes: de l'agent"
+    code, err = write(project, agent, out)
+    assert code == DENY and "GATE_REPORT_FORGERY" in err
+    code, err = bash(project, agent,
+                     f"python .sdda/sdda.py {script} --mission 1 --traces workspace/.sys/traces/runs --out {out}")
+    assert code == ALLOW, err
