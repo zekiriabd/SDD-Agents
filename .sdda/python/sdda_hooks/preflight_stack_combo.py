@@ -6,7 +6,7 @@ Le hook que `registry/compatibility.matrix.json` nomme dans
 pas. Un registre qui désigne son garde sans que le garde existe est la forme la
 plus tranquille du doc-theater : tout le monde le cite, personne ne l'exécute.
 
-Trois contrôles, trois pannes distinctes :
+Six contrôles, six pannes distinctes :
 
 1. **Chargeabilité** — `missing` vs `untested`. La distinction est le tout du
    sujet :
@@ -38,10 +38,24 @@ Trois contrôles, trois pannes distinctes :
    leur valeur ; elles ont maintenant une fiche derrière, donc un mensonge
    possible — et un contrôle.
 
-Un composant `refusedByDefault` (text-to-sql non enveloppé, `DbAgentRole: full`,
-`MemoryPIIPolicy: allow`…) exige un ADR référencé, quel que soit son niveau.
+4. **Valeurs** — `[CONFIG_VALUE_INVALID]`, `[JUDGE_SAME_AS_EVALUATED]`… :
+   `layered_config.validate_config` et `judge_issues`, les mêmes que le smoke.
 
-Bypass : `SDDA_ALLOW_UNTESTED_COMBO=1` (chargeabilité, hérité de SDD_Pro) et
+5. **Reconnaissance de la combinaison** — `[STACK_COMBO_UNLISTED]`. La
+   signature (`comboSignatureFields` : langage, ensemble des frameworks,
+   pattern racine, RAG, vector store, reranker, accès données, surface,
+   fournisseur runtime) est calculée depuis STACK.md et cherchée dans
+   `combos[]`. Absente : `StackComboCheck: strict` (défaut) refuse, `warn` le
+   dit, `off` se tait — et `off` exige lui-même un ADR. La matrice annonçait ce
+   contrôle depuis sa création ; le hook ne lisait ni `combos` ni la signature.
+
+6. **Décisions refusées par défaut** — `[ADR_MISSING]`. Toute exigence active
+   de `registry/adr-requirements.yml` (`DbAgentRole: full`, `MemoryPIIPolicy:
+   allow`, pattern `network`…) sans ADR ACCEPTÉ refuse le spawn des agents qui
+   construisent (`dev-*`, `qa-*`, `review-*`). Cette docstring le promettait ;
+   rien ne le faisait.
+
+Bypass : `SDDA_ALLOW_UNTESTED_COMBO=1` (chargeabilité et combinaison hors matrice, hérité de SDD_Pro) et
 `SDDA_ALLOW_LANG_MISMATCH=1` (cohérence de langage — le cas légitime est le
 projet polyglotte, un reranker Python en side-car d'une application .NET). Les
 deux sont audit-loggués.
@@ -55,7 +69,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import ALLOW, allow, bypassed, deny, run  # noqa: E402
+from _hook import ALLOW, agent_of, allow, bypassed, deny, run  # noqa: E402
 
 HOOK = "preflight_stack_combo"
 
@@ -220,6 +234,124 @@ def _retrieval_drift(root: Path, activated: list[tuple[str, str]]) -> str | None
     return None
 
 
+#: `- .sdda/stacks/{répertoire}/{nom}.md` — le répertoire compte : `## Active
+#: Retrieval Stack` active un vector store ET un modèle d'embedding.
+_ACTIVE_PATH_RE = re.compile(r"^\s*-\s+\.sdda/stacks/([\w-]+)/([\w.-]+)\.md\s*(?:#.*)?$", re.M)
+
+
+def _active_paths(root: Path, heading: str) -> list[tuple[str, str]]:
+    from sdda_lib import markdown_io, paths  # noqa: E402
+
+    p = paths.stack_md_path(root)
+    if not p.is_file():
+        return []
+    body = markdown_io.section_body(markdown_io.read_text(p), heading) or ""
+    return _ACTIVE_PATH_RE.findall(body)
+
+
+#: Champ de signature -> (section, répertoire de fiche). `provider` n'est pas
+#: une fiche : c'est `RuntimeProvider`, lu à part.
+SIGNATURE_SOURCES = {
+    "language": ("Active Language & Runtime", "lang"),
+    "framework": ("Active Agent Framework", "framework"),
+    "orchestration": ("Active Orchestration Pattern", "orchestration"),
+    "rag": ("Active RAG Pattern", "rag"),
+    "vectorstore": ("Active Retrieval Stack", "vectorstore"),
+    "rerank": ("Active Reranker", "rerank"),
+    "dataaccess": ("Active Data Access", "dataaccess"),
+    "serving": ("Active Serving Surface", "serving"),
+}
+
+
+def signature(root: Path) -> dict[str, object]:
+    """La combinaison activée, dans les termes de `comboSignatureFields`.
+
+    `framework` est un ensemble (la composition est explicite) ; les autres
+    champs sont une valeur, `none` quand la section n'active rien.
+    """
+    from sdda_lib.layered_config import read_stack_section_kv  # noqa: E402
+
+    sig: dict[str, object] = {}
+    for fname, (heading, directory) in SIGNATURE_SOURCES.items():
+        names = sorted(n for d, n in _active_paths(root, heading) if d == directory)
+        if fname == "framework":
+            sig[fname] = names
+        else:
+            sig[fname] = names[0] if len(names) == 1 else ("none" if not names else ",".join(names))
+    sig["provider"] = str(read_stack_section_kv(root, "Runtime Models").get("RuntimeProvider") or "none").strip()
+    return sig
+
+
+def mismatches(combo: dict, sig: dict[str, object], fields: list[str]) -> list[str]:
+    """Les champs de `fields` où la combinaison activée s'écarte de `combo`."""
+    out = []
+    for fname in fields:
+        declared, active = combo.get(fname), sig.get(fname)
+        if fname == "framework":
+            ok = sorted(declared or []) == sorted(active or [])
+        elif isinstance(declared, list):
+            ok = active in declared
+        else:
+            ok = str(declared if declared not in (None, "") else "none") == str(active)
+        if not ok:
+            out.append(f"{fname}={active if not isinstance(active, list) else '+'.join(active) or 'none'} "
+                       f"(combo : {declared if not isinstance(declared, list) else '|'.join(declared)})")
+    return out
+
+
+def recognise(matrix: dict, sig: dict[str, object]) -> tuple[dict | None, dict | None, list[str]]:
+    """`(combo reconnue, combo la plus proche, écarts à la plus proche)`."""
+    fields = list((matrix.get("comboSignatureFields") or {}).get("fields") or SIGNATURE_SOURCES)
+    best: tuple[dict | None, list[str]] = (None, [])
+    for combo in matrix.get("combos") or []:
+        gaps = mismatches(combo, sig, fields)
+        if not gaps:
+            return combo, combo, []
+        if best[0] is None or len(gaps) < len(best[1]):
+            best = (combo, gaps)
+    return None, best[0], best[1]
+
+
+def _combo_check_mode(root: Path) -> str:
+    """`StackComboCheck` effectif : strict (défaut) | warn | off."""
+    from sdda_lib.errors import SddaError  # noqa: E402
+    from sdda_lib.layered_config import read_layered_config  # noqa: E402
+    import io
+
+    try:
+        value = read_layered_config(root, warn_stream=io.StringIO()).get("StackComboCheck", "strict")
+    except SddaError:
+        return "strict"
+    value = str(value).strip().lower()
+    return value if value in ("strict", "warn", "off") else "strict"
+
+
+#: Agents qui IMPLÉMENTENT une décision : au-delà de la topologie, une décision
+#: refusée par défaut sans ADR accepté ne se code pas.
+BUILD_AGENT_PREFIXES = ("dev-", "qa-", "review-")
+
+
+def _adr_refusal(root: Path, agent: str) -> int | None:
+    """Refus si une décision de `registry/adr-requirements.yml` n'a pas d'ADR accepté."""
+    from sdda_lib.errors import SddaError  # noqa: E402
+    from sdda_lib.layered_config import read_layered_config  # noqa: E402
+    from sdda_scripts import validate_adr  # noqa: E402
+    import io
+
+    try:
+        config = read_layered_config(root, warn_stream=io.StringIO())
+    except SddaError:
+        return None
+    missing = validate_adr.uncovered(root, config)
+    if not missing:
+        return None
+    what = ", ".join(f"`{req.key}: {value}`" for req, value, _ in missing[:4])
+    return deny(HOOK, "ADR_MISSING",
+                f"`{agent}` implémenterait {len(missing)} décision(s) refusée(s) par défaut sans ADR accepté : {what}",
+                "écrire l'ADR (Status: Accepted, `Covers: Clé=valeur`) sous workspace/pipeline/decisions/, "
+                "ou revenir à la valeur par défaut — `python .sdda/sdda.py validate-adr --explain`")
+
+
 def _config_refusal(root: Path) -> int | None:
     """Refus sur la première classe bloquante de `validate_config`, les autres nommées."""
     from sdda_lib.layered_config import judge_issues, validate_config  # noqa: E402
@@ -309,6 +441,40 @@ def check(root: Path, data: dict) -> int:
         )
 
     notes: list[str] = []
+
+    # La combinaison, reconnue ou non. `comboSignatureFields` et `combos`
+    # étaient écrits dans la matrice et lus par personne : sa description
+    # annonçait que ce hook « bloque toute combinaison absente », et il ne
+    # l'ouvrait même pas.
+    mode = _combo_check_mode(root)
+    if mode != "off":
+        sig = signature(root)
+        known, nearest, gaps = recognise(matrix, sig)
+        if known is not None:
+            notes.append(f"combo {known.get('id')} reconnue ({known.get('status', '?')})")
+        else:
+            near = (f" — la plus proche, {nearest.get('id')}, diffère sur : {'; '.join(gaps[:4])}"
+                    if nearest is not None else "")
+            if mode == "strict" and not bypassed("SDDA_ALLOW_UNTESTED_COMBO"):
+                return deny(
+                    HOOK, "STACK_COMBO_UNLISTED",
+                    f"la combinaison activée n'est aucune de registry/compatibility.matrix.json{near}",
+                    "une combinaison listée a été pensée d'un bloc (fiches, langage, surface) ; une "
+                    "combinaison inédite est un assemblage que personne n'a relu. Revenir à une combo "
+                    "listée, l'ajouter à la matrice (même `untested`), ou l'assumer : "
+                    "`StackComboCheck: warn` dans `## Project Config`, ou SDDA_ALLOW_UNTESTED_COMBO=1 "
+                    "(audit-loggué)")
+            notes.append(f"combinaison hors matrice (StackComboCheck: {mode}"
+                         + (", SDDA_ALLOW_UNTESTED_COMBO" if mode == "strict" else "") + f"){near}")
+
+    # Les décisions refusées par défaut : un ADR ACCEPTÉ avant que quiconque
+    # les implémente. Seuls les agents qui CONSTRUISENT sont retenus — les
+    # po-*/architect-* sont précisément ceux qui proposent et rédigent l'ADR ;
+    # les bloquer ici rendrait l'ADR impossible à écrire.
+    agent = agent_of(data)
+    if agent.startswith(BUILD_AGENT_PREFIXES) and (refusal := _adr_refusal(root, agent)) is not None:
+        return refusal
+
     if weak:
         notes.append(f"{len(weak)} composant(s) non mesuré(s) : {', '.join(weak[:4])}"
                      + (" — attendu (frameworkStatus: design-phase)" if design_phase else

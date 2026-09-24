@@ -357,6 +357,70 @@ def test_every_adr_required_rule_of_the_other_registries_is_in_the_adr_registry(
     assert expected and expected <= declared, expected - declared
 
 
+# ---------------------------------------------------------------------------
+# C3 — la combinaison est reconnue, et le refus par défaut a besoin d'un ADR
+# ---------------------------------------------------------------------------
+def strict(project: Path) -> Path:
+    return patch_stack(project, "StackComboCheck: warn", "StackComboCheck: strict")
+
+
+def run_hook_as(project: Path, agent: str, *env: tuple[str, str]) -> tuple[int, str]:
+    import os
+
+    environment = {k: v for k, v in os.environ.items() if not k.startswith("SDDA_")}
+    environment.update(dict(env))
+    proc = subprocess.run([sys.executable, str(HOOK), "--root", str(project), "--agent", agent],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          env=environment, stdin=subprocess.DEVNULL, cwd=project)
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+def test_an_unlisted_combination_is_refused_in_strict_mode(tmp_path: Path) -> None:
+    """La matrice annonçait « bloque toute combinaison absente » ; le hook ne lisait pas `combos`."""
+    code, out = run_hook(strict(make_project(tmp_path)))
+    assert code == 2 and "STACK_COMBO_UNLISTED" in out, out
+    assert "dataaccess=none" in out, "le refus nomme l'écart à la combo la plus proche"
+
+
+def test_warn_says_it_and_the_bypass_assumes_it(tmp_path: Path) -> None:
+    code, out = run_hook(make_project(tmp_path))
+    assert code == 0 and "hors matrice" in out
+    code, out = run_hook(strict(make_project(tmp_path / "b")), ("SDDA_ALLOW_UNTESTED_COMBO", "1"))
+    assert code == 0 and "SDDA_ALLOW_UNTESTED_COMBO" in out
+
+
+def test_a_listed_combination_is_recognised_by_name(tmp_path: Path) -> None:
+    project = strict(make_project(tmp_path))
+    patch_stack(project, " - .sdda/stacks/dataaccess/none.md\n", " - .sdda/stacks/dataaccess/view-per-agent.md\n")
+    code, out = run_hook(project)
+    assert code == 0 and "combo C1 reconnue" in out, out
+
+
+def test_the_signature_follows_the_matrix_semantics() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("psc", HOOK)
+    psc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(psc)
+    c1 = next(c for c in _matrix()["combos"] if c["id"] == "C1")
+    sig = {"language": "python", "framework": ["langgraph", "langchain"], "orchestration": "sequential",
+           "rag": "hybrid", "vectorstore": "pgvector", "rerank": "none", "dataaccess": "view-per-agent",
+           "serving": "cli", "provider": "anthropic"}
+    fields = _matrix()["comboSignatureFields"]["fields"]
+    assert psc.mismatches(c1, sig, fields) == [], "framework = ensemble, orchestration = patterns admis"
+    assert psc.mismatches(c1, {**sig, "framework": ["langchain"]}, fields), "LangChain seul est une autre stack"
+
+
+def test_a_refused_by_default_decision_blocks_builders_until_an_adr_is_accepted(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "MemoryPIIPolicy: redact-before-write", "MemoryPIIPolicy: allow")
+    code, out = run_hook_as(project, "dev-agent")
+    assert code == 2 and "ADR_MISSING" in out and "MemoryPIIPolicy" in out, out
+    code, _ = run_hook_as(project, "architect-memory")
+    assert code == 0, "l'architecte est celui qui rédige l'ADR : le bloquer le rendrait impossible"
+    write_adr(project, "ADR-0001-memory.md", "Status: Accepted\nCovers: MemoryPIIPolicy=allow\n")
+    assert run_hook_as(project, "dev-agent")[0] == 0
+
+
 def test_the_rule_can_be_lifted_explicitly(tmp_path: Path) -> None:
     project = patch_stack(with_ir(make_project(tmp_path), "balanced"), "AdversarialSetMinItems: 2\n",
                           "AdversarialSetMinItems: 2\nJudgeMustDifferFromEvaluated: false\n")

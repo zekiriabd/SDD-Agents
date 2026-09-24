@@ -628,10 +628,11 @@
     "StackComboCheck": {
       "enum": [
         "strict",
-        "warn"
+        "warn",
+        "off"
       ],
       "default": "strict",
-      "description": "strict : une combinaison absente de registry/compatibility.matrix.json bloque. Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1."
+      "description": "strict : une combinaison absente de registry/compatibility.matrix.json (combos[], comparées sur comboSignatureFields) refuse le spawn -> [STACK_COMBO_UNLISTED] ; warn : le dit sans bloquer ; off : ne regarde pas, et exige un ADR (registry/adr-requirements.yml). Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1."
     },
     "security_down_protected": {
       "type": "array",
