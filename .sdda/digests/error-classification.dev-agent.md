@@ -18,6 +18,7 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[BOUND_NOT_MATERIALIZED]`
+- `[OWNERSHIP_INSTANCE_ESCAPE]`
 - `[OWNERSHIP_VIOLATION]`
 - `[PROMPT_CONTRACT_MISMATCH]`
 - `[PROMPT_HASH_MISMATCH]`

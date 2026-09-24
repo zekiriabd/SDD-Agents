@@ -141,12 +141,16 @@ def check(root: Path, data: dict) -> int:
 
     # 3. La matrice : écritures (répertoires entiers compris), puis lectures.
     report = Report(name="BASH-HOOK", target=str(root))
-    bindings, verdict = _bindings(root, loader, agent, res.writes, data)
+    # Un répertoire CRÉÉ se juge sur ce qu'il contiendra : `mkdir -p
+    # agents/billing` est à l'instance qui écrira `agents/billing/x`.
+    mkdirs = set(res.mkdirs)
+    judged = [(p + "/x" if p in mkdirs else p) for p in res.writes]
+    bindings, verdict = _bindings(root, loader, agent, judged, data)
     if verdict != ALLOW:
         return verdict
     recursive = set(res.recursive_writes)
-    for path in res.writes:
-        ok = (ao.check_recursive_write(loader, agent, path, report, bindings, root) if path in recursive
+    for original, path in zip(res.writes, judged):
+        ok = (ao.check_recursive_write(loader, agent, path, report, bindings, root) if original in recursive
               else ao.check_write(loader, agent, path, report, bindings))
         if not ok:
             break

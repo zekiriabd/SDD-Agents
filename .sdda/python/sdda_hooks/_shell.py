@@ -59,6 +59,10 @@ class Analysis:
     #: Recherches récursives qui lisent les fichiers cachés (GNU `grep -r`,
     #: `rg --hidden`) — un `.env` dessous serait rendu.
     hidden_content_reads: list[str] = field(default_factory=list)
+    #: Répertoires CRÉÉS (`mkdir -p`, `New-Item -ItemType Directory`) : jugés
+    #: sur ce qu'ils contiendront — `agents/billing` est à l'instance qui écrira
+    #: `agents/billing/x`, même si le répertoire lui-même ne matche aucun motif.
+    mkdirs: list[str] = field(default_factory=list)
     #: Raisons d'opacité : une écriture dont la cible ne se résout pas.
     opaque: list[str] = field(default_factory=list)
     #: Jetons de lecture non résolus (variable, substitution).
@@ -71,6 +75,7 @@ class Analysis:
         self.reads += other.reads
         self.recursive_writes += other.recursive_writes
         self.hidden_content_reads += other.hidden_content_reads
+        self.mkdirs += other.mkdirs
         self.opaque += other.opaque
         self.unresolved_reads += other.unresolved_reads
         self.mentions_governed |= other.mentions_governed
@@ -588,7 +593,8 @@ def _might_be_governed(ctx: _Ctx, token: str) -> bool:
     return is_governed(rel)
 
 
-def _add_write(ctx: _Ctx, res: Analysis, token: str, *, recursive: bool = False, why: str = "") -> None:
+def _add_write(ctx: _Ctx, res: Analysis, token: str, *, recursive: bool = False, why: str = "",
+               directory: bool = False) -> None:
     paths, ok = _resolve(ctx, token)
     if not ok:
         if _might_be_governed(ctx, token):
@@ -601,6 +607,8 @@ def _add_write(ctx: _Ctx, res: Analysis, token: str, *, recursive: bool = False,
             res.writes.append(p)
             if recursive:
                 res.recursive_writes.append(p)
+            if directory:
+                res.mkdirs.append(p)
 
 
 def _add_read(ctx: _Ctx, res: Analysis, token: str, scope: str) -> None:
@@ -886,7 +894,7 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
         recursive = verb in ("rmdir", "rd") or (
             verb in ("rm", "del", "erase", "chmod", "chown", "chgrp") and any(_recursive_flag(a) for a in args))
         for p in paths:
-            _add_write(ctx, res, p, recursive=recursive, why=f"`{verb}`")
+            _add_write(ctx, res, p, recursive=recursive, why=f"`{verb}`", directory=verb == "mkdir")
         return
     if verb in WRITE_MOVE:
         for p in pos:
@@ -1258,8 +1266,10 @@ def _ps_cmdlet(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Frag
         base = targets[0] if targets else "."
         targets = [base.rstrip("/\\") + "/" + named["-name"][0]]
     if verb in PS_WRITE_PATH:
+        is_dir = verb == "new-item" and any(
+            v.lower() == "directory" for v in named.get("-itemtype", []) + named.get("-type", []))
         for p in targets:
-            _add_write(ctx, res, p, recursive=recursive, why=f"`{verb}`")
+            _add_write(ctx, res, p, recursive=recursive, why=f"`{verb}`", directory=is_dir)
         return
     if verb in PS_READ_PATH:
         for p in targets:
