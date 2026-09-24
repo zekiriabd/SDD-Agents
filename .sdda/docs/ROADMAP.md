@@ -22,7 +22,7 @@ real product — only at lot 6.
 | 5 | Review and acceptance | 🟡 written, not validated by a complete real run |
 | 6 | End-to-end validation | ⬜ not started |
 | 7.0 | .NET RAG | ⬜ next |
-| 7.1 | TypeScript generator | ⬜ next framework axis |
+| 7.1 | .NET then TypeScript generators | ⬜ next framework axis |
 
 A direct consequence, carried by `registry/compatibility.matrix.json`: the
 target combination **C1** is in `design-phase`, the others in `untested`, and
@@ -163,7 +163,7 @@ lot that turns C1 into a combo under SLA — not a declaration.
 ## Lot 7 — Broadening
 
 One axis at a time, each validated before the next. The next two are the .NET
-RAG (7.0) and the TypeScript generator (7.1).
+RAG (7.0) and the .NET then TypeScript generators (7.1).
 
 0. **The .NET RAG** — ⬜ next. A prerequisite to the frameworks, and the most
    urgent because it is the only gap today that is *enforced*:
@@ -176,7 +176,8 @@ RAG (7.0) and the TypeScript generator (7.1).
    `serving/aspnet-minimal.libs.json`. This gap is what got the `dotnet-api`
    combo removed from the bootstrap: it activated Python sheets on a C# project,
    and nothing said so.
-1. **Frameworks**: TypeScript (⬜ next) then .NET — they are what proves the IR
+1. **Frameworks**: .NET (⬜ next, right after the .NET RAG: a C# skeleton
+   generator) then TypeScript — they are what proves the IR
    keeps its promise. If a second generator requires changing the contracts,
    the IR has failed and must be fixed.
    TypeScript note: the target is **LangGraph.js**, not LangChain.js. The

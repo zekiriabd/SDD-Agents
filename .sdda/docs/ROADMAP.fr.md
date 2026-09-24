@@ -22,7 +22,7 @@ de ce framework — mesuré sur un vrai produit — qu'au lot 6.
 | 5 | Revue et acceptation | 🟡 écrit, non validé par un run réel complet |
 | 6 | Validation de bout en bout | ⬜ non commencé |
 | 7.0 | RAG .NET | ⬜ prochain |
-| 7.1 | Générateur TypeScript | ⬜ prochain axe de framework |
+| 7.1 | Générateurs .NET puis TypeScript | ⬜ prochain axe de framework |
 
 Conséquence directe, portée par `registry/compatibility.matrix.json` : la
 combinaison cible **C1** est en `design-phase`, les autres en `untested`, et
@@ -163,7 +163,7 @@ C'est ce lot qui transforme C1 en combo sous SLA — pas une déclaration.
 ## Lot 7 — Élargissement
 
 Un axe à la fois, chacun validé avant le suivant. Les deux prochains sont le
-RAG .NET (7.0) et le générateur TypeScript (7.1).
+RAG .NET (7.0) et les générateurs .NET puis TypeScript (7.1).
 
 0. **Le RAG .NET** — ⬜ prochain. Préalable aux frameworks, et le plus urgent
    parce que c'est le seul manque aujourd'hui *opposable* :
@@ -176,7 +176,8 @@ RAG .NET (7.0) et le générateur TypeScript (7.1).
    dans `serving/aspnet-minimal.libs.json`. C'est ce manque qui a fait retirer
    la combo `dotnet-api` du bootstrap : elle activait des fiches Python sur un
    projet C#, et rien ne le disait.
-1. **Frameworks** : TypeScript (⬜ prochain) puis .NET — ce sont eux qui
+1. **Frameworks** : .NET (⬜ prochain, dans la foulée du RAG .NET : générateur
+   de squelette C#) puis TypeScript — ce sont eux qui
    prouvent que l'IR tient sa promesse. Si un second générateur demande de
    modifier les contrats, l'IR a échoué et doit être corrigé.
    Note TypeScript : la cible est **LangGraph.js**, pas LangChain.js. L'argument
