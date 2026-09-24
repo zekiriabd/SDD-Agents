@@ -19,7 +19,9 @@ license = "MIT"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11"]
+# `pydantic` : seulement pour les tests qui exécutent le runtime GÉNÉRÉ (même pin
+# que les .libs.json) ; l'outillage lui-même reste stdlib seule.
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11", "pydantic==2.13.5"]
 
 [project.scripts]
 # Le point d'entrée unique : `sdda {sous-commande}` couvre les 60 scripts, et

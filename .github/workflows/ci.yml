@@ -55,8 +55,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # L'outillage est stdlib seule ; `pydantic` n'est là que pour les tests qui
+      # EXÉCUTENT le runtime généré (test_runtime_envelope) — même pin que les
+      # .libs.json des fiches, sinon ce qu'on teste n'est pas ce qu'on génère.
       - name: Install test runner
-        run: python -m pip install --upgrade pip pytest pytest-cov
+        run: python -m pip install --upgrade pip pytest pytest-cov pydantic==2.13.5
 
       # Le lanceur, pas les chemins à cinq segments : la CI doit exercer la
       # forme que les prompts écrivent. Si `python .sdda/sdda.py` cassait, toutes

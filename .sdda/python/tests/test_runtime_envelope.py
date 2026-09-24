@@ -28,8 +28,13 @@ from pathlib import Path
 
 import pytest
 
-from conftest import make_project
-from sdda_scripts import gen_source_tools as gst
+# Le runtime généré importe `pydantic` (dépendance de l'APPLICATION, pas de
+# l'outillage stdlib) : sans lui, 36 erreurs d'import qui ne disent pas leur
+# cause. La CI l'installe au pin des fiches ; un clone nu saute, et le dit.
+pytest.importorskip("pydantic", reason="runtime généré exécuté : `pip install pydantic==2.13.5`")
+
+from conftest import make_project  # noqa: E402
+from sdda_scripts import gen_source_tools as gst  # noqa: E402
 
 APP = "SupportAssistant"
 MANIFEST = "workspace/stack/STACK.md"          # la déclaration des sources est inline (v3)
