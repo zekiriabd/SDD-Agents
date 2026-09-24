@@ -63,8 +63,11 @@ telemetry:
   last_reviewed: 2026-09-20
 
 pricing:                              # USD par million de tokens — tarif API Anthropic (revu 2026-09-20)
-  # SSoT machine : sdda_lib/pricing.py. Ce bloc miroir sert à estimate_budget.py
-  # et au grader `cost`. Toute modification doit être répercutée dans pricing.py.
+  # CE BLOC EST LU : sdda_lib/pricing.py charge le `pricing:` de chaque fiche
+  # (yaml_mini) et le fait primer sur sa table en dur, qui n'est plus qu'un
+  # repli pour les modèles qu'aucune fiche ne porte. Réviser un tarif, c'est
+  # l'éditer ICI et avancer `pricing_last_reviewed` ; test_pricing.py vérifie
+  # que le repli concorde là où les deux se recouvrent.
   # cache_read = 10 % de input ; cache_creation (écriture ephemeral 5 min) = 125 % de input.
   claude-opus-5:    {input: 5.00, output: 25.00, cache_read: 0.50, cache_creation: 6.25}
   claude-sonnet-5:  {input: 2.00, output: 10.00, cache_read: 0.20, cache_creation: 2.50}
