@@ -41,7 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import paths  # noqa: E402
-from sdda_lib.runtime_io import ensure_utf8_stdout, now_iso  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout, now_iso, slash_command  # noqa: E402
 
 ensure_utf8_stdout()
 
@@ -145,7 +145,7 @@ def main() -> int:
         "at": now_iso(),
         "ts": now_iso(),
         "operator": operator,
-        "command": args.command,
+        "command": slash_command(args.command),
         "mission": args.mission or None,
         "runId": os.environ.get("SDDA_RUN_ID"),
         "levers": levers,

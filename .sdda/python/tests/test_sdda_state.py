@@ -235,3 +235,15 @@ def test_status_text_shows_one_line_per_mission(project: Path) -> None:
 def test_status_without_any_run_is_not_an_error(project: Path) -> None:
     code, out = run_main(sdda_state.main, ["status", "--root", str(project), "--json"])
     assert code == 0 and json.loads(out)["runs"] == []
+
+
+def test_a_command_mangled_by_git_bash_is_recorded_as_typed() -> None:
+    """Git Bash réécrit `/sdda-full` en `C:/Program Files/Git/sdda-full`."""
+    from sdda_lib.runtime_io import slash_command
+
+    assert slash_command("C:/Program Files/Git/sdda-full") == "/sdda-full"
+    assert slash_command(r"C:\Program Files\Git\sdda-caps 1") == "/sdda-caps 1"
+    assert slash_command("C:/Program Files/Git/sdda-roster 1 scaffold --force") == "/sdda-roster 1 scaffold --force"
+    assert slash_command("sdda-build") == "/sdda-build"
+    assert slash_command("/sdda-eval 1 --acceptance") == "/sdda-eval 1 --acceptance"
+    assert slash_command("C:/work/notes.txt") == "C:/work/notes.txt"      # un vrai chemin n'est pas touché
