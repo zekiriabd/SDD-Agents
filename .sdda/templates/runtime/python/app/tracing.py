@@ -54,12 +54,86 @@ import json
 import os
 import re
 import secrets as _secrets
+import sys
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
+
+# ---------------------------------------------------------------------------
+# Append atomique entre PROCESSUS — même mécanique que `sdda_lib.tracing`
+# ---------------------------------------------------------------------------
+# Recopiée et non importée : l'application générée ne dépend pas du framework.
+# Le runner d'eval lance jusqu'à `EvalMaxParallel` exécutions en parallèle, et
+# chacune peut écrire la trace d'un même run (reprise, sous-processus d'outil) :
+# `open("a").write` découpe une ligne longue en plusieurs appels système, et le
+# mode append du CRT Windows positionne PUIS écrit — deux spans pouvaient donc
+# se retrouver collés sur une ligne, que le lecteur ignore. Un span perdu est un
+# appel d'outil absent de l'audit de scope, ou un coût qui manque au plafond.
+
+#: Octet verrouillé sous Windows, loin après toute fin de fichier : le verrou y
+#: est obligatoire, et il ne doit bloquer aucun LECTEUR de la trace.
+_WIN_LOCK_OFFSET = 0x7FFFFFFF
+#: Au-delà, on écrit sans verrou : perdre un span parce qu'un processus est mort
+#: en tenant le verrou serait pire qu'un risque d'entrelacement.
+LOCK_TIMEOUT_S = 10.0
+
+if sys.platform == "win32":  # pragma: no cover - dépend de la plateforme
+    import msvcrt
+
+    def _lock(fd: int) -> bool:
+        deadline = time.monotonic() + LOCK_TIMEOUT_S
+        delay = 0.001
+        while True:
+            os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                return True
+            except OSError:
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(delay)
+                delay = min(delay * 2, 0.05)
+
+    def _unlock(fd: int) -> None:
+        os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+else:  # pragma: no cover - dépend de la plateforme
+    import fcntl
+
+    def _lock(fd: int) -> bool:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return True
+
+    def _unlock(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+def append_line(path: Path, line: str) -> None:
+    """Ajoute UNE ligne, écrite en entier sous verrou exclusif, sur un fd `O_APPEND`.
+
+    Les octets sont construits d'abord, puis écrits en boucle jusqu'au dernier
+    sous le verrou : c'est lui qui rend la ligne atomique, `O_APPEND` qui
+    garantit la fin de fichier. `\\n` seul, jamais `\\r\\n` : sous Windows, un
+    retour chariot casse la lecture ligne à ligne et la comparaison de hashes.
+    """
+    data = (line.rstrip("\n") + "\n").encode("utf-8")
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
+    fd = os.open(str(path), flags, 0o644)
+    try:
+        held = _lock(fd)
+        try:
+            view = memoryview(data)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+        finally:
+            if held:
+                _unlock(fd)
+    finally:
+        os.close(fd)
 
 #: Version des conventions suivies. Portée par chaque ligne : une console doit
 #: pouvoir lire une trace de six mois sans deviner quelle graphie y régnait.
@@ -354,11 +428,7 @@ class Tracer:
             span["duration_ms"] = round(duration_ms)
         self.spans.append(span)
         if self.path is not None:
-            # `newline="\n"` : sur Windows, un `\r\n` casse la lecture ligne à
-            # ligne côté console et fait échouer la comparaison de hashes.
-            with self.path.open("a", encoding="utf-8", newline="\n") as fh:
-                fh.write(json.dumps(span, ensure_ascii=False, sort_keys=True) + "\n")
-                fh.flush()
+            append_line(self.path, json.dumps(span, ensure_ascii=False, sort_keys=True))
         return span
 
     @contextmanager
