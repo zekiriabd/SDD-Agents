@@ -1,0 +1,5 @@
+# Les JSONL (jeux, fixtures, traces) restent en LF sur tous les postes : un
+# jeu append-only extrait en CRLF sous `core.autocrlf=true` ne se prolonge plus
+# à l'identique — l'ajout écrit en LF, le préfixe relu est en CRLF, et le diff
+# montre toutes les lignes changées au lieu de celles ajoutées.
+*.jsonl text eol=lf
