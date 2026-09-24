@@ -62,11 +62,10 @@ Exécute l'inventaire déterministe (0 token) :
 python .sdda/sdda.py corpus-profile --mission {n} --out workspace/.sys/.validation/corpus-{n}.json
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 4) — `corpus_profile.py` n'existe pas encore.
-> Tant qu'il est absent : caractérise le corpus depuis les sources déclarées
-> (`STACK.md ## Active Data Sources`) — nombre de documents, longueurs, formats —
-> en le disant **à la main, donc hypothèse** : `Confidence` ≤ 0.6 dans le
-> contrat, et chaque chiffre porte la mention « non mesuré ».
+Le corpus est lu sous les stores `kind: local` de `## Active Data Sources`
+(repli : `workspace/assets/`) ; `--corpus {dir}` le désigne explicitement.
+Exit 1 `[RETRIEVAL_CORPUS_MISSING]` : aucun document — tu n'inventes pas de
+profil, tu le dis. Les fichiers non lus (PDF, DOCX) sont listés sous `unparsed`.
 
 Tu en tires : nombre de documents, distribution des longueurs, structure
 (titres, articles, tableaux), langues, formats, fraîcheur, **niveaux d'accès
