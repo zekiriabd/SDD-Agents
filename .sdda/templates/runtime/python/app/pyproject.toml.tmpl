@@ -19,6 +19,13 @@ dependencies = []
 [project.scripts]
 {AppName} = "{AppName}.serving.cli:main"
 
+# Les outils de TEST, et eux seuls : ils ne partent pas dans la roue.
+# `asyncio_mode = "auto"` (plus bas) ne vaut rien sans pytest-asyncio — sans lui,
+# chaque test `async def` échoue en « async def functions are not natively
+# supported », ce qui ressemble à une panne du code et n'en est pas une.
+[dependency-groups]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -28,7 +35,7 @@ build-backend = "hatchling.build"
 # pas du code livrable (tests, secrets, méta du projet) n'y entre pas.
 [tool.hatch.build.targets.wheel]
 only-include = ["."]
-exclude = ["tests", ".env", ".env.example", "README.md", "pyproject.toml", "uv.lock", "__pycache__"]
+exclude = ["**/tests", ".env", ".env.example", "README.md", "pyproject.toml", "uv.lock", "__pycache__"]
 
 [tool.hatch.build.targets.wheel.sources]
 "" = "{AppName}"
@@ -60,7 +67,9 @@ python_version = "3.12"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+# Layout plat : les tests vivent À CÔTÉ de ce qu'ils testent (`app/tests`,
+# `tools/tests`…), il n'y a pas de `tests/` racine à désigner.
+testpaths = ["."]
 markers = [
   "network: exige une dépendance joignable ; exclu du smoke",
   "eval: suite d'évaluation (k runs) ; jamais relancée sur échec — cela masquerait la variance",
