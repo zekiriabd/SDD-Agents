@@ -40,12 +40,12 @@ Exécute (0 token) :
 python .sdda/sdda.py cost-report --mission {n} --traces workspace/.sys/traces/runs --out workspace/.sys/.validation/cost-{n}.json
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 5) — `cost_report.py` n'existe pas encore. Tant
-> qu'il est absent : coût et latence **par run** se lisent dans
-> `tracing.summarize_all(root)` (`costUsd`, `latencyMs`, `tokensIn/Out`) et dans
-> les rapports L7 (`workspace/.sys/reports/{n}-*.json`). Sans p95 par nœud ni
-> coût par CAP, ces lignes du rapport portent « non mesuré » — jamais un chiffre
-> estimé à la main, c'est le premier item de ton anti-dérive.
+Le script compare déjà chaque seuil du STEP 3 (`thresholds[]`, classe par
+ligne) ; exit 1 sur `[MEASUREMENT_MISSING]` (< 30 runs, `--min-runs`),
+`[BUDGET_EXCEEDED_MEASURED]` ou `[UNBOUNDED_LOOP]`. Une ligne qu'il ne peut pas
+remplir (seuil absent de l'IR, trace sans `sdda.cap.ids` ni `servesCaps`) porte
+« non mesuré » dans ton rapport — jamais un chiffre estimé à la main.
+
 Deux factures, jamais additionnées. Le coût du **produit** vient des spans `chat`
 et il est RECALCULÉ depuis les tokens (`summarize().cost_usd`). Le coût de la
 **construction** vient des spans `sdda.build.agent` et il est DÉCLARÉ par le
