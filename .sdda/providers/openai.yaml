@@ -19,6 +19,11 @@ base_url_env: OPENAI_BASE_URL         # défaut SDK : https://api.openai.com/v1
 default_base_url: https://api.openai.com/v1   # lu par graders/judge_clients.py si la variable est absente
 auth_env: OPENAI_API_KEY
 
+# SDK que `models.provider_client` importe dans l'application générée ;
+# `gen_app_skeleton` l'épingle dans son pyproject. Version relevée sur PyPI le
+# 2026-09-24, compatible avec `langchain-openai` 1.6.3 (openai>=2.45,<4).
+runtime_sdk: {package: openai, version: "3.19.2"}
+
 tier_map:
   # Résolution 2026-09-20 depuis la page de tarifs officielle. Le mapping
   # tier <-> modèle est CONFIRMÉ au 1er conformance run, pas avant.
