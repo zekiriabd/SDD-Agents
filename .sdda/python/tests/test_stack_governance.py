@@ -421,6 +421,43 @@ def test_a_refused_by_default_decision_blocks_builders_until_an_adr_is_accepted(
     assert run_hook_as(project, "dev-agent")[0] == 0
 
 
+# ---------------------------------------------------------------------------
+# C9 — ce que le parseur accepte et que rien n'implémente est refusé, pas avalé
+# ---------------------------------------------------------------------------
+def test_long_term_memory_is_refused_for_lack_of_an_implementation(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "LongTermEnabled: false", "LongTermEnabled: true")
+    code, out = run_hook(project)
+    assert code == 2 and "STACK_VALUE_UNIMPLEMENTED" in out and "long terme" in out, out
+
+
+def test_a_guardrail_named_without_its_fiche_is_refused(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "OutputGuardrails: [schema-validation]",
+                          "OutputGuardrails: [schema-validation, llm-judge]")
+    code, out = run_hook(project)
+    assert code == 2 and "llm-judge" in out, out
+
+
+def test_a_remote_store_or_connector_has_no_runtime_client(tmp_path: Path) -> None:
+    from conftest import make_project as mk
+
+    project = mk(tmp_path, "project_declared_sources")
+    stack = project / STACK_REL
+    text = stack.read_text(encoding="utf-8")
+    assert "connector: file" in text
+    stack.write_text(text.replace("connector: file", "connector: http-api", 1), encoding="utf-8")
+    code, out = run_hook(project, ("SDDA_ALLOW_UNTESTED_COMBO", ""))
+    assert code == 2 and "http-api" in out, out
+    code, out = run_hook(project, ("SDDA_ALLOW_UNTESTED_COMBO", "1"))
+    assert code == 0 and "assumé" in out
+
+
+def test_human_in_the_loop_without_checkpointing_is_refused(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), " - .sdda/stacks/framework/langgraph.md\n", "")
+    patch_stack(project, "HumanInTheLoopEnabled: false", "HumanInTheLoopEnabled: true")
+    code, out = run_hook(project)
+    assert code == 2 and "HumanInTheLoopEnabled" in out, out
+
+
 def test_the_rule_can_be_lifted_explicitly(tmp_path: Path) -> None:
     project = patch_stack(with_ir(make_project(tmp_path), "balanced"), "AdversarialSetMinItems: 2\n",
                           "AdversarialSetMinItems: 2\nJudgeMustDifferFromEvaluated: false\n")
