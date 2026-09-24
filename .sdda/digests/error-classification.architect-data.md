@@ -24,6 +24,7 @@ FIX: <l'action précise qui débloque>
 - `[DATA_SECRET_INLINE]`
 - `[DATA_SECRET_VAR_UNDECLARED]`
 - `[DATA_SOURCE_DB_CONFLICT]`
+- `[DATA_SOURCE_SCHEMA_MISSING]`
 - `[DATA_SOURCE_TRUST_OPTIMISTIC]`
 
 ## Classes universelles
