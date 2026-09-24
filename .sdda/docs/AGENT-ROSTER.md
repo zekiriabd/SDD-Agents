@@ -1,179 +1,255 @@
-# Les Developer Agents de SDD_Agents
+# The SDD_Agents Developer Agents
 
-<!--sdda:count agents-->23<!--/sdda:count--> agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
-confondre avec les agents du produit généré, décrits dans `contracts/agents/`.
+<!--sdda:count agents-->23<!--/sdda:count--> specialised agents. **These are the agents that *build*** — not to be
+confused with the agents of the generated product, described in
+`workspace/pipeline/contracts/agents/`.
 
-Règle d'orchestration interne héritée de SDD_Pro : **aucun agent ne spawne un
-autre agent.** La commande orchestre, l'agent exécute. C'est ce qui rend la
-facture de construction prévisible et le parallélisme bornable (`MaxParallel`).
+Internal orchestration rule inherited from SDD_Pro: **no agent spawns another
+agent.** The command orchestrates, the agent executes. That is what keeps the
+build bill predictable and parallelism boundable (`MaxParallel`).
 
-## 0. La convention de nommage — `{métier}-{domaine}`
+## 0. The naming convention — `{trade}-{domain}`
 
-Cinq préfixes, un par métier, dans l'ordre du pipeline :
+Five prefixes, one per trade, in pipeline order:
 
-| Préfixe | Métier | Phase | Agents |
+| Prefix | Trade | Phase | Agents |
 |---|---|:---:|---|
-| `po-` | product owner — le besoin et son découpage | 0-1 | `po-elicitor`, `po-capabilities` |
-| `architect-` | architecture — les décisions de structure | 2 | `architect-topology`, `architect-rag`, `architect-data`, `architect-memory`, `architect-tools` |
-| `dev-` | implémentation | 3-5 | `dev-backend` (la coquille), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` |
-| `qa-` | ce qui prouve | 6 | `qa-tests`, `qa-evals` |
-| `review-` | ce qui conteste | 7 | `review-spec`, `review-safety`, `review-cost`, `review-orchestration`, `review-rag`, `review-adversarial` |
+| `po-` | product owner — the need and how it is broken down | 0-1 | `po-elicitor`, `po-capabilities` |
+| `architect-` | architecture — materialising, contracting and costing the declared structure | 2 | `architect-topology`, `architect-rag`, `architect-data`, `architect-memory`, `architect-tools` |
+| `dev-` | implementation | 3-5 | `dev-backend` (the shell), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` |
+| `qa-` | what proves | 6a, 6 | `qa-tests`, `qa-evals` |
+| `review-` | what contests | 7 | `review-spec`, `review-safety`, `review-cost`, `review-orchestration`, `review-rag`, `review-adversarial` |
 
-Ce n'est pas de la cosmétique. La nomenclature d'origine appelait **cinq**
-agents `*-architect` alors qu'un seul décide de l'architecture au sens où un
-architecte l'entend : `architect-topology` fixe le périmètre, les quatre autres
-travaillent dedans. Et la phase fonctionnelle — celle où l'on demande ce que le
-système doit faire et pour qui — n'avait aucun nom qui la désigne, alors qu'elle
-porte deux agents.
+This is not cosmetic. The original naming called **five** agents `*-architect`
+when none of them decides the architecture in the sense an architect means it:
+the **human architect** declares it in the roster
+(`workspace/feats/{n}-roster.md`, PHILOSOPHY P7), `architect-topology`
+materialises and costs it, and the other four write contracts inside the scope
+it has drawn. And the functional phase — the one where we ask what the system
+must do and for whom — had no name to designate it, although it carries two
+agents.
 
-Un `ls .sdda/agents/` trie désormais par métier puis par domaine : le roster se
-lit comme une équipe, dans l'ordre où elle intervient, sans documentation.
+An `ls .sdda/agents/` now sorts by trade, then by domain: the roster reads like
+a team, in the order it steps in, without documentation.
 
-**Pourquoi deux agents PO et non un seul.** `po-elicitor` recueille, puis
-`po-capabilities` découpe en CAPs mesurables. Les fusionner supprimerait la
-barrière qui rend le veto de `qa-evals` possible : une CAP dont l'AC n'est pas
-mesurable lui revient avec `[AC_NOT_EVALUABLE]`, et elle doit revenir à
-quelqu'un dont c'est le seul travail — pas à l'agent qui a aussi écrit la
-MISSION dont elle dérive.
+**Why two PO agents rather than one.** `po-elicitor` gathers, then
+`po-capabilities` splits into measurable CAPs. Merging them would remove the
+barrier that makes `qa-evals`'s veto possible: a CAP whose AC is not measurable
+is sent back with `[AC_NOT_EVALUABLE]`, and it must go back to someone whose
+only job that is — not to the agent that also wrote the MISSION it derives from.
 
-> **CAP = user story.** Le découpage de `po-capabilities` est celui que SDD_Pro
-> fait en User Stories, avec quatre exigences de plus : métrique, seuil,
-> dataset, k runs (cf. `SDD-PRO-INHERITANCE.md §3`). Il n'y a pas de niveau
-> intermédiaire entre MISSION et CAP — en ajouter un dupliquerait la traçabilité
-> sans rien mesurer de plus.
+> **CAP = user story.** The breakdown `po-capabilities` performs is the one
+> SDD_Pro performs into User Stories, with four extra requirements: metric,
+> threshold, dataset, k runs (see `SDD-PRO-INHERITANCE.md §3`). There is no
+> intermediate level between MISSION and CAP — adding one would duplicate
+> traceability without measuring anything more.
 
 ---
 
-## 1. Tableau de bord
+## 1. Dashboard
 
-| Agent | Phase | Tier | Écrit dans | La question qu'il pose |
+The "Writes to" column is a summary; the source of truth is each agent's
+`writes:` key in `.sdda/loader.yml`, which the hooks enforce.
+
+| Agent | Phase | Tier | Writes to | The question it asks |
 |---|:---:|:---:|---|---|
-| **`po-elicitor`** | 0 | balanced | `missions/` | Quelle est la vérité contre laquelle on jugera, et que fait le système quand il ne sait pas ? |
-| **`po-capabilities`** | 1 | balanced | `caps/` | Quelles compétences discrètes, et comment mesure-t-on chacune ? |
-| **`architect-topology`** | 2 | **deep** | `topology/` | Quelle est la topologie la plus simple qui tienne, et pourquoi pas plus simple encore ? |
-| **`architect-tools`** | 2 | balanced | `contracts/tools/` | Quel contrat, quels effets de bord, quelle sûreté ? |
-| **`architect-rag`** | 2 | **deep** | `contracts/retrieval/` | Quel corpus, quel découpage, quelle stratégie, quel golden set ? |
-| **`architect-data`** | 2 | balanced | `contracts/tools/`, ADR | Comment l'agent touche la base sans pouvoir lui nuire ? |
-| **`architect-memory`** | 2 | balanced | `contracts/memory/` | Qu'est-ce qui persiste, pour combien de temps, avec quelles PII ? |
-| **`dev-prompt`** | 4 | **deep** | `prompts/` | Comment ce contrat devient-il un prompt qui tient sous adversité — outils **et skills** compris ? |
-| **`dev-tools`** | 3 | balanced | `src/tools/` | — implémente |
-| **`dev-retrieval`** | 3 | balanced | `src/retrieval/` | — implémente ingestion + retriever |
-| **`dev-data`** | 3 | balanced | `src/data/` | — implémente vues, repositories, enveloppe |
-| **`dev-agent`** | 4 | **deep** | `src/agents/{agent}/` | — implémente un agent (1 instance par agent) |
-| **`dev-orchestration`** | 5 | **deep** | `src/orchestration/` | — implémente le graphe/superviseur/routeur |
-| **`dev-api`** | 5 | balanced | `src/serving/` | — implémente la surface d'exposition |
-| **`dev-backend`** | 3, 5 | balanced | `src/{App}/*`, `src/app/` | — la coquille : projet, composition, config, règles calculables, packaging (hérité de SDD_Pro, EN PLUS des six du moteur) |
-| **`qa-evals`** | 6a, 6 | **deep** | `datasets/`, `suites/`, `calibration/` | Quel jeu, quel grader, quel seuil, calibré comment ? (6a : les jeux, AVANT le code ; 6 : suites complétées) |
-| **`qa-tests`** | 6 | balanced | `src/**/tests/` | — tests déterministes L0→L2 |
-| **`review-spec`** | 7A | balanced | rapports | Chaque AC de CAP a-t-elle une eval qui la couvre vraiment ? |
-| **`review-safety`** | 7B | **deep** | rapports | Où passe le texte hostile, et que peut-il déclencher ? |
-| **`review-cost`** | 7B | fast | rapports | Combien ça coûte vraiment, et où part l'argent ? |
-| **`review-orchestration`** | 7B | balanced | rapports | Des hops inutiles, des boucles, des impasses, des handoffs sans contrat ? |
-| **`review-rag`** | 7B | balanced | rapports | Le retrieval tient-il, ou l'agent compense-t-il ? |
-| **`review-adversarial`** | 7C | **deep** | rapports | Comment je casse ce système maintenant qu'il tourne ? |
+| **`po-elicitor`** | 0 | balanced | `pipeline/missions/` | What is the truth we will be judged against, and what does the system do when it does not know? |
+| **`po-capabilities`** | 1 | balanced | `pipeline/caps/` | Which discrete capabilities, and how is each one measured? |
+| **`architect-topology`** | 2 | **deep** | `pipeline/topology/`, `pipeline/contracts/agents/`, the CAPs' `## Allocated To`, ADRs | Is the declared roster complete for the active pattern, and what does it cost in the worst case? |
+| **`architect-tools`** | 2 | balanced | `pipeline/contracts/tools/` | Which contract, which side effects, which safety? |
+| **`architect-rag`** | 2 | **deep** | `pipeline/contracts/retrieval/` | Which corpus, which chunking, which strategy, which golden set? |
+| **`architect-data`** | 2 | balanced | `pipeline/contracts/tools/{n}-data-*`, ADRs | How does the agent touch the data without being able to harm it? |
+| **`architect-memory`** | 2 | balanced | `pipeline/contracts/memory/` | What persists, for how long, with which PII? |
+| **`dev-backend`** | 3.0, 5 | balanced | `src/{App}/*`, `src/**/app/` | — the shell: project, composition, config, computable rules (3.0), then packaging (5) — inherited from SDD_Pro, IN ADDITION to the six engine agents |
+| **`dev-tools`** | 3 | balanced | `src/**/tools/` | — implements the tools |
+| **`dev-retrieval`** | 3 | balanced | `src/**/retrieval/` | — implements ingestion + retriever |
+| **`dev-data`** | 3 | balanced | `src/**/data/` | — implements views, repositories, envelope |
+| **`dev-prompt`** | 4 | **deep** | `src/{App}/prompts/`, `skills/`, `rules/` | How does this contract become a prompt that holds under adversity — tools, **skills and rules** included? |
+| **`dev-agent`** | 4 | **deep** | `src/**/agents/{agent}/` | — implements one agent (1 bound instance per agent) |
+| **`dev-orchestration`** | 4.0, 5 | **deep** | `src/**/shared/`, `src/**/memory/`, `src/**/orchestration/` | — prepass (shared types + memory interface), then graph/supervisor/router and memory |
+| **`dev-api`** | 5 | balanced | `src/**/serving/` | — implements the exposure surface |
+| **`qa-evals`** | 6a, 6 | **deep** | `pipeline/datasets/`, `pipeline/suites/`, `pipeline/calibration/` | Which set, which grader, which threshold, calibrated how? (6a: the sets, BEFORE the code; 6: suites completed) |
+| **`qa-tests`** | 6 | balanced | `src/**/tests/` | — deterministic tests L0→L2, one invocation per layer |
+| **`review-spec`** | 7A | balanced | `.sys/.validation/reports/spec-compliance-{n}.md` | Does every CAP AC have an eval that really covers it? |
+| **`review-safety`** | 7B | **deep** | `.sys/.validation/reports/agent-safety-{n}.md` | Where does hostile text flow, and what can it trigger? |
+| **`review-cost`** | 7B | fast | `.sys/.validation/reports/cost-latency-{n}.md`, `cost-{n}.json` | What does it really cost, and where does the money go? |
+| **`review-orchestration`** | 7B | balanced | `.sys/.validation/reports/orchestration-{n}.md`, `trajectories-{n}.json` | Useless hops, loops, dead ends, uncontracted handoffs? |
+| **`review-rag`** | 7B | balanced | `.sys/.validation/reports/rag-quality-{n}.md` | Does retrieval hold, or is the agent compensating? |
+| **`review-adversarial`** | 7C | **deep** | `.sys/.validation/reports/adversarial-{n}.md`, `adversarial-findings/{n}.jsonl` | How do I break this system now that it runs? |
 
-Bornes `tier_floor` / `tier_ceiling` par agent : `.sdda/agent-bounds.yaml`.
-Elles sont des invariants de qualité, non surchargeables par le Project Config.
+Per-agent `tier_floor` / `tier_ceiling` bounds: `.sdda/agent-bounds.yaml`. They
+are quality invariants and cannot be overridden by the Project Config.
 
-`dev-prompt` porte une seconde responsabilité que la colonne « Écrit dans »
-ne montre pas : il est l'**owner d'implémentation des skills** des agents du
-produit. `architect-topology` les *déclare* au §5 du contrat d'agent,
-`dev-prompt` les *implémente* dans `prompts/{agent}.system.md`
-(`## Compétences`), et aucun des deux ne peut écrire chez l'autre — donc aucun ne
-peut résoudre seul un désaccord. `lint_prompts.py` constate la correspondance
-dans les deux sens : `[SKILL_NOT_IMPLEMENTED]`, `[SKILL_UNDECLARED]`. Une skill
-n'ayant ni schéma ni effet de bord, c'est la seule vérification possible : aucune
-gate ne peut l'exécuter pour la juger. Détail : `rules/ownership.md §2.2`.
+Reviewers write **exactly** the paths in their `writes:` under
+`workspace/.sys/.validation/`: that is where `validate-safety-gate` reads them
+back, and an invented report name would be a report the gate never finds. A
+**gate** report (`G{k}-*.json`) stays forbidden to them, through the editor as
+through the shell: only the gate's script writes it.
+
+`dev-prompt` carries a second responsibility that the "Writes to" column only
+half shows: it is the **implementation owner of the skills and rules** of the
+product's agents. `architect-topology` *declares* them in the agent contract
+(copied from the roster), `dev-prompt` *implements* them in
+`prompts/{agent}.system.md` (`## Compétences`, `## Règles`) and in one fragment
+per slug (`skills/{slug}.md`, `rules/{slug}.md`), and neither can write in the
+other's files — so neither can resolve a disagreement alone. `lint_prompts.py`
+checks the correspondence both ways: `[SKILL_NOT_IMPLEMENTED]`,
+`[SKILL_UNDECLARED]`, `[RULE_NOT_IMPLEMENTED]`, `[RULE_UNDECLARED]`. Since a
+skill or a rule has neither schema nor side effect, this is the only possible
+check: no gate can execute it to judge it. Details: `rules/ownership.md §2.2`.
 
 ---
 
-## 2. Les agents qui portent la valeur du framework
+## 2. The agents that carry the framework's value
 
-### `architect-topology` — l'agent signature
+### `architect-topology` — costing before building
 
-Il n'a pas d'équivalent dans SDD_Pro, et c'est lui qui décide si le produit sera
-maintenable ou un plat de spaghettis à $0.40 l'appel.
+It has no equivalent in SDD_Pro. It does **not choose** the architecture — the
+number of agents, their roles, their tools and the pattern are declared by the
+architect (roster and `STACK.md`, PHILOSOPHY P7). What it contributes, nobody
+else does: it is the only point in the pipeline where a topology at $0.40 per
+call, for a product that bills $0.05, becomes visible **before** everything has
+been built on top of it.
 
-**Procédure imposée**, dans cet ordre :
+**Mandatory procedure**, in this order:
 
-1. Partir de **un agent + des outils**. Toujours. Sans exception.
-2. Pour chaque CAP, demander : un outil suffit-il ? (Souvent oui. Un outil
-   déterministe bat un agent à tous les critères : coût, latence, testabilité,
-   débogabilité.)
-3. N'escalader vers un agent supplémentaire qu'en invoquant **explicitement** une
-   des cinq raisons closes de P7 — isolation de scope d'outils, tier distinct,
-   pression de contexte mesurée, fonction objectif différente, parallélisme requis.
-4. Écrire dans `topology/{n}-topology.md` la section **« Alternative plus simple
-   écartée »** : quelle topologie à N-1 agents a été envisagée, et quel critère
-   précis la disqualifie. Section vide = `[TOPOLOGY_UNJUSTIFIED]`, bloquant.
-5. Produire le graphe (bloc ```mermaid de `## 4. Le graphe`, dans la topologie
-   elle-même) et le **budget estimé** par chemin.
+1. Read the declared roster (`workspace/feats/{n}-roster.md`, validated by
+   `python .sdda/sdda.py roster validate` before it is spawned) and copy it
+   **verbatim** into the topology's `## 2. Roster déclaré`. It reads the roster;
+   it never writes it.
+2. Run `python .sdda/sdda.py validate-architecture --mission {n}`: is the
+   declaration complete for the active pattern
+   (`registry/architecture-requirements.yml`)? Red → STOP; it names the missing
+   fields and does not guess them.
+3. Allocate each CAP to the roster, asking two questions first: does a
+   deterministic tool suffice? (Often yes: a tool beats an agent on every
+   criterion — cost, latency, testability, debuggability.) Does retrieval
+   suffice? A CAP given to an agent when a tool would have done is **reported**;
+   it does not remove the agent.
+4. For every agent beyond the first, look for one of P7's five closed reasons —
+   tool-scope isolation, distinct tier, measured context pressure, different
+   objective function, required parallelism. None → `[TOPOLOGY_SIMPLICITY_ADVISORY]`
+   with the cost that agent adds: a figure, not an opinion. The **"Simpler
+   alternative considered"** section is advisory in the same way: what an N-1
+   agent design would have been, and how much less it would have cost.
+5. Produce the graph (the ```mermaid block of `## 4. Le graphe`, inside the
+   topology itself), each agent's five bounds with their behaviour when reached,
+   and the **estimated budget** per path — nominal and worst case. Worst case
+   above the MISSION's cap → `[BUDGET_EXCEEDED_ESTIMATE]`: it hands back with the
+   figure and the three levers, without picking any of them.
 
-Il **n'écrit pas** de prompt, **ne choisit pas** de modèle (il choisit un tier),
-**ne nomme aucune API** de framework.
+Its estimate is a **hypothesis** (ARCHITECTURE §5): the fact comes after it,
+from `estimate-budget` on the compiled IR, which writes the `budget` part of G2.
 
-### `qa-evals` — celui sans qui rien n'est prouvé
+It **writes no** prompt, **chooses no** model (it chooses a tier), **names no**
+framework API, and never renames, adds or removes a roster agent
+(`[ARCH_ROSTER_MUTATED]`).
 
-Le seul autorisé à écrire dans `workspace/pipeline/datasets/`. Produit :
+### `qa-evals` — without it, nothing is proven
 
-- **golden set** (ajustement) et **holdout** (verdict), disjoints, vérifiés par hash ;
-- **set de calibration** : ≥ 50 items labellisés humainement, pour valider chaque
-  juge LLM avant qu'il ne rende un verdict bloquant (P9) ;
-- **set adversarial** : injections directes et indirectes, jailbreaks, tentatives
-  d'abus d'outils, exfiltration ;
-- les **graders** et leurs seuils ;
-- les **baselines** épinglées au tuple de hashes (P10).
+The only agent allowed to write to `workspace/pipeline/datasets/`. It runs
+twice: in **6a**, before the code (`/sdda-eval {n} --datasets-only`), so that
+the sets exist before any `dev-*` can tune against them; then in **6**, to
+complete the suites. It produces:
 
-Il a un droit de veto : une CAP dont l'AC n'est pas mesurable lui revient, et il
-la renvoie à `po-capabilities` avec `[AC_NOT_EVALUABLE]`.
+- the **golden set** (tuning) and the **holdout** (verdict), disjoint, checked by hash;
+- the **calibration set**: ≥ 50 human-labelled items
+  (`JudgeCalibrationMinItems`), to validate every LLM judge before it renders a
+  blocking verdict (P9) — an uncalibrated judge becomes advisory;
+- the **adversarial set**: direct and indirect injections, jailbreaks, tool-abuse
+  attempts, exfiltration;
+- the eval **suites**, their **graders** and their thresholds.
+
+It does not write the **baselines** (P10): `workspace/pipeline/baselines/**` is
+reserved to the `python .sdda/sdda.py promote-baseline` script. A baseline moves
+through a traced action, never by overwrite.
+
+It holds a veto: a CAP whose AC is not measurable comes back to it, and it sends
+it back to `po-capabilities` with `[AC_NOT_EVALUABLE]`.
 
 ### `review-safety`
 
-Remplace et élargit le `security-reviewer` de SDD_Pro. Sa grille : injection
-directe et **indirecte** (corpus empoisonné, réponse d'API, page web), excès de
-scope d'outils par rapport aux CAPs, opérations destructives sans stratégie de
-sûreté, fuite de secrets vers prompts/traces/datasets, PII dans le vector store,
-escalade de privilège par délégation, exfiltration via un outil sortant.
-`AgentSafetyMode: off` est refusé sur un run de production.
+Replaces and widens SDD_Pro's `security-reviewer`. Its grid: direct and
+**indirect** injection (poisoned corpus, API response, web page), tool scope in
+excess of the CAPs, destructive operations without a safety strategy, secrets
+leaking into prompts/traces/datasets, PII in the vector store, privilege
+escalation through delegation, exfiltration through an outbound tool. It
+**reads** the reports of the deterministic scans (`scan-secrets`, `scan-pii`,
+`audit-tool-scope`), run once before stage B; it does not rerun them. Its
+`[SAFETY_*]` classes are blocking. `AgentSafetyMode: off` is refused on a
+production or CI run.
 
 ---
 
-## 3. Étage de revue — deux étages puis adversarial
+## 3. Review stages — two stages, then adversarial
 
-Hérité de SDD_Pro (`AuditorBatchMode: two-stage`), adapté :
+Inherited from SDD_Pro (`AuditorBatchMode: two-stage`), adapted:
 
 ```
-Étage A   review-spec  (SEUL)
-          → chaque AC de CAP est-elle couverte par une eval qui la mesure
-            vraiment, et non par une eval qui la contourne ?
-          Verdict ROUGE → les étages B et C ne se lancent pas.
+Stage A   review-spec  (ALONE)
+          → is every CAP AC covered by an eval that really measures it,
+            rather than by an eval that sidesteps it?
+          RED verdict → stages B and C do not start.
 
-Étage B   agent-safety · cost-latency · orchestration · rag-quality   (PARALLÈLE)
+Scans     scan-secrets · scan-pii · audit-tool-scope   (0 token, once)
 
-Étage C   review-adversarial  (sur le système VIVANT, pas sur le code)
-          → attaque réelle, trajectoires inattendues, entrées limites
+Stage B   agent-safety · cost-latency · orchestration · rag-quality   (PARALLEL)
+
+Stage C   review-adversarial  (on the LIVE system, not on the code)
+          → real attacks, unexpected trajectories, edge inputs
+          then run-adversarial-suite: the versioned set, played LIVE
 ```
 
-Raison de l'étage A seul : agréger des findings de qualité, de coût et de
-sécurité sur un système qui ne fait pas ce que la spec demande est du gaspillage.
-On vérifie d'abord qu'on regarde le bon système.
+Why stage A runs alone: aggregating quality, cost and security findings on a
+system that does not do what the spec asks is waste. First we check we are
+looking at the right system.
 
-Raison de l'étage C séparé : l'adversarial n'a de sens qu'exécuté. Relire du code
-pour chercher une faille d'injection donne un avis ; lancer 40 injections contre
-le système donne un fait.
+Why the scans run before stage B: one measurement, one producer, one moment —
+before the readers. Run twice, the second execution overwrote the part the
+first had made the reviewer read.
+
+Why stage C is separate: adversarial testing only makes sense when executed.
+Reading code to look for an injection flaw yields an opinion; firing 40
+injections at the system yields a fact. `review-adversarial` improvises and
+records every successful attack as a **finding**; the versioned set, for its
+part, is played by a script (`python .sdda/sdda.py run-adversarial-suite`),
+which records every execution itself and writes the `adversarial` part of G7. A
+missing mandatory reviewer report is not "zero findings": it is
+`[SAFETY_REVIEW_REPORT_MISSING]`.
 
 ---
 
-## 4. Orchestration interne — le parallélisme et ce qui le borne
+## 4. Internal orchestration — parallelism and what bounds it
 
-| Phase | Parallélisable | Barrière |
+| Phase | Parallelisable | Barrier |
 |---|---|---|
-| 2 — architecture | `architect-tools` ∥ `architect-rag` ∥ `architect-data` ∥ `architect-memory` | `architect-topology` d'abord (il fixe le périmètre), puis compilation IR |
-| 3 — socle | `dev-tools` ∥ `dev-retrieval` ∥ `dev-data` | TOOL GATE + RETRIEVAL GATE avant la phase 4 |
-| 4 — agents | 1 `dev-agent` par agent, en parallèle | `dev-prompt` d'abord ; AGENT GATE après |
-| 6 — eval/tests | `qa-evals` ∥ `qa-tests` | datasets figés avant l'exécution des evals |
-| 7B — revue | 4 reviewers en parallèle | étage A vert |
+| 2 — architecture | `architect-tools` ∥ `architect-rag` ∥ `architect-data` ∥ `architect-memory` | `architect-topology` first (it sets the scope), declared-source contracts generated by script (`gen-source-tools --scope contracts`), then IR compilation |
+| 6a — datasets | `qa-evals` alone | G2 green; the sets exist before the code |
+| 3 — foundation | `dev-tools` ∥ `dev-retrieval` ∥ `dev-data` | `dev-backend` (skeleton) alone first; source code generated (`gen-source-tools --scope code`) before `dev-data`; TOOL GATE + RETRIEVAL GATE before phase 4 |
+| 4 — agents | 1 `dev-agent` per agent, in parallel waves | `dev-orchestration --prepass` (4.0) then `dev-prompt` (4.1), each alone; AGENT GATE after |
+| 5 — orchestration | none: sequential | `dev-orchestration` → `dev-api` → `dev-backend` (packaging); ORCH GATE after |
+| 6 — eval/tests | `qa-evals` ∥ `qa-tests` (one invocation per layer) | datasets frozen before evals run |
+| 7B — review | 4 reviewers, in waves ≤ `MaxParallel` | stage A green, scans run |
 
-Le parallélisme est borné par `MaxParallel` et rendu sûr par la matrice
-d'ownership : deux `dev-agent` concurrents écrivent dans
-`src/agents/{agent}/` disjoints et ne partagent aucun fichier en écriture.
+Parallelism is bounded by `MaxParallel` and made safe by the ownership matrix,
+and that safety is checked at three moments rather than assumed:
+
+- **At spawn and on every write.** Ownership globs are segmented (`*` stays
+  within one segment, `**` spans several) and real overlaps between zones are
+  computed (`audit-ownership --declared-only`). Every `dev-agent` instance
+  carries `SDDA-INSTANCE: {agent}` as the first line of its prompt: the
+  `preflight_instance_bind` hook declares it, its first write binds it to its
+  agent, and a write under `agents/{other}/` is refused
+  (`[OWNERSHIP_INSTANCE_ESCAPE]`). Without that line, the spawn is refused
+  (`[OWNERSHIP_INSTANCE_UNDECLARED]`).
+- **On disk, after every wave.** `audit-ownership snapshot` before the wave,
+  `audit-ownership --since-snapshot` after it (phases 3, 4.0, 4 and 5): what the
+  hooks cannot see — a script writing from the inside — shows up in the diff. An
+  out-of-zone write is revoked with `--restore`.
+- **On frozen zones.** The shared types and the memory interface laid down by
+  the 4.0 prepass are frozen during phases 4 and 5; touching them is
+  `[OWNERSHIP_FROZEN_ZONE_CHANGED]`.
+
+Two concurrent `dev-agent` instances thus write into disjoint
+`src/**/agents/{agent}/` directories and share no file for writing — not
+because they were asked to, but because the hook and the audit observe it.
