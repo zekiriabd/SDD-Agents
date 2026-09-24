@@ -404,28 +404,11 @@
     }
   },
   "refusedByDefault": {
-    "description": "Composants dont l'activation exige un ADR référencé, indépendamment de leur niveau de validation. Source : patterns.registry.json (status refused-by-default) et DATA-ACCESS.md / STACK.md (valeurs exigeant un ADR).",
+    "description": "Composants dont l'activation exige un ADR ACCEPTÉ, indépendamment de leur niveau de validation. Source : patterns.registry.json (status refused-by-default). Les VALEURS de configuration qui exigent un ADR (DbAgentRole, MemoryPIIPolicy, TracePIIPolicy, TlsVerify…) vivent dans `configValuesFrom` — une seule liste, appliquée par validate_adr (G2) et par preflight_stack_combo au spawn des agents de construction. `tests/test_stack_governance.py` vérifie que chaque composant d'ici y figure.",
     "components": [
       "orchestration/network"
     ],
-    "configValues": [
-      {
-        "key": "DbAgentRole",
-        "value": "full"
-      },
-      {
-        "key": "DbAgentRole",
-        "value": "scoped-write"
-      },
-      {
-        "key": "MemoryPIIPolicy",
-        "value": "allow"
-      },
-      {
-        "key": "TracePIIPolicy",
-        "value": "raw"
-      }
-    ]
+    "configValuesFrom": ".sdda/registry/adr-requirements.yml"
   },
   "catalogDiscrepancies": {
     "description": "Écarts constatés entre les sources au moment de la synchronisation, à trancher par le mainteneur (pas par ce fichier).",

@@ -56,7 +56,9 @@ GATE_PARTS: dict[str, tuple[str, ...]] = {
 #: antérieur sans qu'aucune régression n'ait eu lieu — et on apprendrait à
 #: ignorer la redescente. Le rouge, lui, n'a jamais d'excuse.
 GATE_PARTS_ADVISORY: dict[str, tuple[str, ...]] = {
-    "G2": ("packaging", "architecture"),
+    # `adr` (validate_adr) : une décision qui exige un ADR accepté et n'en a
+    # pas rend G2 rouge ; un projet sans décision de ce genre n'a rien à écrire.
+    "G2": ("packaging", "architecture", "adr"),
     "G3": ("dataaccess",),
     "G5": ("calibration", "ownership", "prompts"),
     # `api` est contributive et non obligatoire parce qu'une surface `cli` ou

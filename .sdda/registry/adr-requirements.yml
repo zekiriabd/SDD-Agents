@@ -1,0 +1,96 @@
+# SDD_Agents — décisions qui EXIGENT un ADR (registre déclaratif, 0 token)
+#
+# Lu par `sdda_scripts/validate_adr.py` (part `adr` de G2, bloquante quand
+# rouge), par `human_tasks.py` (file des tâches humaines) et par le hook
+# `preflight_stack_combo` (refus au spawn des agents de construction). Les
+# exigences vivaient codées en dur dans `human_tasks.py`, en tâches NON
+# bloquantes, et un ADR les « couvrait » dès qu'il contenait la sous-chaîne de
+# la clé OU de la valeur : un ADR qui écrivait « false » quelque part couvrait
+# `ApiContractFirst: false`, `TlsVerify: false` et toute autre décision
+# booléenne du projet.
+#
+# UN ADR COUVRE UNE EXIGENCE SEULEMENT S'IL LA NOMME DANS UN CHAMP STRUCTURÉ :
+#
+#     Status: Accepted
+#     Covers: DbAgentRole=scoped-write, VectorStoreConnection.TlsVerify=false
+#
+# (cf. `templates/adr.template.md`). Clé ET valeur, égalité exacte (casse
+# ignorée), `Status: Accepted`. Un ADR `Proposed` n'autorise rien : il est
+# écrit AVANT l'implémentation, et c'est son acceptation qui la débloque.
+#
+# Grammaire d'une exigence :
+#   id        identifiant stable (kebab-case)
+#   key       clé contrôlée ; `a.b` = sous-clé d'un mapping (VectorStoreConnection.TlsVerify)
+#             ou `{catégorie}` pour un composant activé (orchestration)
+#   section   `Project Config` (config en 3 couches) ou titre d'une section `## Active *`
+#   values    valeurs qui déclenchent l'exigence (comparées en minuscules)
+#   onlyIf    (optionnel) liste de conditions {key, section, in | notIn} toutes vraies
+#   source    documents du framework d'où vient la règle — elle n'est pas inventée ici
+#   why       ce que l'ADR doit rendre lisible en revue
+#
+# Cohérence vérifiée par tests/test_adr_requirements.py : toute entrée
+# `adr_required: true` de `architecture-requirements.yml` et tout composant de
+# `compatibility.matrix.json refusedByDefault.components` figure ici.
+
+requirements:
+  - id: api-contract-divergence
+    key: ApiContractFirst
+    section: Project Config
+    values: ["false"]
+    source: config.base.yml ApiContractFirst · INVARIANTS.yml api-contract-derived-from-ir · stacks/serving/fastapi-sse.md §6
+    why: l'API peut diverger des schémas de l'IR — la divergence se décide par écrit, elle ne se subit pas chez l'appelant
+
+  - id: network-surface-without-identity
+    key: ApiAuthMode
+    section: Project Config
+    values: [none]
+    onlyIf:
+      - {key: DeliverableType, section: Project Config, in: [backend-api, mcp-server]}
+    source: validate_packaging.py [PACKAGING_IDENTITY_UNESTABLISHED] · config.base.yml ApiAuthMode
+    why: une surface réseau sans identité d'appelant n'est tenable que derrière une passerelle qui l'établit — laquelle, et pourquoi, se dit
+
+  - id: db-agent-role-write
+    key: DbAgentRole
+    section: Active Data Access
+    values: [scoped-write, full]
+    onlyIf:
+      - {key: DatabaseType, section: Active Data Access, notIn: [none, ""]}
+    source: docs/DATA-ACCESS.md §3 · loader.yml architect-data · agents/architect-data.md
+    why: un agent qui écrit en base est un incident qui attend son heure — le rôle se justifie nominativement
+
+  - id: memory-pii-allow
+    key: MemoryPIIPolicy
+    section: Active Memory Strategy
+    values: [allow]
+    source: INVARIANTS.yml pii-not-in-vector-store · stacks/guardrails/pii-redaction.md
+    why: ce qui entre dans un index se retire mal — la base légale et le mécanisme d'effacement se déclarent
+
+  - id: trace-pii-raw
+    key: TracePIIPolicy
+    section: Project Config
+    values: [raw]
+    source: rules/agent-safety.md · stacks/observability/otel-genai.md · scan_pii.py [PII_POLICY_PERMISSIVE]
+    why: les PII détectées dans les traces ne bloquent plus — la décision doit être lisible en revue
+
+  - id: vector-store-tls-off
+    key: VectorStoreConnection.TlsVerify
+    section: Active Retrieval Stack
+    values: ["false"]
+    onlyIf:
+      - {key: VectorStoreConnection.Mode, section: Active Retrieval Stack, in: [dedicated]}
+    source: STACK.md.template ## Active Retrieval Stack (« `false` exige un ADR ») · rules/agent-safety.md
+    why: un index joint sans vérification TLS accepte n'importe quel serveur qui répond à son adresse — corpus et requêtes compris
+
+  - id: stack-combo-check-off
+    key: StackComboCheck
+    section: Project Config
+    values: ["off"]
+    source: config.base.yml StackComboCheck · registry/compatibility.matrix.json
+    why: couper la reconnaissance des combinaisons, c'est renoncer à savoir si la stack activée a jamais été pensée d'un bloc
+
+  - id: orchestration-network
+    key: orchestration
+    section: Active Orchestration Pattern
+    values: [network]
+    source: registry/architecture-requirements.yml adr_required · registry/patterns.registry.json refused-by-default · ORCHESTRATION-PATTERNS.md
+    why: un réseau libre rend trajectoires et coût non bornables par construction — l'ADR démontre qu'aucun graph ne convient

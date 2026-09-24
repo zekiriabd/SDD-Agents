@@ -3,7 +3,8 @@
 Ce que ces tests défendent : chaque tâche cite sa raison et son remède ; un
 roster absent, à trous ou rouge est une tâche BLOQUANTE de l'architecte (P7) ;
 un jaune de G5/G6/G8 est une décision, pas un avertissement ; un ADR exigé par
-STACK.md apparaît tant qu'aucun fichier ADR ne nomme la clé ; et le script est
+STACK.md est une tâche bloquante tant qu'aucun ADR accepté ne le couvre
+(`Covers: Clé=valeur`) ; et le script est
 un listing (exit 0, aucun rapport écrit), jamais une gate.
 """
 from __future__ import annotations
@@ -111,24 +112,36 @@ def test_a_default_stack_requires_no_adr(project: Path) -> None:
     assert only(tasks(project), "adr") == []
 
 
-def test_a_permissive_memory_pii_policy_requires_an_adr_until_one_names_it(project: Path) -> None:
+def _adr(project: Path, name: str, body: str) -> None:
+    adr_dir = project / "workspace/pipeline/decisions"
+    adr_dir.mkdir(parents=True, exist_ok=True)
+    (adr_dir / name).write_text(body, encoding="utf-8")
+
+
+def test_a_permissive_memory_pii_policy_requires_an_accepted_adr_that_covers_it(project: Path) -> None:
+    """Bloquante : la part `adr` de G2 l'est — une tâche facultative qui fait rougir une gate est mal étiquetée."""
     patch(project, STACK, "MemoryPIIPolicy: redact-before-write", "MemoryPIIPolicy: allow")
     (found,) = only(tasks(project), "adr")
-    assert found["blocking"] is False and "MemoryPIIPolicy" in found["title"]
-    assert "pii-not-in-vector-store" in found["why"]
+    assert found["blocking"] is True and "MemoryPIIPolicy" in found["title"]
+    assert "pii-not-in-vector-store" in found["why"] and "Covers: MemoryPIIPolicy=allow" in found["how"]
 
-    adr_dir = project / "workspace/pipeline/decisions"
-    adr_dir.mkdir(parents=True, exist_ok=True)
-    (adr_dir / "ADR-20260922T1000-memory-pii.md").write_text("# ADR\n\nMemoryPIIPolicy: allow — base légale…\n", encoding="utf-8")
+    _adr(project, "ADR-20260922T1000-memory-pii.md",
+         "# ADR\n\nStatus: Accepted\nCovers: MemoryPIIPolicy=allow\n\nbase légale…\n")
     assert only(tasks(project), "adr") == []
 
 
-def test_an_adr_written_in_docs_adr_also_counts(project: Path) -> None:
+def test_an_adr_that_only_mentions_the_key_no_longer_covers_it(project: Path) -> None:
+    """La sous-chaîne suffisait : un ADR qui écrivait « allow » ou « false » couvrait tout."""
     patch(project, STACK, "MemoryPIIPolicy: redact-before-write", "MemoryPIIPolicy: allow")
-    adr_dir = project / "workspace/pipeline/decisions"
-    adr_dir.mkdir(parents=True, exist_ok=True)
-    (adr_dir / "ADR-0001-memory.md").write_text("La politique `MemoryPIIPolicy` passe à allow parce que…\n", encoding="utf-8")
-    assert only(tasks(project), "adr") == []
+    _adr(project, "ADR-0001-memory.md", "Status: Accepted\n\nLa politique `MemoryPIIPolicy` passe à allow parce que…\n")
+    assert len(only(tasks(project), "adr")) == 1
+
+
+def test_a_proposed_adr_is_said_and_still_blocks(project: Path) -> None:
+    patch(project, STACK, "MemoryPIIPolicy: redact-before-write", "MemoryPIIPolicy: allow")
+    _adr(project, "ADR-0002-memory.md", "Status: Proposed\nCovers: MemoryPIIPolicy=allow\n")
+    (found,) = only(tasks(project), "adr")
+    assert found["blocking"] is True and "n'est pas `Accepted`" in found["why"]
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +182,7 @@ def test_tasks_are_ordered_by_kind_then_mission(project: Path) -> None:
     _yellow(project, "G5", "1-2-ExplainInvoiceLine")
     payload = tasks(project)
     assert kinds(payload) == ["roster", "adr", "findings"]
-    assert payload["counts"] == {"total": 3, "blocking": 2, "byKind": {"roster": 1, "labels": 0, "adr": 1, "findings": 1}}
+    assert payload["counts"] == {"total": 3, "blocking": 3, "byKind": {"roster": 1, "labels": 0, "adr": 1, "findings": 1}}
 
 
 def test_mission_scope_keeps_project_wide_adr_tasks(project: Path) -> None:

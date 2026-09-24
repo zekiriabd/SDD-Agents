@@ -272,6 +272,91 @@ def test_a_tier_name_as_judge_is_resolved(tmp_path: Path) -> None:
     assert [i.blocking for i in judge(project)] == [True]
 
 
+# ---------------------------------------------------------------------------
+# C5 — les ADR : un registre déclaratif, une couverture structurée, une part de G2
+# ---------------------------------------------------------------------------
+def adr_report(project: Path, *argv: str) -> tuple[int, dict]:
+    from conftest import run_main
+    from sdda_scripts import validate_adr
+
+    code, out = run_main(validate_adr.main, ["--root", str(project), "--json", "--mission", "1", *argv])
+    return code, json.loads(out)
+
+
+def classes_of(payload: dict) -> list[str]:
+    return [f["class"] for f in payload.get("errors", [])]
+
+
+def write_adr(project: Path, name: str, body: str) -> None:
+    d = project / "workspace" / "pipeline" / "decisions"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text(body, encoding="utf-8")
+
+
+def with_db_write(project: Path) -> Path:
+    return patch_stack(project, "DatabaseType: none\n",
+                       "DatabaseType: PostgreSql\n - DB_PASSWORD: ${DB_PASSWORD}\nDbAgentRole: scoped-write\n")
+
+
+def test_a_default_stack_needs_no_adr_and_writes_a_green_g2_part(tmp_path: Path) -> None:
+    project = make_project(tmp_path)
+    code, payload = adr_report(project)
+    assert code == 0 and classes_of(payload) == []
+    assert (project / "workspace/.sys/.validation/G2-1.adr.json").is_file()
+
+
+def test_a_write_role_without_adr_is_blocking(tmp_path: Path) -> None:
+    code, payload = adr_report(with_db_write(make_project(tmp_path)))
+    assert code == 1 and classes_of(payload) == ["ADR_MISSING"]
+
+
+def test_a_structured_accepted_adr_covers_it(tmp_path: Path) -> None:
+    project = with_db_write(make_project(tmp_path))
+    write_adr(project, "ADR-20260924T1000-db-write.md", "Status: Accepted\nCovers: DbAgentRole=scoped-write\n")
+    assert adr_report(project)[0] == 0
+
+
+def test_a_proposed_adr_does_not_unlock_anything(tmp_path: Path) -> None:
+    project = with_db_write(make_project(tmp_path))
+    write_adr(project, "ADR-20260924T1000-db-write.md", "Status: Proposed\nCovers: DbAgentRole=scoped-write\n")
+    assert classes_of(adr_report(project)[1]) == ["ADR_NOT_ACCEPTED"]
+
+
+def test_a_substring_no_longer_covers_a_decision(tmp_path: Path) -> None:
+    """« false » n'importe où couvrait `ApiContractFirst: false` — et toute autre décision booléenne."""
+    project = patch_stack(make_project(tmp_path), "AdversarialSetMinItems: 2\n",
+                          "AdversarialSetMinItems: 2\nApiContractFirst: false\n")
+    write_adr(project, "ADR-0001-x.md", "Status: Accepted\nCovers: TracePIIPolicy=raw\n\nApiContractFirst false, bien sûr.\n")
+    assert classes_of(adr_report(project)[1]) == ["ADR_MISSING"]
+
+
+def test_tls_off_on_a_dedicated_store_requires_an_adr(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), " - .sdda/stacks/embedding/voyage.md\n",
+                          " - .sdda/stacks/embedding/voyage.md\nVectorStoreConnection:\n  Mode: dedicated\n"
+                          "  Endpoint: https://idx.internal\n  Collection: kb\n  TlsVerify: false\n")
+    _, payload = adr_report(project, "--no-report")
+    assert any("VectorStoreConnection.TlsVerify" in f["message"] for f in payload["errors"])
+
+
+def test_every_adr_required_rule_of_the_other_registries_is_in_the_adr_registry() -> None:
+    """Un seul registre : ce que `architecture-requirements.yml` et la matrice disent exiger un ADR y figure."""
+    from sdda_lib import yaml_mini
+    from sdda_scripts import validate_adr
+
+    declared = {(r.key, v) for r in validate_adr.load_requirements() for v in r.values}
+    arch = yaml_mini.parse_mapping((SDDA / "registry" / "architecture-requirements.yml").read_text(encoding="utf-8"))
+    expected = set()
+    for axis, entries in arch.items():
+        if not isinstance(entries, dict) or not isinstance(entries.get("choices"), dict):
+            continue
+        for name, entry in entries["choices"].items():
+            if isinstance(entry, dict) and entry.get("adr_required"):
+                expected.add((axis, name))
+    for component in _matrix()["refusedByDefault"]["components"]:
+        expected.add(tuple(component.split("/", 1)))
+    assert expected and expected <= declared, expected - declared
+
+
 def test_the_rule_can_be_lifted_explicitly(tmp_path: Path) -> None:
     project = patch_stack(with_ir(make_project(tmp_path), "balanced"), "AdversarialSetMinItems: 2\n",
                           "AdversarialSetMinItems: 2\nJudgeMustDifferFromEvaluated: false\n")
