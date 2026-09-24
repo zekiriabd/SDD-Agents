@@ -1,13 +1,12 @@
-# Cycle de vie et machine à états
+# Lifecycle and state machine
 
-Chaque artefact de spécification porte un `Status`. Les transitions sont
-**gardées** : on ne passe à l'état suivant qu'en franchissant une gate. L'état est
-un **fait** dérivé des gates franchies, jamais une déclaration d'intention d'un
-agent.
+Every specification artefact carries a `Status`. Transitions are **guarded**:
+you only move to the next state by passing a gate. The state is a **fact**
+derived from the gates passed, never a statement of intent by an agent.
 
 ---
 
-## 1. La machine à états
+## 1. The state machine
 
 ```
    Draft ──G0 · G1──► Specified ──G2──► Architected ──(revue de plan)──► Planned
@@ -30,82 +29,118 @@ agent.
                                     ──► Cancelled
 ```
 
-Une étiquette d'arête nomme la gate qui **donne** l'état d'arrivée — celle du
-tableau ci-dessous et de `compute_status.py`. Le schéma les décalait d'un cran
-(`Specified ──G1──► Architected`) : il plaçait `Architected` après G1, là où le
-tableau et le code l'accordent à G2. `Planned` n'a pas de gate numérotée : la
-revue de plan est conditionnelle, et son absence fait sauter le niveau
+An edge label names the gate that **grants** the arrival state — the one in the
+table below and in `compute_status.py`. The diagram used to shift them by one
+(`Specified ──G1──► Architected`): it placed `Architected` after G1, where the
+table and the code grant it at G2 — `test_workflow_sync.py` now checks that the
+diagram and the code say the same thing. `Planned` has no numbered gate: the
+plan review is conditional, and its absence skips the level
 (`OPTIONAL_LEVELS`).
 
-**Aucun saut d'état.** `Draft -> Implemented` est refusé même avec un flag : le
-bypass existe au niveau d'une gate donnée (audit-loggué), pas au niveau de la
-machine.
+**No state skipping.** `Draft -> Implemented` is refused even with a flag: the
+bypass exists at the level of a given gate (audit-logged), not at the level of
+the machine. `compute_status.py` climbs the ladder level by level and stops at
+the first absent or stale gate; on the command side, `/sdda-full --from-phase`
+cannot skip a gate that has not been passed (`[STATE_SKIP_FORBIDDEN]`).
 
 ---
 
-## 2. Les états
+## 2. The states
 
-| État | Signifie | Gate qui y donne accès | Porté par |
+| State | Means | Gate that grants it | Carried by |
 |---|---|---|---|
-| `Draft` | existe, incomplet | — | MISSION, CAP |
-| `Specified` | objectif chiffré, budget, ground truth, trust boundaries présents ; AC évaluables | **G0** puis **G1** | MISSION, CAP |
-| `Architected` | topologie décidée, alternative simple écartée par écrit, contrats écrits, IR compilé et valide, budget estimé sous plafond | **G2** | MISSION, TOPOLOGY |
-| `Planned` | plans d'implémentation par couche écrits, ordre de construction figé | revue de plan (humaine, conditionnelle) | TOPOLOGY, contrats |
-| `Implemented` | outils verts + connectivité live, retrieval au-dessus des seuils, agents et orchestration matérialisés | **G3** + **G4** | TOOL, RETRIEVER, AGENT |
-| `Tested` | L0→L2 verts, agents évalués isolés sur leurs CAP ACs | **G5** | CAP, AGENT |
-| `Evaluated` | evals bout-en-bout passées, coût et latence **mesurés** sous budget, suite adversariale et sécurité passées | **G6** + **G7** | MISSION |
-| `Approved` | objectif chiffré atteint sur **holdout**, non-régression vs baseline | **G8** | MISSION |
-| `Blocked` | une gate a rendu rouge ; porte la classe `[CLASS]` et le rapport | — | tout |
-| `Deferred` / `Cancelled` | décision humaine tracée | — | tout |
+| `Draft` | exists, incomplete | — | MISSION, CAP |
+| `Specified` | quantified goal, budget, ground truth, trust boundaries present; ACs evaluable; every MISSION item covered by a CAP | **G0** then **G1** (traceability per MISSION, and one G1 per CAP) | MISSION, CAP |
+| `Architected` | topology decided, simpler alternative ruled out in writing, contracts written, IR compiled and valid, estimated budget under the cap | **G2** — `topology`, `ir`, `budget` parts; `packaging`, `architecture` and `adr` block when red | MISSION, TOPOLOGY |
+| `Planned` | per-layer implementation plans written, build order frozen | plan review (human, conditional) | TOPOLOGY, contracts |
+| `Implemented` | tools green + live connectivity, retrieval above thresholds, agents and orchestration materialised | **G3** (`contracts` and `suites` parts, per wired tool) + **G4** (per retriever) | TOOL, RETRIEVER, AGENT |
+| `Tested` | agents evaluated in isolation against their CAP ACs (L4, k runs); no judge calibration, prompt pinning or ownership audit in red | **G5**, per CAP — `calibration`, `prompts`, `ownership` parts block when red | CAP, AGENT |
+| `Evaluated` | end-to-end evals passed, cost and latency **measured** under budget, adversarial and security suites passed, reviewer reports present | **G6** + **G7** (`suites`, `adversarial`, `verdict` parts) | MISSION |
+| `Approved` | quantified goal reached on **holdout**, no regression against the baseline | **G8** (`datasets` and `acceptance` parts) | MISSION |
+| `Blocked` | a gate turned red; carries the `[CLASS]` and the report | — | all |
+| `Deferred` / `Cancelled` | traced human decision | — | all |
+
+A **mandatory** part that is absent stops the climb; a **contributing** part
+(`GATE_PARTS_ADVISORY` in `gate_reports.py`) that is absent does not block, but
+red, it blocks. The distinction exists because some checks do not apply to
+every project — a `cli` surface publishes no HTTP contract, hence no `api`
+part — and a red, for its part, never has an excuse.
 
 ---
 
-## 3. Règles de transition
+## 3. Transition rules
 
-**R1 — L'état est dérivé, pas déclaré.**
-`sdda_scripts/compute_status.py` calcule l'état depuis les rapports de gate sur
-disque. Un agent qui écrit `Status: Tested` dans un fichier sans rapport
-correspondant émet `[STATUS_UNBACKED]` et le script écrase. Un état auto-proclamé
-est le mécanisme par lequel un pipeline agentic se déclare vert.
+**R1 — The state is derived, not declared.**
+`sdda_scripts/compute_status.py` computes the state from the gate reports on
+disk. An agent that writes `Status: Tested` in a file without a matching report
+emits `[STATUS_UNBACKED]` and the script overwrites it. The correction works in
+both directions: a `Status: Blocked` that no red report backs any more is
+rewritten too, otherwise an unblocked artefact would stay `Blocked` forever in
+its header. A self-proclaimed state is the mechanism by which an agentic
+pipeline declares itself green.
 
-**R2 — La régression d'état est automatique et silencieuse.**
-Si un hash épinglé bouge (prompt, modèle, index, schéma d'outil, dataset — P10),
-tout artefact au-dessus de `Implemented` **redescend** à `Implemented` et les
-résultats concernés sont marqués périmés. Aucune validation humaine n'est requise
-pour redescendre : c'est un fait, pas un arbitrage.
+**R2 — State regression is automatic and silent.**
+Every gate report pins the hashes of what it judged (MISSION, CAP, topology, IR,
+`STACK.md`, prompts, datasets — P10). If one moves, the report is **stale**: the
+gate is no longer passed, the artefact drops below the level it granted, and
+`compute-status` says so (`[STATUS_PINNED_HASH_MOVED]`). No human validation is
+required to drop: it is a fact, not a judgement call.
 
-**R3 — L'état d'un parent est le minimum de ses enfants.**
-Une MISSION est `Evaluated` quand **toutes** ses CAPs le sont. Une seule CAP
-`Blocked` rend la MISSION `Blocked`. Pas de moyenne, pas de pourcentage
-d'avancement qui masque un trou.
+Pinning follows what each gate judges, and nothing more. G1 pins the CAP
+**without** its `## Allocated To` section (`capspec:` key): PHASE 2 fills that
+section, and it must not make PHASE 1 stale. G2 and the IR pin the whole CAP
+(`cap:` key): a reallocation does make the topology stale.
 
-**R4 — La confiance ne monte jamais en montant l'échelle.**
-Hérité de SDD_Pro. Une CAP dérivée d'une
-MISSION à confiance `medium` ne peut pas être `high`. Un agent qui sert une CAP à
-confiance `medium` hérite du plafond.
+**R3 — A parent's state is the minimum of its children's.**
+A MISSION is `Evaluated` when **all** its CAPs are. A single `Blocked` CAP makes
+the MISSION `Blocked`. No average, no progress percentage that hides a gap.
 
-**R5 — Un bypass est nominatif, borné et audité.**
-Chaque gate a un bypass explicite (`SDDA_BYPASS_{GATE}=1` ou un flag de commande).
-Il est écrit dans `workspace/.sys/.audit/bypasses.jsonl` avec l'horodatage,
-l'opérateur et la raison. Le cumul de ≥ 2 bypasses sur un même run est lui-même
-bloquant (`preflight_force_cumul`, hérité de SDD_Pro).
+**R4 — Confidence never rises as you climb the ladder.**
+Inherited from SDD_Pro. A CAP derived from a MISSION at `medium` confidence
+cannot be `high` (`[CONFIDENCE_ESCALATION]`). An agent serving a CAP at `medium`
+confidence inherits the ceiling.
+
+**R5 — A bypass is named, bounded and audited.**
+A gate is bypassed through an explicit bypass (`SDDA_BYPASS_{GATE}=1` or a
+command flag) — not every gate: some classes have none, for example
+`[UNBOUNDED_LOOP]`, `[INJECTION_SUCCEEDED]` or `[SECRET_LEAK]`. A bypass
+requires a reason (`SDDA_BYPASS_REASON`; missing or filler,
+`[BYPASS_REASON_MISSING]`) and is written to
+`workspace/.sys/.audit/bypasses.jsonl` with the timestamp, the operator and the
+reason — even when it is allowed: a legitimate bypass that leaves no trace
+produces the same record as a concealed one. Accumulating ≥ 2 bypasses (or
+`--force` + a bypass) on the same run is itself blocking
+(`preflight_force_cumul`, inherited from SDD_Pro), unless `SDDA_ALLOW_FORCE=1`,
+which is traced in turn.
+
+**R6 — Resuming means replaying the gates, not trusting them.**
+`/sdda-full {n} --resume` opens a run linked to the previous one
+(`resumedFrom`) and skips the lineage's `pass` phases — but it **replays** their
+gates (0 tokens), because a hash may have moved in the meantime (R2). A state
+remains a fact computed when it is read, never a memory of the previous run.
 
 ---
 
-## 4. Ce que la console affiche
+## 4. What the console shows
 
-L'état n'a de valeur que s'il est lisible d'un coup d'œil :
+A state is only worth something if it can be read at a glance. Today,
+`python .sdda/sdda.py compute-status` (or `/sdda-status`) shows the state tree:
+MISSION, CAPs, the verdict of every gate, the classes carried, stale hashes,
+audited bypasses. The measurements live alongside — eval reports under
+`workspace/.sys/reports/`, `cost-report`, `trajectory-report`. The combined view
+below is the **target** of the validation console 🟡: each of its lines exists
+in a report, no screen brings them together yet.
 
 ```
 MISSION 1-SupportAssistant                                        Evaluated  🟡
   budget      $0.041/run (cible $0.05)   p95 6.2s (cible 8s)      ✅
   holdout     objectif 0.90 → mesuré 0.88                          🟡  G8 non franchie
   CAP 1-1 ClassifyIntent          Approved   0.97 ±0.01  (k=5)     ✅
-  CAP 1-2 ExplainInvoiceLine      Evaluated  0.86 ±0.09  (k=3)     🟡  variance > 15%
+  CAP 1-2 ExplainInvoiceLine      Evaluated  0.86 ±0.14  (k=3)     🟡  variance > 15%
   CAP 1-3 RouteByIntent           Approved   0.96 ±0.02  (k=5)     ✅
   CAP 1-4 IssueRefundTicket       Blocked    [INJECTION_SUCCEEDED]         🔴
 ```
 
-Le jaune de la CAP 1-2 est une information réelle : le score passe le seuil mais
-la variance dit que le prochain run peut ne pas passer. Un pipeline qui n'affiche
-qu'un booléen aurait montré vert.
+The yellow on CAP 1-2 is real information: the score clears the threshold but
+the variance says the next run may not. A pipeline that only shows a boolean
+would have shown green.
