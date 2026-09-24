@@ -67,6 +67,18 @@ REVIEWERS = {
     "review-orchestration": ("OrchestrationFailOn", "serious", "ORCH_FINDING_BLOCKING"),
 }
 
+#: Le mode qui rend chaque rapport de reviewer OBLIGATOIRE — `off` seul le
+#: dispense (et `AgentSafetyMode: off` est refusé en production par
+#: `/sdda-review`, pas ici : ce script lit la décision, il ne la prend pas).
+REVIEWER_MODE = {
+    "review-safety": "AgentSafetyMode",
+    "review-orchestration": "OrchestrationReviewMode",
+}
+
+#: Un rapport de reviewer obligatoire absent. Littéral ici pour que
+#: `sync_error_registry` le voie.
+CLS_REVIEW_REPORT_MISSING = "SAFETY_REVIEW_REPORT_MISSING"
+
 #: Le nom du rapport que chaque reviewer ÉCRIT, tel que sa fiche le déclare.
 #:
 #: `reviewer_findings` cherchait `review-safety-{n}.md` ; la fiche écrit
@@ -114,8 +126,15 @@ def reviewer_findings(root: Path, mission: str) -> dict[str, list[tuple[str, str
 
     Lecture volontairement tolérante : un reviewer est un agent LLM, et exiger
     de lui un JSON strict ferait échouer la gate sur une virgule. On cherche des
-    lignes qui portent une sévérité connue. Un rapport illisible compte comme
-    un rapport absent — dit, jamais silencieux.
+    lignes qui portent une sévérité connue.
+
+    Un reviewer dont le rapport est ABSENT ou illisible n'a PAS de clé dans le
+    résultat — jamais une liste vide. La liste vide voulait dire « rapport lu,
+    rien trouvé » ET « rapport introuvable », et `run` ne pouvait pas les
+    distinguer : un étage B qui n'avait pas tourné (reviewer planté, nom de
+    rapport inventé par la commande) rendait 0 finding, donc un seuil qui ne
+    mordait sur rien, donc un vert. C'est `run` qui dit l'absence (classe
+    `[SAFETY_REVIEW_REPORT_MISSING]`), pas ce lecteur.
     """
     out: dict[str, list[tuple[str, str]]] = {}
     reports_dir = paths.validation_dir(root) / "reports"
@@ -124,7 +143,6 @@ def reviewer_findings(root: Path, mission: str) -> dict[str, list[tuple[str, str
 
     number = mission.split("-", 1)[0]
     for reviewer in REVIEWERS:
-        findings: list[tuple[str, str]] = []
         stem = REPORT_STEM.get(reviewer, reviewer)
         for candidate in (f"{stem}-{number}.md", f"{stem}-{mission}.md",
                           f"{reviewer}-{mission}.md", f"{reviewer}-{number}.md",
@@ -132,12 +150,17 @@ def reviewer_findings(root: Path, mission: str) -> dict[str, list[tuple[str, str
             path = reports_dir / candidate
             if not path.is_file():
                 continue
-            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                break           # illisible = absent : pas de clé
+            findings: list[tuple[str, str]] = []
+            for line in text.splitlines():
                 m = _SEV_RE.search(line)
                 if m and line.lstrip().startswith(("|", "-", "*")):
                     findings.append((m.group(1).lower(), line.strip()[:120]))
+            out[reviewer] = findings
             break
-        out[reviewer] = findings
     return out
 
 
@@ -177,11 +200,28 @@ def run(root: Path, mission: str, fail_on: str | None, report: Report) -> Report
 
     # -- 3. Les findings de reviewers contre leur seuil ----------------------
     threshold_used = {}
+    found = reviewer_findings(root, mission)
+    number = mission.split("-", 1)[0]
     for reviewer, (key, default, cls) in REVIEWERS.items():
         configured = str(fail_on or config.get(key, default) or default).lower()
         threshold_used[reviewer] = configured
-        blocking = [f for f in reviewer_findings(root, mission).get(reviewer, [])
-                    if rank(f[0]) >= rank(configured)]
+        mode_key = REVIEWER_MODE[reviewer]
+        mode = str(config.get(mode_key, "full") or "full").strip().lower()
+        if reviewer not in found:
+            if mode != "off":
+                # L'absence n'est pas un zéro : un seuil appliqué à un rapport
+                # qui n'existe pas ne mord sur rien, et le vert qui en sort ne
+                # dit rien de la sûreté du système.
+                report.error(
+                    CLS_REVIEW_REPORT_MISSING,
+                    f"{reviewer} : rapport `reports/{REPORT_STEM[reviewer]}-{number}.md` absent ou illisible "
+                    f"— `{key}` ne peut s'appliquer à rien",
+                    f"relancer l'étage B de /sdda-review {number} ; `{mode_key}: off` (décision tracée) "
+                    "est la seule façon légitime de s'en passer",
+                    loc,
+                )
+            continue
+        blocking = [f for f in found[reviewer] if rank(f[0]) >= rank(configured)]
         if blocking:
             report.error(
                 cls,
