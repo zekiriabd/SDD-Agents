@@ -516,7 +516,8 @@ def test_the_tool_spec_comes_from_the_resolved_contract(runtime) -> None:
     assert spec.side_effect_class == "read-only" and spec.idempotent
     assert spec.trust == "untrusted", "la source porte un champ free_text"
     assert spec.tool_schema_hash.startswith("sha256:")
-    assert "NOT_FOUND" in spec.errors
+    # Seules les erreurs que le runtime LÈVE ; une clé inconnue rend `record: null`.
+    assert set(spec.errors) == {"SOURCE_UNAVAILABLE", "TIMEOUT"}
 
 
 def test_an_unknown_contract_is_refused(runtime) -> None:

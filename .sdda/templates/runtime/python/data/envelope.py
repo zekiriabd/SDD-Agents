@@ -11,7 +11,7 @@ Ce que l'enveloppe applique, dans cet ordre, à chaque appel :
     2. la frontière de racine                     (index.py, à la construction)
     3. le budget de lecture                       -> Timeout, jamais un partiel muet
     4. les filtres, sur champs DÉCLARÉS           -> InvalidFilter sinon
-    5. la fraîcheur                               -> SourceStale, une ERREUR
+    5. la fraîcheur                               -> `stale: true` + `as_of`, jamais tue
     6. l'ordre déterministe                       sinon les evals ne rejouent pas
     7. le plafond, lu à maxRows + 1               -> truncated: true
     8. l'enveloppe des champs de texte libre      (P8)
@@ -20,8 +20,14 @@ Ce que l'enveloppe applique, dans cet ordre, à chaque appel :
 
 L'ordre n'est pas indifférent. Le plafond est appliqué **après** le tri : « les
 200 premiers » doivent être les mêmes d'un run à l'autre. La fraîcheur est
-vérifiée **avant** de rendre quoi que ce soit : une réponse exacte sur un
-instantané périmé est fausse, et elle est fausse avec assurance.
+vérifiée **avant** de rendre quoi que ce soit, et DITE dans la réponse
+(`stale`, `as_of`) : une réponse exacte sur un instantané périmé est fausse
+avec assurance si rien ne le signale — et inutile si on refuse de la rendre.
+
+Ce qui est une ERREUR (levée) et ce qui est un ÉTAT (rendu) ne se confondent
+pas : une clé inconnue rend `record: null`, un plafond atteint `truncated:
+true`, un instantané périmé `stale: true`. Seuls un filtre invalide, une
+identité absente, une source illisible et un budget dépassé lèvent.
 """
 from __future__ import annotations
 

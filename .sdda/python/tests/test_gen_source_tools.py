@@ -139,6 +139,35 @@ def test_a_closed_filter_is_typed_with_its_admitted_values(sources_project: Path
     assert "Literal" not in record
 
 
+def test_a_contract_declares_only_the_errors_the_runtime_raises(sources_project: Path) -> None:
+    """NOT_FOUND, SOURCE_STALE, TOO_MANY_RECORDS sont RENDUS, pas levés.
+
+    Les déclarer en erreurs faisait écrire à qa-evals des cas impossibles, que
+    qa-tests devait marquer `xfail` — et G3 les lisait comme des défauts.
+    """
+    import re as _re
+
+    runtime_errors = Path(__file__).resolve().parents[2] / "templates/runtime/python/data"
+    raised = set()
+    for path in runtime_errors.glob("*.py"):
+        raised |= set(_re.findall(r"raise (\w+)\(", path.read_text(encoding="utf-8")))
+    codes = {"InvalidFilter": "INVALID_FILTER", "SourceUnavailable": "SOURCE_UNAVAILABLE", "Timeout": "TIMEOUT"}
+    raisable = {codes[c] for c in raised if c in codes}
+    for kind in ("lookup", "search", "count"):
+        for src in ({}, {"required_filter": ["customer_id"]}):
+            assert set(gst.declared_errors(kind, src)) <= raisable, (kind, src)
+    assert "INVALID_FILTER" in gst.declared_errors("lookup", {"required_filter": ["customer_id"]})
+    assert "INVALID_FILTER" not in gst.declared_errors("lookup", {})
+
+    assert gst.run(sources_project, mode="write").ok
+    contract = (sources_project / CONTRACTS / "1-order-tracking-search.tool.md").read_text(encoding="utf-8")
+    errors_table = contract.split("## 4. Erreurs déclarées", 1)[1].split("### 4.1", 1)[0]
+    for impossible in ("NOT_FOUND", "SOURCE_STALE", "TOO_MANY_RECORDS"):
+        assert impossible not in errors_table
+    states = contract.split("### 4.1", 1)[1].split("## 5.", 1)[0]
+    assert "`truncated: true`" in states and "`stale: true`" in states and "`records: []`" in states
+
+
 def test_count_tool_exists_so_the_model_never_counts(sources_project: Path) -> None:
     """« Combien ? » est un outil, pas 200 lignes tronquées que le modèle additionne."""
     gst.run(sources_project, mode="write")
