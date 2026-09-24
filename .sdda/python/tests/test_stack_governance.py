@@ -396,6 +396,17 @@ def test_a_listed_combination_is_recognised_by_name(tmp_path: Path) -> None:
     assert code == 0 and "combo C1 reconnue" in out, out
 
 
+def test_a_red_stack_blocks_pipeline_agents_only(tmp_path: Path) -> None:
+    """Un STACK.md rouge refusait TOUTE délégation, exploration comprise — jusqu'au
+    spawn inoffensif de `hooks-selfcheck`. Seuls les Developer Agents le lisent
+    comme une consigne ; le lancement à la main (sans agent) reste jugé."""
+    project = strict(make_project(tmp_path))
+    assert run_hook_as(project, "po-elicitor")[0] == 2
+    assert run_hook(project)[0] == 2
+    code, out = run_hook_as(project, "Explore")
+    assert code == 0 and "hors pipeline" in out, out
+
+
 def test_the_signature_follows_the_matrix_semantics() -> None:
     import importlib.util
 

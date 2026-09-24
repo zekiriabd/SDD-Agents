@@ -148,6 +148,11 @@ Puis le smoke de la stack sur une base de test. Les tests L1/L2 sont à
   cette colonne ». Une colonne non exigée par une CAP est une fuite potentielle.
 - **Tu n'écris ni dans `workspace/pipeline/datasets/`, ni dans `workspace/src/{App}/prompts/`,
   ni dans `workspace/pipeline/contracts/`.**
+- **`data/tools/` est à toi, `tools/data/` ne l'est pas.** Un chemin appartient
+  à la couche la plus externe qu'il traverse : les outils d'accès aux sources
+  vivent sous `data/`, et `dev-tools`, qui tourne EN MÊME TEMPS que toi en
+  phase 3, se les voit refuser. L'inverse vaut pour un `data/` niché sous
+  `tools/`, `agents/` ou `orchestration/`.
 - **Tu ne remplaces jamais le parser AST par une regex**, même « en attendant ».
 
 ### Le biais que tu dois combattre chez toi-même

@@ -61,7 +61,9 @@ def test_declares_name_wiring_and_entrypoint(module) -> None:
 
 
 def test_wiring_covers_bash_and_the_three_readers() -> None:
-    assert preflight_bash_ownership.WIRING["matcher"] == "Bash"
+    # `PowerShell` est l'outil shell de Claude Code sous Windows : sans lui, un
+    # sous-agent y avait un shell qu'aucun hook ne voyait.
+    assert set(preflight_bash_ownership.WIRING["matcher"].split("|")) == {"Bash", "PowerShell"}
     assert set(preflight_forbidden_reads.WIRING["matcher"].split("|")) == {"Read", "Glob", "Grep"}
 
 
@@ -119,7 +121,11 @@ def test_the_main_thread_is_free_but_an_unknown_subagent_is_not(project: Path) -
 
 
 def test_chained_commands_are_each_judged(project: Path) -> None:
-    code, err = bash(project, "dev-agent", "cd workspace && ls && echo x > workspace/pipeline/datasets/golden/z.jsonl")
+    code, err = bash(project, "dev-agent", "ls && echo x > workspace/pipeline/datasets/golden/z.jsonl")
+    assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
+    # Le répertoire courant est SUIVI : après `cd workspace`, le chemin relatif
+    # `pipeline/datasets/…` est le golden — c'était le contournement ordinaire.
+    code, err = bash(project, "dev-agent", "cd workspace && ls && echo x > pipeline/datasets/golden/z.jsonl")
     assert code == DENY and "DATASET_OWNERSHIP_VIOLATION" in err
 
 

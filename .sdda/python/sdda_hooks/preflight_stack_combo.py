@@ -441,7 +441,29 @@ def _config_refusal(root: Path) -> int | None:
                 f"{first.fix}. `python .sdda/sdda.py smoke-check` liste tous les constats")
 
 
+def _outside_pipeline(agent: str) -> bool:
+    """Un sous-agent NOMMÉ qui n'est pas un Developer Agent (`.sdda/agents/{agent}.md`).
+
+    `""` (lancement à la main, `--root` sans `--agent`) reste jugé : c'est le
+    preflight complet que la commande ou l'humain demande.
+
+    Ce hook dit si STACK.md est assez juste pour qu'un agent du PIPELINE le lise
+    comme une consigne. Un sous-agent hors pipeline (exploration, relecture,
+    outil du harnais) ne lit pas STACK.md comme une consigne : le refuser parce
+    qu'une valeur y est fausse bloquait toute délégation du projet — jusqu'au
+    `hooks-selfcheck`, dont le spawn inoffensif était refusé sur un STACK.md
+    rouge. Ce qu'un tel agent ÉCRIT reste jugé par les hooks d'ownership, qui
+    refusent sous `workspace/` tout agent hors matrice.
+
+    La liste est celle du framework qui porte ce hook, pas celle de `root` : un
+    projet de test n'a pas de `.sdda/agents/`, et ses agents restent ceux-là.
+    """
+    return bool(agent) and not (Path(__file__).resolve().parents[2] / "agents" / f"{agent}.md").is_file()
+
+
 def check(root: Path, data: dict) -> int:
+    if _outside_pipeline(agent_of(data)):
+        return allow("sous-agent hors pipeline : STACK.md ne lui est pas une consigne")
     try:
         matrix = _matrix()
     except (OSError, ValueError) as exc:

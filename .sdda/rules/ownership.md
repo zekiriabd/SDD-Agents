@@ -80,8 +80,15 @@ ne peut plus rien conclure.
 > vérité est pire qu'aucun enforcer.
 | `workspace/.sys/.context/constitution.md` | **séquentiel** : `po-elicitor` (§1-§3) → `po-capabilities` (§3 acteurs) → `architect-topology` (§4 architecture) | Append-only par section | 0, 1, 2 |
 | `workspace/pipeline/decisions/ADR-*.md` | `architect-topology`, `architect-data` | Numérotation atomique par horodatage | 2 |
-| `workspace/.sys/.validation/**` | scripts de gate | Create exclusif | tout |
-| `workspace/.sys/.audit/**` | hooks framework | Append-only | tout |
+| `workspace/.sys/.validation/**` | scripts de gate | Create exclusif — **zone protégée** : refusée à `Write`/`Edit` et au shell des sous-agents, fil principal compris à l'éditeur | tout |
+| `workspace/.sys/.validation/reports/{revue}-{n}.md` · `adversarial-findings/{n}.jsonl` | le reviewer qui le déclare dans ses `writes:` | Create exclusif — **seule exception** à la zone protégée : un motif de SES `writes:` ancré DANS la zone ; un rapport de gate `.json` reste refusé à tous | 7 |
+| `workspace/.sys/.audit/**` | hooks framework | Append-only — zone protégée, au shell comme à l'éditeur | tout |
+
+> **Le motif est segmenté.** `*` reste dans un segment, `**` en couvre zéro ou
+> plus, un placeholder (`{n}`, `{agent}`) vaut un segment. Le repli par
+> `fnmatch` d'avant laissait `*` traverser les `/` : `workspace/src/*/*` — les
+> fichiers à la racine du projet — couvrait tout `src/`. Un motif dont le
+> dernier segment est littéral nomme un répertoire et couvre son contenu.
 
 ---
 
@@ -175,10 +182,29 @@ Deux instances de `dev-agent` tournent en parallèle sur
 `workspace/src/**/agents/{agent-a}/` et `workspace/src/**/agents/{agent-b}/` :
 répertoires **disjoints**, aucun fichier partagé en écriture.
 
-Ce qui est partagé — les schémas communs, les types, la configuration — est
-créé **avant** la phase parallèle, par `dev-orchestration` en pré-passe, puis
-gelé en lecture seule (**first-write wins + lock**). Un `dev-agent` qui a besoin
-d'un type absent ne le crée pas : il le signale.
+**Disjoints se vérifie, et se vérifie sur des chemins.** `audit-ownership
+--declared-only` calcule, pour chaque paire d'agents, s'il EXISTE un chemin que
+leurs deux motifs désignent (`real_overlaps`) — et le montre. Comparer des
+chaînes ne suffisait pas : `contracts/tools/{n}-*.tool.md` englobait
+`{n}-data-*.tool.md`, `src/**/tools/**` englobait `src/**/data/tools/`, et
+aucune chaîne n'était identique. Un recouvrement se résout de trois façons,
+dans cet ordre de préférence :
+
+1. **Couche externe** — un chemin appartient à la couche la plus externe qu'il
+   traverse : `agents/billing/tools/` est à `dev-agent`, `data/tools/` à
+   `dev-data`. Chaque `dev-*` s'interdit sa couche nichée sous une autre
+   (`src/**/{autres}/**/{sa couche}/**` dans ses `forbidden_writes:`).
+2. **Préfixe réservé** — `architect-tools` s'interdit `{n}-data-*.tool.md`.
+3. **Partage déclaré** — `shared_writes:` avec un mode (`serialized`,
+   `disjoint-by-layer`…) : les CAPs (phase 1 puis `Allocated To` en phase 2),
+   les tests par couche.
+
+Ce qui est partagé — les schémas communs, les types, l'interface mémoire — est
+créé **avant** la phase parallèle, par `dev-orchestration` en pré-passe
+(`/sdda-build` STEP 4.0 : `shared/**` et `memory/interface.*`), puis GELÉ :
+l'audit de chaque phase suivante (`audit-ownership --since-snapshot --frozen …`)
+refuse qu'il ait bougé (`[OWNERSHIP_FROZEN_ZONE_CHANGED]`). Un `dev-agent` qui a
+besoin d'un type absent ne le crée pas : il le signale.
 
 ```
 ERROR: agent dev-agent — type partagé manquant

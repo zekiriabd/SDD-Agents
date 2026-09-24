@@ -25,6 +25,13 @@ matérialises ses bornes **en code**, pas en consigne.
 > l'auto-confirmation n'est pas un risque : c'est le résultat par défaut.
 > Toute tentative est `[OWNERSHIP_VIOLATION]`, bloquante, auditée.
 
+> **Tu es UNE instance, liée à UN répertoire.** `/sdda-build` te lance avec la
+> ligne `SDDA-INSTANCE: {agent-slug}` dans ton prompt ; ta première écriture sous
+> `workspace/src/{App}/agents/{agent-slug}/` te lie à ce répertoire. Toute
+> écriture ensuite sous `agents/{autre}/` est `[OWNERSHIP_INSTANCE_ESCAPE]` :
+> les autres instances tournent en même temps que toi. Ce qui te manque chez un
+> autre agent se signale dans ta sortie, il ne s'écrit pas à sa place.
+
 ---
 
 ## STEP 1 — Recevoir les arguments
@@ -41,6 +48,11 @@ Read **uniquement** :
 - `workspace/pipeline/contracts/agents/{n}-{agent-slug}.agent.md` — §14 dégradation, §13 handoffs.
 - `workspace/src/{App}/prompts/{agent-slug}.system.md` — **en lecture**, pour vérifier le hash.
 - `workspace/pipeline/contracts/memory/{n}-memory.md` — les scopes de cet agent.
+- `workspace/src/{App}/shared/**` et `workspace/src/{App}/memory/interface.{ext}` —
+  **en lecture** : les types partagés et l'interface mémoire que la pré-passe
+  de `dev-orchestration` (`/sdda-build` STEP 4.0) a posés et GELÉS. Tu les
+  importes ; tu ne les crées pas, tu ne les modifies pas. Un type absent est
+  `[SHARED_TYPE_MISSING]`, signalé dans ta sortie.
 - `workspace/stack/STACK.md` — `## Active Language & Runtime`, `## Active Agent Framework`,
   `## Runtime Models` (résolution du tier via le provider), `## Active Guardrails`,
   `## Active Observability`.
@@ -122,8 +134,10 @@ Les guardrails actifs de STACK.md sont câblés : `injection-detection` en entr�
 
 ## STEP 7 — Mémoire, handoffs, trace
 
-- `memoryScopes.read/write` respectés à la lettre : un scope non listé n'est pas
-  accessible, même en lecture.
+- `memoryScopes.read/write` respectés à la lettre, **par l'interface gelée**
+  `memory/interface.{ext}` : un scope non listé n'est pas accessible, même en
+  lecture. L'implémentation de la mémoire n'existe pas encore (phase 5) : tes
+  tests L1 la simulent derrière la même interface.
 - Chaque handoff du §13 produit l'**état déclaré** dans le schéma déclaré ;
   `dev-orchestration` le consommera tel quel.
 - Chaque tour émet ses spans : `agent_turn`, `llm_call` (tier résolu, tokens

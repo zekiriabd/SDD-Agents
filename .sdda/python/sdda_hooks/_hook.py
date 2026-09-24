@@ -11,12 +11,17 @@ Trois différences qui gouvernent tout ce module :
    rend `stderr` au modèle. C'est le seul canal par lequel un invariant peut
    arrêter un agent **avant** qu'il écrive, et non après.
 
-2. **Un hook qui plante doit AUTORISER.** Un bug de hook qui bloque chaque
-   `Write` paralyse le pipeline entier, et la réaction humaine sera de désactiver
-   les hooks — donc de perdre tous les invariants, pas seulement le fautif. Un
-   hook qui plante émet un avertissement sur `stderr` et laisse passer. Le
-   contrôle correspondant reste joué en CI par son validateur, plus tard mais
-   sûrement.
+2. **Un hook qui plante doit AUTORISER — en session interactive.** Un bug de
+   hook qui bloque chaque `Write` paralyse le pipeline entier, et la réaction
+   humaine sera de désactiver les hooks — donc de perdre tous les invariants,
+   pas seulement le fautif. Un hook qui plante émet un avertissement sur
+   `stderr` et laisse passer. Le contrôle correspondant reste joué en CI par
+   son validateur, plus tard mais sûrement. En mode strict
+   (`SDDA_HOOKS_STRICT=1`, la CI), la panne REFUSE : c'est là qu'une panne qui
+   autorise se confond avec un jugement qui autorise. Et un interpréteur absent
+   du PATH — le hook ne démarre même pas, code ≠ 2, donc autorisé par le
+   harnais — est rattrapé par la commande générée (`harness_build`) et par
+   `hooks-selfcheck`, qui exécute chaque hook câblé.
 
 3. **Un hook lit, il n'écrit pas.** Aucun rapport de gate, aucun état. Il
    consulte ce que les validateurs ont déjà écrit. Deux écrivains sur
@@ -192,11 +197,34 @@ def allow(note: str = "") -> int:
     return ALLOW
 
 
+#: Mode strict : un hook qui plante REFUSE. Activé par la CI et par qui veut
+#: qu'aucune panne ne passe pour un feu vert.
+STRICT_ENV = "SDDA_HOOKS_STRICT"
+
+
+def strict() -> bool:
+    return os.environ.get(STRICT_ENV, "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 def degrade(hook: str, exc: BaseException) -> int:
-    """Un hook cassé autorise — et le dit. Cf. §2 du module."""
+    """Un hook cassé autorise — et le dit. Cf. §2 du module.
+
+    SAUF en mode strict (`SDDA_HOOKS_STRICT=1`). Le §2 arbitre entre deux
+    risques pour une session INTERACTIVE : un hook cassé qui bloque tout se fait
+    désactiver. En CI, ou pour un opérateur qui l'a demandé, l'arbitrage
+    s'inverse : un hook qui plante et autorise est indiscernable d'un hook qui a
+    jugé et autorisé, et c'est précisément la panne qu'on ne voit jamais. Le
+    mode strict la rend bruyante — `[HOOK_FAILED]`, code 2.
+    """
+    if strict():
+        return deny(hook, "HOOK_FAILED",
+                    f"le hook n'a pas pu s'exécuter ({exc.__class__.__name__}: {exc}) — refus en mode strict",
+                    f"corriger le hook ; `{STRICT_ENV}=0` rend le comportement interactif (panne = autorisation "
+                    "avertie), jamais silencieux")
     sys.stderr.write(
         f"[hook] {hook} n'a pas pu s'exécuter ({exc.__class__.__name__}: {exc}) — action AUTORISÉE.\n"
-        f"[hook] le contrôle reste joué en CI par son validateur. Corriger le hook.\n")
+        f"[hook] le contrôle reste joué en CI par son validateur. Corriger le hook.\n"
+        f"[hook] {STRICT_ENV}=1 transforme cette panne en refus.\n")
     return ALLOW
 
 
@@ -278,8 +306,11 @@ WORKSPACE_PREFIX = "workspace/"
 
 def unknown_subagent(hook: str, agent: str, rel: str) -> int:
     """Verdict pour un SOUS-AGENT absent de `loader.yml` : refus sous `workspace/`."""
-    normalized = rel.replace("\\", "/").lstrip("./")
-    if not (normalized == WORKSPACE_PREFIX.rstrip("/") or normalized.startswith(WORKSPACE_PREFIX)):
+    from sdda_scripts.audit_ownership import CASE_INSENSITIVE, normalize  # noqa: E402
+
+    normalized = normalize(rel)
+    probe = normalized.casefold() if CASE_INSENSITIVE else normalized
+    if not (probe == WORKSPACE_PREFIX.rstrip("/") or probe.startswith(WORKSPACE_PREFIX)):
         return ALLOW  # hors du workspace : pas notre affaire
     return deny(hook, "OWNERSHIP_AGENT_UNKNOWN",
                 f"`{agent}` n'est dans aucune matrice d'ownership et touche `{normalized}`",

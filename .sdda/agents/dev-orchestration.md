@@ -33,6 +33,35 @@ facture.
 
 Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
+Argument `--prepass` (ligne `SDDA-PREPASS` du prompt) → **mode pré-passe**, ci-dessous, puis STOP.
+
+## Mode pré-passe — `/sdda-build` STEP 4.0, AVANT les agents
+
+Les instances de `dev-agent` tournent en parallèle et se passent des états
+(handoffs §13) ; elles lisent et écrivent la mémoire selon leurs
+`memoryScopes`. Si chacune inventait ses types et son accès mémoire, la phase 4
+produirait N dialectes qu'aucun graphe ne relie — et la phase 5, où tu écris
+la mémoire, arriverait APRÈS les agents qui s'en servent. La pré-passe inverse
+l'ordre : tu poses d'abord ce que tous partagent, puis tu le GÈLES.
+
+Tu écris **uniquement** :
+- `workspace/src/{App}/shared/` — les types partagés : chaque schéma d'état de
+  handoff du §13 des contrats d'agents, chaque `inputSchema`/`outputSchema` de
+  l'IR qu'un autre agent ou le graphe consomme. Des types, aucune logique.
+- `workspace/src/{App}/memory/interface.{ext}` — l'INTERFACE de la mémoire du
+  contrat de `architect-memory` : une opération de lecture et d'écriture par
+  scope nommé, leurs signatures, les erreurs (`[MEMORY_SHARED_STATE_UNSCOPED]`).
+  Aucune implémentation : elle vient en phase 5, DERRIÈRE cette interface.
+
+Rien sous `orchestration/` : l'AGENT GATE n'est pas passée, le graphe n'a rien
+à câbler. `/sdda-build` le vérifie sur le disque (instantané de la phase 4.0,
+`orchestration/**` gelé), puis gèle `shared/**` et `memory/**` pendant la
+phase 4, et `shared/**` et `memory/interface.*` pendant la phase 5 : un type
+qui change sous des agents déjà construits invalide ce qu'ils ont fait.
+
+Un type manquant découvert plus tard ne s'ajoute pas en douce : c'est
+`[SHARED_TYPE_MISSING]`, et la pré-passe se rejoue.
+
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
@@ -112,7 +141,10 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
 - **Mémoire** : le contrat de `architect-memory`
   (`workspace/pipeline/contracts/memory/{n}-memory.md`) devient du code dans
   `workspace/src/{App}/memory/` — c'est TA zone, et lui seul : une mémoire est
-  un état qui survit au tour, donc un état du graphe. Fenêtre de conversation
+  un état qui survit au tour, donc un état du graphe. L'implémentation se
+  range DERRIÈRE `memory/interface.{ext}`, posée et gelée par ta pré-passe :
+  les agents de la phase 4 ont été construits contre elle, tu ne la modifies
+  pas (`[OWNERSHIP_FROZEN_ZONE_CHANGED]` après la phase). Fenêtre de conversation
   (`ShortTermPolicy`, `ShortTermMaxTurns`) avec expulsion déterministe et
   testable sans LLM ; état partagé entre agents réduit aux clés que le contrat
   nomme (`CrossAgentSharedState: scoped`) ; politique PII appliquée À
