@@ -19,7 +19,7 @@ réapparaître comme « à écrire » tout script migré vers la forme courte.
 Usage :
     python .sdda/sdda.py planned-scripts
     python .sdda/sdda.py planned-scripts --json
-    python .sdda/sdda.py planned-scripts --write   # écrit le .md
+    python .sdda/sdda.py planned-scripts --write   # écrit PLANNED-SCRIPTS.md (en) et .fr.md
 """
 
 from __future__ import annotations
@@ -96,7 +96,8 @@ def collect() -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[s
                 text = path.read_text(encoding="utf-8")
             except Exception:
                 continue
-            caller = str(path.relative_to(SDDA))
+            # POSIX : l'inventaire généré ne doit pas dépendre de l'OS qui l'écrit.
+            caller = path.relative_to(SDDA).as_posix()
             # {module rel-path: les textes d'appel qui le désignent dans CE fichier}
             calls: dict[str, list[str]] = defaultdict(list)
             for ref in REF_RE.findall(text):
@@ -125,7 +126,82 @@ def undeclared_missing(pathed: dict[str, set[str]], declared: dict[str, set[str]
     return out
 
 
-def render(pathed: dict[str, set[str]], bare: dict[str, set[str]], declared: dict[str, set[str]] | None = None) -> str:
+#: Le même inventaire en deux langues : `PLANNED-SCRIPTS.md` (anglais, la page
+#: de référence) et son jumeau `PLANNED-SCRIPTS.fr.md`. Mêmes données, même
+#: structure — `docs.parity` compare les deux comme n'importe quelle paire.
+OUTPUTS: dict[str, Path] = {
+    "en": OUT,
+    "fr": SDDA / "docs" / "PLANNED-SCRIPTS.fr.md",
+}
+
+TEXT: dict[str, dict[str, str]] = {
+    "en": {
+        "title": "# Planned scripts",
+        "generated": "> **Generated** by `sdda_admin/planned_scripts.py`. Do not edit by hand.",
+        "intro": (
+            "Inventory of the deterministic scripts that agents, commands and\n"
+            "invariants name before they exist. It is the backlog of the\n"
+            "implementation lots, not a list of bugs."
+        ),
+        "reading": (
+            "**Reading**: the number of callers is a signal. A script requested by\n"
+            "six places is an established need; a script requested once may have\n"
+            "been invented in passing and deserves a question before it is written."
+        ),
+        "tally": "- **{written}** written · **{missing}** to write · **{silent}** cited without declaration",
+        "declared": (
+            "**Declared**: the prompt that calls the script says « Planifié » on the\n"
+            "following line, with what to do while it is missing. A missing script\n"
+            "cited without saying so makes the agent believe it has a tool — and it\n"
+            "invents the output. `framework_smoke` fails on every silent reference."
+        ),
+        "package": "## `{package}/` — {n} to write",
+        "table": "| Script | Callers | Declared | Requested by |",
+        "orphan_title": "## Names cited without a path",
+        "orphan_intro": (
+            "These scripts are named somewhere, but nothing says where they live.\n"
+            "Attach them to a package, or merge them into an existing script that\n"
+            "already does the job."
+        ),
+        "orphan_table": "| Name | Cited by |",
+    },
+    "fr": {
+        "title": "# Scripts planifiés",
+        "generated": "> **Généré** par `sdda_admin/planned_scripts.py`. Ne pas éditer à la main.",
+        "intro": (
+            "Inventaire des scripts déterministes que les agents, commandes et\n"
+            "invariants nomment sans qu'ils existent encore. C'est le backlog des\n"
+            "lots d'implémentation, pas une liste de bugs."
+        ),
+        "reading": (
+            "**Lecture** : le nombre d'appelants est un signal. Un script réclamé par\n"
+            "six endroits est un besoin établi ; un script réclamé une seule fois a pu\n"
+            "être inventé au fil de la plume et mérite une question avant d'être écrit."
+        ),
+        "tally": "- **{written}** écrits · **{missing}** à écrire · **{silent}** cité(s) sans déclaration",
+        "declared": (
+            "**Déclaré** : le prompt qui appelle le script dit « Planifié » à la ligne\n"
+            "suivante, avec la conduite à tenir tant qu'il manque. Un script absent cité\n"
+            "sans le dire fait croire à l'agent qu'il dispose d'un outil — il en invente\n"
+            "la sortie. `framework_smoke` échoue sur toute référence muette."
+        ),
+        "package": "## `{package}/` — {n} à écrire",
+        "table": "| Script | Appelants | Déclaré | Réclamé par |",
+        "orphan_title": "## Noms cités sans chemin",
+        "orphan_intro": (
+            "Ces scripts sont nommés quelque part mais aucun endroit ne dit où ils\n"
+            "vivent. À rattacher à un paquet, ou à fusionner avec un script existant\n"
+            "qui fait déjà le travail."
+        ),
+        "orphan_table": "| Nom | Cité par |",
+    },
+}
+
+
+def render(pathed: dict[str, set[str]], bare: dict[str, set[str]],
+           declared: dict[str, set[str]] | None = None, lang: str = "en") -> str:
+    """L'inventaire en Markdown, dans la langue `lang` (`en` | `fr`)."""
+    t = TEXT[lang]
     declared = declared or {}
     existing = {r for r in pathed if (SDDA / "python" / r).is_file()}
     missing = {r: c for r, c in pathed.items() if r not in existing}
@@ -141,30 +217,17 @@ def render(pathed: dict[str, set[str]], bare: dict[str, set[str]], declared: dic
         by_package[Path(ref).parent.as_posix() or "."].append((ref, callers))
 
     lines = [
-        "# Scripts planifiés",
-        "",
-        "> **Généré** par `sdda_admin/planned_scripts.py`. Ne pas éditer à la main.",
-        "",
-        "Inventaire des scripts déterministes que les agents, commandes et",
-        "invariants nomment sans qu'ils existent encore. C'est le backlog des",
-        "lots d'implémentation, pas une liste de bugs.",
-        "",
-        "**Lecture** : le nombre d'appelants est un signal. Un script réclamé par",
-        "six endroits est un besoin établi ; un script réclamé une seule fois a pu",
-        "être inventé au fil de la plume et mérite une question avant d'être écrit.",
-        "",
-        f"- **{len(existing)}** écrits · **{len(missing)}** à écrire · **{len(silent)}** cité(s) sans déclaration",
-        "",
-        "**Déclaré** : le prompt qui appelle le script dit « Planifié » à la ligne",
-        "suivante, avec la conduite à tenir tant qu'il manque. Un script absent cité",
-        "sans le dire fait croire à l'agent qu'il dispose d'un outil — il en invente",
-        "la sortie. `framework_smoke` échoue sur toute référence muette.",
-        "",
+        t["title"], "",
+        t["generated"], "",
+        t["intro"], "",
+        t["reading"], "",
+        t["tally"].format(written=len(existing), missing=len(missing), silent=len(silent)), "",
+        t["declared"], "",
     ]
 
     for package in sorted(by_package):
         entries = sorted(by_package[package], key=lambda e: (-len(e[1]), e[0]))
-        lines += [f"## `{package}/` — {len(entries)} à écrire", "", "| Script | Appelants | Déclaré | Réclamé par |", "|---|---:|:-:|---|"]
+        lines += [t["package"].format(package=package, n=len(entries)), "", t["table"], "|---|---:|:-:|---|"]
         for ref, callers in entries:
             names = ", ".join(f"`{c}`" for c in sorted(callers)[:4])
             if len(callers) > 4:
@@ -174,16 +237,7 @@ def render(pathed: dict[str, set[str]], bare: dict[str, set[str]], declared: dic
         lines.append("")
 
     if orphan_bare:
-        lines += [
-            "## Noms cités sans chemin",
-            "",
-            "Ces scripts sont nommés quelque part mais aucun endroit ne dit où ils",
-            "vivent. À rattacher à un paquet, ou à fusionner avec un script existant",
-            "qui fait déjà le travail.",
-            "",
-            "| Nom | Cité par |",
-            "|---|---|",
-        ]
+        lines += [t["orphan_title"], "", t["orphan_intro"], "", t["orphan_table"], "|---|---|"]
         for name, callers in sorted(orphan_bare.items()):
             lines.append(f"| `{name}` | {', '.join(f'`{c}`' for c in sorted(callers)[:3])} |")
         lines.append("")
@@ -194,7 +248,8 @@ def render(pathed: dict[str, set[str]], bare: dict[str, set[str]], declared: dic
 def main() -> int:
     parser = argparse.ArgumentParser(description="Inventaire des scripts planifiés.")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--write", action="store_true", help="écrit docs/PLANNED-SCRIPTS.md")
+    parser.add_argument("--write", action="store_true",
+                        help="écrit docs/PLANNED-SCRIPTS.md (anglais) et docs/PLANNED-SCRIPTS.fr.md")
     args = parser.parse_args()
 
     pathed, bare, declared = collect()
@@ -215,9 +270,10 @@ def main() -> int:
         return 0
 
     if args.write:
-        OUT.parent.mkdir(exist_ok=True)
-        OUT.write_text(render(pathed, bare, declared), encoding="utf-8")
-        print(f"  {OUT.relative_to(SDDA)} — {len(existing)} écrits, {len(missing)} à écrire")
+        for lang, out in OUTPUTS.items():
+            out.parent.mkdir(exist_ok=True)
+            out.write_text(render(pathed, bare, declared, lang=lang), encoding="utf-8")
+            print(f"  {out.relative_to(SDDA).as_posix()} — {len(existing)} écrits, {len(missing)} à écrire")
         return 0
 
     print(f"\n  {len(existing)} script(s) écrit(s) · {len(missing)} à écrire\n")

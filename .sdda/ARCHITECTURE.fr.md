@@ -1,7 +1,3 @@
-<!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/ARCHITECTURE.fr.md.
-     NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
-     et le test de parité la signale. Éditer la source. -->
-
 # SDD_Agents — Architecture
 
 Document de référence : arborescence, couches, pipeline, gates, abstraction
@@ -28,7 +24,7 @@ Identique en esprit à SDD_Pro, adapté à l'agentic.
 | **Workspace** | `workspace/` | Le projet de l'utilisateur : spécifications, contrats, prompts, datasets, code généré | Les agents, au runtime |
 
 > `.sdda/` (et non `.sdd/`) : nom court volontaire — il est référencé des centaines
-> de fois dans 23 prompts d'agents ; deux caractères de moins sont des tokens
+> de fois dans <!--sdda:count agents-->23<!--/sdda:count--> prompts d'agents ; deux caractères de moins sont des tokens
 > économisés à chaque invocation. Distinct de `.sdd/` pour permettre de vendorer
 > SDD_Pro et SDD_Agents dans un même dépôt.
 
@@ -60,8 +56,8 @@ SDD-Agents/
 │   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache par agent
 │   ├── agent-bounds.yaml              # tier_default / floor / ceiling par agent
 │   ├── capability-matrix.yml          # harnais x mécanismes ; tier -> modèle de CONSTRUCTION
-│   ├── agents/                        # 23 Developer Agents (cf. docs/AGENT-ROSTER.md)
-│   ├── commands/                      # 11 commandes slash
+│   ├── agents/                        # <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents (cf. docs/AGENT-ROSTER.md)
+│   ├── commands/                      # <!--sdda:count commands-->11<!--/sdda:count--> commandes slash
 │   ├── rules/                         # règles opérationnelles
 │   │   ├── ownership.md               # matrice d'écriture (hérité SDD_Pro)
 │   │   ├── output-protocol.md
@@ -77,7 +73,7 @@ SDD-Agents/
 │   │                                  #   prompts (cf. §7, rules/ownership.md §2.2)
 │   ├── providers/                     # anthropic · openai · google · azure-openai · local-ollama
 │   │                                  #   tarifs, URL, variable de clé — lus par pricing et le juge
-│   ├── stacks/                        # ── LE CATALOGUE — 45 fiches sur disque ─
+│   ├── stacks/                        # ── LE CATALOGUE — <!--sdda:count stacks-->45<!--/sdda:count--> fiches sur disque ─
 │   │   │                    # Chaque fiche déclare `Languages:` (un langage,
 │   │   │                    # plusieurs, ou `*` si elle n'en suppose aucun).
 │   │   │                    # C'est la SSoT du couplage : preflight_stack_combo
@@ -150,14 +146,14 @@ SDD-Agents/
 │   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
 │   │                                  #   marche depuis un clone nu, sans pip install
 │   └── python/                        # outillage déterministe 0-token
-│       ├── sdda_cli.py                # dispatcher des 76 sous-commandes ; registre
+│       ├── sdda_cli.py                # dispatcher des <!--sdda:count subcommands-->76<!--/sdda:count--> sous-commandes ; registre
 │       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (dont judge_clients : le juge LLM réel)
 │       ├── sdda_scripts/              # validate_*, estimate_budget, eval_runner, audit_ownership, …
 │       ├── sdda_admin/                # harness_build, framework_smoke, sync_*, planned_scripts,
 │       │                              #   command_flags, hooks_selfcheck
-│       ├── sdda_hooks/                # 15 hooks bloquants PreToolUse / SubagentStop
+│       ├── sdda_hooks/                # <!--sdda:count hooks-->15<!--/sdda:count--> hooks bloquants PreToolUse / SubagentStop
 │       │                              #   chacun déclare son WIRING ; harness_build
 │       │                              #   les câble TOUS, aucune table en dur
 │       └── tests/
@@ -288,7 +284,7 @@ de créer le nouvel arbre à côté de l'ancien.
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
 annoncé, pas encore écrit — `plugin.json` et `.sdda/skills/`, rien d'autre.
 La règle vaut surtout pour `stacks/` —
-45 fiches existent, quand le
+<!--sdda:count stacks-->45<!--/sdda:count--> fiches existent, quand le
 catalogue visé en compte trois fois plus. Ce n'est pas un
 manque à combler avant d'annoncer : c'est la séquence de
 [docs/ROADMAP.fr.md](docs/ROADMAP.fr.md), qui livre **une combinaison validée de bout en
@@ -306,7 +302,7 @@ refusée au preflight (`[STACK_VALUE_UNIMPLEMENTED]`) au lieu d'être avalée.
 
 ### 2.ante Un seul point d'entrée pour l'outillage
 
-Les 76 sous-commandes déterministes s'appellent par une forme unique :
+Les <!--sdda:count subcommands-->76<!--/sdda:count--> sous-commandes déterministes s'appellent par une forme unique :
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
@@ -314,7 +310,7 @@ sdda validate-mission --mission 1                     # après `pip install -e .
 ```
 
 La première ne suppose **aucune installation**, et c'est elle qu'écrivent les
-23 fiches d'agents et les 11 commandes. Un framework dont les prompts exigent un
+<!--sdda:count agents-->23<!--/sdda:count--> fiches d'agents et les <!--sdda:count commands-->11<!--/sdda:count--> commandes. Un framework dont les prompts exigent un
 `pip install` préalable échoue au premier clone — et l'agent qui reçoit
 `command not found` invente la sortie du script au lieu de s'arrêter.
 
@@ -598,7 +594,7 @@ obligatoire en agentic :
 | Notion | Qui exécute | Déclaré dans |
 |---|---|---|
 | **Harness** | où tourne l'orchestration de *construction* (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
-| **Build models** | quels modèles paient les tokens de *construction* (les 23 Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
+| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
 | **Runtime models** | quels modèles fait tourner l'**application générée** | `STACK.md ## Runtime Models` |
 
 Les trois sont indépendants. Construire avec Claude Code + Opus une application
@@ -691,7 +687,7 @@ les `writes:` que `loader.yml` leur donne sous `.sys/.validation` ; un rapport d
 GATE `.json` reste interdit à Write/Edit ET au shell. Un verdict qu'un agent
 peut écrire n'est pas un verdict.
 
-**Les hooks.** 15 hooks sont câblés dans
+**Les hooks.** <!--sdda:count hooks-->15<!--/sdda:count--> hooks sont câblés dans
 `.claude/settings.json`, chacun déclarant son `WIRING` : écriture
 (`Write|Edit|MultiEdit|NotebookEdit`), lecture (`Read|Glob|Grep`), shell
 (`Bash|PowerShell`), spawn (`Task|Agent`) et fin de sous-agent. Le hook shell
@@ -771,7 +767,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **440**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->440<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Le chiffre ci-dessus est lui-même régénéré (`sync-counters`), pas recopié.

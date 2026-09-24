@@ -2,7 +2,8 @@
 
 > 🇬🇧 [English version](README.md) — la page anglaise est la page d'entrée par défaut ;
 > cette version française en est la traduction. Le contenu technique (identifiants,
-> classes `[CLASS]`, chemins, flags) est identique dans les deux.
+> classes `[CLASS]`, chemins, flags) est identique dans les deux. Les prompts, agents,
+> commandes et règles sous `.sdda/` sont écrits en français.
 
 **Le framework qui refuse de livrer un agent que personne n'a évalué.**
 
@@ -15,6 +16,12 @@ Frère de **SDD_Pro**, dont il hérite la méthodologie
 abstraction harness/provider) — mais **pas** sa cible. SDD_Pro construit des
 applications classiques (mobile, desktop, front/back). SDD_Agents construit des
 systèmes d'agents LLM.
+
+> **Statut : phase de conception.** `frameworkStatus: design-phase` dans
+> [`registry/compatibility.matrix.json`](.sdda/registry/compatibility.matrix.json) :
+> chaque gate, chaque script et chaque fiche d'agent existe, et **aucune
+> combinaison de stack n'a encore été validée de bout en bout**, C1 comprise.
+> Voir [Statut](#statut).
 
 ---
 
@@ -41,8 +48,8 @@ sous-entendu.
 
 | | Langage | Framework | RAG · vector · rerank | Serving | État |
 |---|---|---|---|---|---|
-| **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | utilisable |
-| **.NET** | ✅ | Microsoft Agent Framework | ❌ **aucune fiche** | aspnet-minimal | **sans RAG** |
+| **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | utilisable — seul runtime doté d'un générateur de squelette |
+| **.NET** | ✅ | Microsoft Agent Framework | ❌ **aucune fiche** | cli-dotnet · aspnet-minimal | **sans RAG** |
 | **TypeScript** | ✅ fiche | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **fiches seulement** — aucune combo bootstrap (eval/observability sont `[python]`), pas de générateur de squelette |
 | **Kotlin** | ✅ fiche | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **fiches seulement** — même réserve ; pins Maven non vérifiés |
 | **Java** | ❌ | — | ❌ | ❌ | non planifié |
@@ -61,10 +68,67 @@ Python et le déclare (`Languages: python`). Ce n'est pas une omission de
 documentation : `preflight_stack_combo` **refuse** la combinaison
 (`[STACK_LANGUAGE_MISMATCH]`) au lieu de laisser un générateur .NET recevoir du
 `psycopg` comme référence et improviser une traduction. Le RAG .NET est au
-Lot 7 de la [ROADMAP](.sdda/docs/ROADMAP.md).
+Lot 7 de la [ROADMAP](.sdda/docs/ROADMAP.fr.md).
 
 Rien ici n'est *validé* : `frameworkStatus: design-phase`, et tous les
 composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
+
+### Quel harnais exécute la construction
+
+| Harnais | Statut | Gates bloquantes au runtime |
+|---|---|---|
+| **Claude Code** | **supporté** — le harnais de référence | oui — les hooks de `.claude/settings.json` refusent l'appel d'outil |
+| **Codex CLI** | **expérimental** — compilé vers `.codex/`, jamais validé par un run de conformance | **non** — reportées au CI et aux scripts déterministes |
+| **Gemini CLI** | **expérimental** — compilé vers `.gemini/`, même réserve | **non** — idem |
+
+Sous Codex ou Gemini CLI, rien n'empêche au moment de l'action une écriture
+hors ownership ou un agent câblé avant sa TOOL GATE ; le CI la rattrape plus
+tard. Le wrapper de spawn dont ces harnais auraient besoin est planifié, pas
+écrit. Les `AGENTS.md` et `GEMINI.md` de la racine sont des pointeurs générés
+vers les façades — c'est eux que Codex et Gemini CLI lisent vraiment. Les
+modèles de construction viennent du harnais (`capability-matrix.yml`,
+`tier_models`), jamais de `STACK.md`. Détail :
+[MULTI-HARNESS.fr.md](.sdda/docs/MULTI-HARNESS.fr.md).
+
+---
+
+## Démarrage rapide
+
+> **Phase de conception.** `frameworkStatus: design-phase` dans
+> [`registry/compatibility.matrix.json`](.sdda/registry/compatibility.matrix.json) :
+> **aucune combinaison de stack n'est validée de bout en bout**, C1 comprise.
+> Les étapes ci-dessous font tourner le pipeline ; elles ne promettent pas un
+> verdict vert. Harnais : Claude Code (Codex et Gemini CLI sont expérimentaux,
+> voir plus haut).
+
+1. **Cloner** — Python 3.11+ seulement, rien à installer :
+   `git clone https://github.com/zekiriabd/SDD-Agents.git && cd SDD-Agents`
+2. **Amorcer** — `python bootstrap.py` (interactif), ou
+   `python bootstrap.py --combo c1 --app-name SupportDesk --auto`. Il écrit
+   `workspace/stack/STACK.md`, `workspace/assets/.env` et l'arborescence du
+   workspace, puis lance un smoke. Aucun appel LLM.
+3. **Remplir `workspace/stack/STACK.md`** — surtout `## Project Config` :
+   `CostPerRunTargetUsd` et `LatencyP95TargetMs` n'ont pas de défaut côté
+   framework, et la MISSION GATE les exige. Des noms de variables seulement,
+   jamais une valeur de secret. Les valeurs sont validées contre le schéma au
+   `smoke-check` et au preflight.
+4. **Secrets** — les valeurs dans `workspace/assets/.env` (`LLM_API_KEY`,
+   `DB_*` si base), puis `python .sdda/sdda.py install-env` les copie dans
+   l'application générée. Aucun agent ne lit l'un ou l'autre fichier.
+5. **Vos entrées** — le brief en `workspace/feats/1-{Name}.md` (Markdown
+   seulement), vos données sous `workspace/assets/`, votre vérité terrain
+   (scénarios annotés, labels) sous `workspace/seed/`.
+6. **Ouvrir Claude Code à la racine du dépôt**, puis éliciter la MISSION 1 depuis
+   le brief : `/sdda-mission {Name} --from-brief workspace/feats/1-{Name}.md`.
+   Tout `<à préciser>` laissé ouvert bloque G0 — y répondre, ou éditer la MISSION.
+7. **Lancer le pipeline** — `/sdda-full 1`. Il s'arrête proprement sur toute
+   décision qui vous appartient, à commencer par le roster : `/sdda-roster 1`
+   écrit un `workspace/feats/1-roster.md` pré-rempli, vous le complétez, puis
+   `/sdda-full 1 --resume`.
+8. **Lire l'état** — `/sdda-status 1` (`--gates` pour le détail contrôle par
+   contrôle). L'état est dérivé des rapports de gate, jamais déclaré.
+
+`/sdda-help` dit quoi faire ensuite depuis l'état dérivé.
 
 ---
 
@@ -121,10 +185,10 @@ TOOLS + RETRIEVAL + DATA ACCESS          ← les couches qui touchent le monde r
    ├─ TOOL GATE       contrats verts + connectivité live vérifiée
    └─ RETRIEVAL GATE  recall@k / groundedness / citations sur golden set
         └─ AGENTS (isolés, outils mockés)
-             └─ AGENT GATE       chaque CAP AC évaluée sur son agent seul
+             └─ AGENT GATE       chaque CAP AC évaluée sur son agent seul, juges calibrés, prompts épinglés
                   └─ ORCHESTRATION
-                       └─ ORCH GATE   trajectoires, bornes de hops, coût/latence mesurés
-                            └─ SAFETY GATE   injection, scope d'outils, secrets, PII
+                       └─ ORCH GATE   trajectoires, bornes de hops, coût/latence mesurés, dérive API et framework
+                            └─ SAFETY GATE   injection, jeu adversarial joué en live, scope d'outils, secrets, PII
                                  └─ ACCEPTANCE GATE   objectif chiffré sur holdout
 ```
 
@@ -132,6 +196,12 @@ TOOLS + RETRIEVAL + DATA ACCESS          ← les couches qui touchent le monde r
 fait un mauvais retriever, ou un « agent qui hallucine » qui est en fait un outil
 dont le schéma ment. Chaque couche prouve qu'elle fonctionne avant que la suivante
 s'appuie dessus.
+
+En amont, la TOPOLOGY GATE (G2) tranche ce qui doit l'être avant une ligne de
+code : l'IR, le budget estimé, le packaging, la complétude du roster déclaré,
+et — par `registry/adr-requirements.yml` — toute décision qui contredit un
+défaut sûr et exige donc un ADR accepté (`[ADR_MISSING]`). Les neuf gates et
+leurs parts : [ARCHITECTURE.fr.md §4](.sdda/ARCHITECTURE.fr.md).
 
 ---
 
@@ -180,6 +250,16 @@ langage actif** — sinon `preflight_stack_combo` refuse le spawn
 pour une fiche absente ne charge rien : l'agent travaille sans mapping de
 couches, sans idiomes et sans `.libs.json`, donc il invente.
 
+Le fichier est gouverné, pas seulement lu. Chaque valeur est validée contre
+`templates/project-config.schema.json` (`[CONFIG_VALUE_INVALID]`,
+`[CONFIG_KEY_CONFLICT]`, `[CONFIG_KEY_MISPLACED]`), chaque clé du gabarit nomme
+le script ou l'agent qui la lit, et les clés que personne ne lisait ont été
+retirées. Une valeur que les parseurs acceptent mais que rien n'implémente est
+refusée (`[STACK_VALUE_UNIMPLEMENTED]`). La combinaison active est cherchée par
+sa signature dans `registry/compatibility.matrix.json` ; une combinaison non
+listée est gouvernée par `StackComboCheck: strict|warn|off`
+(`[STACK_COMBO_UNLISTED]`).
+
 Spécification complète : [.sdda/templates/STACK.md.template](.sdda/templates/STACK.md.template).
 
 ---
@@ -198,26 +278,81 @@ Spécification complète : [.sdda/templates/STACK.md.template](.sdda/templates/S
 
 ---
 
+## Modèle de sécurité
+
+Deux systèmes sont à protéger, et le framework les traite séparément : la
+**construction** (des Developer Agents qui écrivent dans votre dépôt) et le
+**produit** (l'application agentic qu'ils génèrent).
+
+**Pendant la construction** — appliqué au runtime sous Claude Code, reporté au
+CI ailleurs :
+
+- **Ownership.** Chaque écriture est confrontée à `loader.yml` par des motifs
+  lus segment par segment ; chaque instance de `dev-agent` est liée à son propre
+  répertoire `agents/{agent}/` ; chaque vague d'écriture est encadrée par un
+  instantané `audit-ownership` qui peut révoquer ce qu'une phase a écrit hors de
+  sa zone. Aucun agent ne peut écrire un rapport de gate, ni par l'éditeur ni par
+  le shell.
+- **Secrets.** Aucun agent ne lit `assets/.env` ni `src/{App}/.env`, quelle que
+  soit la graphie qui l'ouvre (`[SECRET_READ_FORBIDDEN]`), et
+  `.claude/settings.json` y ajoute des `deny` natifs de lecture. `STACK.md`
+  porte des noms de variables, jamais des valeurs (`[STACK_SECRET_IN_CLEAR]`).
+- **Shell.** Le hook shell résout ce qu'une commande Bash ou PowerShell écrit —
+  `bash -c`, `eval`, `$(…)`, `-EncodedCommand`, heredocs, chemins Windows — et
+  refuse ce qu'il ne peut pas nommer sans l'exécuter (`[OWNERSHIP_SHELL_OPAQUE]`).
+- **Des hooks qui tombent.** Avec `SDDA_HOOKS_STRICT=1` (la CI), un hook qui
+  plante refuse au lieu d'autoriser (`[HOOK_FAILED]`), et `hooks-selfcheck`
+  exécute réellement chaque hook câblé : un hook qui ne démarre pas se lirait
+  sinon comme vert.
+
+**Dans le produit** — mesuré par les gates, pas promis :
+
+- **Garde-fous en code.** Le squelette runtime Python livre la détection
+  d'injection, la rédaction des PII et la validation du schéma de sortie
+  (`.sdda/templates/runtime/python/app/guardrails/`), branchées là où le texte
+  entre et sort, et actives selon `## Active Guardrails`.
+- **Attaqué avant d'être livré.** `qa-evals` part d'un jeu adversarial d'amorce
+  écrit à la main (`.sdda/templates/datasets/adversarial-seed.jsonl`) ; G7 joue
+  le jeu versionné en live contre la surface livrée, et chaque attaque réussie
+  trouvée en revue devient un item permanent. Un rapport de reviewer obligatoire
+  absent est `[SAFETY_REVIEW_REPORT_MISSING]`, jamais « zéro finding ».
+- **Des juges qui ne se notent pas eux-mêmes.** Un modèle juge que le produit
+  fait aussi tourner est refusé au preflight (`[JUDGE_SAME_AS_EVALUATED]`) ; un
+  juge non calibré n'est qu'advisory, et une calibration rouge bloque G5.
+- **Un défaut dangereux exige une décision.** Désactiver la vérification TLS,
+  donner à un agent l'écriture sur une base, garder des PII brutes en trace ou
+  exposer une surface réseau sans identité d'appelant exige chaque fois un ADR
+  accepté — G2 reste rouge sans lui.
+
+---
+
 ## Documentation de conception
+
+La documentation est en anglais par défaut ; les jumeaux français portent le
+suffixe `.fr.md`. Le hub [.sdda/docs/README.fr.md](.sdda/docs/README.fr.md)
+liste chaque document et ses langues disponibles.
 
 | Document | Objet |
 |---|---|
-| [PHILOSOPHY.md](.sdda/PHILOSOPHY.md) | Les 12 principes fondateurs |
-| [ARCHITECTURE.md](.sdda/ARCHITECTURE.md) | Arborescence, pipeline, 9 gates, abstraction harness/provider |
-| [SDD-PRO-INHERITANCE.md](.sdda/docs/SDD-PRO-INHERITANCE.md) | Ce qu'on hérite, ce qu'on refuse, ce qu'on ajoute |
-| [DOMAIN-MODEL.md](.sdda/docs/DOMAIN-MODEL.md) | Le vocabulaire clos : MISSION, CAP, AGENT, TOOL, RETRIEVER… |
-| [AGENTIC-IR.md](.sdda/docs/AGENTIC-IR.md) | La représentation intermédiaire qui rend le multi-framework déterministe |
-| [LIFECYCLE.md](.sdda/docs/LIFECYCLE.md) | Machine à états Draft → Approved, dérivée des gates |
-| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | Les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents et leur orchestration interne |
-| [ORCHESTRATION-PATTERNS.md](.sdda/docs/ORCHESTRATION-PATTERNS.md) | Catalogue + matrice de sélection |
-| [RAG-PATTERNS.md](.sdda/docs/RAG-PATTERNS.md) | Catalogue + métriques de gate |
-| [MEMORY-PATTERNS.md](.sdda/docs/MEMORY-PATTERNS.md) | Portées, coûts, et la mémoire comme surface d'attaque persistante |
-| [DATA-ACCESS.md](.sdda/docs/DATA-ACCESS.md) | Stratégies d'accès base pour agents |
-| [MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md) | Compilation vers Claude Code / Codex / Gemini CLI |
-| [TESTING-AND-EVAL.md](.sdda/docs/TESTING-AND-EVAL.md) | La pyramide L0→L9 |
+| [PHILOSOPHY.fr.md](.sdda/PHILOSOPHY.fr.md) | Les 12 principes fondateurs |
+| [ARCHITECTURE.fr.md](.sdda/ARCHITECTURE.fr.md) | Arborescence, pipeline, 9 gates, abstraction harness/provider |
+| [SDD-PRO-INHERITANCE.fr.md](.sdda/docs/SDD-PRO-INHERITANCE.fr.md) | Ce qu'on hérite, ce qu'on refuse, ce qu'on ajoute |
+| [DOMAIN-MODEL.fr.md](.sdda/docs/DOMAIN-MODEL.fr.md) | Le vocabulaire clos : MISSION, CAP, AGENT, TOOL, RETRIEVER… |
+| [AGENTIC-IR.fr.md](.sdda/docs/AGENTIC-IR.fr.md) | La représentation intermédiaire qui rend le multi-framework déterministe |
+| [LIFECYCLE.fr.md](.sdda/docs/LIFECYCLE.fr.md) | Machine à états Draft → Approved, dérivée des gates |
+| [AGENT-ROSTER.fr.md](.sdda/docs/AGENT-ROSTER.fr.md) | Les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents et leur orchestration interne |
+| [ORCHESTRATION-PATTERNS.fr.md](.sdda/docs/ORCHESTRATION-PATTERNS.fr.md) | Catalogue + matrice de sélection |
+| [RAG-PATTERNS.fr.md](.sdda/docs/RAG-PATTERNS.fr.md) | Catalogue + métriques de gate |
+| [MEMORY-PATTERNS.fr.md](.sdda/docs/MEMORY-PATTERNS.fr.md) | Portées, coûts, et la mémoire comme surface d'attaque persistante |
+| [DATA-ACCESS.fr.md](.sdda/docs/DATA-ACCESS.fr.md) | Stratégies d'accès base pour agents |
+| [DATA-SOURCES.fr.md](.sdda/docs/DATA-SOURCES.fr.md) | Sources de données hors base — registre, connecteurs, secrets |
+| [MULTI-HARNESS.fr.md](.sdda/docs/MULTI-HARNESS.fr.md) | Compilation vers Claude Code / Codex / Gemini CLI |
+| [TESTING-AND-EVAL.fr.md](.sdda/docs/TESTING-AND-EVAL.fr.md) | La pyramide L0→L9 |
 | [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les <!--sdda:count invariants-->21<!--/sdda:count--> contrats porteurs + leur enforcer |
-| [ROADMAP.md](.sdda/docs/ROADMAP.md) | Ordre de construction + le MVP |
-| [PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md) | Le backlog déterministe, généré — qui réclame quoi |
+| [ROADMAP.fr.md](.sdda/docs/ROADMAP.fr.md) | Ordre de construction + le MVP |
+| [PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) | Le backlog déterministe, généré — qui réclame quoi |
+| [python/README.fr.md](.sdda/python/README.fr.md) | La couche Python déterministe |
+| [CHANGELOG.md](CHANGELOG.md) | Ce qui a changé, version par version (en anglais) |
 
 **Templates de spécification** : [mission](.sdda/templates/mission.template.md) ·
 [capability](.sdda/templates/capability.template.md) ·
@@ -238,13 +373,18 @@ python .sdda/sdda.py framework-smoke
 ```
 
 Il vérifie : parité agents ↔ bornes de tier, invariants ↔ enforcers sur disque,
-réciprocité des classes d'erreur, digests à jour, références internes, et
+réciprocité des classes d'erreur, classes citées en prose que rien n'émet,
+digests et compteurs à jour, références internes, options CLI citées par les
+prompts, parité des jumeaux anglais/français (`docs.parity`), et
 **l'honnêteté du catalogue** — aucune fiche de stack ne peut se déclarer validée
 sans qu'un run l'ait mesurée.
 
 ```bash
 python .sdda/sdda.py sync-error-registry --check   # taxonomie
 python .sdda/sdda.py sync-digests --check          # digests par agent
+python .sdda/sdda.py sync-counters --check         # chiffres cités par la prose
+python .sdda/sdda.py harness-build --check         # façades vs source
+python .sdda/sdda.py hooks-selfcheck               # chaque hook câblé, exécuté
 python -m pytest .sdda/python/tests/ -q                         # couche déterministe
 ```
 
@@ -252,8 +392,61 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 
 ## Statut
 
-**Lots 1 et 2 écrits.** Le socle déterministe et le moteur d'évaluation
-existent et sont testés (<!--sdda:count tests-->1476<!--/sdda:count--> fonctions de test) :
+**Phase de conception.** <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents,
+<!--sdda:count commands-->11<!--/sdda:count--> commandes,
+<!--sdda:count invariants-->21<!--/sdda:count--> invariants,
+<!--sdda:count stacks-->45<!--/sdda:count--> fiches de stack,
+<!--sdda:count classes-->440<!--/sdda:count--> classes d'erreur,
+<!--sdda:count hooks-->15<!--/sdda:count--> hooks et
+<!--sdda:count subcommands-->76<!--/sdda:count--> sous-commandes déterministes existent sur
+disque et sont testés (<!--sdda:count tests-->1494<!--/sdda:count--> fonctions de test).
+Aucun script cité par un prompt ne manque
+([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
+n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en
+bout sur un vrai produit, donc aucune combinaison n'est validée. C'est le Lot 6
+de la [ROADMAP](.sdda/docs/ROADMAP.fr.md), et rien de ce qui suit ne le remplace.
+
+### Le dernier lot — fermer ce qui était annoncé sans être tenu
+
+- **Workflow.** Les contrats des outils de source sont générés en PHASE 2 avant
+  l'IR, leur code en PHASE 3 ; la passe complète de `validate-topology` tourne
+  avant `ir-compiler` et écrit seule la part `topology` de G2 ; une nouvelle
+  étape 4.0 de pré-passe pose les types `shared/` et l'interface mémoire, gelés
+  pendant les phases 4 et 5 ; `--resume` suit la lignée des runs et
+  `BuildLoopMaxCostUsd` borne la boucle d'un item ; G1 ne se périme plus quand la
+  PHASE 2 remplit `## Allocated To`.
+- **Gates.** G2 gagne une part `adr` (`registry/adr-requirements.yml`, couverte
+  seulement par un ADR accepté qui nomme clé et valeur) ; G5 bloque sur une
+  calibration de juge rouge et épingle chaque hash de prompt
+  (`[PROMPT_MISSING]`, `[PROMPT_HASH_MISMATCH]`) ; G6 gagne une part `framework`
+  (`[FRAMEWORK_DRIFT]`) ; G7 joue le jeu adversarial en live et traite un
+  rapport de reviewer absent comme une erreur.
+- **Ownership et hooks.** Les motifs se lisent par segment, les recouvrements
+  réels de zones sont détectés et résolus, les instances de `dev-agent` sont
+  liées à leur répertoire, les phases sont auditées contre un instantané et
+  révocables ; le hook shell a été réécrit et couvre PowerShell ; mode strict et
+  `hooks-selfcheck`.
+- **Gouvernance de STACK.md.** Valeurs validées contre le schéma, clés mortes
+  retirées (les tiers de construction viennent désormais de
+  `capability-matrix.yml`), combos cherchées dans la matrice, valeurs non
+  implémentées refusées, juge ≠ modèle évalué.
+- **Runtime.** Un juge LLM réel en stdlib (Anthropic, OpenAI, Gemini, Ollama),
+  des tarifs lus dans les fiches providers, des garde-fous en code, un jeu
+  adversarial d'amorce de 31 items, des traces écrites sous verrou exclusif.
+- **Industrialisation.** `LICENSE` MIT, `CHANGELOG.md`, workflow de release
+  déclenché par tag, Dependabot, actions épinglées par SHA, job `lint` (ruff +
+  mypy), plancher de couverture, `AGENTS.md` / `GEMINI.md` à la racine ; dix
+  scripts neufs (`corpus-profile`, `chunking-bench`, `validate-envelope`,
+  `cost-report`, `trajectory-report`, `adversarial-target-check`,
+  `promote-adversarial-findings`, `validate-adr`, `validate-framework`,
+  `hooks-selfcheck`) ; chaque document a désormais une référence anglaise et un
+  jumeau français.
+
+Détail : [CHANGELOG.md](CHANGELOG.md).
+
+### Comment on en est arrivé là
+
+**Lots 1 et 2 — le socle déterministe et le moteur d'évaluation :**
 
 - `bootstrap.py` de bout en bout ; G0 (mission), G1 (capabilities) et G2
   (topologie, IR, budget) **refusent** effectivement une spécification
@@ -267,11 +460,12 @@ existent et sont testés (<!--sdda:count tests-->1476<!--/sdda:count--> fonction
   **sans agent**) et `run_adversarial_suite.py` (G7 — couverture des familles
   d'attaque et rejeu du set versionné).
 
-**Aucun de ces scripts n'appelle un LLM** : ils reçoivent un exécuteur injecté
-ou rejouent des runs enregistrés. C'est délibéré — le framework sait aujourd'hui
-*juger* une spécification et une mesure, il ne sait pas encore en *produire*.
+Les scripts de gate n'appellent eux-mêmes aucun LLM : ils reçoivent un
+exécuteur injecté ou rejouent des runs enregistrés, et seul le grader
+`llm-judge` appelle un modèle. C'est délibéré — une gate qui jugerait avec un
+modèle non épinglé ne serait pas déterministe.
 
-**Lot 3 en cours** — la jonction entre les fiches d'agent et le pipeline :
+**Lot 3 — la jonction entre les fiches d'agent et le pipeline :**
 
 - `sdda_state.py` — journal des runs : identité, phases, reprise (`--resume`),
   bypasses. Il ne calcule aucun état d'artefact : ça reste `compute_status.py`,
@@ -308,15 +502,14 @@ Ce que la mesure et cette exécution ont trouvé, et qui est corrigé :
 Reste ouvert, et non résolu : le budget s'exprime en USD (`CostPerRunTargetUsd`)
 alors que les briefs arrivent en euros, sans parité déclarée nulle part.
 
-**Lot 4 commencé — les gates de la génération.** `validate_tool_contract.py`
-écrit la part `contracts` de la TOOL GATE (G3) : méta-schéma des schémas
-d'outil, `required` ⊆ `properties`, cohérence de la stratégie de sûreté,
-confrontation contrat ↔ IR ↔ **code**, enveloppe DB. `check_ir_freshness.py`
-refuse de générer depuis un IR qui ne décrit plus ses sources.
+**Lot 4 — les gates de la génération.** `validate_tool_contract.py` écrit la
+part `contracts` de la TOOL GATE (G3) : méta-schéma des schémas d'outil,
+`required` ⊆ `properties`, cohérence de la stratégie de sûreté, confrontation
+contrat ↔ IR ↔ **code**, enveloppe DB. `check_ir_freshness.py` refuse de générer
+depuis un IR qui ne décrit plus ses sources. Deux défauts de fond ont été
+trouvés en les câblant :
 
-Deux défauts de fond trouvés en les câblant :
-
-- `compute_status` cherche `G3-{outil}`, `G4-{retriever}`, `G5-{cap}`, alors
+- `compute_status` cherchait `G3-{outil}`, `G4-{retriever}`, `G5-{cap}`, alors
   qu'`eval_runner` écrivait tout sous `{mission}`. Les rapports étaient verts
   dans des fichiers que la machine à états n'ouvrait jamais : l'état `Tested`
   était **inatteignable**. La granularité est maintenant celle du LIFECYCLE ;
@@ -325,9 +518,9 @@ Deux défauts de fond trouvés en les câblant :
   `/sdda-topology --recompile-only` existe pour traiter. `contractHashes` est
   entré dans l'IR et dans son schéma.
 
-**L'API GATE existe enfin.** `validate_api_contract.py` écrit la part `api` de
-G6 : schémas publiés confrontés à l'`inputSchema`/`outputSchema` de l'IR dans
-les deux sens, routes confrontées au contrat de la surface active, statuts HTTP
+**L'API GATE existe.** `validate_api_contract.py` écrit la part `api` de G6 :
+schémas publiés confrontés à l'`inputSchema`/`outputSchema` de l'IR dans les
+deux sens, routes confrontées au contrat de la surface active, statuts HTTP
 confrontés à la table `[CLASS]` → code. Tant qu'aucun `openapi.json` n'est
 publié, la part est **non applicable** : elle n'écrit aucun rapport, donc
 n'accorde aucun vert.
@@ -362,18 +555,13 @@ Ce qu'un audit du dispositif anti-pourrissement a trouvé, et qui est corrigé :
   lise pas comme une famille inexistante.
 
 **L'IR est scindé en `intent` / `binding`** — avant le Lot 4, délibérément.
-
 `store: "pgvector"` et `embeddingModel: "voyage-3-large"` étaient des champs
 **obligatoires** de l'IR, alors que la même décision vivait déjà dans
-`STACK.md ## Active Retrieval Stack`. Deux vérités sur le même fait, que rien ne
-confrontait — et le contrôle de neutralité ne les voyait pas, parce qu'il ne
-cherchait que des noms d'**API** de framework. Un générateur C# lisant
-`pgvector` serait allé chercher une fiche qui n'existe pas dans son runtime.
-
-L'IR porte désormais deux branches : l'**intention** (`pattern`, `topK`,
+`STACK.md ## Active Retrieval Stack` : deux vérités sur le même fait, que rien
+ne confrontait. L'IR porte désormais l'**intention** (`pattern`, `topK`,
 `citationMode`, `identityFilter`, `gateThresholds`, `envelope`, `exposedTo`) et
 le **`binding`** (`store`, `embeddingModel`, `chunk`, `hybridWeights`,
-`rerank`, `strategy`). Trois mécanismes la tiennent :
+`rerank`, `strategy`), tenus par trois mécanismes :
 
 - `[INFRA_LEAK_IN_INTENT]` — tout nom de composant hors de `binding` est refusé ;
 - `[RETRIEVAL_BINDING_MISMATCH]` — le `binding` est **réconcilié** avec les
@@ -383,67 +571,34 @@ le **`binding`** (`store`, `embeddingModel`, `chunk`, `hybridWeights`,
   complet sans jamais lire `binding`, et ce plan est identique pour `pgvector`
   et pour n'importe quel autre store.
 
-La ROADMAP prévoyait d'apprendre l'échec éventuel de l'IR au Lot 7, sur le
-second générateur. Le faire maintenant coûte un schéma, un compilateur et un
-validateur ; le faire après le Lot 4 aurait coûté six générateurs déjà écrits
-contre un contrat qu'on savait faux. `memory.longTermStore` nomme lui aussi un
-composant et reste hors périmètre : sa propre scission n'est pas faite, et le
-contrôle le dit plutôt que de le taire.
-
 **Lot d'audit — le pipeline ne pouvait pas aboutir une seule fois, et cinq
-contrôles étaient inertes.** Un audit complet, source par source, puis chaque
-constat corrigé. Ce qu'il a trouvé :
+contrôles étaient inertes.** `ir_compiler` exigeait un holdout qui n'existe que
+trois phases plus loin ; aucune suite L9 n'était jamais compilée ; neuf options
+CLI étaient citées par les prompts et n'existaient dans aucun script
+(désormais attrapées par `refs.flags`) ; les hooks d'ownership lisaient
+l'identité du sous-agent au mauvais endroit du payload, les hooks de spawn ne
+matchaient que `Task`, les façades ne portaient aucun `model:`, `MaxCostPerRun`
+n'avait aucun écrivain, et les commandes de hook étaient relatives au répertoire
+courant. Tout est corrigé ; le lot a aussi livré le squelette runtime Python
+(`gen-app-skeleton --write`), les items d'évaluation en parallèle, les paquets
+de contexte tranchés sur les fiches actives, et la migration du workspace.
 
-- `ir_compiler` exigeait le holdout que `qa-evals` ne produit que trois phases
-  plus loin : aucune mission neuve ne franchissait G2. L'exigence est déplacée
-  dans `validate_datasets` (G8), où elle est actionnable, et le holdout est
-  devenu une source compilée pour que son arrivée périme l'IR ;
-- **aucune suite L9 n'était jamais compilée** : la part `acceptance` de G8
-  n'avait aucune exécution capable de la rendre verte. Elle naît désormais de
-  la ligne `Grader:` du `## Quantified Goal` de la mission ;
-- neuf options CLI étaient citées par les prompts et n'existaient dans aucun
-  script (`--pre`, `--static`, `--isolated`, `--dataset`, `--require`,
-  `--min-items`, …). argparse répondait par un `usage:` au lieu d'un bloc
-  `ERROR/CAUSE/FIX`, et le modèle orchestrateur concluait que le contrôle
-  « n'avait rien dit ». Un scanner neuf, `command-flags`, résout chaque option
-  citée contre le parseur réel et tourne dans `framework-smoke` sous
-  `refs.flags` ;
-- cinq contrôles se déclaraient actifs et ne s'exécutaient pas : les hooks
-  d'ownership lisaient l'identité du sous-agent au mauvais endroit du payload
-  (toute écriture de sous-agent passait) ; les hooks de spawn ne matchaient que
-  `Task`, jamais `Agent` ; les façades portaient `model_tier` mais aucune clé
-  `model:` (les 22 agents héritaient du modèle parent) ; `MaxCostPerRun` n'avait
-  aucun appelant qui alimente le cumul ; les bornes du `build_loop` ne vivaient
-  que dans le prompt qu'elles devaient borner ;
-- les commandes de hook étaient relatives au répertoire courant : un `cd`
-  désarmait les quatorze. Elles sont ancrées sur `$CLAUDE_PROJECT_DIR`.
-
-Ce qu'il a livré :
-
-- **un squelette runtime Python** (`.sdda/templates/runtime/python/app/`,
-  18 fichiers) : point d'entrée, client LLM par tier, bornes en code, traçage
-  OTel-GenAI, boucle d'orchestration, surface console, et les deux exécuteurs
-  d'évaluation dont G5/G6/G8 avaient besoin.
-  `python .sdda/sdda.py gen-app-skeleton --write` le matérialise ; la console
-  générée démarre, résout ses tiers, rend un code de sortie par classe d'erreur
-  et émet une trace que le lecteur du framework parse ;
-- les items d'évaluation mesurés en parallèle (`EvalMaxParallel`, ordre
-  préservé) ; les paquets de contexte tranchés sur les fiches de stack
-  *actives* — l'agent le plus saturé passe de 93 % à 61 % de son budget sans
-  relever aucun plafond ;
-- le workspace à quatre entrées (`feats/ · stack/ · src/ · proof/ · .sys/`) et
-  une migration qui déplace le contenu existant.
-
-Maturité honnête après ce lot : la couche déterministe est en bêta ; la couche
-génération est un squelette plus six prompts d'agents qui **n'ont toujours
-jamais été exécutés de bout en bout**. Rien de ce qui précède ne change le
-tableau des langages : Python est le seul runtime doté d'un squelette, .NET n'a
-pas de chaîne de retrieval, TypeScript et Java n'ont aucune fiche.
-
-Reste à faire : les six agents générateurs et leurs stacks (Lot 4), puis la
-revue (Lot 5). Ordre et raisons : [ROADMAP.md](.sdda/docs/ROADMAP.md).
+**Maturité honnête.** La couche déterministe est en bêta. La couche de
+génération — huit agents `dev-*`, le squelette Python — et la couche de revue —
+six reviewers — sont écrites et câblées à leurs gates, et **n'ont jamais été
+exécutées de bout en bout**. Python est le seul runtime doté d'un générateur de
+squelette, .NET n'a pas de chaîne de retrieval, TypeScript et Kotlin ont des
+fiches mais aucun générateur, Java n'a rien.
 
 **Aucune combinaison de stack n'est annoncée validée**, parce qu'aucune n'a
 encore été mesurée par un run réel. C1 est la cible du MVP, en `design-phase`.
 Annoncer autre chose serait précisément le faux vert que ce framework existe
 pour empêcher.
+
+---
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE). Les mêmes termes couvrent les sources du
+framework sous `.sdda/` et le paquet Python `sdda` construit depuis
+`.sdda/python/`.
