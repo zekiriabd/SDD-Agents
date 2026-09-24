@@ -34,8 +34,9 @@
 
 ## Active Harness
 # Où tourne l'orchestration de CONSTRUCTION (les Developer Agents de .sdda/agents/).
-# Options : claude-code | codex | gemini-cli | antigravity | cursor
-# SSoT machine : .sdda/capability-matrix.yml
+# Options : claude-code | codex | gemini-cli | antigravity — les harnais de
+# .sdda/capability-matrix.yml (SSoT machine). Toute autre valeur n'a aucune
+# façade générée -> [CONFIG_VALUE_INVALID].
 Harness: claude-code
 
 
@@ -246,6 +247,11 @@ MaxAgentsWarnAt: 4                  # au-delà, justification renforcée exigée
 # - .sdda/stacks/orchestration/single-agent.md    # [*] 1 agent + outils  <- DEFAUT
 # - .sdda/stacks/orchestration/router.md          # [*] classification -> spécialiste
 # - .sdda/stacks/orchestration/sequential.md      # [*] pipeline d'étapes ordonnées
+#
+# Les lignes « (fiche absente) » ci-dessous sont un CATALOGUE D'INTENTIONS :
+# activées, elles ne chargent rien et sont refusées au preflight
+# ([STACK_COMBO_UNLOADABLE]). supervisor, graph et plan-execute en font partie —
+# le runtime généré ne porte que router et sequential (+ single-agent).
 # - .sdda/stacks/orchestration/parallel.md        # (fiche absente) fan-out / gather
 # - .sdda/stacks/orchestration/supervisor.md      # (fiche absente) hiérarchique, délégation dynamique
 # - .sdda/stacks/orchestration/graph.md           # (fiche absente) machine à états, cycles, HITL
@@ -434,6 +440,11 @@ SourceSecretsFile: .env
 Stores:
 #  - id: exports_local
 #    kind: local                      # local|smb|nfs|s3|azure-blob|gcs|http|sftp|mcp
+#                                     # CLIENT RUNTIME : `local` seul, et `smb`/`nfs`
+#                                     # s'ils sont MONTÉS (lus comme un chemin).
+#                                     # s3|azure-blob|gcs|http|sftp|mcp : acceptés
+#                                     # par le parseur, AUCUN client généré ->
+#                                     # [STACK_VALUE_UNIMPLEMENTED] au preflight.
 #    root: workspace/assets/exports
 #    auth: { mode: none }
 #  - id: ops_share
@@ -459,7 +470,9 @@ Stores:
 # CE QUE C'EST, et ce qu'on en expose. Aucune URL, aucun chemin absolu, aucun secret.
 Sources:
 #  - id: order_tracking
-#    connector: file                  # file | http-api | mcp
+#    connector: file                  # file | http-api | mcp — seul `file` a un
+#                                     # client runtime ; les deux autres sont refusés
+#                                     # au preflight ([STACK_VALUE_UNIMPLEMENTED])
 #    store: ops_share
 #    glob: tracking/*.jsonl
 #    format: jsonl                    # object|array|jsonl|csv|tsv|xlsx|parquet
@@ -541,8 +554,12 @@ ExternalAPIs:
 ShortTermPolicy: sliding-window       # none | sliding-window | summarize-over | hybrid
 ShortTermMaxTurns: 12
 SummarizeTriggerTokens: 24000
+# LONG TERME : aucune fiche (memory/vector.md, store.md) ni module runtime ne
+# l'implémente. `LongTermEnabled: true` ou un `LongTermStore` != none est refusé
+# au preflight ([STACK_VALUE_UNIMPLEMENTED]) : l'IR le compilerait, rien ne
+# l'exécuterait.
 LongTermEnabled: false
-LongTermStore: none                   # none | pgvector | redis | store-backed
+LongTermStore: none                   # none | pgvector | redis | store-backed (aucun implémenté)
 LongTermWritePolicy: explicit         # explicit (l'agent décide via un outil) | automatic
 LongTermRetentionDays: 90
 MemoryPIIPolicy: redact-before-write  # forbid | redact-before-write | allow (allow exige un ADR)
@@ -556,6 +573,8 @@ CrossAgentSharedState: scoped         # none | scoped | full  — qui lit l'éta
 # - .sdda/stacks/guardrails/pii-redaction.md      # [*]
 # - .sdda/stacks/guardrails/llm-judge.md          # (fiche absente) garde de qualité en ligne
 # - .sdda/stacks/guardrails/nemo-guardrails.md    # (fiche absente)
+# Chaque nom ci-dessous DOIT être une fiche activée plus haut : un garde-fou
+# nommé sans fiche n'existe pas ([STACK_VALUE_UNIMPLEMENTED]).
 InputGuardrails: [injection-detection]
 OutputGuardrails: [schema-validation]
 OnGuardrailTrip: block-and-log        # block-and-log | sanitize-and-continue | escalate-human
@@ -615,7 +634,9 @@ BaselineStorage: workspace/pipeline/baselines/
 
 ServingLocalPort: {{ServingPort}}
 StreamingEnabled: true
-HumanInTheLoopEnabled: false          # exige un pattern d'orchestration avec checkpointing
+HumanInTheLoopEnabled: false          # exige le checkpointing : `true` sans
+                                      # framework/langgraph.md actif est refusé
+                                      # ([STACK_VALUE_UNIMPLEMENTED])
 
 
 ## Active Architecture Pattern

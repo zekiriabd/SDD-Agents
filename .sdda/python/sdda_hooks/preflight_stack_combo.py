@@ -6,7 +6,7 @@ Le hook que `registry/compatibility.matrix.json` nomme dans
 pas. Un registre qui désigne son garde sans que le garde existe est la forme la
 plus tranquille du doc-theater : tout le monde le cite, personne ne l'exécute.
 
-Six contrôles, six pannes distinctes :
+Sept contrôles, sept pannes distinctes :
 
 1. **Chargeabilité** — `missing` vs `untested`. La distinction est le tout du
    sujet :
@@ -54,6 +54,12 @@ Six contrôles, six pannes distinctes :
    allow`, pattern `network`…) sans ADR ACCEPTÉ refuse le spawn des agents qui
    construisent (`dev-*`, `qa-*`, `review-*`). Cette docstring le promettait ;
    rien ne le faisait.
+
+7. **Valeurs sans implémentation** — `[STACK_VALUE_UNIMPLEMENTED]`. Ce que les
+   parseurs acceptent et que rien n'exécute : mémoire long terme, stores
+   distants (s3, http, mcp…), connecteurs `http-api` / `mcp`, garde-fou nommé
+   sans fiche active, reprise humaine sans checkpointing. `smb`/`nfs` sont
+   dits (lus comme chemins montés), pas refusés.
 
 Bypass : `SDDA_ALLOW_UNTESTED_COMBO=1` (chargeabilité et combinaison hors matrice, hérité de SDD_Pro) et
 `SDDA_ALLOW_LANG_MISMATCH=1` (cohérence de langage — le cas légitime est le
@@ -312,6 +318,61 @@ def recognise(matrix: dict, sig: dict[str, object]) -> tuple[dict | None, dict |
     return None, best[0], best[1]
 
 
+#: Valeurs que les parseurs ACCEPTENT et que rien n'implémente. Chacune passait
+#: en silence : `source_registry` admet `connector: http-api` et `kind: s3`,
+#: l'IR compile `LongTermEnabled: true` — et le runtime généré ne sait lire que
+#: des fichiers sur un chemin, sans aucune mémoire longue. L'agent recevait une
+#: déclaration valide et inventait le client qui manquait.
+#:
+#: Connecteurs / stores : le runtime (`templates/runtime/python/data/`) résout
+#: une racine de fichiers et rien d'autre. `smb` / `nfs` passent s'ils sont
+#: MONTÉS (un chemin que l'OS résout) : dit, pas refusé.
+IMPLEMENTED_CONNECTORS = {"file"}
+MOUNTED_STORE_KINDS = {"smb", "nfs"}
+IMPLEMENTED_STORE_KINDS = {"local"} | MOUNTED_STORE_KINDS
+
+
+def _unimplemented(root: Path, activated: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+    """`(refus, avertissements)` pour les valeurs acceptées sans implémentation."""
+    from sdda_lib.layered_config import read_stack_section_kv  # noqa: E402
+
+    refused: list[str] = []
+    said: list[str] = []
+    active = {(c, n) for c, n in activated}
+
+    memory = read_stack_section_kv(root, "Active Memory Strategy")
+    store = str(memory.get("LongTermStore") or "none").strip().lower()
+    if memory.get("LongTermEnabled") is True or store not in ("", "none"):
+        refused.append(f"mémoire long terme (`LongTermEnabled: {memory.get('LongTermEnabled')}`, `LongTermStore: {store}`) "
+                       "— aucune fiche memory/vector|store, aucun module runtime : l'IR la compile, rien ne l'exécute")
+
+    if ("dataaccess", "declared-sources") in active:
+        sources = read_stack_section_kv(root, "Active Data Sources")
+        for s in sources.get("Stores") or []:
+            if not isinstance(s, dict):
+                continue
+            kind = str(s.get("kind") or "")
+            if kind not in IMPLEMENTED_STORE_KINDS:
+                refused.append(f"store `{s.get('id')}` kind `{kind}` — aucun client runtime (seuls `local`, et `smb`/`nfs` montés, sont lus)")
+            elif kind in MOUNTED_STORE_KINDS:
+                said.append(f"store `{s.get('id')}` kind `{kind}` lu comme un chemin monté : le montage n'est pas vérifié")
+        for s in sources.get("Sources") or []:
+            if isinstance(s, dict) and str(s.get("connector") or "file") not in IMPLEMENTED_CONNECTORS:
+                refused.append(f"source `{s.get('id')}` connector `{s.get('connector')}` — aucun client runtime (seul `file` est implémenté)")
+
+    guards = read_stack_section_kv(root, "Active Guardrails")
+    fiches = {n for c, n in activated if c == "guardrails"}
+    for key in ("InputGuardrails", "OutputGuardrails"):
+        for name in guards.get(key) or []:
+            if str(name) not in fiches:
+                refused.append(f"`{key}: [{name}]` sans fiche `guardrails/{name}.md` active — le garde-fou nommé n'existe pas")
+
+    serving = read_stack_section_kv(root, "Active Serving Surface")
+    if serving.get("HumanInTheLoopEnabled") is True and ("framework", "langgraph") not in active:
+        refused.append("`HumanInTheLoopEnabled: true` sans `framework/langgraph.md` — aucune autre fiche active ne porte le checkpointing qu'une reprise humaine exige")
+    return refused, said
+
+
 def _combo_check_mode(root: Path) -> str:
     """`StackComboCheck` effectif : strict (défaut) | warn | off."""
     from sdda_lib.errors import SddaError  # noqa: E402
@@ -441,6 +502,20 @@ def check(root: Path, data: dict) -> int:
         )
 
     notes: list[str] = []
+
+    refused, said = _unimplemented(root, activated)
+    if refused and bypassed("SDDA_ALLOW_UNTESTED_COMBO"):
+        said += [f"assumé par SDDA_ALLOW_UNTESTED_COMBO : {r}" for r in refused]
+        refused = []
+    if refused:
+        return deny(
+            HOOK, "STACK_VALUE_UNIMPLEMENTED",
+            f"{len(refused)} valeur(s) acceptée(s) sans implémentation : {'; '.join(refused[:3])}",
+            "ces valeurs passent les parseurs mais rien ne les exécute : l'agent recevrait une déclaration "
+            "valide et inventerait le client, la mémoire ou le garde-fou manquant. Revenir à une valeur "
+            "implémentée (cf. STACK.md.template, « aucun client runtime »), ou écrire la fiche et le module. "
+            "Assumer (le client sera écrit à la main) : SDDA_ALLOW_UNTESTED_COMBO=1 (audit-loggué)")
+    notes += said
 
     # La combinaison, reconnue ou non. `comboSignatureFields` et `combos`
     # étaient écrits dans la matrice et lus par personne : sa description
