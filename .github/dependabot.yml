@@ -1,0 +1,15 @@
+# Mises à jour proposées chaque semaine. Les actions des workflows sont
+# épinglées par SHA : sans ce fichier, personne ne verrait qu'un SHA a vieilli.
+# Le moteur est stdlib seule (dependencies = []) : l'écosystème pip ne suit que
+# les dépendances de dev et de build du pyproject.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: "/.sdda/python"
+    schedule:
+      interval: weekly
