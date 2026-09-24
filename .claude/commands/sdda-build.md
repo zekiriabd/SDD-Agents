@@ -358,8 +358,9 @@ pas. Sans cette garde, `--resume` après un `[AGENT_GATE_FAILED]` sur un agent
 repayait les N-1 autres. `--agent {id}` court-circuite la garde : c'est une
 demande explicite de re-matérialiser.
 
-Prompt par instance :
+Prompt par instance — **la première ligne n'est pas facultative** :
 ```
+SDDA-INSTANCE: {agent}
 Implémenter l'agent {agent} de la MISSION {n}. IR : agents[{agent}] (bornes, outils, retrievers,
 schémas, trustPosture, refusalPolicy). Prompt : workspace/src/{App}/prompts/{agent}.system.md — CHARGÉ AU
 RUNTIME par chemin, jamais copié dans le code (P1, [PROMPT_INLINE_DETECTED]). Stack : {framework}.md.
@@ -367,6 +368,14 @@ Bornes obligatoires : maxIterations, maxToolCalls, maxDelegationDepth, timeoutSe
 onBoundExceeded implémenté (P12). Tests L1 avec LLM mocké. Interdiction absolue d'écrire sous
 workspace/pipeline/datasets/ et workspace/src/{App}/prompts/ ([OWNERSHIP_VIOLATION]).
 ```
+
+`SDDA-INSTANCE: {agent}` est lu par le hook `preflight_instance_bind` au spawn :
+il DÉCLARE l'instance, et la première écriture de l'instance la lie à son
+`agent_id` (`_instances`). Sans cette ligne, le spawn est refusé
+(`[OWNERSHIP_INSTANCE_UNDECLARED]`) ; avec elle, une instance qui écrit sous
+`agents/{autre}/` est refusée (`[OWNERSHIP_INSTANCE_ESCAPE]`). Les N instances
+d'une vague tournent en parallèle : c'est la seule chose qui garde leurs
+répertoires disjoints pendant qu'elles écrivent, et non après.
 
 Post-step déterministe par vague :
 

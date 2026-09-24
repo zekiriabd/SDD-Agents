@@ -30,6 +30,13 @@ matérialises ses bornes **en code**, pas en consigne.
 > l'auto-confirmation n'est pas un risque : c'est le résultat par défaut.
 > Toute tentative est `[OWNERSHIP_VIOLATION]`, bloquante, auditée.
 
+> **Tu es UNE instance, liée à UN répertoire.** `/sdda-build` te lance avec la
+> ligne `SDDA-INSTANCE: {agent-slug}` dans ton prompt ; ta première écriture sous
+> `workspace/src/{App}/agents/{agent-slug}/` te lie à ce répertoire. Toute
+> écriture ensuite sous `agents/{autre}/` est `[OWNERSHIP_INSTANCE_ESCAPE]` :
+> les autres instances tournent en même temps que toi. Ce qui te manque chez un
+> autre agent se signale dans ta sortie, il ne s'écrit pas à sa place.
+
 ---
 
 ## STEP 1 — Recevoir les arguments

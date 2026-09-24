@@ -433,6 +433,11 @@ dev-data:
 
 dev-agent:
   model_tier: deep
+  # Une instance PAR agent du produit, en parallèle : `{agent}` de `writes:`
+  # est lié à l'instance qui écrit (hooks `preflight_instance_bind` au spawn,
+  # `_instances` à la première écriture). Sans liaison, `agents/{agent}/**`
+  # autorisait n'importe quelle instance à écrire chez n'importe quelle autre.
+  instance_placeholder: agent
   budget_bytes: 320000      # recalibré sur le premier projet réel (était 180000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-agent.md     # stable — framework tranché
@@ -464,12 +469,13 @@ dev-agent:
     # la phase 4 était impossible dès que le hook recevait l'identité.
     #
     # L'isolation entre deux instances de `dev-agent` n'est pas exprimable par
-    # un motif statique : elle demande de savoir QUELLE instance écrit, et le
-    # harnais ne le dit pas. Elle est assurée en amont — la commande alloue un
-    # répertoire par agent (`/sdda-build` STEP 4.2) — et vérifiable en aval par
-    # `audit_ownership.py --agent dev-agent --wrote <chemin>` avec l'instance
-    # nommée. Écrire ici un interdit qui n'en est pas un donnait l'illusion
-    # d'une barrière tout en supprimant la seule qui fonctionnait.
+    # un motif statique : elle demande de savoir QUELLE instance écrit. Elle
+    # est tenue par `instance_placeholder: agent` ci-dessus — déclaration au
+    # spawn (`SDDA-INSTANCE:` dans le prompt), liaison à l'`agent_id` à la
+    # première écriture — et vérifiée en aval par
+    # `audit-ownership --since-snapshot --instances …` (/sdda-build STEP 4.2).
+    # Écrire ici un interdit qui n'en est pas un donnait l'illusion d'une
+    # barrière tout en supprimant la seule qui fonctionnait.
   forbidden_reads:
     - workspace/pipeline/datasets/**     # coder en regardant le jeu de test, c'est tricher
 

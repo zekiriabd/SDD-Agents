@@ -64,6 +64,10 @@
           },
           {
             "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_instance_bind.py\""
+          },
+          {
+            "type": "command",
             "command": "python \"$CLAUDE_PROJECT_DIR/.sdda/python/sdda_hooks/preflight_judge_calibration.py\""
           },
           {
