@@ -73,6 +73,7 @@ def run(root: Path, *, only: str | None = None, write: bool = True, mission: int
         except json.JSONDecodeError as exc:
             report.error("IR_INVALID", f"{ir_path.name} illisible ({exc})", "recompiler l'IR", paths.rel(root, ir_path))
             continue
+        first_finding, first_outcome = len(report.findings), len(outcomes)
 
         for suite in judge_suites(ir):
             suite_id = str(suite.get("id", "?"))
@@ -174,16 +175,35 @@ def run(root: Path, *, only: str | None = None, write: bool = True, mission: int
             for note in result.notes:
                 report.warn("JUDGE_UNCALIBRATED", f"suite `{suite_id}` : {note}", "", loc)
 
-    if write:
-        _write_report(root, report, outcomes)
+        if write:
+            sub = Report(name="G5.calibration", target=str(ir.get("missionId") or ir_path.stem))
+            sub.findings.extend(report.findings[first_finding:])
+            _write_report(root, sub, outcomes[first_outcome:], mission_artifact(ir, ir_path))
+
+    report.data["judges"] = outcomes
     return report, outcomes
 
 
-def _write_report(root: Path, report: Report, outcomes: list[dict]) -> Path:
+def mission_artifact(ir: dict, ir_path: Path) -> str:
+    """L'artefact sous lequel `compute_status` cherche la calibration : le NUMÉRO de MISSION.
+
+    Le rapport était écrit sous l'artefact `calibration` (`G5-calibration.calibration.json`),
+    que `GateIndex._for` ne rattache à rien : une MISSION se cherche par son
+    stem ou son numéro, une CAP par son id. Une calibration ROUGE — des labels
+    synthétiques, `[JUDGE_CALIBRATION_SYNTHETIC]`, sans bypass — ne bloquait
+    donc jamais G5, alors que `GATE_PARTS_ADVISORY` la déclare bloquante au
+    rouge. Le numéro seul est rattaché à chaque CAP de la MISSION (alias de
+    `_for`) : c'est exactement la portée d'un juge, partagé par les suites.
+    """
+    head = str(ir.get("missionId") or ir_path.name).split("-", 1)[0]
+    return head if head.isdigit() else "stack"
+
+
+def _write_report(root: Path, report: Report, outcomes: list[dict], artifact: str) -> Path:
     from sdda_lib import gate_reports
 
     report.data["judges"] = outcomes
-    return gate_reports.write_gate_report(root, "G5", "calibration", report, {}, part="calibration")
+    return gate_reports.write_gate_report(root, "G5", artifact, report, {}, part="calibration")
 
 
 def build_parser() -> argparse.ArgumentParser:

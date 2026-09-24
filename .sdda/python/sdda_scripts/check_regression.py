@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.eval_pinning import Baseline, load_baselines, regression_delta  # noqa: E402
-from sdda_lib.eval_reports import baseline_path, find_ir_file, latest_report, load_json, mission_number, report_by_run_id, report_suites, suite_pins  # noqa: E402
+from sdda_lib.eval_reports import baseline_path, find_ir_file, latest_report, load_json, merged_run_report, mission_number, report_by_run_id, report_suites, suite_pins  # noqa: E402
 from sdda_lib.eval_stats import parse_threshold  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
@@ -56,12 +56,15 @@ def compare(
     noise_sigma: float = 2.0,
     baseline_file: Path | None = None,
     require_baseline: bool = False,
+    data: dict[str, Any] | None = None,
 ) -> Report:
+    """`data` : un rapport déjà chargé — la vue réunie d'un run (`merged_run_report`)."""
     mid = str(ir.get("missionId", ""))
     number = mission_number(ir)
     report = Report(name="EVAL.regression", target=mid)
     rloc = paths.rel(root, report_path)
-    data = load_json(report_path)
+    if data is None:
+        data = load_json(report_path)
     if data is None:
         report.error("EVAL_REPORT_NOT_FOUND", f"rapport `{rloc}` illisible ou absent", "eval_runner.py produit workspace/.sys/reports/{n}-{RUN_ID}.json", rloc)
         return report
@@ -170,16 +173,21 @@ def main(argv: list[str] | None = None) -> int:
         return finish(report, args)
     ir = ir_compiler.load_ir(ir_file)
     number = mission_number(ir)
+    run_data = None
     if args.report is not None:
         rpath = args.report if args.report.is_absolute() else root / args.report
     elif args.run:
+        # Toutes les mesures du run, chaque suite à sa dernière : un RUN_ID
+        # propagé porte plusieurs rapports (`{n}-{RUN_ID}-2.json`…).
         rpath = report_by_run_id(root, number, args.run) or (paths.reports_dir(root) / f"{number}-{args.run}.json")
+        run_data = merged_run_report(root, number, args.run)
     else:
         rpath = latest_report(root, number) or (paths.reports_dir(root) / f"{number}-<aucun>.json")
     tolerance = args.tolerance if args.tolerance is not None else config.get_float("RegressionTolerancePct", 3.0)
     noise_sigma = args.noise_sigma if args.noise_sigma is not None else config.get_float("RegressionNoiseSigma", 2.0)
     bfile = args.baseline if args.baseline is None or args.baseline.is_absolute() else root / args.baseline
-    sub = compare(root, ir, rpath, tolerance_pct=tolerance, noise_sigma=noise_sigma, baseline_file=bfile, require_baseline=args.require_baseline)
+    sub = compare(root, ir, rpath, tolerance_pct=tolerance, noise_sigma=noise_sigma, baseline_file=bfile,
+                  require_baseline=args.require_baseline, data=run_data)
     report.extend(sub)
     report.data.update(sub.data)
     report.target = sub.target

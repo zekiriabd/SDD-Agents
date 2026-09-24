@@ -107,8 +107,8 @@ tronquée et confiante, indétectable en aval.
 Agent : `dev-backend` (`.sdda/agents/dev-backend.md`). Tier `balanced`. Owner
 de la **coquille** : fichiers de projet (`workspace/src/{AppName}/*`),
 composition, configuration et Domaine (`workspace/src/**/app/**`). Il lance
-les générateurs déterministes quand ils existent (`gen-app-skeleton --write`,
-`gen-source-tools --write` en Python) et écrit le squelette depuis la fiche de
+les générateurs déterministes quand ils existent (`gen-app-skeleton --write`
+en Python) et écrit le squelette depuis la fiche de
 langage sinon. Il part **seul et d'abord** : le projet doit exister pour que
 `dev-tools`, `dev-retrieval` et `dev-data` écrivent dedans, et la composition
 doit exposer les points d'attache que les agents et le graphe honoreront.
@@ -117,7 +117,7 @@ Prompt d'invocation :
 ```
 Construire la coquille de la MISSION {n}-{MissionName} — phase skeleton.
 Livrable : {DeliverableType} · archi : {archi} · backend : {backend|aucune} · langage : {lang}.
-Générateurs d'abord (gen-app-skeleton, gen-source-tools si sources déclarées), puis projet,
+Générateur d'abord (gen-app-skeleton), puis projet,
 composition contre l'IR, configuration par NOMS de variables, Domaine (BR-x calculables).
 N'écrire ni agent, ni outil, ni orchestration, ni prompt, ni dataset.
 Fin : `python .sdda/sdda.py gen-app-skeleton --check` et `validate-packaging` verts, une ligne de confirmation.
@@ -138,6 +138,20 @@ Construire le `BATCH` depuis l'IR :
 Un seul message multi-`Agent`, **≤ `MaxParallel`** simultanés (3 agents au
 plus ici — sous le défaut `MaxParallel: 3`). Chemins disjoints par ownership.
 
+**Couche `data` en `declared-sources`** — le code des outils de source est
+généré par la commande (0 token), **avant** le spawn de `dev-data` :
+
+```bash
+python .sdda/sdda.py gen-source-tools --write --scope code --mission {n}
+```
+
+Wrappers `src/{App}/data/tools/`, runtime `data/`, `sources.json`,
+`tool_specs.json`. Les contrats, eux, ont été générés en PHASE 2, avant l'IR
+(`/sdda-topology` STEP 4.bis, `--scope contracts`) : un contrat absent ici est
+`[DATA_TOOL_MISSING]`, jamais créé après coup — il décrirait un outil que l'IR
+et G2 n'ont pas vu. `dev-data` complète autour, n'édite pas ce qui est généré,
+et finit par `gen-source-tools --check --scope code`.
+
 **Garde par couche** (reprise à la granularité de l'item, `sdda_state.py`) —
 avant d'ajouter une couche au `BATCH` :
 
@@ -147,7 +161,7 @@ python .sdda/sdda.py state should-skip-item --phase build_socle --item {couche} 
   && echo "⊘ {couche}: skipped (pass sur les mêmes entrées, run $SDDA_RUN_ID)"
 
 # Si la couche PART : la boucle de correction est-elle encore ouverte ?
-python .sdda/sdda.py state should-retry-item --phase build_socle --item {couche}
+python .sdda/sdda.py state should-retry-item --phase build_socle --item {couche} --inputs-hash "$H"
 ```
 
 Exit 0 → la couche ne part pas. Exit 1 → elle part. Le hash porte la tranche
@@ -344,7 +358,7 @@ python .sdda/sdda.py state should-skip-item --phase build_agents --item {agent} 
   && echo "⊘ dev-agent {agent}: skipped (pass sur le même prompt et la même entrée IR)"
 
 # Si l'agent PART : la boucle de correction est-elle encore ouverte ?
-python .sdda/sdda.py state should-retry-item --phase build_agents --item {agent}
+python .sdda/sdda.py state should-retry-item --phase build_agents --item {agent} --inputs-hash "$H_{agent}"
 ```
 
 Le hash porte l'entrée `agents[{agent}]` de l'IR **et** le texte du prompt :
@@ -421,7 +435,8 @@ CAP sont advisory → la CAP ne peut pas être verte → 🟡 au mieux, WARN
 `[JUDGE_UNCALIBRATED]`.
 
 ```bash
-python .sdda/sdda.py eval-runner --mission {n} --level L4 --isolated \n  --executor {module}:{InProcessExecutor} --json \
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
+  --executor {module}:{InProcessExecutor} --json \
   > workspace/.sys/.validation/{n}-G5-agent.json
 ```
 
@@ -550,7 +565,8 @@ architecture que la fiche relue en revue ne décrit pas.
 ### 5.4 — ORCH GATE (G6)
 
 ```bash
-python .sdda/sdda.py eval-runner --mission {n} --level L5,L7 \n  --executor {module}:{CliExecutor} --json \
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
+  --executor {module}:{CliExecutor} --json \
   > workspace/.sys/.validation/{n}-G6-orch.json
 ```
 

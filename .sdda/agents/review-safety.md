@@ -31,7 +31,7 @@ juges risqué devient une hypothèse qu'il testera.
 
 Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
-## STEP 2 — Charger le contexte et lancer les scans déterministes
+## STEP 2 — Charger le contexte et les rapports des scans déterministes
 
 Read :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (`tools`, `trustPosture`,
@@ -43,14 +43,16 @@ Read :
   `workspace/src/**` (hors tests), `workspace/.sys/traces/runs/*.jsonl` (échantillon),
   `workspace/pipeline/datasets/adversarial/*.jsonl` (couverture, pas contenu du holdout).
 
-Exécute (0 token) et lis les rapports :
-```bash
-python .sdda/sdda.py scan-secrets --paths workspace/src workspace/.sys/traces workspace/pipeline/datasets
-python .sdda/sdda.py scan-pii --mission {n} --target vectorstore
-python .sdda/sdda.py audit-tool-scope --ir workspace/.sys/.ir/{n}-system.ir.json --src workspace/src
-```
+Lis les rapports des scans, que `/sdda-review` STEP 3.bis a joués **avant**
+l'étage B (0 token) — tu ne les relances pas :
+- `workspace/.sys/.validation/G7-stack.secrets.json` (`scan-secrets`) ;
+- `workspace/.sys/.validation/G7-{n}.pii.json` (`scan-pii --target vectorstore`) ;
+- `workspace/.sys/.validation/G7-{n}.toolscope.json` (`audit-tool-scope`, IR **et** traces).
 
-Un scan non exécutable est un finding, pas une excuse : `[SAFETY_SCAN_UNAVAILABLE]`, serious.
+Relancer un scan ici réécrivait la part de G7 que la gate lit : la commande
+les rejouait ensuite de son côté, et le verdict portait sur une exécution que
+ton rapport ne citait pas. Un rapport de scan absent est un finding, pas une
+excuse : `[SAFETY_SCAN_UNAVAILABLE]`, serious.
 
 ---
 

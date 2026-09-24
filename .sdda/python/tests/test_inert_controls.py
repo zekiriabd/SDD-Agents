@@ -192,12 +192,37 @@ def test_the_build_loop_stops_at_its_declared_iteration_ceiling(project: Path) -
 
 def test_the_build_loop_also_stops_on_its_own_budget(project: Path) -> None:
     run_id = _open_run(project)
-    sdda_state.add_cost(project, run_id, usd=20.0, label="dev-agent")
+    sdda_state.add_cost(project, run_id, usd=20.0, label="dev-agent", phase="build_agents", item="billing")
     code, out = run_main(sdda_state.main,
                          ["should-retry-item", "--root", str(project), "--run-id", run_id,
                           "--phase", "build_agents", "--item", "billing",
                           "--max-iter", "99", "--max-cost-usd", "15"])
     assert code == 1 and "BUILD_LOOP_BUDGET_EXHAUSTED" in out
+
+
+def test_the_loop_budget_is_the_loop_s_not_the_run_s(project: Path) -> None:
+    """`BuildLoopMaxCostUsd` était comparé au cumul du RUN : passé $15 de
+    construction, plus aucun item ne pouvait être retenté, même une première
+    fois — et une boucle emballée restait invisible tant que le run n'avait
+    pas dépensé ailleurs."""
+    run_id = _open_run(project)
+    sdda_state.add_cost(project, run_id, usd=40.0, label="dev-prompt")                 # le run, pas une boucle
+    sdda_state.add_cost(project, run_id, usd=9.0, label="dev-agent/billing", phase="build_agents", item="billing")
+    run = sdda_state.load_run(project, run_id)
+    assert sdda_state.should_retry_item(run, "build_agents", "routing", max_iter=3, max_cost_usd=15)[0]
+    assert sdda_state.should_retry_item(run, "build_agents", "billing", max_iter=3, max_cost_usd=15)[0]
+    sdda_state.add_cost(project, run_id, usd=7.0, label="dev-agent/billing", phase="build_agents", item="billing")
+    allowed, cls, _ = sdda_state.should_retry_item(sdda_state.load_run(project, run_id), "build_agents", "billing",
+                                                   max_iter=3, max_cost_usd=15)
+    assert not allowed and cls == "BUILD_LOOP_BUDGET_EXHAUSTED"
+
+
+def test_a_build_span_attributes_its_cost_to_the_item_loop(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    run_id = _open_run(project)
+    monkeypatch.setenv("SDDA_RUN_ID", run_id)
+    run_main(build_trace.main, ["agent", "--root", str(project), "--agent", "dev-agent", "--item", "billing",
+                                "--phase", "build_agents", "--cost-usd", "2.5", "--json"])
+    assert sdda_state.loop_cost(sdda_state.load_run(project, run_id), "build_agents", "billing") == pytest.approx(2.5)
 
 
 def test_each_item_carries_its_own_counter(project: Path) -> None:

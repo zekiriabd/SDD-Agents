@@ -52,7 +52,7 @@ quel que soit le flag.
 | Flag | Effet | Audit |
 |---|---|---|
 | `--force` | une gate 🟡 (G2 coût > cible sous cap, G5/G6 variance élevée, G7 findings serious sous seuil) **continue** au lieu de STOP. Ne change **rien** pour une gate 🔴. | 1 ligne `bypasses.jsonl` par gate jaune assumée |
-| `--resume` | lit `sdda_state.py resume-target` et saute les phases `pass` du dernier run ; dans la phase reprise, `/sdda-build` saute aussi les **items** `pass` sur les mêmes entrées (couche du socle, instance de `dev-agent` — `should-skip-item`) ; les gates sont **rejouées** (0 token) pour vérifier qu'elles sont toujours vertes (un hash a pu bouger — R2) | — |
+| `--resume` | ouvre un run lié au précédent (`new-run --resume`), lit `resume-target` et saute les phases `pass` de la lignée ; dans la phase reprise, `/sdda-build` saute aussi les **items** `pass` sur les mêmes entrées (couche du socle, instance de `dev-agent` — `should-skip-item`) ; les gates sont **rejouées** (0 token) pour vérifier qu'elles sont toujours vertes (un hash a pu bouger — R2) | — |
 | `--from-phase {mission\|caps\|topology\|build\|eval\|review\|acceptance}` | point de départ explicite. Refusé si une gate amont n'est pas verte : **aucun saut d'état** (LIFECYCLE §1) | — |
 | `--no-review` | saute PHASE 7 et donc G7 ; la MISSION s'arrête à `Tested` et PHASE 8 **n'est pas exécutée** (G8 exige G7). Refusé si `SDDA_ENV ∈ {production, ci}` ou `CI=true` | 1 ligne `bypasses.jsonl` |
 
@@ -122,18 +122,31 @@ python .sdda/sdda.py preflight-force-cumul \
 
 ## STEP 1.ter — État du run et reprise
 
+Sans `--resume` :
 ```bash
 RUN_ID=$(python .sdda/sdda.py state new-run \
-  --mission {n} --command "/sdda-full" --tags "$TAGS")     # TAGS = force,resume,from-phase=…,no-review
+  --mission {n} --command "/sdda-full" --tags "$TAGS")     # TAGS = force,from-phase=…,no-review
 export SDDA_RUN_ID="$RUN_ID"      # propagé à toutes les sous-commandes : un seul audit-trail
 ```
 
-**Si `--resume`** :
+**Avec `--resume`** — un seul appel, qui lit le run à reprendre **avant** d'ouvrir le nouveau :
 ```bash
-RUN_ID=$(python .sdda/sdda.py state get-run --mission {n} --latest)
+RUN_ID=$(python .sdda/sdda.py state new-run \
+  --mission {n} --command "/sdda-full" --tags "$TAGS" --resume)   # lié au précédent par `resumedFrom`
+export SDDA_RUN_ID="$RUN_ID"
 RESUME_TARGET=$(python .sdda/sdda.py state resume-target --run-id "$RUN_ID")
 echo "RESUME: reprise à $RESUME_TARGET"
 ```
+
+L'ancien enchaînement — `new-run`, puis `get-run --latest` — lisait le run
+qu'on venait d'ouvrir, vide : `resume-target` rendait `mission` et la reprise
+repartait de la PHASE 0. Le run de reprise hérite désormais de sa lignée
+(`resumedFrom`) : phases franchies, items `pass` (`should-skip-item`),
+tentatives et coût de chaque boucle de correction (`should-retry-item`,
+`BuildLoopMaxIter`, `BuildLoopMaxCostUsd`). Une reprise ne remet donc aucune
+borne à zéro. Sans run antérieur, `--resume` sort en `[STATE_RUN_NOT_FOUND]` :
+il n'y a rien à reprendre, et repartir de zéro en silence serait mentir sur ce
+qu'on a demandé.
 
 Phases canoniques (`PIPELINE_PHASES` de `sdda_state.py`) :
 `mission` · `caps` · `topology` · `eval_datasets` · `build_socle` ·
@@ -250,18 +263,8 @@ qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
 vérifie, il ne la prend pas.
 
   /sdda-roster {n} --validate   dit quels trous restent
+  /sdda-roster {n}              (ré)écrit un gabarit pré-rempli depuis la MISSION et les CAPs
   /sdda-full {n} --resume       reprend ici une fois le manifeste complet
-```
-
-```
-⏸ /sdda-full {n} — arrêt sur une décision qui vous appartient
-
-Le roster est la décision d'architecture agentic : combien d'agents, lesquels,
-qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
-vérifie, il ne la prend pas.
-
-  /sdda-roster {n}            écrit un gabarit pré-rempli, puis le vérifie
-  /sdda-full {n} --resume     reprend ici une fois le manifeste complet
 ```
 
 **Pourquoi ce STEP existe.** `architect-topology` matérialise un roster
@@ -289,7 +292,7 @@ Garde `should-skip-step topology`. Exécuter `/sdda-topology {n}`.
 ```
 🟡 /sdda-full {n} — arrêt sur gate {Gk} jaune ({raison courte})
 
-Rapport : workspace/.sys/.validation/{n}-G{k}-{gate}.json
+Rapport : workspace/.sys/.validation/G{k}-{n}-{MissionName}[.{part}].json   (G1/G5 : aussi un par CAP, G3 : un par outil)
   {détail : coût estimé $0.07 > cible $0.05 (cap $0.25) | CAP 1-2 variance 18% > 15% | …}
 
 Le jaune est une information, pas une indécision : le prochain run peut ne pas passer.
@@ -449,7 +452,7 @@ REVUE (phase 7)   {skipped (--no-review) |}
 ACCEPTATION (phase 8)   {non exécutée (G7 absente) |}
   Holdout          : {Metric} {mesuré} vs cible {Target} (k={k})                     G8 {🟢|🟡|🔴}
   Non-régression   : {ok | -x.x% sur {metric} (tolérance {t}%, hors bande {s}σ) | bruit : -x.x% sous {s}σ de la baseline}
-  Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID}}
+  Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID} --label "…"}
 
 Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--force) · …}  → workspace/.sys/.audit/bypasses.jsonl
 Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {durée} · top : {agent} ${x}

@@ -278,7 +278,7 @@ sdda validate-mission --mission 1                     # après `pip install -e .
 ```
 
 La première ne suppose **aucune installation**, et c'est elle qu'écrivent les
-22 fiches d'agents et les 11 commandes. Un framework dont les prompts exigent un
+<!--sdda:count agents-->23<!--/sdda:count--> fiches d'agents et les <!--sdda:count commands-->11<!--/sdda:count--> commandes. Un framework dont les prompts exigent un
 `pip install` préalable échoue au premier clone — et l'agent qui reçoit
 `command not found` invente la sortie du script au lieu de s'arrêter.
 
@@ -338,26 +338,35 @@ compilée, régénérable, jamais éditée à la main. Détail et schéma :
    |                                                         [MISSION GATE]
  PHASE 1   CAPABILITIES       po-capabilities        -> pipeline/caps/{n}-{m}-*.md
    |                                                         [CAP GATE]
+   |         ROSTER           roster validate (script, 0 token) — feats/{n}-roster.md complet,
+   |                          sinon STOP humain AVANT de payer l'architecte (P7)
  PHASE 2   TOPOLOGIE          architect-topology          -> pipeline/topology/{n}-topology.md
+   |         gen-source-tools --scope contracts (script, si sources déclarées)
    |         + architect-rag, architect-data,          + pipeline/contracts/**
    |           architect-memory, architect-tools  (parallèle)
-   | PHASE 2.9 COMPILATION IR  ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
+   | PHASE 2.9 COMPILATION IR  validate-topology (passe complète) puis
+   |                          ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
    |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
+ PHASE 6a  DATASETS           qa-evals --datasets-only  -> golden · holdout · calibration · adversarial
+   |                          (AVANT le code : G4 et G5 en ont besoin, et le code ne voit jamais
+   |                           le jeu qui le jugera)
  PHASE 3   SOCLE              dev-backend (squelette : projet, composition, config, Domaine — seul, d'abord)
    |                          puis dev-tools || dev-retrieval || dev-data     (parallèle)
+   |                          (+ gen-source-tools --scope code avant dev-data, si sources déclarées)
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
  PHASE 4   PROMPTS + AGENTS   dev-prompt -> dev-agent  (parallèle par agent)
    |                                                         [AGENT GATE]
- PHASE 5   ORCHESTRATION      dev-orchestration             -> graphe / superviseur / routeur
-   |       + dev-api (surface d'exposition)
-   |       + dev-backend (packaging : exécutable, image, README d'exploitation)
+ PHASE 5   ORCHESTRATION      dev-orchestration -> dev-api -> dev-backend (packaging)   (SÉQUENTIEL :
+   |                          graphe, puis la surface qui l'importe, puis le livrable qui l'embarque)
    |                                                         [ORCH GATE]
- PHASE 6   EVAL + TESTS       qa-evals || qa-tests
+ PHASE 6   EVAL + TESTS       qa-evals (complète suites, baselines) || qa-tests
    |
- PHASE 7   REVUE              Etage A : spec-compliance seul
-   |                          Etage B : agent-safety || cost-latency ||
-   |                                    orchestration || rag-quality   (parallèle)
+ PHASE 7   REVUE              Etage A : review-spec seul
+   |                          scans déterministes (secrets, PII, scopes d'outils)
+   |                          Etage B : review-safety || review-cost ||
+   |                                    review-orchestration || review-rag   (parallèle)
    |                          Etage C : review-adversarial (système vivant)
+   |                                    + set adversarial versionné joué en live
    |                                                         [SAFETY GATE]
  PHASE 8   ACCEPTATION        mesure de l'objectif chiffré sur holdout
                               + non-régression vs baseline
@@ -572,7 +581,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->407<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->422<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Familles propres à SDD_Agents :
