@@ -112,6 +112,70 @@ def normalize(path: str) -> str:
     return posixpath.normpath(p)
 
 
+_GIT_BASH_DRIVE_RE = re.compile(r"^/(?:mnt/|cygdrive/)?([A-Za-z])(?=/|$)")
+
+
+def _native(path: str) -> str:
+    """`/g/Dev/x` (Git Bash, MSYS), `/mnt/g/…` (WSL), `/cygdrive/g/…` -> `G:/Dev/x`.
+
+    Sous Windows, le shell du harnais est Git Bash : un agent y écrit
+    naturellement `/g/Developement/SDD-Agents/workspace/…`. `Path` ne sait pas
+    le lire, le chemin semblait hors projet, et l'écriture passait.
+    """
+    p = str(path).replace("\\", "/")
+    if os.name == "nt" or CASE_INSENSITIVE:
+        m = _GIT_BASH_DRIVE_RE.match(p)
+        if m:
+            p = m.group(1).upper() + ":" + (p[m.end():] or "/")
+    return p
+
+
+def _is_absolute(p: str) -> bool:
+    return p.startswith("/") or bool(re.match(r"^[A-Za-z]:/", p)) or p.startswith("//")
+
+
+def relative_to_root(root: Path, target: str, cwd: Path | str | None = None) -> str:
+    """Un chemin tel que l'agent l'a écrit -> relatif à la racine du projet.
+
+    LEXICAL d'abord (`..` résolu sans toucher au disque, casse du système de
+    fichiers respectée) : c'est ce qui rend `./src/../workspace/…` et
+    `Workspace/…` comparables à la matrice. Un chemin hors projet est rendu
+    absolu, tel quel : aucune zone ne le régit.
+    """
+    t = _native(str(target).strip())
+    base = _native(Path(cwd).as_posix()) if cwd else _native(Path(root).as_posix())
+    if not _is_absolute(t):
+        t = base.rstrip("/") + "/" + t
+    t = posixpath.normpath(t)
+    r = posixpath.normpath(_native(Path(root).as_posix()))
+    tf, rf = (t.casefold(), r.casefold()) if CASE_INSENSITIVE else (t, r)
+    if tf == rf:
+        return "."
+    if tf.startswith(rf.rstrip("/") + "/"):
+        return t[len(r.rstrip("/")) + 1:]
+    return t
+
+
+def real_relative_to_root(root: Path, target: str, cwd: Path | str | None = None) -> str | None:
+    """Comme `relative_to_root`, liens symboliques et jonctions RÉSOLUS — ou None.
+
+    Un lien `src/App/vendor -> ../../pipeline/datasets` rend lexicalement un
+    chemin anodin et physiquement le golden. On rend l'autre lecture quand elle
+    diffère ; l'appelant juge les deux.
+    """
+    lexical = relative_to_root(root, target, cwd)
+    try:
+        absolute = Path(root) / lexical if not _is_absolute(lexical) else Path(lexical)
+        real = Path(os.path.realpath(absolute))
+        real_root = Path(os.path.realpath(root))
+        rel = real.relative_to(real_root).as_posix() if real != real_root else "."
+    except (OSError, ValueError):
+        return None
+    if (rel.casefold() if CASE_INSENSITIVE else rel) == (lexical.casefold() if CASE_INSENSITIVE else lexical):
+        return None
+    return rel
+
+
 @functools.lru_cache(maxsize=4096)
 def _to_regex(pattern: str, bindings: tuple[tuple[str, str], ...] = (),
               fold: bool = False) -> re.Pattern[str]:
@@ -188,6 +252,96 @@ def matches(pattern: str, path: str, bindings: dict[str, str] | None = None) -> 
     if last and not any(ch in last for ch in _GLOB_CHARS):
         return bool(_to_regex(pattern.rstrip("/") + "/**", key, CASE_INSENSITIVE).match(normalized))
     return False
+
+
+# ---------------------------------------------------------------------------
+# Zones protégées — écrites par des SCRIPTS, jamais par un outil d'édition
+# ---------------------------------------------------------------------------
+#: Trois répertoires ne sont écrits que par des scripts, en E/S Python. Un
+#: `Write` sur l'un d'eux est fautif sans qu'on ait besoin de savoir QUI le
+#: tente — sauf une exception, déclarée et étroite (cf. `protected_write`).
+#:
+#:   pipeline/baselines/  `promote_baseline.py` — retouchée à la main, la
+#:                        référence rend toute non-régression tautologique ;
+#:   .sys/.validation/    les rapports de gate. Ils sont du JSON en clair, non
+#:                        signé, et `gate_status` ne lit que leur `ok` : un
+#:                        rapport `{"ok": true}` déposé par `Write` rendait
+#:                        n'importe quelle gate verte, et `.sys/` est gitignoré,
+#:                        donc la contrefaçon n'atteignait jamais une revue ;
+#:   .sys/.audit/         `bypasses.jsonl`, append-only « hooks framework ».
+#:
+#: Nommées en constantes pour que `sync_error_registry` les voie : il ne lit que
+#: les littéraux (`deny(HOOK, "CLASS", …)` ou `CLS_X = "CLASS"`).
+CLS_GATE_REPORT_FORGERY = "GATE_REPORT_FORGERY"
+CLS_BASELINE_OWNERSHIP_VIOLATION = "BASELINE_OWNERSHIP_VIOLATION"
+
+PROTECTED_ZONES: dict[str, tuple[str, str]] = {
+    "workspace/pipeline/baselines": (
+        CLS_BASELINE_OWNERSHIP_VIOLATION,
+        "la baseline s'écrit par `python .sdda/sdda.py promote-baseline`, jamais par Write/Edit : "
+        "déplacer la référence rend toute non-régression tautologique"),
+    "workspace/.sys/.validation": (
+        CLS_GATE_REPORT_FORGERY,
+        "un rapport de gate est écrit par le script de la gate, jamais par Write/Edit : "
+        "un `{\"ok\": true}` déposé à la main rend verte une gate que rien n'a mesurée"),
+    "workspace/.sys/.audit": (
+        CLS_GATE_REPORT_FORGERY,
+        "le journal des bypasses est append-only et n'est écrit que par les scripts : "
+        "un audit qu'on peut réécrire n'est pas un audit"),
+}
+
+#: Ce qui, dans `.sys/.validation/`, est un RAPPORT DE GATE — ce que
+#: `gate_status` lit. Aucun agent ne l'écrit par un outil d'édition, même si un
+#: motif de ses `writes:` le couvrait : c'est la ligne qui ne se négocie pas.
+_GATE_REPORT_SUFFIXES = (".json",)
+
+
+def protected_zone(path: str) -> tuple[str, str, str] | None:
+    """`(zone, classe, fix)` si `path` est dans une zone protégée, sinon None."""
+    rel = normalize(path)
+    folded = rel.casefold() if CASE_INSENSITIVE else rel
+    for zone, (cls, fix) in PROTECTED_ZONES.items():
+        z = zone.casefold() if CASE_INSENSITIVE else zone
+        if folded == z or folded.startswith(z + "/"):
+            return zone, cls, fix
+    return None
+
+
+def protected_write(loader: dict[str, Any], agent: str, path: str,
+                    bindings: dict[str, str] | None = None) -> tuple[str, str] | None:
+    """Verdict d'une écriture en zone protégée : None si permise, sinon `(classe, fix)`.
+
+    La règle était « personne », jouée AVANT l'identité — or `loader.yml` y
+    déclare les rapports des six reviewers (`reports/*-{n}.md`,
+    `adversarial-findings/{n}.jsonl`) : la phase 7 ne pouvait rien écrire. Le
+    refus aveugle protégeait les gates en rendant la revue impossible.
+
+    La règle devient étroite et nommée :
+
+    - le fil principal (pas d'agent) reste refusé : un humain qui écrit un
+      rapport de gate à la main fabrique une gate verte ;
+    - un agent l'est aussi, SAUF pour un chemin qu'un motif de SES `writes:`
+      couvre ET dont le préfixe littéral est DANS la zone — un motif large
+      (`workspace/**`) n'ouvre pas une zone protégée par accident ;
+    - un rapport de gate (`.json` sous `.sys/.validation/`) reste refusé à
+      tous, déclaré ou non. Les `.md` des reviewers ne sont pas lus par
+      `gate_status` ; le `.json` est ce qu'il lit.
+    """
+    found = protected_zone(path)
+    if found is None:
+        return None
+    zone, cls, fix = found
+    rel = normalize(path)
+    if not agent or not isinstance(loader.get(agent), dict):
+        return cls, fix
+    if zone.endswith("/.validation") and rel.lower().endswith(_GATE_REPORT_SUFFIXES):
+        return cls, fix
+    for pattern in writes_of(loader, agent):
+        literal = _zone_root(pattern)
+        if (literal == zone or literal.startswith(zone + "/")) and matches(pattern, rel, bindings):
+            if not any(matches(f, rel, bindings) for f in forbidden_of(loader, agent)):
+                return None
+    return cls, fix
 
 
 def load_loader(root: Path) -> dict[str, Any]:
