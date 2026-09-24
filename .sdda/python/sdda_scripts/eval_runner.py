@@ -177,9 +177,78 @@ def resolve_grader(name: str, overrides: dict[str, GraderFn] | None = None, conf
         grader = graders_registry.get(name)
     except SddaError:            # [AC_GRADER_UNKNOWN] — la liste est close
         return None
-    if not getattr(grader, "available", True):
+    # Un juge sans client propre devient disponible quand la configuration lui
+    # en apporte un (le client réel construit par `judge_clients`, ou un faux).
+    if not getattr(grader, "available", True) and (config or {}).get("client") is None:
         return None
     return _adapt(grader, config or {})
+
+
+def _evaluated_models(root: Path, ir: dict[str, Any] | None, suite: dict[str, Any], config: LayeredConfig | None) -> list[str]:
+    """Le(s) modèle(s) qu'une suite évalue : le tier de son agent, résolu par la `RuntimeTierMap`.
+
+    Sans `agentRef` (suite de système), tous les modèles des agents de l'IR :
+    le juge ne doit être AUCUN d'eux (`JudgeMustDifferFromEvaluated`).
+    """
+    from sdda_lib.layered_config import read_runtime_tier_map  # noqa: PLC0415
+
+    try:
+        tier_map = read_runtime_tier_map(root)
+    except Exception:  # noqa: BLE001 — une section illisible ne doit pas empêcher de mesurer
+        tier_map = {}
+    default_tier = str(config.get("DefaultTier", "balanced") if config else "balanced")
+    agents = [a for a in ((ir or {}).get("agents") or []) if isinstance(a, dict)]
+    ref = str(suite.get("agentRef") or "")
+    chosen = [a for a in agents if a.get("id") == ref] if ref else agents
+    return sorted({tier_map[t] for t in (str(a.get("tier") or default_tier) for a in chosen) if tier_map.get(t)})
+
+
+class JudgeTrace:
+    """Les spans des appels de juge d'un run d'eval — un fichier de trace à part, complet.
+
+    Le juge est un appel LLM facturé : il laisse une trace comme le produit,
+    au même format, sous `{run_id}-judge.jsonl`, avec son propre span racine
+    — un fichier sans racine serait signalé « run sans début ni fin » par
+    `tracing.summarize`. Il n'est PAS mêlé à la trace du produit : son coût
+    est un coût d'évaluation, et l'additionner à celui du système évalué
+    ferait dépasser un plafond que le produit respecte.
+    """
+
+    def __init__(self, root: Path, run_id: str) -> None:
+        import threading  # noqa: PLC0415
+
+        self.root = root
+        self.run_id = f"{run_id}-judge"
+        self.root_span_id = f"{run_id}-judge-root"
+        self.started = _now_iso()
+        self._t0 = time.monotonic()
+        self._lock = threading.Lock()
+        self._writer: Any = None
+        self._seq = 0
+
+    def __call__(self, name: str, attrs: dict[str, Any], status: str, duration_ms: float) -> None:
+        from sdda_lib import tracing  # noqa: PLC0415
+
+        with self._lock:
+            if self._writer is None:
+                self._writer = tracing.TraceWriter(self.root, self.run_id)
+            self._seq += 1
+            span_id = f"{self.run_id}-{self._seq}"
+        self._writer.emit(name, span_id=span_id, parent_span_id=self.root_span_id, attributes=attrs,
+                          status=status, duration_ms=round(duration_ms))
+
+    @property
+    def path(self) -> Path | None:
+        return self._writer.path if self._writer is not None else None
+
+    def close(self) -> None:
+        from sdda_lib import tracing  # noqa: PLC0415
+
+        if self._writer is None:
+            return
+        self._writer.emit(f"{tracing.RUN_SPAN} eval-judge", span_id=self.root_span_id,
+                          attributes={"sdda.run.kind": "eval-judge"}, start=self.started, end=_now_iso(),
+                          duration_ms=round((time.monotonic() - self._t0) * 1000))
 
 
 def _adapt(grader: Any, config: dict[str, Any]) -> GraderFn:
@@ -369,6 +438,8 @@ def execute_suite(
     graders: dict[str, GraderFn] | None = None,
     report: Report | None = None,
     item_limit: int | None = None,
+    ir: dict[str, Any] | None = None,
+    judge_trace: JudgeTrace | None = None,
 ) -> tuple[SuiteResult, dict[str, float], list[dict[str, Any]], int]:
     """k passages complets du dataset. Aucun cache : chaque run rappelle l'exécuteur.
 
@@ -398,7 +469,19 @@ def execute_suite(
     if item_limit is not None:
         items = items[:item_limit]
     grader_name = str(suite.get("grader", ""))
-    grader = resolve_grader(grader_name, graders, suite.get("graderConfig") if isinstance(suite.get("graderConfig"), dict) else None)
+    grader_config = suite.get("graderConfig") if isinstance(suite.get("graderConfig"), dict) else None
+    if graders_registry.normalize_name(grader_name) == "llm-judge" and not (graders and grader_name in graders):
+        # Le juge est construit ICI, depuis STACK.md (`JudgeModel`, clé nommée
+        # par la fiche provider) — sauf si la suite ou un test injecte le sien.
+        from sdda_lib.graders import judge_clients  # noqa: PLC0415
+
+        grader_config, problem = judge_clients.prepare_config(
+            root, grader_config, layered=config,
+            evaluated_model_id=_evaluated_models(root, ir, suite, config) or None,
+            span_sink=judge_trace)
+        if problem is not None and report is not None:
+            report.error(problem.cls, f"suite `{sid}` : {problem.error}", problem.fix, sid)
+    grader = resolve_grader(grader_name, graders, grader_config)
     if grader is None:
         if report is not None:
             report.error("AC_GRADER_UNKNOWN", f"suite `{sid}` : grader `{grader_name}` indisponible",
@@ -469,6 +552,17 @@ def execute_suite(
                 "costUsd": round(ir_item.cost_usd, 6), "latencyMs": round(ir_item.latency_ms, 2), "error": ir_item.error,
             })
         result.runs.append(run)
+
+    # Un grader peut retirer au verdict son pouvoir de bloquer, item par item :
+    # le juge LLM le fait quand il n'est pas calibré (P9) ou quand il est le
+    # modèle évalué (`JudgeMustDifferFromEvaluated`). La suite le reprend — sans
+    # quoi `detail["advisory"]` serait une annotation que rien ne lit, et le
+    # score d'un juge qui se note lui-même bloquerait comme une mesure.
+    reasons = sorted({str(it.detail.get("advisory_reason") or "advisory")
+                      for run in result.runs for it in run.items if it.detail.get("advisory")})
+    if reasons and not result.advisory:
+        result.advisory = True
+        result.notes.append("advisory (grader) : " + " | ".join(reasons[:3]))
 
     per_class_all = {cls: sum(v) / len(v) for cls, v in class_scores.items() if v}
     # Seules les classes CRITIQUES entrent dans le verdict : une classe
@@ -561,6 +655,10 @@ def run_evals(
 
     hard_cap = (ir.get("budget") or {}).get("costPerRunHardCapUsd")
     executed: list[ExecutedSuite] = []
+    rid = run_id or run_id_now()
+    # Écrit seulement si un juge RÉEL est appelé : ni les faux des tests, ni
+    # les graders déterministes n'ouvrent de fichier.
+    judge_trace = JudgeTrace(root, rid) if write_report else None
     for suite in selected:
         plan = plan_suite(root, suite, config, runs_override=runs_override, base_seed=base_seed)
         sid = plan.id
@@ -572,7 +670,8 @@ def run_evals(
             (report.error if in_ci else report.warn)(
                 "EVAL_SINGLE_RUN_FORBIDDEN", f"suite `{sid}` : k=1 — un run n'est pas une mesure, la variance est inconnue",
                 "EvalRuns >= 3 (5 si critique) ; k=1 n'est toléré qu'en dev local", sid)
-        result, per_class_all, rows, exec_errors = execute_suite(root, plan, executor, config=config, graders=graders, report=report, item_limit=item_limit)
+        result, per_class_all, rows, exec_errors = execute_suite(root, plan, executor, config=config, graders=graders, report=report,
+                                                                 item_limit=item_limit, ir=ir, judge_trace=judge_trace)
         pins = current_pins(root, ir, suite=suite)
         ex = ExecutedSuite(plan=plan, result=result, pins=pins, per_class_all=per_class_all, items=rows, executor_errors=exec_errors)
         base = baselines.get(sid)
@@ -598,7 +697,8 @@ def run_evals(
     summary = summarize(results)
     summary["verdict"] = verdict
 
-    rid = run_id or run_id_now()
+    if judge_trace is not None:
+        judge_trace.close()
     payload: dict[str, Any] = {
         "missionId": mid,
         "runId": rid,
@@ -620,6 +720,8 @@ def run_evals(
         "suites": [ex.to_dict() for ex in executed],
         "findings": {"errors": [f.to_dict() for f in report.errors], "warnings": [f.to_dict() for f in report.warnings]},
     }
+    if judge_trace is not None and judge_trace.path is not None:
+        payload["judgeTrace"] = paths.rel(root, judge_trace.path)
 
     written: dict[str, str] = {}
     if write_report and executed:

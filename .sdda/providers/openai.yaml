@@ -16,6 +16,7 @@ schema: sdda.provider/v1
 name: openai
 endpoint_kind: openai-compat          # Responses API / Chat Completions
 base_url_env: OPENAI_BASE_URL         # défaut SDK : https://api.openai.com/v1
+default_base_url: https://api.openai.com/v1   # lu par graders/judge_clients.py si la variable est absente
 auth_env: OPENAI_API_KEY
 
 tier_map:

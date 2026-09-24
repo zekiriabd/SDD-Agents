@@ -24,6 +24,7 @@ schema: sdda.provider/v1
 name: anthropic
 endpoint_kind: native                 # API Anthropic native (Messages API)
 base_url_env: ANTHROPIC_BASE_URL      # défaut SDK : https://api.anthropic.com
+default_base_url: https://api.anthropic.com   # lu par graders/judge_clients.py si la variable est absente
 auth_env: ANTHROPIC_API_KEY
 
 tier_map:

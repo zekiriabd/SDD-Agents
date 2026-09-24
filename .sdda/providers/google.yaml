@@ -16,6 +16,7 @@ schema: sdda.provider/v1
 name: google
 endpoint_kind: native                 # API Gemini native (generativelanguage)
 base_url_env: GOOGLE_GEMINI_BASE_URL  # défaut SDK : https://generativelanguage.googleapis.com
+default_base_url: https://generativelanguage.googleapis.com   # lu par graders/judge_clients.py si la variable est absente
 auth_env: GEMINI_API_KEY
 
 tier_map:
