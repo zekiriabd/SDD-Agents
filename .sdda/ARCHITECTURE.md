@@ -224,7 +224,7 @@ with the tree.
 | `assets/` | the data (root of `kind: local` stores, SDD_Pro's `assets/`) and `.env` | **the human** | no |
 | `seed/` | the ground truth — annotated scenarios, labels | **the human** | no |
 | `pipeline/` | everything the pipeline generates: MISSION, CAPs, topology, contracts, ADRs, sets, suites, baselines, calibration | the `po-*`, `architect-*` and `qa-evals` agents, the scripts — **never a `dev-*`** under datasets/suites/baselines/calibration | partly |
-| `src/` | the generated application, prompts and frozen schemas included | the seven `dev-*`, `qa-tests`, the generators | yes |
+| `src/` | the generated application, prompts and frozen schemas included | the eight `dev-*`, `qa-tests`, the generators | yes |
 | `.sys/` | internal state and run output | the scripts | yes |
 
 **The user's input fits in four places**, deliberately: `STACK.md` (the
