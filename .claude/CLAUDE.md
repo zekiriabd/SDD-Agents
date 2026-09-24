@@ -228,7 +228,7 @@ qu'il devait laisser au framework. La v6 le dit par l'arbre.
 | `assets/` | les données (racine des stores `kind: local`, l'`assets/` de SDD_Pro) et `.env` | **l'humain** | non |
 | `seed/` | la vérité terrain — scénarios annotés, labels | **l'humain** | non |
 | `pipeline/` | tout ce que le pipeline génère : MISSION, CAPs, topologie, contrats, ADR, jeux, suites, baselines, calibration | les agents `po-*`, `architect-*`, `qa-evals`, les scripts — **jamais un `dev-*`** sous datasets/suites/baselines/calibration | en partie |
-| `src/` | l'application générée, prompts et schémas figés compris | les sept `dev-*`, `qa-tests`, les générateurs | oui |
+| `src/` | l'application générée, prompts et schémas figés compris | les huit `dev-*`, `qa-tests`, les générateurs | oui |
 | `.sys/` | état interne et sorties de run | les scripts | oui |
 
 **L'entrée de l'utilisateur tient en quatre dépôts**, et c'est voulu : `STACK.md`
