@@ -18,6 +18,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .errors import BoundaryViolation, SourceUnavailable
 from .formats import read_records
@@ -135,7 +136,7 @@ def build_index(registry: Registry, source: Source, base: Path) -> SourceIndex:
     return index
 
 
-def record_at(location: Location, source: Source) -> dict | None:
+def record_at(location: Location, source: Source) -> dict[str, Any] | None:
     """Relit l'enregistrement à son emplacement. L'index ne garde aucune donnée.
 
     Conserver les enregistrements en mémoire ferait tenir la source entière dans

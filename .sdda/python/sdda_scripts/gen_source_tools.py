@@ -449,17 +449,20 @@ def render_wrapper(ctx: Context, source_id: str, src: dict[str, Any], schema: di
     lines.extend(["", "", f"async def {tool_name}(params: Input, *, ctx: ToolContext) -> Output:"])
     lines.append(f'    """{_docstring(src, kind)}"""')
     if kind == "lookup":
-        call = ["    return await lookup_record(", "        source=SOURCE,",
+        call = ["    result: Output = await lookup_record(", "        source=SOURCE,",
                 f"        key=params.{key},", "        record_model=Record,", "        output_model=Output,"]
     elif kind == "search":
-        call = ["    return await search_records(", "        source=SOURCE,",
+        call = ["    result: Output = await search_records(", "        source=SOURCE,",
                 "        filters=params.model_dump(exclude_none=True),", "        record_model=Record,",
                 "        output_model=Output,"]
     else:
-        call = ["    return await count_records(", "        source=SOURCE,",
+        call = ["    result: Output = await count_records(", "        source=SOURCE,",
                 "        filters=params.model_dump(exclude_none=True),", "        output_model=Output,"]
     call.extend(["        ctx=ctx,", "        pii_fields=PII_FIELDS,",
-                 "        untrusted_fields=UNTRUSTED_FIELDS,", "    )"])
+                 "        untrusted_fields=UNTRUSTED_FIELDS,", "    )",
+                 # Le runtime rend `Any` (il sert aussi les tests, sans modèle) :
+                 # nommer le type ici garde le wrapper propre sous `mypy --strict`.
+                 "    return result"])
     lines.extend(call)
 
     header = [
