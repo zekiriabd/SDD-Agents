@@ -1,4 +1,24 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(/workspace/assets/.env)",
+      "Read(/workspace/assets/.env.local)",
+      "Read(/workspace/assets/.env.production)",
+      "Read(/workspace/assets/.env.development)",
+      "Read(/workspace/src/**/.env)",
+      "Read(/workspace/src/**/.env.local)",
+      "Read(/workspace/src/**/.env.production)",
+      "Read(/workspace/src/**/.env.development)",
+      "Read(./workspace/assets/.env)",
+      "Read(./workspace/assets/.env.local)",
+      "Read(./workspace/assets/.env.production)",
+      "Read(./workspace/assets/.env.development)",
+      "Read(./workspace/src/**/.env)",
+      "Read(./workspace/src/**/.env.local)",
+      "Read(./workspace/src/**/.env.production)",
+      "Read(./workspace/src/**/.env.development)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -61,7 +81,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
