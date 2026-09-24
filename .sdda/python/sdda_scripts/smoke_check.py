@@ -296,9 +296,9 @@ def check_config(root: Path, report: Report) -> dict[str, int]:
     `OnBoundExceeded: foo` ou une `CitationMode: requried` n'échoue sinon
     nulle part, et le premier agent la lit comme une consigne.
     """
-    from sdda_lib.layered_config import validate_config
+    from sdda_lib.layered_config import judge_issues, validate_config
 
-    issues = validate_config(root)
+    issues = validate_config(root) + judge_issues(root)
     for issue in issues:
         (report.error if issue.blocking else report.warn)(issue.cls, issue.message, issue.fix, issue.location)
     return {"errors": sum(1 for i in issues if i.blocking), "warnings": sum(1 for i in issues if not i.blocking)}

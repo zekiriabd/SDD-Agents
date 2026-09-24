@@ -222,9 +222,9 @@ def _retrieval_drift(root: Path, activated: list[tuple[str, str]]) -> str | None
 
 def _config_refusal(root: Path) -> int | None:
     """Refus sur la première classe bloquante de `validate_config`, les autres nommées."""
-    from sdda_lib.layered_config import validate_config  # noqa: E402
+    from sdda_lib.layered_config import judge_issues, validate_config  # noqa: E402
 
-    blocking = [i for i in validate_config(root) if i.blocking]
+    blocking = [i for i in validate_config(root) + judge_issues(root) if i.blocking]
     if not blocking:
         return None
     first = blocking[0]
