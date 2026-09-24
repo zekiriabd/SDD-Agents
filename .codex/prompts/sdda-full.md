@@ -462,7 +462,7 @@ REVUE (phase 7)   {skipped (--no-review) |}
 ACCEPTATION (phase 8)   {non exécutée (G7 absente) |}
   Holdout          : {Metric} {mesuré} vs cible {Target} (k={k})                     G8 {🟢|🟡|🔴}
   Non-régression   : {ok | -x.x% sur {metric} (tolérance {t}%, hors bande {s}σ) | bruit : -x.x% sous {s}σ de la baseline}
-  Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID}}
+  Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID} --label "…"}
 
 Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--force) · …}  → workspace/.sys/.audit/bypasses.jsonl
 Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {durée} · top : {agent} ${x}
