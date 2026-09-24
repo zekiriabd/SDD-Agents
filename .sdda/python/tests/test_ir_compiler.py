@@ -164,6 +164,24 @@ def test_suites_are_derived_from_cap_acs_and_injection_suites(project: Path) -> 
     assert ir["traceability"]["1-2-ExplainInvoiceLine"]["implementedBy"]["tools"] == ["1-invoice-lookup", "1-zendesk-create-ticket"]
 
 
+def test_two_acs_of_one_metric_get_distinct_suite_ids_and_fields_reach_the_runner(project: Path) -> None:
+    """Deux AC `routing_accuracy` d'une même CAP donnaient deux suites homonymes."""
+    cap = project / "workspace/pipeline/caps/1-1-ClassifyIntent.md"
+    second = ("- AC-2:\n  - metric: routing_accuracy\n  - threshold: >= 0.90\n"
+              "  - dataset: workspace/pipeline/datasets/golden/routing-v1.jsonl\n  - grader: exact\n"
+              "  - runs: 5\n  - fields: intent, confidence_band\n\n## Covers")
+    cap.write_text(cap.read_text(encoding="utf-8").replace("## Covers", second, 1), encoding="utf-8")
+    ir, _ = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    suites = {s["id"]: s for s in ir["evaluation"]["suites"]}
+    assert "1-1-routing_accuracy" not in suites
+    assert suites["1-1-ac-1-routing_accuracy"]["threshold"] == 0.95
+    assert suites["1-1-ac-2-routing_accuracy"]["graderConfig"] == {"fields": ["intent", "confidence_band"]}
+    assert "graderConfig" not in suites["1-1-ac-1-routing_accuracy"]
+    schema = json.loads(paths.ir_schema_path(None).read_text(encoding="utf-8-sig"))
+    assert SchemaValidator(schema).validate(ir) == []
+    assert ir["traceability"]["1-1-ClassifyIntent"]["evaluatedBy"] == ["1-1-ac-1-routing_accuracy", "1-1-ac-2-routing_accuracy"]
+
+
 def test_missing_bound_is_a_compile_error_not_a_default(project: Path) -> None:
     contract = project / "workspace/pipeline/contracts/agents/1-billing-specialist.agent.md"
     text = contract.read_text(encoding="utf-8").replace("| `max_tool_calls` | 10 | fail-explicit |\n", "")

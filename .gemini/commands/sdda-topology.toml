@@ -133,7 +133,9 @@ Prompt d'invocation :
 ```
 Concevoir la topologie de la MISSION {n}-{MissionName} à partir de ses {C} CAPs.
 Roster DÉCLARÉ : {workspace/feats/{n}-roster.md (validé) | aucun roster — repli ## 2. Roster déclaré}.
-Le recopier tel quel ; ne renommer, n'ajouter ni ne retirer aucun agent (P7). Ne PAS écrire dans {n}-roster.md.
+Manifeste présent : ne PAS le recopier — `## 2. Roster` le référence (chemin + hash) ; une section
+`## 2. Roster déclaré` non vide à côté est [ARCH_ROSTER_DUPLICATE_SOURCE]. Repli : la section porte la
+déclaration. Ne renommer, n'ajouter ni ne retirer aucun agent (P7). Ne PAS écrire dans {n}-roster.md.
 Template : .sdda/templates/topology.template.md. Graphe : bloc ```mermaid de ## 4 (aucun .mmd).
 Procédure imposée (AGENT-ROSTER.md §2) : le roster est la décision de l'architecte humain ;
 tu vérifies sa complétude pour le pattern actif, alloues chaque CAP à un agent déclaré, bornes et chiffres.

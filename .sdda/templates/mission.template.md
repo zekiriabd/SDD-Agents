@@ -22,6 +22,10 @@ Confidence: high          # high | medium | low — ne monte jamais en montant l
   C'est de cette ligne que naît la suite d'acceptation L9, la seule que G8 exécute.
   Sans elle, l'objectif est chiffré mais personne ne sait le mesurer, et la gate
   d'acceptation reste sans exécution à rendre verte.>
+- Fields: <UNIQUEMENT si Grader: exact et que la sortie est une structure portant
+  du texte libre (un `message`) : les champs comparés, ex. `status, total_amount`.
+  Sans elle, `exact` compare la sortie ENTIÈRE et rend 0.0 à une réponse parfaite
+  dont le message diffère. Sinon, supprimer la ligne.>
 - Calibration: <chemin du rapport de calibration — UNIQUEMENT si Grader: llm-judge.
   Un juge non calibré ne rend pas de verdict bloquant (P9). Sinon, supprimer la ligne.>
 

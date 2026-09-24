@@ -20,6 +20,7 @@ FIX: <l'action précise qui débloque>
 - `[AC_NOT_EVALUABLE]`
 - `[HOLDOUT_NOT_DISJOINT]`
 - `[JUDGE_UNCALIBRATED]`
+- `[SECRET_READ_FORBIDDEN]`
 
 ## Classes universelles
 

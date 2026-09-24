@@ -24,6 +24,19 @@ def test_prose_ac_is_rejected(tmp_path: Path) -> None:
     assert any(l.startswith("FIX:") for l in block)
 
 
+def test_fields_on_a_grader_other_than_exact_is_rejected(project: Path) -> None:
+    """`fields:` ne projette que `exact` : ailleurs, l'AC croirait exclure un champ que l'eval compare."""
+    cap = project / "workspace/pipeline/caps/1-1-ClassifyIntent.md"
+    text = cap.read_text(encoding="utf-8")
+    cap.write_text(text.replace("  - runs: 5\n", "  - runs: 5\n  - fields: intent\n", 1), encoding="utf-8")
+    code, out = run_main(validate_cap.main, ["--root", str(project), "--no-report", str(cap)])
+    assert code == 0, out
+    cap.write_text(text.replace("  - grader: exact\n", "  - grader: regex\n", 1)
+                   .replace("  - runs: 5\n", "  - runs: 5\n  - fields: intent\n", 1), encoding="utf-8")
+    code, out = run_main(validate_cap.main, ["--root", str(project), "--no-report", str(cap)])
+    assert code == 1 and "[AC_NOT_EVALUABLE]" in out and "fields" in out
+
+
 def test_ac_missing_one_field_is_rejected(project: Path) -> None:
     cap = project / "workspace/pipeline/caps/1-1-ClassifyIntent.md"
     text = cap.read_text(encoding="utf-8").replace("  - dataset: workspace/pipeline/datasets/golden/routing-v1.jsonl\n", "")

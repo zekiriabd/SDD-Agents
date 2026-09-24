@@ -846,8 +846,32 @@ def compile_orchestration(ctx: CompileContext, topo: TopologySpec, mmd_text: str
 # --------------------------------------------------------------------------
 # Évaluation et traçabilité
 # --------------------------------------------------------------------------
-def _suite_id(cap: CapSpec, metric: str) -> str:
+def _suite_id(cap: CapSpec, metric: str, ac_id: str | None = None) -> str:
+    """`{n}-{m}-{metric}`, ou `{n}-{m}-{ac}-{metric}` quand la CAP porte deux AC de même métrique.
+
+    Deux AC `exact_match` d'une même CAP donnaient le même id : l'IR portait
+    deux suites homonymes, et le rapport de la seconde écrasait la première.
+    """
+    if ac_id:
+        return f"{cap.number}-{cap.index}-{ac_id.lower()}-{metric}"
     return f"{cap.number}-{cap.index}-{metric}"
+
+
+#: Clés d'AC qui deviennent le `graderConfig` de la suite (P10 : ce que l'AC dit
+#: au grader doit voyager jusqu'au runner, sinon l'AC dit une chose et l'eval en
+#: mesure une autre). Valeurs « liste » : séparées par des virgules.
+AC_GRADER_CONFIG_KEYS = {"fields": "list"}
+
+
+def _grader_config(fields: dict[str, str]) -> dict[str, Any]:
+    cfg: dict[str, Any] = {}
+    for key, kind in AC_GRADER_CONFIG_KEYS.items():
+        raw = str(fields.get(key, "")).strip().strip("`")
+        if not raw or markdown_io.is_placeholder(raw):
+            continue
+        if kind == "list":
+            cfg[key] = [v.strip().strip("`") for v in raw.strip("[]").split(",") if v.strip().strip("`")]
+    return cfg
 
 
 def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, runs: int) -> dict[str, Any] | None:
@@ -895,6 +919,9 @@ def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, ru
     if grader == "llm-judge":
         cal = str(goal.get("Calibration", "")).strip()
         suite["judgeCalibrationRef"] = cal if cal and not markdown_io.is_placeholder(cal) else f"workspace/pipeline/calibration/{ctx.number}-acceptance.json"
+    grader_config = _grader_config({"fields": str(goal.get("Fields", ""))}) if grader == "exact" else {}
+    if grader_config:
+        suite["graderConfig"] = grader_config
     return suite
 
 
@@ -918,6 +945,10 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
                     ctx.fail(f"CAP `{cap.id}` : `## Allocated To` référence le {kind} `{i}` sans contrat", f"écrire le contrat `workspace/pipeline/contracts/…/{i}.*.md` ou corriger l'allocation", f"{loc}:Allocated To")
         level = "L4" if alloc_agents else ("L3" if alloc_retr else "L2")
         evaluated_by: list[str] = []
+        metric_counts: dict[str, int] = {}
+        for ac in cap.acs:
+            m = ac.fields.get("metric", "").strip()
+            metric_counts[m] = metric_counts.get(m, 0) + 1
         for ac in cap.acs:
             f = ac.fields
             metric = f.get("metric", "").strip()
@@ -929,9 +960,13 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
                 ctx.fail(f"CAP `{cap.id}` {ac.id} : AC non évaluable (metric/threshold/dataset/grader/runs)", "corriger l'AC — G1 doit être verte avant de compiler", f"{loc}:Acceptance Criteria")
                 continue
             suite: dict[str, Any] = {
-                "id": _suite_id(cap, metric), "level": level, "capRef": cap.id,
+                "id": _suite_id(cap, metric, ac.id if metric_counts.get(metric, 0) > 1 else None),
+                "level": level, "capRef": cap.id,
                 "dataset": dataset, "grader": grader, "threshold": threshold, "runs": runs,
             }
+            grader_config = _grader_config(f)
+            if grader_config:
+                suite["graderConfig"] = grader_config
             if len(alloc_agents) == 1:
                 suite["agentRef"] = alloc_agents[0]
             if grader == "llm-judge":

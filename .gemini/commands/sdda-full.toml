@@ -406,7 +406,7 @@ refusée). Ne jamais recalculer un delta à la main dans le récap.
 ## STEP 9 — Récap consolidé
 
 ```bash
-FINAL_STATUS={success|partial|failed}    # success = toutes gates 🟢 ; partial = ≥ 1 🟡 assumé ou skip ; failed = STOP
+FINAL_STATUS={pass|partial|fail|aborted}  # pass = toutes gates 🟢 ; partial = ≥ 1 🟡 assumé, skip ou arrêt humain ; fail = STOP ; aborted = interrompu
 python .sdda/sdda.py state end-run --run-id $RUN_ID --status $FINAL_STATUS
 python .sdda/sdda.py compute-status --mission {n}
 ```

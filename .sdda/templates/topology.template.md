@@ -29,6 +29,10 @@ Root Pattern: <single-agent | router | sequential | parallel | supervisor | grap
 > choisi dans `STACK.md`, et refuse de générer sinon
 > (`[ARCH_SPEC_INCOMPLETE]`, bloquant en G2).
 >
+> **Si `workspace/feats/{n}-roster.md` existe**, cette section ne le recopie
+> pas : elle s'intitule `## 2. Roster`, le référence (chemin + hash) et dit ce
+> qui en découle. Deux déclarations, c'est `[ARCH_ROSTER_DUPLICATE_SOURCE]`.
+>
 > Ce qui est exigé dépend du pattern actif — voir
 > `.sdda/registry/architecture-requirements.yml`. Contrôle sans token :
 > `python .sdda/sdda.py validate-architecture --mission {n}`

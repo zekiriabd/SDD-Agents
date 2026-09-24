@@ -86,6 +86,30 @@ def test_exact_without_expected_is_an_item_error_not_a_zero() -> None:
     assert r.error and r.error_class == "DATASET_ITEM_INVALID"
 
 
+def test_exact_fields_ignore_the_free_text_the_sortie_also_carries() -> None:
+    """Sans projection, une réponse parfaite dont le `message` diffère vaut 0.0."""
+    expected = {"order_number": "CMD-1001", "status": "paid", "message": "référence"}
+    output = {"order_number": "CMD-1001", "status": "Paid", "message": "La commande CMD-1001 est payée."}
+    assert grade("exact", item(expected=expected), output).score == 0.0
+    r = grade("exact", item(expected=expected), output, {"fields": ["order_number", "status"]})
+    assert r.score == 1.0 and r.detail["mismatches"] == {}
+    assert grade("exact", item(expected=expected), json.dumps(output), {"fields": "order_number, status"}).score == 1.0
+
+
+def test_exact_fields_count_an_absent_or_different_field_as_a_miss() -> None:
+    expected = {"order_number": "CMD-1001", "carrier": None}
+    r = grade("exact", item(expected=expected), {"order_number": "CMD-1002", "carrier": None}, {"fields": ["order_number", "carrier"]})
+    assert r.score == 0.0 and set(r.detail["mismatches"]) == {"order_number"}
+    r = grade("exact", item(expected=expected), {"order_number": "CMD-1001"}, {"fields": ["order_number", "carrier"]})
+    assert r.score == 0.0 and r.detail["mismatches"]["carrier"]["output"] == "<absent>"
+    assert grade("exact", item(expected=expected), "pas du JSON", {"fields": ["order_number"]}).score == 0.0
+
+
+def test_exact_fields_need_an_object_expected_that_names_them() -> None:
+    assert grade("exact", item(expected="CMD-1001"), {"order_number": "CMD-1001"}, {"fields": ["order_number"]}).error_class == "DATASET_ITEM_INVALID"
+    assert grade("exact", item(expected={"status": "paid"}), {"status": "paid"}, {"fields": ["order_number"]}).error_class == "DATASET_ITEM_INVALID"
+
+
 # ---------------------------------------------------------------------------
 # regex
 # ---------------------------------------------------------------------------

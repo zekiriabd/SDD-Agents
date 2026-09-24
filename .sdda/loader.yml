@@ -607,6 +607,9 @@ qa-evals:
     - .sdda/templates/golden-set.schema.json         # stable
     - workspace/pipeline/missions/{n}-*.md                    # semi — où est la ground truth
     - workspace/seed/**                        # semi — la ground truth ELLE-MÊME, fournie par l'humain
+                                               # (+ le fichier sous assets/ que `## Ground Truth → Source`
+                                               # désigne, lu à la demande : pas tout assets/, qui ferait
+                                               # déborder budget_bytes dès qu'un export pèse)
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — les AC à mesurer
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl   # volatile — si présent : le

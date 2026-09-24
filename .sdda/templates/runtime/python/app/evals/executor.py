@@ -77,18 +77,42 @@ def _item_input(item: Mapping[str, Any]) -> str:
 def mocked_toolset(fixtures: Path | Mapping[str, Any] | None) -> DictToolset:
     """Des outils qui répondent depuis des fixtures, sans réseau ni base.
 
-    Les fixtures viennent de `workspace/pipeline/fixtures/tools/*.jsonl`, une ligne
-    par réponse : `{"tool": "…", "result": …}`. Un outil sans fixture ne rend pas
-    une réponse vide — il rend une ERREUR déclarée. Une réponse vide se
-    confondrait avec « l'outil n'a rien trouvé », et l'agent répondrait
-    tranquillement à côté sans que rien ne signale la fixture manquante.
+    Les fixtures viennent de `workspace/pipeline/fixtures/tools/**/*.jsonl`, une
+    ligne par réponse :
+
+    - `{"tool": "…", "args": {…}, "result": …}` — rendue quand l'appel porte ces
+      arguments (chaque argument nommé, égal ; les autres sont libres) ;
+    - `{"tool": "…", "args": {…}, "error": {"code": "…", "message": "…"}}` — une
+      erreur DÉCLARÉE du contrat, rejouée telle quelle (`ok=False`) ;
+    - sans `args` : la réponse par défaut de l'outil (la dernière l'emporte).
+
+    Avant, seule la dernière ligne de chaque outil survivait et les arguments
+    étaient ignorés : `lookup(CMD-9999)` rendait la commande de la dernière
+    ligne, donc la suite critique « commande introuvable » ne pouvait pas
+    échouer pour la bonne raison — ni réussir. Et aucune erreur ne se rejouait.
+
+    Un appel qu'aucune ligne ne couvre ne rend pas une réponse vide — il rend une
+    ERREUR (`TOOL_FIXTURE_MISSING`). Une réponse vide se confondrait avec
+    « l'outil n'a rien trouvé », et l'agent répondrait tranquillement à côté sans
+    que rien ne signale la fixture manquante.
     """
-    responses: dict[str, Any] = {}
+    matched: dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
+    defaults: dict[str, Mapping[str, Any]] = {}
+
+    def add(entry: Mapping[str, Any]) -> None:
+        name = str(entry["tool"])
+        args = entry.get("args")
+        if isinstance(args, Mapping) and args:
+            matched.setdefault(name, []).append((args, entry))
+        else:
+            defaults[name] = entry
+
     if isinstance(fixtures, Mapping):
-        responses.update(fixtures)
+        for name, result in fixtures.items():
+            add({"tool": name, "result": result})
     elif fixtures is not None:
         directory = Path(fixtures)
-        for path in sorted(directory.glob("*.jsonl")) if directory.is_dir() else ():
+        for path in sorted(directory.rglob("*.jsonl")) if directory.is_dir() else ():
             for line in path.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
                     continue
@@ -97,16 +121,31 @@ def mocked_toolset(fixtures: Path | Mapping[str, Any] | None) -> DictToolset:
                 except ValueError:
                     continue
                 if isinstance(entry, dict) and entry.get("tool"):
-                    responses[str(entry["tool"])] = entry.get("result")
+                    add(entry)
+
+    def canon(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
+    def outcome(entry: Mapping[str, Any]) -> ToolOutcome:
+        error = entry.get("error")
+        if isinstance(error, Mapping):
+            code = str(error.get("code") or "TOOL_ERROR")
+            return ToolOutcome(content=canon({"error": dict(error)}), ok=False, error_code=code)
+        payload = entry.get("result")
+        return ToolOutcome(content=payload if isinstance(payload, str) else canon(payload))
 
     def handler(name: str) -> Callable[..., ToolOutcome]:
-        def _call(**_: Any) -> ToolOutcome:
-            payload = responses[name]
-            return ToolOutcome(content=payload if isinstance(payload, str) else json.dumps(
-                payload, ensure_ascii=False, sort_keys=True, default=str))
+        def _call(**kwargs: Any) -> ToolOutcome:
+            for args, entry in matched.get(name, ()):
+                if all(k in kwargs and canon(kwargs[k]) == canon(v) for k, v in args.items()):
+                    return outcome(entry)
+            if name in defaults:
+                return outcome(defaults[name])
+            return ToolOutcome(content=canon({"error": {"code": "TOOL_FIXTURE_MISSING", "tool": name, "args": kwargs}}),
+                               ok=False, error_code="TOOL_FIXTURE_MISSING")
         return _call
 
-    return DictToolset(tools={name: handler(name) for name in responses})
+    return DictToolset(tools={name: handler(name) for name in sorted(set(matched) | set(defaults))})
 
 
 def frozen_retrieval(fixtures: Mapping[str, Sequence[Mapping[str, Any]]] | None = None

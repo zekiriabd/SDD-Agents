@@ -28,6 +28,9 @@ Le système doit pouvoir <action observable et discrète>.
   - grader: <exact | regex | schema | numeric-tolerance | semantic-similarity
              | llm-judge | trajectory | cost | latency>
   - runs: <3, ou 5 si criticality = critical>
+  - fields: <OPTIONNEL, grader `exact` seulement : les champs comparés quand la
+    sortie structurée porte aussi du texte libre, ex. `status, total_amount`.
+    Sans elle, `exact` compare toute la sortie, `message` compris. Sinon supprimer.>
   - notes: <ce que l'AC NE couvre pas — le trou assumé>
 
 - AC-2:

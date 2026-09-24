@@ -134,9 +134,15 @@ Sur ERROR de l'agent → `set-phase --phase mission --status fail` + STOP.
 ## STEP 6 — MISSION GATE (G0) — déterministe, 0 token
 
 ```bash
-python .sdda/sdda.py validate-mission --mission {n} --json \
-  > workspace/.sys/.validation/G0-{n}-{Name}.json
+python .sdda/sdda.py validate-mission --mission {n} --json
 ```
+
+Le script écrit lui-même son rapport de gate,
+`workspace/.sys/.validation/G0-{n}-{Name}.json` (avec `pinnedHashes`), sous le
+nom que `compute_status` relit. La sortie `--json` ne sert qu'au récap : jamais
+redirigée vers ce fichier — le shell le tronquait à l'ouverture, le script
+l'écrivait, puis la redirection y recopiait sa sortie par-dessus, et le
+rapport devenait un JSON illisible.
 
 Contrôles (INVARIANTS `mission-budget-declared`, G0) :
 

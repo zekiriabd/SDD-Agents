@@ -23,9 +23,11 @@ produire les contrats.
 > déclaration), ou à défaut dans `## 2. Roster déclaré` de la topologie — et le
 > pattern d'orchestration est choisi dans `STACK.md`. Ton travail commence
 > **après** cette décision. Le roster est dans TON répertoire mais n'est PAS à
-> toi : tu le lis, tu ne l'écris jamais (`loader.yml`). S'il existe, tu le
-> recopies dans `## 2. Roster déclaré` **tel quel** : une seule source, jamais
-> deux (`[ARCH_ROSTER_DUPLICATE_SOURCE]` sinon).
+> toi : tu le lis, tu ne l'écris jamais (`loader.yml`). S'il existe, tu ne le
+> recopies **pas** : la section devient `## 2. Roster`, qui le **référence**
+> (chemin et hash) et dit ce qui en découle. Une seule source, jamais deux —
+> une section `## 2. Roster déclaré` non vide à côté du fichier est
+> `[ARCH_ROSTER_DUPLICATE_SOURCE]`.
 
 Ce que tu apportes, et que personne d'autre n'apporte : **le chiffrage avant la
 construction.** Une topologie à $0.40 l'appel pour un produit qui en facture

@@ -418,6 +418,26 @@ def test_mocked_tools_answer_from_fixtures_and_a_missing_one_is_loud(rt: Runtime
     assert absent.ok is False and absent.error_code == "TOOL_NOT_REGISTERED"
 
 
+def test_mocked_tools_answer_by_arguments_and_replay_declared_errors(rt: Runtime, tmp_path: Path) -> None:
+    """Le double ne rendait que la dernière ligne, quels que soient les arguments."""
+    fixtures = tmp_path / "tools"
+    (fixtures / "errors").mkdir(parents=True)
+    (fixtures / "lookup.jsonl").write_text("\n".join(json.dumps(e) for e in (
+        {"tool": "lookup", "args": {"key": "CMD-1001"}, "result": {"record": {"status": "paid"}}},
+        {"tool": "lookup", "args": {"key": "CMD-9999"}, "result": {"record": None}},
+    )) + "\n", encoding="utf-8")
+    (fixtures / "errors" / "lookup.errors.jsonl").write_text(json.dumps(
+        {"tool": "lookup", "args": {"key": "CMD-0500"}, "error": {"code": "SOURCE_UNAVAILABLE", "message": "down"}}) + "\n",
+        encoding="utf-8")
+    toolset = rt.executor.mocked_toolset(fixtures)
+    assert "paid" in asyncio.run(toolset.call("lookup", {"key": "CMD-1001"})).content
+    assert json.loads(asyncio.run(toolset.call("lookup", {"key": "CMD-9999"})).content) == {"record": None}
+    down = asyncio.run(toolset.call("lookup", {"key": "CMD-0500"}))
+    assert down.ok is False and down.error_code == "SOURCE_UNAVAILABLE"
+    uncovered = asyncio.run(toolset.call("lookup", {"key": "CMD-4242"}))
+    assert uncovered.ok is False and uncovered.error_code == "TOOL_FIXTURE_MISSING"
+
+
 def test_the_cli_executor_drives_the_delivered_surface(rt: Runtime) -> None:
     """Ce qu'on mesure est ce qu'on livre : un vrai sous-processus, un vrai code."""
     env = dict(os.environ)

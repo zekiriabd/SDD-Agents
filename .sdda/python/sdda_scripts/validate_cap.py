@@ -156,6 +156,12 @@ def ac_problems(ac: AcSpec, config: LayeredConfig | None, criticality: str) -> t
                 warnings.append(f"runs={runs} < {key}={required} : un run vert n'est pas une preuve (P3)")
     if f.get("grader", "").strip().lower() == "llm-judge" and markdown_io.is_placeholder(f.get("calibration")):
         warnings.append("grader llm-judge sans `calibration:` déclarée — le compilateur utilisera workspace/pipeline/calibration/{metric}.json (P9)")
+    # `fields:` projette la comparaison d'`exact` sur des champs nommés ; sur un
+    # autre grader elle ne dirait rien, et l'AC croirait avoir exclu un champ
+    # que l'eval compare quand même.
+    if not markdown_io.is_placeholder(f.get("fields")) and f.get("grader", "").strip().lower() != "exact":
+        problems.append(f"`fields:` ne s'applique qu'au grader `exact` (grader `{f.get('grader', '').strip()}`) — "
+                        "pour `schema`, poser un `const` par champ dans le schéma de chaque item")
     return problems, warnings
 
 

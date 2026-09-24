@@ -41,6 +41,12 @@ Read **uniquement** :
   `grader`, `runs`, `notes` ; `criticality` ; `failure_behavior`.
 - `workspace/pipeline/missions/{n}-*.md` — `## Ground Truth` (source, volume, arbitre),
   `## Quantified Goal`, `## Trust Boundaries`, `## Failure Policy`.
+- La vérité terrain elle-même : `workspace/seed/**` (ce que l'humain a annoté),
+  **et** le fichier que `## Ground Truth → Source` désigne quand il vit sous
+  `workspace/assets/` — le cas d'une source de données qui fait foi (« le fichier
+  lui-même »). Ce fichier-là seulement, en lecture : pas tout `assets/`, et
+  jamais un `.env` (`[SECRET_READ_FORBIDDEN]`). Sans lui, chaque valeur attendue
+  serait une invention.
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (`trustPosture`,
   `refusalPolicy`, `tools`), `retrievers[].gateThresholds`, `evaluation`, `traceability`.
 - `workspace/pipeline/contracts/**` — pour les trajectoires attendues, les erreurs
@@ -181,11 +187,15 @@ sans agent), L5 trajectoire (hops, ordre d'outils, bornes), L7 mission
 rouge, pas jaune), L8 adversarial, L9 régression.
 
 **Les doubles d'isolement L4** sont à toi aussi, sous `workspace/pipeline/fixtures/` :
-`tools/{tool}.jsonl` (une ligne `{"tool": "…", "result": …}` par réponse mockée)
-et `{index}-v{k}.json` (retrieval figé), cités par `fixtures:` dans la suite. Tu
+`tools/**/*.jsonl` — une ligne par réponse mockée, `{"tool": "…", "args": {…},
+"result": …}` rendue quand l'appel porte ces arguments, ou `{"tool": "…", "args":
+{…}, "error": {"code": "…", "message": "…"}}` pour rejouer une erreur déclarée ;
+une ligne sans `args` est la réponse par défaut de l'outil — et
+`{index}-v{k}.json` (retrieval figé), cités par `fixtures:` dans la suite. Tu
 les dérives des **contrats d'outils et de retrieval** — sorties déclarées,
-erreurs déclarées — jamais du code. Un outil appelé sans fixture rend une
-erreur, pas une réponse vide : la suite L4 échoue au lieu de mentir.
+erreurs déclarées — jamais du code. Un appel qu'aucune ligne ne couvre rend une
+erreur (`TOOL_FIXTURE_MISSING`), pas une réponse vide : la suite L4 échoue au
+lieu de mentir. Donc : une ligne `args` par item du jeu qui appelle l'outil.
 
 Le rapport de chaque suite porte `score_mean`, `score_stddev`, `pass_rate`,
 `min`, `max`, verdict vert/jaune/rouge. Jamais un booléen.
