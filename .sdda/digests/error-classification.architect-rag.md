@@ -17,6 +17,8 @@ FIX: <l'action précise qui débloque>
 
 ## Classes propres à cet agent
 
+- `[GOLDEN_SET_MISSING]`
+- `[MEASUREMENT_MISSING]`
 - `[RAG_PATTERN_MISMATCH]`
 - `[RAG_PATTERN_UNUSED]`
 - `[RETRIEVAL_CHUNKING_UNMEASURED]`

@@ -117,12 +117,16 @@ python .sdda/sdda.py chunking-bench --mission {n} \
   --k {RetrievalK} --out workspace/.sys/.validation/chunking-bench-{n}.json
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 4) — `chunking_bench.py` n'existe pas encore.
-> Tant qu'il est absent : **n'invente aucun tableau comparatif**. Écris au §4
-> du contrat que le chunking est *non mesuré*, choisis la configuration par
-> défaut de la fiche RAG active, et laisse `[RETRIEVAL_CHUNKING_UNMEASURED]`
-> visible dans ta sortie : c'est `qa-evals` qui mesurera à la G4, et un
-> tableau inventé lui ferait croire que c'est déjà fait.
+Grammaire des `--config` : `fixed:S/O`, `recursive-structural:S/O`,
+`document-aware:section[/MAX]`, `paragraph:S`, `sentence:N`,
+`parent-child:C/O[/P]` (tailles en tokens approximés). Le retriever du banc est
+un BM25 lexical déterministe : il **compare** les découpages entre eux, il ne
+prédit pas le recall absolu de l'index de production (G4 le mesure). Le
+rapport porte `recommendation` — la règle des 2 points y est déjà appliquée.
+Exit 1 `[RETRIEVAL_CHUNKING_UNMEASURED]` (< 2 configurations),
+`[GOLDEN_SET_MISSING]` ou `[MEASUREMENT_MISSING]` (aucun `doc_id` résolu dans
+le corpus) : **n'invente aucun tableau** — écris au §4 que le chunking est
+*non mesuré* et laisse la classe visible dans ta sortie.
 
 Le tableau comparatif (`recall@k`, `nDCG@k`, `context_precision`, nombre de
 chunks, coût d'ingestion) va **dans le contrat**, avec la configuration retenue
