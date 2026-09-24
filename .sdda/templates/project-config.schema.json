@@ -9,7 +9,11 @@
     "AppName": {
       "type": "string",
       "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
-      "description": "Nom de l'application générée (namespace racine en snake_case côté Python). Présent dans STACK.md ## Project Config uniquement."
+      "description": "Nom de l'application générée (namespace racine en snake_case côté Python). Présent dans STACK.md ## Project Config uniquement.",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py",
+        "script:sdda_scripts/gen_app_skeleton.py"
+      ]
     },
     "SystemName": {
       "type": "string",
@@ -22,7 +26,11 @@
       ],
       "exclusiveMinimum": 0,
       "default": null,
-      "description": "Budget d'EXECUTION (P6) : coût cible d'une exécution bout-en-bout du produit généré, USD. null = doit être déclaré par la MISSION (G0 refuse un budget absent)."
+      "description": "Budget d'EXECUTION (P6) : coût cible d'une exécution bout-en-bout du produit généré, USD. null = doit être déclaré par la MISSION (G0 refuse un budget absent).",
+      "x-readBy": [
+        "script:sdda_scripts/validate_mission.py",
+        "script:sdda_scripts/ir_compiler.py"
+      ]
     },
     "CostPerRunHardCapUsd": {
       "type": [
@@ -31,7 +39,11 @@
       ],
       "exclusiveMinimum": 0,
       "default": null,
-      "description": "Plafond dur par run, USD. Dépassement estimé -> [BUDGET_EXCEEDED_ESTIMATE] (G2) ; mesuré -> [BUDGET_EXCEEDED_MEASURED] (G6), rouge. Doit être >= CostPerRunTargetUsd."
+      "description": "Plafond dur par run, USD. Dépassement estimé -> [BUDGET_EXCEEDED_ESTIMATE] (G2) ; mesuré -> [BUDGET_EXCEEDED_MEASURED] (G6), rouge. Doit être >= CostPerRunTargetUsd.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_mission.py",
+        "script:sdda_scripts/ir_compiler.py"
+      ]
     },
     "LatencyP95TargetMs": {
       "type": [
@@ -40,7 +52,11 @@
       ],
       "exclusiveMinimum": 0,
       "default": null,
-      "description": "Latence p95 cible d'un run, millisecondes. null = à déclarer par la MISSION."
+      "description": "Latence p95 cible d'un run, millisecondes. null = à déclarer par la MISSION.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_mission.py",
+        "script:sdda_scripts/ir_compiler.py"
+      ]
     },
     "TokenCeilingPerRun": {
       "type": [
@@ -49,35 +65,51 @@
       ],
       "exclusiveMinimum": 0,
       "default": null,
-      "description": "Plafond de tokens (entrée + sortie) par run. null = à déclarer par la MISSION."
+      "description": "Plafond de tokens (entrée + sortie) par run. null = à déclarer par la MISSION.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_mission.py",
+        "script:sdda_scripts/ir_compiler.py"
+      ]
     },
     "MaxIterations": {
       "type": "integer",
       "minimum": 1,
       "maximum": 200,
       "default": 12,
-      "description": "Borne imposée à TOUT agent généré (P12) : nombre max de tours de boucle."
+      "description": "Borne imposée à TOUT agent généré (P12) : nombre max de tours de boucle.",
+      "x-readBy": [
+        "agent:dev-orchestration"
+      ]
     },
     "MaxToolCalls": {
       "type": "integer",
       "minimum": 0,
       "maximum": 500,
       "default": 25,
-      "description": "Borne P12 : nombre max d'appels d'outils par run et par agent."
+      "description": "Borne P12 : nombre max d'appels d'outils par run et par agent.",
+      "x-readBy": [
+        "agent:dev-orchestration"
+      ]
     },
     "MaxDelegationDepth": {
       "type": "integer",
       "minimum": 0,
       "maximum": 10,
       "default": 3,
-      "description": "Borne P12 : profondeur max de délégation entre agents."
+      "description": "Borne P12 : profondeur max de délégation entre agents.",
+      "x-readBy": [
+        "agent:dev-orchestration"
+      ]
     },
     "AgentTimeoutSec": {
       "type": "integer",
       "minimum": 1,
       "maximum": 3600,
       "default": 120,
-      "description": "Borne P12 : timeout d'un agent, secondes."
+      "description": "Borne P12 : timeout d'un agent, secondes.",
+      "x-readBy": [
+        "agent:dev-orchestration"
+      ]
     },
     "OnBoundExceeded": {
       "enum": [
@@ -86,40 +118,59 @@
         "escalate-human"
       ],
       "default": "fail-explicit",
-      "description": "Comportement par défaut à l'atteinte d'une borne (P12). Surchargé par agent dans son contrat."
+      "description": "Comportement par défaut à l'atteinte d'une borne (P12). Surchargé par agent dans son contrat.",
+      "x-readBy": [
+        "script:sdda_scripts/estimate_budget.py",
+        "runtime:app/bounds.py"
+      ]
     },
     "MaxCostPerRun": {
       "type": "number",
       "minimum": 0,
       "default": 50.0,
-      "description": "Budget de CONSTRUCTION : coût max d'un run du pipeline SDD_Agents lui-même, USD. 0 = désactivé."
+      "description": "Budget de CONSTRUCTION : coût max d'un run du pipeline SDD_Agents lui-même, USD. 0 = désactivé.",
+      "x-readBy": [
+        "script:sdda_hooks/preflight_cost_cap.py"
+      ]
     },
     "BuildLoopMaxCostUsd": {
       "type": "number",
       "minimum": 0,
       "default": 15.0,
-      "description": "Coût max d'une boucle de construction (itérations dev -> gate), USD."
+      "description": "Coût max d'une boucle de construction (itérations dev -> gate), USD.",
+      "x-readBy": [
+        "script:sdda_scripts/sdda_state.py"
+      ]
     },
     "BuildLoopMaxIter": {
       "type": "integer",
       "minimum": 1,
       "maximum": 20,
       "default": 3,
-      "description": "Nombre max d'itérations d'une boucle de construction."
+      "description": "Nombre max d'itérations d'une boucle de construction.",
+      "x-readBy": [
+        "script:sdda_scripts/sdda_state.py"
+      ]
     },
     "MaxParallel": {
       "type": "integer",
       "minimum": 1,
       "maximum": 16,
       "default": 3,
-      "description": "Nombre max de Developer Agents exécutés en parallèle."
+      "description": "Nombre max de Developer Agents exécutés en parallèle.",
+      "x-readBy": [
+        "command:sdda-build"
+      ]
     },
     "EvalRuns": {
       "type": "integer",
       "minimum": 1,
       "maximum": 20,
       "default": 3,
-      "description": "k runs par item pour toute eval médiée par un LLM (P3). 1 = dev local, REFUSÉ en CI. Protégée security-down."
+      "description": "k runs par item pour toute eval médiée par un LLM (P3). 1 = dev local, REFUSÉ en CI. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/eval_runner.py"
+      ]
     },
     "EvalRunsCritical": {
       "type": "integer",
@@ -133,7 +184,10 @@
       "minimum": 0,
       "maximum": 100,
       "default": 15,
-      "description": "Écart-type du score (en %) au-delà duquel le verdict est JAUNE."
+      "description": "Écart-type du score (en %) au-delà duquel le verdict est JAUNE.",
+      "x-readBy": [
+        "script:sdda_scripts/eval_runner.py"
+      ]
     },
     "EvalMaxParallel": {
       "type": "integer",
@@ -155,13 +209,19 @@
       "minimum": 0,
       "maximum": 1,
       "default": 0.6,
-      "description": "Accord minimal (kappa de Cohen) entre le juge LLM et les labels humains pour que le juge rende un verdict bloquant (P9). Protégée security-down."
+      "description": "Accord minimal (kappa de Cohen) entre le juge LLM et les labels humains pour que le juge rende un verdict bloquant (P9). Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_hooks/preflight_judge_calibration.py"
+      ]
     },
     "JudgeCalibrationMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 50,
-      "description": "Taille minimale du set de calibration humain d'un juge LLM."
+      "description": "Taille minimale du set de calibration humain d'un juge LLM.",
+      "x-readBy": [
+        "script:sdda_hooks/preflight_judge_calibration.py"
+      ]
     },
     "JudgeAdvisoryFallback": {
       "type": "boolean",
@@ -171,31 +231,47 @@
     "JudgeMustDifferFromEvaluated": {
       "type": "boolean",
       "default": true,
-      "description": "Le modèle juge doit différer du modèle évalué : un modèle qui se note mesure sa complaisance."
+      "description": "Le modèle juge doit différer du modèle évalué : un modèle qui se note mesure sa complaisance.",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py"
+      ]
     },
     "GoldenSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 50,
-      "description": "Taille minimale d'un jeu golden (ajustement)."
+      "description": "Taille minimale d'un jeu golden (ajustement).",
+      "x-section": "Active Eval Stack",
+      "x-readBy": [
+        "script:sdda_scripts/validate_datasets.py"
+      ]
     },
     "HoldoutSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 30,
-      "description": "Taille minimale d'un jeu holdout (verdict)."
+      "description": "Taille minimale d'un jeu holdout (verdict).",
+      "x-section": "Active Eval Stack",
+      "x-readBy": [
+        "script:sdda_scripts/validate_datasets.py"
+      ]
     },
     "CalibrationSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 50,
-      "description": "Taille minimale d'un jeu de calibration (labels humains)."
+      "description": "Taille minimale d'un jeu de calibration (labels humains).",
+      "x-section": "Active Eval Stack"
     },
     "AdversarialSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 25,
-      "description": "Taille minimale du jeu adversarial. Le jeu grandit : toute attaque réussie devient un item permanent."
+      "description": "Taille minimale du jeu adversarial. Le jeu grandit : toute attaque réussie devient un item permanent.",
+      "x-section": "Active Eval Stack",
+      "x-readBy": [
+        "script:sdda_scripts/validate_datasets.py"
+      ]
     },
     "HoldoutDisjointCheck": {
       "enum": [
@@ -203,14 +279,20 @@
         "warn"
       ],
       "default": "strict",
-      "description": "Vérification par hash que golden et holdout sont disjoints. `warn` autorise l'optimisation contre le jeu qui rend le verdict : POC uniquement. Protégée security-down."
+      "description": "Vérification par hash que golden et holdout sont disjoints. `warn` autorise l'optimisation contre le jeu qui rend le verdict : POC uniquement. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_datasets.py"
+      ]
     },
     "RegressionTolerancePct": {
       "type": "number",
       "minimum": 0,
       "maximum": 100,
       "default": 3,
-      "description": "Baisse tolérée (en %) vs la baseline épinglée avant [REGRESSION] (L9)."
+      "description": "Baisse tolérée (en %) vs la baseline épinglée avant [REGRESSION] (L9).",
+      "x-readBy": [
+        "script:sdda_scripts/check_regression.py"
+      ]
     },
     "RegressionNoiseSigma": {
       "type": "number",
@@ -232,21 +314,30 @@
       "minimum": 0,
       "maximum": 1,
       "default": 0.8,
-      "description": "Seuil G4 : recall@k minimal. Protégée security-down."
+      "description": "Seuil G4 : recall@k minimal. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "RetrievalK": {
       "type": "integer",
       "minimum": 1,
       "maximum": 100,
       "default": 8,
-      "description": "k utilisé pour recall@k et nDCG@k."
+      "description": "k utilisé pour recall@k et nDCG@k.",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "RetrievalNdcgMin": {
       "type": "number",
       "minimum": 0,
       "maximum": 1,
       "default": 0.7,
-      "description": "Seuil G4 : nDCG@k minimal."
+      "description": "Seuil G4 : nDCG@k minimal.",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "RetrievalContextPrecisionMin": {
       "type": "number",
@@ -260,7 +351,10 @@
       "minimum": 0,
       "maximum": 1,
       "default": 0.85,
-      "description": "Seuil G4 : groundedness minimale (juge LLM calibré). Protégée security-down."
+      "description": "Seuil G4 : groundedness minimale (juge LLM calibré). Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "AnswerRelevanceMin": {
       "type": "number",
@@ -274,7 +368,10 @@
       "minimum": 0,
       "maximum": 1,
       "default": 0.98,
-      "description": "Seuil G4 : taux minimal de citations pointant vers un passage réel. Protégée security-down."
+      "description": "Seuil G4 : taux minimal de citations pointant vers un passage réel. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "RetrievalGoldenMinQueries": {
       "type": "integer",
@@ -289,7 +386,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode du reviewer spec-compliance (étage A)."
+      "description": "Mode du reviewer spec-compliance (étage A).",
+      "x-readBy": [
+        "agent:review-spec"
+      ]
     },
     "AgentSafetyMode": {
       "enum": [
@@ -298,7 +398,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode du reviewer agent-safety. `off` REFUSÉ si SDDA_RUN_PROFILE=production -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION]. Protégée security-down."
+      "description": "Mode du reviewer agent-safety. `off` REFUSÉ si SDDA_RUN_PROFILE=production -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION]. Protégée security-down.",
+      "x-readBy": [
+        "agent:review-safety"
+      ]
     },
     "CostLatencyMode": {
       "enum": [
@@ -307,7 +410,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode du reviewer cost-latency."
+      "description": "Mode du reviewer cost-latency.",
+      "x-readBy": [
+        "agent:review-cost"
+      ]
     },
     "OrchestrationReviewMode": {
       "enum": [
@@ -316,7 +422,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode du reviewer orchestration."
+      "description": "Mode du reviewer orchestration.",
+      "x-readBy": [
+        "agent:review-orchestration"
+      ]
     },
     "RagQualityMode": {
       "enum": [
@@ -325,7 +434,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode du reviewer rag-quality. Auto-skip si le pattern RAG actif est none."
+      "description": "Mode du reviewer rag-quality. Auto-skip si le pattern RAG actif est none.",
+      "x-readBy": [
+        "agent:review-rag"
+      ]
     },
     "AdversarialMode": {
       "enum": [
@@ -334,7 +446,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode de l'review-adversarial (étage C, système vivant)."
+      "description": "Mode de l'review-adversarial (étage C, système vivant).",
+      "x-readBy": [
+        "agent:review-adversarial"
+      ]
     },
     "AgentSafetyRequiredInProduction": {
       "type": "boolean",
@@ -358,7 +473,10 @@
         "critical"
       ],
       "default": "serious",
-      "description": "Sévérité minimale d'un finding spec-compliance qui bloque."
+      "description": "Sévérité minimale d'un finding spec-compliance qui bloque.",
+      "x-readBy": [
+        "agent:review-spec"
+      ]
     },
     "AgentSafetyFailOn": {
       "enum": [
@@ -369,7 +487,10 @@
         "critical"
       ],
       "default": "critical",
-      "description": "Sévérité minimale d'un finding agent-safety qui bloque. Protégée security-down."
+      "description": "Sévérité minimale d'un finding agent-safety qui bloque. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_safety_gate.py"
+      ]
     },
     "CostLatencyFailOn": {
       "enum": [
@@ -391,7 +512,10 @@
         "critical"
       ],
       "default": "serious",
-      "description": "Sévérité minimale d'un finding orchestration qui bloque."
+      "description": "Sévérité minimale d'un finding orchestration qui bloque.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_safety_gate.py"
+      ]
     },
     "RagQualityFailOn": {
       "enum": [
@@ -507,25 +631,37 @@
       "type": "integer",
       "minimum": 1,
       "default": 4,
-      "description": "Nombre cible de CAPs par MISSION."
+      "description": "Nombre cible de CAPs par MISSION.",
+      "x-readBy": [
+        "agent:po-capabilities"
+      ]
     },
     "CapGranularityWarnAt": {
       "type": "integer",
       "minimum": 1,
       "default": 8,
-      "description": "Nombre de CAPs au-delà duquel un WARN est émis. Doit être >= CapGranularityTarget."
+      "description": "Nombre de CAPs au-delà duquel un WARN est émis. Doit être >= CapGranularityTarget.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_cap.py"
+      ]
     },
     "CapGranularityHardCap": {
       "type": "integer",
       "minimum": 1,
       "default": 15,
-      "description": "Nombre max de CAPs par MISSION, bloquant. Doit être >= CapGranularityWarnAt."
+      "description": "Nombre max de CAPs par MISSION, bloquant. Doit être >= CapGranularityWarnAt.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_cap.py"
+      ]
     },
     "MaxAgentsWarnAt": {
       "type": "integer",
       "minimum": 1,
       "default": 4,
-      "description": "Nombre d'agents au-delà duquel une justification renforcée est exigée (P7)."
+      "description": "Nombre d'agents au-delà duquel une justification renforcée est exigée (P7).",
+      "x-readBy": [
+        "script:sdda_scripts/validate_topology.py"
+      ]
     },
     "MaxNestingDepth": {
       "type": "integer",
@@ -563,14 +699,22 @@
         "full"
       ],
       "default": "full",
-      "description": "Niveau de trace. `off` n'est acceptable qu'en POC jetable (invariant trace-emitted-per-run)."
+      "description": "Niveau de trace. `off` n'est acceptable qu'en POC jetable (invariant trace-emitted-per-run).",
+      "x-section": "Active Observability",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py"
+      ]
     },
     "TraceSampleRate": {
       "type": "number",
       "minimum": 0,
       "maximum": 1,
       "default": 1.0,
-      "description": "Taux d'échantillonnage des traces quand TraceLevel = sampled."
+      "description": "Taux d'échantillonnage des traces quand TraceLevel = sampled.",
+      "x-section": "Active Observability",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py"
+      ]
     },
     "TracePIIPolicy": {
       "enum": [
@@ -579,12 +723,20 @@
         "raw"
       ],
       "default": "redact",
-      "description": "Traitement des PII dans les spans. `raw` exige un ADR."
+      "description": "Traitement des PII dans les spans. `raw` exige un ADR.",
+      "x-section": "Active Observability",
+      "x-readBy": [
+        "script:sdda_scripts/scan_pii.py"
+      ]
     },
     "CostTrackingEnabled": {
       "type": "boolean",
       "default": true,
-      "description": "Enregistre tokens et coût par appel LLM dans les traces (nécessaire aux graders cost et au coût par CAP)."
+      "description": "Enregistre tokens et coût par appel LLM dans les traces (nécessaire aux graders cost et au coût par CAP).",
+      "x-section": "Active Observability",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py"
+      ]
     },
     "TraceRequiredPerRun": {
       "type": "boolean",
@@ -620,10 +772,14 @@
     "StackComboCheck": {
       "enum": [
         "strict",
-        "warn"
+        "warn",
+        "off"
       ],
       "default": "strict",
-      "description": "strict : une combinaison absente de registry/compatibility.matrix.json bloque. Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1."
+      "description": "strict : une combinaison absente de registry/compatibility.matrix.json (combos[], comparées sur comboSignatureFields) refuse le spawn -> [STACK_COMBO_UNLISTED] ; warn : le dit sans bloquer ; off : ne regarde pas, et exige un ADR (registry/adr-requirements.yml). Bypass audit-loggué : SDDA_ALLOW_UNTESTED_COMBO=1.",
+      "x-readBy": [
+        "script:sdda_hooks/preflight_stack_combo.py"
+      ]
     },
     "security_down_protected": {
       "type": "array",
@@ -686,7 +842,10 @@
         "mcp-server"
       ],
       "default": "cli-exe",
-      "description": "CE QU'ON LIVRE, distinct de la surface d'exposition (`## Active Serving Surface`, qui dit par où l'on entre). Les deux sont indépendants : un même RunService s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable. Le défaut est `cli-exe` dans les quatre langages : un système agentic se livre d'abord comme un programme qu'on lance, et c'est la surface que le runner d'eval invoque. `backend-api` change la nature du livrable — le moteur devient un service qu'une autre application appelle — et exige alors `ApiFramework`, une identité d'appelant et un contrat dérivé de l'IR. Sans cette clé, la question « on livre quoi ? » était arbitrée par l'agent, donc différemment à chaque run."
+      "description": "CE QU'ON LIVRE, distinct de la surface d'exposition (`## Active Serving Surface`, qui dit par où l'on entre). Les deux sont indépendants : un même RunService s'expose en HTTP ou en lot, et se livre en conteneur ou en exécutable. Le défaut est `cli-exe` dans les quatre langages : un système agentic se livre d'abord comme un programme qu'on lance, et c'est la surface que le runner d'eval invoque. `backend-api` change la nature du livrable — le moteur devient un service qu'une autre application appelle — et exige alors `ApiFramework`, une identité d'appelant et un contrat dérivé de l'IR. Sans cette clé, la question « on livre quoi ? » était arbitrée par l'agent, donc différemment à chaque run.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_packaging.py"
+      ]
     },
     "ApiFramework": {
       "enum": [
@@ -701,12 +860,19 @@
         "nestjs"
       ],
       "default": "none",
-      "description": "Framework HTTP du back-end livré. Obligatoirement != none quand DeliverableType = backend-api, et cohérent avec `## Active Language & Runtime` -> [PACKAGING_LANG_MISMATCH]."
+      "description": "Framework HTTP du back-end livré. Obligatoirement != none quand DeliverableType = backend-api, et cohérent avec `## Active Language & Runtime` -> [PACKAGING_LANG_MISMATCH].",
+      "x-readBy": [
+        "script:sdda_scripts/validate_packaging.py"
+      ]
     },
     "ApiContractFirst": {
       "type": "boolean",
       "default": true,
-      "description": "L'OpenAPI est dérivé des inputSchema/outputSchema de l'IR et vérifié contre eux (API GATE, G6.5). `false` autorise l'API à diverger de la spécification : exige un ADR."
+      "description": "L'OpenAPI est dérivé des inputSchema/outputSchema de l'IR et vérifié contre eux (API GATE, G6.5). `false` autorise l'API à diverger de la spécification : exige un ADR.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_packaging.py",
+        "script:sdda_scripts/validate_adr.py"
+      ]
     },
     "ApiAuthMode": {
       "enum": [
@@ -717,7 +883,10 @@
         "mtls"
       ],
       "default": "none",
-      "description": "Par où entre l'identité de l'appelant (dev-api STEP 3). `none` n'est acceptable qu'en POC ou derrière une passerelle qui l'établit déjà : sans identité établie au transport, tout le filtrage à la source est contournable."
+      "description": "Par où entre l'identité de l'appelant (dev-api STEP 3). `none` n'est acceptable qu'en POC ou derrière une passerelle qui l'établit déjà : sans identité établie au transport, tout le filtrage à la source est contournable.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_packaging.py"
+      ]
     }
   },
   "allOf": [
@@ -738,8 +907,682 @@
         ]
       },
       "then": {
-        "$comment": "Contrainte inter-clés non exprimable en JSON Schema pur (HardCap >= Target) : vérifiée par validate_config.py."
+        "$comment": "Contrainte inter-clés non exprimable en JSON Schema pur (HardCap >= Target) : vérifiée par sdda_lib/layered_config.py `validate_config` ([CONFIG_VALUE_INVALID]), avec EvalRunsCritical >= EvalRuns et CapGranularityTarget <= WarnAt <= HardCap."
       }
     }
-  ]
+  ],
+  "x-stackSections": {
+    "description": "Clés des sections `## Active *` de STACK.md (lues par `read_stack_section_kv`), validées EN VALEUR par `layered_config.validate_stack` au smoke-check et au preflight -> [CONFIG_VALUE_INVALID], bloquant. Une clé absente d'ici -> WARN [CONFIG_UNKNOWN_KEY]. Les clés de Project Config qui portent `x-section` peuvent AUSSI s'écrire dans la section nommée : elles y sont lues comme couche projet (une valeur dans les deux endroits qui diffère -> [CONFIG_KEY_CONFLICT]). `x-readBy` nomme le LECTEUR de chaque clé : `script:` (chemin sous .sdda/python/), `agent:` / `command:` (la prose d'un agent ou d'une commande, qui la lit à l'exécution), `runtime:` (le squelette généré). tests/test_stack_governance.py exige un lecteur pour chaque clé du gabarit et vérifie que le lecteur nomme la clé.",
+    "Active Harness": {
+      "type": "object",
+      "properties": {
+        "Harness": {
+          "enum": [
+            "claude-code",
+            "codex",
+            "gemini-cli",
+            "antigravity"
+          ],
+          "description": "Harnais de CONSTRUCTION. Liste close : `.sdda/capability-matrix.yml` `harnesses`.",
+          "x-readBy": [
+            "command:sdda-bootstrap"
+          ]
+        }
+      }
+    },
+    "Runtime Models": {
+      "type": "object",
+      "properties": {
+        "RuntimeProvider": {
+          "enum": [
+            "anthropic",
+            "openai",
+            "google",
+            "azure-openai",
+            "local-ollama"
+          ],
+          "description": "Fournisseur du produit généré — un fichier `.sdda/providers/{id}.yaml` par valeur.",
+          "x-readBy": [
+            "script:sdda_scripts/gen_app_skeleton.py"
+          ]
+        },
+        "RuntimeTierMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deep": {
+              "type": "string",
+              "minLength": 1
+            },
+            "balanced": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fast": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Tier -> identifiant de modèle du PRODUIT (jamais un nom de fournisseur).",
+          "x-readBy": [
+            "script:sdda_scripts/estimate_budget.py",
+            "script:sdda_lib/layered_config.py"
+          ]
+        },
+        "EmbeddingModel": {
+          "type": "string",
+          "minLength": 1,
+          "x-readBy": [
+            "script:sdda_scripts/estimate_budget.py"
+          ]
+        },
+        "RerankModel": {
+          "type": "string",
+          "minLength": 1,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "JudgeModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifiant du modèle juge, ou un tier (`deep`…) résolu par RuntimeTierMap. Doit différer des modèles évalués si JudgeMustDifferFromEvaluated.",
+          "x-readBy": [
+            "script:sdda_lib/layered_config.py",
+            "agent:qa-evals"
+          ]
+        }
+      }
+    },
+    "Active Retrieval Stack": {
+      "type": "object",
+      "properties": {
+        "VectorStoreConnection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Mode": {
+              "enum": [
+                "same-as-database",
+                "dedicated"
+              ],
+              "x-readBy": [
+                "script:sdda_hooks/preflight_stack_combo.py"
+              ]
+            },
+            "Endpoint": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "x-readBy": [
+                "script:sdda_hooks/preflight_stack_combo.py"
+              ]
+            },
+            "Collection": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "x-readBy": [
+                "script:sdda_hooks/preflight_stack_combo.py"
+              ]
+            },
+            "ApiKeyEnv": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "description": "NOM de variable d'environnement, jamais la valeur.",
+              "x-readBy": [
+                "agent:dev-retrieval"
+              ]
+            },
+            "Dimensions": {
+              "type": "integer",
+              "minimum": 1,
+              "x-readBy": [
+                "agent:dev-retrieval"
+              ]
+            },
+            "Metric": {
+              "enum": [
+                "cosine",
+                "dot",
+                "l2"
+              ],
+              "x-readBy": [
+                "agent:dev-retrieval"
+              ]
+            },
+            "TlsVerify": {
+              "type": "boolean",
+              "x-readBy": [
+                "script:sdda_scripts/validate_adr.py"
+              ]
+            }
+          },
+          "x-readBy": [
+            "script:sdda_hooks/preflight_stack_combo.py"
+          ]
+        },
+        "ChunkStrategy": {
+          "enum": [
+            "fixed",
+            "recursive-structural",
+            "semantic",
+            "document-aware",
+            "parent-child"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "ChunkSize": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "ChunkOverlap": {
+          "type": "integer",
+          "minimum": 0,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "ParentChildEnabled": {
+          "type": "boolean",
+          "x-readBy": [
+            "script:sdda_hooks/preflight_stack_combo.py"
+          ]
+        },
+        "HybridEnabled": {
+          "type": "boolean",
+          "x-readBy": [
+            "script:sdda_hooks/preflight_stack_combo.py"
+          ]
+        },
+        "HybridWeights": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vector": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "lexical": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "RerankEnabled": {
+          "type": "boolean",
+          "x-readBy": [
+            "script:sdda_hooks/preflight_stack_combo.py",
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "RetrievalTopK": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "RerankTopN": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "agent:dev-retrieval"
+          ]
+        },
+        "CitationMode": {
+          "enum": [
+            "required",
+            "optional",
+            "none"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "IngestionMode": {
+          "enum": [
+            "batch",
+            "incremental",
+            "streaming"
+          ],
+          "x-readBy": [
+            "agent:dev-retrieval"
+          ]
+        },
+        "IndexRefreshPolicy": {
+          "enum": [
+            "manual",
+            "scheduled",
+            "on-source-change"
+          ],
+          "x-readBy": [
+            "agent:dev-retrieval"
+          ]
+        }
+      }
+    },
+    "Active Data Access": {
+      "type": "object",
+      "properties": {
+        "DatabaseType": {
+          "enum": [
+            "none",
+            "PostgreSql",
+            "SqlServer",
+            "MySql",
+            "Oracle",
+            "Sqlite",
+            "MongoDb"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "DbAgentRole": {
+          "enum": [
+            "readonly",
+            "scoped-write",
+            "full"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "DbStatementTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "DbMaxRowsReturned": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "DbAllowedSchemas": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "DbForbiddenStatements": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "DbQueryLogging": {
+          "enum": [
+            "full"
+          ],
+          "description": "Seule valeur admise (DATA-ACCESS.md) : sans journal, aucun post-mortem.",
+          "x-readBy": [
+            "agent:architect-data"
+          ]
+        }
+      }
+    },
+    "Active Data Sources": {
+      "type": "object",
+      "properties": {
+        "SourceSecretsFile": {
+          "type": "string",
+          "x-readBy": [
+            "script:sdda_scripts/validate_data_access.py"
+          ]
+        },
+        "SourceManifestRoot": {
+          "type": "string",
+          "x-readBy": [
+            "script:sdda_lib/source_registry.py"
+          ]
+        },
+        "SourceManifests": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "x-readBy": [
+            "script:sdda_lib/source_registry.py"
+          ]
+        },
+        "Stores": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "x-readBy": [
+            "script:sdda_lib/source_registry.py"
+          ]
+        },
+        "Sources": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "x-readBy": [
+            "script:sdda_lib/source_registry.py"
+          ]
+        },
+        "SourceAgentRole": {
+          "enum": [
+            "readonly"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceReadTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceMaxRecordsReturned": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceMaxObjectBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceSchemaCheckSample": {
+          "type": "integer",
+          "minimum": 0,
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceMaxStalenessHours": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceForbiddenOps": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceAllowedStores": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceAllowedSources": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceEgressAllowlist": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        },
+        "SourceQueryLogging": {
+          "enum": [
+            "full"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/gen_source_tools.py"
+          ]
+        }
+      }
+    },
+    "Active Tools & Integrations": {
+      "type": "object",
+      "properties": {
+        "MCPServers": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/validate_architecture.py"
+          ]
+        },
+        "ExternalAPIs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "x-readBy": [
+            "agent:architect-tools"
+          ]
+        }
+      }
+    },
+    "Active Memory Strategy": {
+      "type": "object",
+      "properties": {
+        "ShortTermPolicy": {
+          "enum": [
+            "none",
+            "sliding-window",
+            "summarize-over",
+            "hybrid"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "ShortTermMaxTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "SummarizeTriggerTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "LongTermEnabled": {
+          "type": "boolean",
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "LongTermStore": {
+          "enum": [
+            "none",
+            "pgvector",
+            "redis",
+            "store-backed"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "LongTermWritePolicy": {
+          "enum": [
+            "explicit",
+            "automatic"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "LongTermRetentionDays": {
+          "type": "integer",
+          "minimum": 0,
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "MemoryPIIPolicy": {
+          "enum": [
+            "forbid",
+            "redact-before-write",
+            "allow"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "CrossAgentSharedState": {
+          "enum": [
+            "none",
+            "scoped",
+            "full"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        }
+      }
+    },
+    "Active Guardrails": {
+      "type": "object",
+      "properties": {
+        "InputGuardrails": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "OutputGuardrails": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        },
+        "OnGuardrailTrip": {
+          "enum": [
+            "block-and-log",
+            "sanitize-and-continue",
+            "escalate-human"
+          ],
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        }
+      }
+    },
+    "Active Serving Surface": {
+      "type": "object",
+      "properties": {
+        "ServingLocalPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "x-readBy": [
+            "agent:dev-api"
+          ]
+        },
+        "StreamingEnabled": {
+          "type": "boolean",
+          "x-readBy": [
+            "script:sdda_scripts/gen_app_skeleton.py"
+          ]
+        },
+        "HumanInTheLoopEnabled": {
+          "type": "boolean",
+          "x-readBy": [
+            "script:sdda_scripts/ir_compiler.py"
+          ]
+        }
+      }
+    },
+    "Active Secrets": {
+      "type": "object",
+      "properties": {}
+    },
+    "Active Observability": {
+      "type": "object",
+      "properties": {}
+    },
+    "Active Eval Stack": {
+      "type": "object",
+      "properties": {}
+    },
+    "Build Models": {
+      "type": "object",
+      "properties": {}
+    }
+  }
 }

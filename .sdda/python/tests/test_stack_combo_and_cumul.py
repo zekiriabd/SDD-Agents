@@ -197,7 +197,11 @@ def test_a_neutral_fiche_never_trips_the_language_check(tmp_path: Path) -> None:
         "## Active Guardrails\n - .sdda/stacks/guardrails/schema-validation.md\n\n"
         "## Active Serving Surface\n - .sdda/stacks/serving/aspnet-minimal.md\n",
         encoding="utf-8")
-    code, out = _run(HOOKS / "preflight_stack_combo.py", ["--root", str(project)])
+    # Aucune combo .NET dans la matrice : la combinaison est hors liste, ce qui
+    # est un AUTRE contrôle. On l'assume explicitement pour ne juger ici que la
+    # neutralité de langage.
+    code, out = _run(HOOKS / "preflight_stack_combo.py", ["--root", str(project)],
+                     {"SDDA_ALLOW_UNTESTED_COMBO": "1"})
     assert code == 0, out
     assert "STACK_LANGUAGE_MISMATCH" not in out
 

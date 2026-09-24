@@ -2,21 +2,36 @@
 #
 # Généré par bootstrap.py — éditer les choix ci-dessous.
 # Lu par TOUS les agents SDD_Agents à CHAQUE invocation.
-# `workspace/stack/STACK.md` est VERSIONNÉ : c'est l'un des trois fichiers
-# que l'utilisateur écrit (avec ses specs Markdown sous feats/ et sa vérité
-# terrain sous seed/). Ce `.template` en est le squelette.
+# `workspace/stack/STACK.md` est VERSIONNÉ. L'entrée de l'utilisateur tient en
+# QUATRE dépôts (ARCHITECTURE §2.ter) : `stack/` (ce fichier, seul), `feats/`
+# (ses specs Markdown : brief puis roster), `assets/` (ses données et `.env`)
+# et `seed/` (sa vérité terrain). Tout le reste est produit sous `pipeline/`,
+# `src/` et `.sys/`. Ce `.template` est le squelette de ce fichier.
+#
+# CHAQUE CLÉ A UN LECTEUR, et il est nommé : `x-readBy` dans
+# `.sdda/templates/project-config.schema.json` — un script (qui l'applique),
+# un agent ou une commande (dont la prose la lit : `agent:dev-retrieval`…),
+# ou le squelette généré. Le schéma valide aussi chaque VALEUR (type, domaine,
+# bornes) : `smoke-check` et le preflight refusent [CONFIG_VALUE_INVALID]. Une
+# clé sans lecteur n'a pas sa place ici — tests/test_stack_governance.py l'interdit.
 #
 # ============================================================================
 # CONTRAT DE PROPAGATION DES SECRETS
 # ============================================================================
 # Ce fichier ne contient AUCUNE valeur de secret — seulement des NOMS de
-# variables, sous la forme `${LLM_API_KEY}`. Les valeurs vivent dans `.env`
-# à la racine du projet, gitignoré (même mécanisme que SDD_Pro). Une valeur
-# en clair ici est refusée au smoke : [STACK_SECRET_IN_CLEAR].
-#   1. Le Tech Lead déclare les noms ici et écrit les valeurs dans `.env`.
-#   2. `dev-api` les projette dans la config native de la stack cible
+# variables, sous la forme `${LLM_API_KEY}`. Les valeurs vivent dans
+# `workspace/assets/.env`, gitignoré, que l'humain dépose avec ses autres
+# entrées ; `python .sdda/sdda.py install-env` le COPIE, sans LLM, vers
+# `workspace/src/{AppName}/.env` — c'est de là que l'application part en
+# exécutable ou en conteneur. Aucun agent ne lit l'un ou l'autre fichier
+# ([SECRET_READ_FORBIDDEN]). Une valeur en clair ici est refusée au smoke :
+# [STACK_SECRET_IN_CLEAR].
+#   1. Le Tech Lead déclare les noms ici et écrit les valeurs dans
+#      `workspace/assets/.env`, puis lance `install-env`.
+#   2. `dev-backend` les projette dans la config native de la stack cible
 #      (.env chargé par pydantic-settings, appsettings.json, application.yml) :
-#      c'est lui qui possède `workspace/src/serving/`, donc la couche Settings.
+#      c'est lui qui possède la coquille `workspace/src/{AppName}/app/`, donc la
+#      couche Settings (`dev-api` ne possède que `serving/`, la surface).
 #   3. Le code généré lit UNIQUEMENT la config native — jamais os.environ
 #      directement pour ces clés. Violation = [SEC_ENV_VAR_FORBIDDEN].
 #   4. Aucune clé ne doit apparaître dans un prompt, un trace span ou un dataset.
@@ -26,24 +41,26 @@
 
 ## Active Harness
 # Où tourne l'orchestration de CONSTRUCTION (les Developer Agents de .sdda/agents/).
-# Options : claude-code | codex | gemini-cli | antigravity | cursor
-# SSoT machine : .sdda/capability-matrix.yml
+# Options : claude-code | codex | gemini-cli | antigravity — les harnais de
+# .sdda/capability-matrix.yml (SSoT machine). Toute autre valeur n'a aucune
+# façade générée -> [CONFIG_VALUE_INVALID].
 Harness: claude-code
 
 
 ## Build Models
 # Quels modèles paient les tokens de CONSTRUCTION. Indépendant du Harness
 # ET des Runtime Models. Les agents déclarent un TIER, jamais un modèle ;
-# la résolution tier -> modèle appartient au provider (.sdda/providers/*.yaml).
-Provider: anthropic
-Endpoint: default
-TierMap:
-  deep: anthropic
-  balanced: anthropic
-  fast: anthropic
-# Mode : static (chaque agent prend son tier_default) | dynamic (scorer
-# déterministe par work-item, clampé par tier_floor/tier_ceiling).
-Mode: static
+# la résolution tier -> modèle de construction appartient au HARNAIS :
+# `.sdda/capability-matrix.yml` > `harnesses.{Harness}.tier_models`, que
+# `harness_build` compile dans le `model:` de chaque façade d'agent. Bornes :
+# `.sdda/agent-bounds.yaml` (tier_floor / tier_ceiling, non surchargeables).
+#
+# AUCUNE CLÉ ICI, délibérément. Ce bloc portait `Provider`, `Endpoint`,
+# `TierMap` (qui mappait des tiers vers… des noms de fournisseurs) et `Mode` :
+# aucun script ni aucun agent ne les lisait, et changer `TierMap` ne changeait
+# aucun appel. Une clé qu'on édite sans effet est pire qu'une clé absente —
+# elle fait croire à un réglage. Une valeur écrite ici est signalée
+# [CONFIG_UNKNOWN_KEY].
 
 
 ## Runtime Models
@@ -67,14 +84,19 @@ RerankModel: none                     # IDENTIFIANT du modèle seulement. La fic
                                       # Deux sources de vérité sur le même sujet,
                                       # c'est celle que personne ne relit qui
                                       # gouverne le code.
-JudgeModel: claude-sonnet-5           # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
-# Règle : JudgeModel != le modèle évalué quand c'est possible. Un modèle qui
-# se note lui-même mesure sa propre complaisance.
+JudgeModel: claude-opus-5             # grader LLM — DOIT être calibré (invariant llm-judge-calibrated)
+# Règle APPLIQUÉE (`JudgeMustDifferFromEvaluated: true`) : le juge ne résout
+# vers le modèle d'AUCUN tier porté par un agent du produit. Un modèle qui se
+# note lui-même mesure sa propre complaisance -> [JUDGE_SAME_AS_EVALUATED],
+# bloquant au preflight dès que l'IR dit quels tiers sont portés (avant l'IR :
+# bloquant si tous les tiers résolvent vers le juge, avertissement sinon).
+# Le défaut `claude-opus-5` suppose que les agents tournent en `balanced` /
+# `fast` ; un agent `deep` exige un autre juge. `JudgeModel` accepte aussi un
+# nom de tier (`deep`), résolu par RuntimeTierMap.
 
 
 ## Project Config
 AppName: {{AppName}}
-SystemName: {{SystemName}}
 
 # --- Budget d'EXECUTION du produit généré (exigence fonctionnelle, cf. P6) ---
 CostPerRunTargetUsd: 0.05           # coût cible d'une exécution bout-en-bout
@@ -232,6 +254,11 @@ MaxAgentsWarnAt: 4                  # au-delà, justification renforcée exigée
 # - .sdda/stacks/orchestration/single-agent.md    # [*] 1 agent + outils  <- DEFAUT
 # - .sdda/stacks/orchestration/router.md          # [*] classification -> spécialiste
 # - .sdda/stacks/orchestration/sequential.md      # [*] pipeline d'étapes ordonnées
+#
+# Les lignes « (fiche absente) » ci-dessous sont un CATALOGUE D'INTENTIONS :
+# activées, elles ne chargent rien et sont refusées au preflight
+# ([STACK_COMBO_UNLOADABLE]). supervisor, graph et plan-execute en font partie —
+# le runtime généré ne porte que router et sequential (+ single-agent).
 # - .sdda/stacks/orchestration/parallel.md        # (fiche absente) fan-out / gather
 # - .sdda/stacks/orchestration/supervisor.md      # (fiche absente) hiérarchique, délégation dynamique
 # - .sdda/stacks/orchestration/graph.md           # (fiche absente) machine à états, cycles, HITL
@@ -302,9 +329,11 @@ VectorStoreConnection:
 ChunkStrategy: recursive-structural   # fixed | recursive-structural | semantic | document-aware | parent-child
 ChunkSize: 800                        # tokens
 ChunkOverlap: 120
-ParentChildEnabled: false             # récupérer le petit chunk, servir le parent
-HybridEnabled: true
-HybridWeights: { vector: 0.6, lexical: 0.4 }
+# `ParentChildEnabled` et `HybridEnabled` ne sont plus des clés : le premier
+# redisait `ChunkStrategy: parent-child`, le second `## Active RAG Pattern =
+# hybrid`, et personne ne les lisait. Écrits quand même, ils doivent s'accorder
+# avec ce qu'ils redisent ([RETRIEVAL_CONFIG_DRIFT]).
+HybridWeights: { vector: 0.6, lexical: 0.4 }   # lu si `## Active RAG Pattern` = hybrid
 RerankEnabled: false                  # DOIT s'accorder avec `## Active Reranker`
                                       # ci-dessous : `true` avec rerank/none.md
                                       # est [RETRIEVAL_CONFIG_DRIFT].
@@ -370,9 +399,10 @@ IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
 # - .sdda/stacks/dataaccess/graphql.md            # (fiche absente)
 
 DatabaseType: {{DatabaseType}}        # none | PostgreSql | SqlServer | MySql | Oracle | Sqlite | MongoDb
-# La DÉCLARATION est ici, les VALEURS sont dans `.env` (racine du projet,
-# gitignoré) — même mécanisme que SDD_Pro. STACK.md est versionné : une valeur
-# en clair ici partirait en commit ([STACK_SECRET_IN_CLEAR] au smoke).
+# La DÉCLARATION est ici, les VALEURS sont dans `workspace/assets/.env`
+# (gitignoré, copié vers `workspace/src/{AppName}/.env` par `install-env`) —
+# même mécanisme que SDD_Pro. STACK.md est versionné : une valeur en clair ici
+# partirait en commit ([STACK_SECRET_IN_CLEAR] au smoke).
  - DB_HOST: ${DB_HOST}
  - DB_PORT: ${DB_PORT}
  - DB_NAME: ${DB_NAME}
@@ -398,8 +428,10 @@ DbQueryLogging: full                  # toute requête émise par un agent est t
 # Spécification : .sdda/stacks/dataaccess/declared-sources.md §3
 
 # Secrets : les déclarations ne portent que des NOMS de variables (clés `*_env`).
-# Les valeurs vivent dans `.env` (racine du projet, gitignoré). Jamais de secret
-# en clair dans STACK.md.
+# Les valeurs vivent dans `workspace/assets/.env` (gitignoré) ; le chemin
+# ci-dessous est RELATIF À `workspace/src/{AppName}/`, c'est-à-dire la copie que
+# `install-env` y dépose — celle que lit l'application. Jamais de secret en clair
+# dans STACK.md.
 SourceSecretsFile: .env
 
 # La déclaration est INLINE, ici : STACK.md est versionné, il ne porte que des
@@ -417,6 +449,11 @@ SourceSecretsFile: .env
 Stores:
 #  - id: exports_local
 #    kind: local                      # local|smb|nfs|s3|azure-blob|gcs|http|sftp|mcp
+#                                     # CLIENT RUNTIME : `local` seul, et `smb`/`nfs`
+#                                     # s'ils sont MONTÉS (lus comme un chemin).
+#                                     # s3|azure-blob|gcs|http|sftp|mcp : acceptés
+#                                     # par le parseur, AUCUN client généré ->
+#                                     # [STACK_VALUE_UNIMPLEMENTED] au preflight.
 #    root: workspace/assets/exports
 #    auth: { mode: none }
 #  - id: ops_share
@@ -442,7 +479,9 @@ Stores:
 # CE QUE C'EST, et ce qu'on en expose. Aucune URL, aucun chemin absolu, aucun secret.
 Sources:
 #  - id: order_tracking
-#    connector: file                  # file | http-api | mcp
+#    connector: file                  # file | http-api | mcp — seul `file` a un
+#                                     # client runtime ; les deux autres sont refusés
+#                                     # au preflight ([STACK_VALUE_UNIMPLEMENTED])
 #    store: ops_share
 #    glob: tracking/*.jsonl
 #    format: jsonl                    # object|array|jsonl|csv|tsv|xlsx|parquet
@@ -524,8 +563,12 @@ ExternalAPIs:
 ShortTermPolicy: sliding-window       # none | sliding-window | summarize-over | hybrid
 ShortTermMaxTurns: 12
 SummarizeTriggerTokens: 24000
+# LONG TERME : aucune fiche (memory/vector.md, store.md) ni module runtime ne
+# l'implémente. `LongTermEnabled: true` ou un `LongTermStore` != none est refusé
+# au preflight ([STACK_VALUE_UNIMPLEMENTED]) : l'IR le compilerait, rien ne
+# l'exécuterait.
 LongTermEnabled: false
-LongTermStore: none                   # none | pgvector | redis | store-backed
+LongTermStore: none                   # none | pgvector | redis | store-backed (aucun implémenté)
 LongTermWritePolicy: explicit         # explicit (l'agent décide via un outil) | automatic
 LongTermRetentionDays: 90
 MemoryPIIPolicy: redact-before-write  # forbid | redact-before-write | allow (allow exige un ADR)
@@ -539,6 +582,8 @@ CrossAgentSharedState: scoped         # none | scoped | full  — qui lit l'éta
 # - .sdda/stacks/guardrails/pii-redaction.md      # [*]
 # - .sdda/stacks/guardrails/llm-judge.md          # (fiche absente) garde de qualité en ligne
 # - .sdda/stacks/guardrails/nemo-guardrails.md    # (fiche absente)
+# Chaque nom ci-dessous DOIT être une fiche activée plus haut : un garde-fou
+# nommé sans fiche n'existe pas ([STACK_VALUE_UNIMPLEMENTED]).
 InputGuardrails: [injection-detection]
 OutputGuardrails: [schema-validation]
 OnGuardrailTrip: block-and-log        # block-and-log | sanitize-and-continue | escalate-human
@@ -568,7 +613,11 @@ CostTrackingEnabled: true
 GoldenSetMinItems: 50
 HoldoutSetMinItems: 30
 AdversarialSetMinItems: 25
-BaselineStorage: workspace/pipeline/baselines/
+# Les baselines vivent sous `workspace/pipeline/baselines/`, et nulle part
+# ailleurs : c'est une zone de JUGEMENT, interdite en écriture à tout `dev-*`
+# (ARCHITECTURE §2.ter). La clé `BaselineStorage` qui prétendait la déplacer
+# n'était lue par personne — et la rendre lisible permettrait de ranger la
+# référence de non-régression là où l'agent jugé écrit.
 
 
 ## Active Serving Surface
@@ -598,7 +647,9 @@ BaselineStorage: workspace/pipeline/baselines/
 
 ServingLocalPort: {{ServingPort}}
 StreamingEnabled: true
-HumanInTheLoopEnabled: false          # exige un pattern d'orchestration avec checkpointing
+HumanInTheLoopEnabled: false          # exige le checkpointing : `true` sans
+                                      # framework/langgraph.md actif est refusé
+                                      # ([STACK_VALUE_UNIMPLEMENTED])
 
 
 ## Active Architecture Pattern
@@ -630,15 +681,18 @@ HumanInTheLoopEnabled: false          # exige un pattern d'orchestration avec ch
 
 
 ## Active Secrets
-# Les NOMS des variables que l'application et les outils attendent. Les VALEURS
-# vivent dans `workspace/src/{AppName}/.env`, gitignoré, AVEC l'application :
-# c'est elle qui consomme la clé (Runtime Models), et c'est de là qu'elle part
-# en exécutable ou en conteneur. Le harnais de construction ne lit jamais ce
-# fichier — il paie ses tokens avec son propre compte. Jamais ici : STACK.md est
-# versionné. `bootstrap.py` écrit les deux ; `smoke-check` refuse une valeur en
-# clair ([STACK_SECRET_IN_CLEAR]). Aucune valeur ne DOIT apparaître dans un
-# prompt, un trace span ni un dataset (scan-secrets, G7).
-SecretsFile: .env                     # relatif à workspace/src/{AppName}/
+# Les NOMS des variables que l'application et les outils attendent. Les VALEURS,
+# l'humain les dépose dans `workspace/assets/.env` (gitignoré) ;
+# `python .sdda/sdda.py install-env` les copie vers `workspace/src/{AppName}/.env`,
+# AVEC l'application : c'est elle qui consomme la clé (Runtime Models), et c'est
+# de là qu'elle part en exécutable ou en conteneur. Le harnais de construction ne
+# lit jamais ni l'un ni l'autre — il paie ses tokens avec son propre compte.
+# Jamais ici : STACK.md est versionné. `bootstrap.py` écrit `assets/.env` et fait
+# la première copie ; `smoke-check` refuse une valeur en clair
+# ([STACK_SECRET_IN_CLEAR]). Aucune valeur ne DOIT apparaître dans un prompt, un
+# trace span ni un dataset (scan-secrets, G7). L'emplacement n'est pas une clé :
+# `SecretsFile` n'était lu par personne, le chemin est fixé par
+# `sdda_lib/paths.py` (env_source_path, env_path).
  - LLM_API_KEY: ${LLM_API_KEY}
 # - EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
 # - LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}

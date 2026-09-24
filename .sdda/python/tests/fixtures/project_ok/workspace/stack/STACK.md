@@ -23,6 +23,10 @@ SystemName: support-assistant
 GoldenSetMinItems: 5
 HoldoutSetMinItems: 3
 AdversarialSetMinItems: 2
+# La fixture croise hybrid + dataaccess/none, qu'aucune combo de la matrice ne
+# porte : `warn` la laisse servir aux tests qui ne portent pas sur la
+# reconnaissance ; test_stack_governance repasse en `strict` pour la juger.
+StackComboCheck: warn
 
 ## Active Language & Runtime
  - .sdda/stacks/lang/python.md

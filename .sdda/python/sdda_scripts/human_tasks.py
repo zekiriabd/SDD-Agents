@@ -9,9 +9,9 @@ n'a listés. Ce script les dérive du disque, pour `/sdda-status` :
               mesure la complaisance d'un modèle envers un autre)
     roster    le roster n'est pas déclaré, ou pas complet, ou pas valide (P7 :
               l'architecte décide, le framework vérifie — il ne comble rien)
-    adr       une décision de STACK.md / Project Config exige un ADR que
-              personne n'a écrit (les règles sont celles des documents du
-              framework, pas les nôtres — chaque tâche cite sa source)
+    adr       une décision de STACK.md / Project Config exige un ADR accepté
+              que personne n'a écrit — règles de `registry/adr-requirements.yml`,
+              appliquées par `validate_adr` (G2) ; chaque tâche cite sa source
     findings  une gate G5/G6/G8 est JAUNE : quelqu'un doit assumer (`--force`,
               audité) ou corriger — livrer un jaune est un pari
 
@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import calibration, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import load_gate_reports  # noqa: E402
-from sdda_lib.layered_config import LayeredConfig, active_stacks, read_stack_section_kv  # noqa: E402
+from sdda_lib.layered_config import LayeredConfig  # noqa: E402
 from sdda_scripts import compute_status, ir_compiler, roster  # noqa: E402
 from sdda_scripts import validate_architecture as va  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, load_config, resolve_root  # noqa: E402
@@ -167,82 +167,26 @@ def labels_tasks(root: Path, number: int, config: LayeredConfig) -> list[dict[st
 # ---------------------------------------------------------------------------
 # adr — les règles des documents du framework, et rien d'autre
 # ---------------------------------------------------------------------------
-def adr_files(root: Path) -> list[Path]:
-    out: list[Path] = []
-    for rel in ADR_DIRS:
-        d = root / rel
-        if d.is_dir():
-            out.extend(sorted(d.glob("ADR-*.md")))
-    return out
-
-
-def adr_covers(files: list[Path], needle: str) -> bool:
-    """Un ADR « référencé » : un fichier ADR-*.md qui nomme la clé (ou la valeur) contournée."""
-    low = needle.lower()
-    for p in files:
-        try:
-            if low in markdown_io.read_text(p).lower():
-                return True
-        except OSError:
-            continue
-    return False
-
-
-def adr_rules(root: Path, config: LayeredConfig) -> list[tuple[str, str, str, str]]:
-    """[(clé, valeur, source de la règle, pourquoi)] pour chaque décision active qui exige un ADR."""
-    rules: list[tuple[str, str, str, str]] = []
-
-    # 1. config.base.yml `ApiContractFirst` (« `false` … exige un ADR ») ; INVARIANTS.yml
-    #    `api-contract-derived-from-ir.bypasses` ; stacks/serving/fastapi-sse.md §6.
-    if config.get("ApiContractFirst") is False:
-        rules.append(("ApiContractFirst", "false", "config.base.yml ApiContractFirst · INVARIANTS.yml api-contract-derived-from-ir",
-                      "l'API peut diverger des schémas de l'IR : la divergence se décide par écrit, elle ne se subit pas"))
-
-    # 2. docs/DATA-ACCESS.md §3 (« `scoped-write` et `full` exigent un ADR ») ;
-    #    loader.yml architect-data.writes (« obligatoire si DbAgentRole != readonly »).
-    data = read_stack_section_kv(root, "Active Data Access")
-    db_type = str(data.get("DatabaseType") or "none").strip().lower()
-    role = str(data.get("DbAgentRole") or "").strip().lower()
-    if db_type not in ("", "none") and role and role != "readonly":
-        rules.append(("DbAgentRole", role, "docs/DATA-ACCESS.md §3 · loader.yml architect-data · agents/architect-data.md",
-                      "un agent qui écrit en base est un incident qui attend son heure : le rôle se justifie nominativement"))
-
-    # 3. INVARIANTS.yml `pii-not-in-vector-store.bypasses` ; templates/memory-contract §PII ;
-    #    stacks/guardrails/pii-redaction.md.
-    memory = str(read_stack_section_kv(root, "Active Memory Strategy").get("MemoryPIIPolicy") or "").strip().lower()
-    if memory == "allow":
-        rules.append(("MemoryPIIPolicy", "allow", "INVARIANTS.yml pii-not-in-vector-store · stacks/guardrails/pii-redaction.md",
-                      "ce qui entre dans un index se retire mal : la base légale et le mécanisme d'effacement se déclarent"))
-
-    # 4. rules/agent-safety.md (« `TracePIIPolicy` : … `raw` (ADR exigé) ») ;
-    #    stacks/observability/otel-genai.md ; scan_pii.py [PII_POLICY_PERMISSIVE].
-    trace = str(read_stack_section_kv(root, "Active Observability").get("TracePIIPolicy") or config.get("TracePIIPolicy") or "").strip().lower()
-    if trace == "raw":
-        rules.append(("TracePIIPolicy", "raw", "rules/agent-safety.md · stacks/observability/otel-genai.md",
-                      "les PII détectées dans les traces ne bloquent plus : la décision doit être lisible en revue"))
-
-    # 5. registry/architecture-requirements.yml `adr_required: true` (pattern `network`).
-    patterns = active_stacks(root, roster.ORCHESTRATION_SECTION)
-    if len(patterns) == 1:
-        registry = va.load_registry(root, Report(name="adr", target=str(root)))
-        _, entry = va.requirements_for(registry, "orchestration", patterns[0]) if registry else ({}, {})
-        if entry.get("adr_required"):
-            rules.append((roster.ORCHESTRATION_SECTION, patterns[0], "registry/architecture-requirements.yml adr_required",
-                          " ".join(str(entry.get("why") or "refusé par défaut : trajectoires et coût non bornables").split())))
-    return rules
-
-
 def adr_tasks(root: Path, mission: int | None, config: LayeredConfig) -> list[dict[str, Any]]:
-    files = adr_files(root)
+    """Une tâche BLOQUANTE par décision de STACK.md qui exige un ADR accepté non écrit.
+
+    Les règles ne vivent plus ici : `registry/adr-requirements.yml`, appliqué
+    par `validate_adr` (part `adr` de G2). Ce listing en est la vue humaine —
+    deux listes de règles rendraient deux réponses à « faut-il un ADR ? ».
+    Bloquante, parce que la gate l'est : une tâche « facultative » qui fait
+    rougir G2 est une tâche mal étiquetée.
+    """
+    from sdda_scripts import validate_adr
+
     out: list[dict[str, Any]] = []
-    for key, value, source, why in adr_rules(root, config):
-        if adr_covers(files, key) or adr_covers(files, value):
-            continue
-        out.append(task("adr", mission, f"Écrire l'ADR exigé par `{key}: {value}`",
-                        f"{why} — règle : {source}",
+    for req, value, proposed in validate_adr.uncovered(root, config):
+        state = (f" ; {', '.join(a.path.name for a in proposed)} la nomme mais n'est pas `Accepted`"
+                 if proposed else "")
+        out.append(task("adr", mission, f"Écrire l'ADR exigé par `{req.key}: {value}`",
+                        f"{req.why} — règle : {req.id} ({req.source}){state}",
                         f"écrire `{ADR_DIRS[0]}/ADR-{{YYYYMMDDTHHMM}}-{{slug}}.md` depuis .sdda/templates/adr.template.md, "
-                        f"en nommant `{key}` ; ou revenir à la valeur par défaut",
-                        blocking=False, ref=f"{ADR_DIRS[0]}/"))
+                        f"avec `Status: Accepted` et `Covers: {req.key}={value}` ; ou revenir à la valeur par défaut",
+                        blocking=True, ref=f"{ADR_DIRS[0]}/"))
     return out
 
 

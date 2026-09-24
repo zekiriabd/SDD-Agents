@@ -2,7 +2,7 @@
   "$id": "https://sdd-agents.dev/registry/compatibility.matrix.json",
   "schemaVersion": 1,
   "title": "SDD_Agents — matrice de compatibilité des combinaisons de stack",
-  "description": "SSoT machine des combinaisons langage x framework x pattern d'orchestration x pattern RAG x vector store x accès données x serving x provider, et du niveau de validation de chaque composant. Consommée par preflight_stack_combo (StackComboCheck: strict bloque toute combinaison absente ; bypass audit-loggué SDDA_ALLOW_UNTESTED_COMBO=1) et par bootstrap.py. RÈGLE D'HONNÊTETÉ : un niveau n'est promu qu'après une mesure réellement exécutée et publiée (ROADMAP Lot 6). Déclarer une validation qui n'a pas eu lieu est exactement le faux vert que ce framework existe pour empêcher.",
+  "description": "SSoT machine des combinaisons langage x framework x pattern d'orchestration x pattern RAG x vector store x accès données x serving x provider, et du niveau de validation de chaque composant. Consommée par preflight_stack_combo, qui calcule la signature de la combinaison activée (comboSignatureFields) et la cherche dans combos[] : absente, StackComboCheck: strict (défaut) refuse [STACK_COMBO_UNLISTED], warn le dit, off se tait (ADR exigé) ; bypass audit-loggué SDDA_ALLOW_UNTESTED_COMBO=1. Les composants refusedByDefault et les valeurs de adr-requirements.yml refusent le spawn des agents de construction sans ADR accepté [ADR_MISSING]. Consommée aussi par bootstrap.py, qui en tire son menu. RÈGLE D'HONNÊTETÉ : un niveau n'est promu qu'après une mesure réellement exécutée et publiée (ROADMAP Lot 6). Déclarer une validation qui n'a pas eu lieu est exactement le faux vert que ce framework existe pour empêcher.",
   "frameworkStatus": "design-phase",
   "lastValidated": null,
   "syncedFrom": [
@@ -30,6 +30,7 @@
   "comboStatuses": {
     "description": "Statut d'une combo. `design-phase` = cible déclarée, rien n'a été exécuté. Les autres statuts ne peuvent apparaître qu'avec un `validatedAt` non nul et une référence de rapport de bench.",
     "allowed": [
+      "untested",
       "design-phase",
       "scaffold-validated",
       "bench-validated",
@@ -63,46 +64,181 @@
     "enforcedBy": ".sdda/python/sdda_hooks/preflight_stack_combo.py",
     "headerPresenceCheckedBy": "framework_smoke.stacks.languages",
     "coverage": {
-      "python": "13 fiches — lang, framework (langchain, langgraph), rag/hybrid, vectorstore/pgvector, rerank/bge-reranker-local, dataaccess (view-per-agent, declared-sources), eval, observability, serving (cli, batch, fastapi-sse), tools/mcp",
-      "csharp": "4 fiches — lang/csharp, framework/ms-agent-framework, serving/aspnet-minimal, serving/cli-dotnet. AUCUNE fiche rag, vectorstore, rerank, dataaccess, eval ni observability : .NET ne peut pas faire de RAG aujourd'hui, et le hook le dit au lieu de le laisser inventer (ROADMAP Lot 7). `serving/cli-dotnet` rend le DÉFAUT `DeliverableType: cli-exe` atteignable en C# — il ne l'était pas, la seule fiche console étant `[python]` — mais un projet .NET complet reste bloqué tant que `eval/` et `observability/` n'ont pas de fiche .NET.",
-      "neutral": "12 fiches `*` — orchestration, guardrails, memory, embedding, rerank (none, cohere-rerank), rag/none, dataaccess/none"
+      "description": "Fiches par langage, telles que leur en-tête `Languages:` les déclare. LISTES et non compteurs en prose : `tests/test_stack_governance.py` les recalcule depuis le disque et échoue au moindre écart. La version en prose annonçait 13 fiches Python et 4 C# quand le disque en portait 15 et 5 — un compteur qu'aucun test ne relit dérive dès la première fiche ajoutée.",
+      "python": {
+        "fiches": ["backend/python-fastapi", "dataaccess/declared-sources", "dataaccess/view-per-agent", "eval/pytest-eval", "framework/langchain", "framework/langgraph", "lang/python", "observability/otel-genai", "rag/hybrid", "rerank/bge-reranker-local", "serving/batch", "serving/cli", "serving/fastapi-sse", "tools/mcp", "vectorstore/pgvector"],
+        "note": "Seul langage qui couvre toute la chaîne : RAG, accès données, eval, observabilité."
+      },
+      "csharp": {
+        "fiches": ["backend/dotnet-minimalapi", "framework/ms-agent-framework", "lang/csharp", "serving/aspnet-minimal", "serving/cli-dotnet"],
+        "note": "AUCUNE fiche rag, vectorstore, rerank, dataaccess, eval ni observability : .NET ne peut pas faire de RAG aujourd'hui, et le hook le dit au lieu de le laisser inventer (ROADMAP Lot 7). `serving/cli-dotnet` rend le DÉFAUT `DeliverableType: cli-exe` atteignable en C#, mais un projet .NET complet reste bloqué tant que `eval/` et `observability/` n'ont pas de fiche .NET."
+      },
+      "typescript": {
+        "fiches": ["backend/nestjs", "backend/node-express", "framework/langgraph-js", "lang/typescript", "serving/cli-node"],
+        "note": "Même réserve que csharp : ni eval/ ni observability/ en TypeScript, donc aucune combo de bootstrap."
+      },
+      "kotlin": {
+        "fiches": ["backend/kotlin-spring-boot", "framework/spring-ai", "lang/kotlin", "serving/cli-kotlin"],
+        "note": "Même réserve que csharp ; pins Maven encore `versionsVerified: false`."
+      },
+      "neutral": {
+        "fiches": ["archi/ddd", "archi/microservice", "archi/mvc", "dataaccess/none", "embedding/bge-local", "embedding/voyage", "guardrails/injection-detection", "guardrails/pii-redaction", "guardrails/schema-validation", "memory/buffer", "orchestration/router", "orchestration/sequential", "orchestration/single-agent", "rag/none", "rerank/cohere-rerank", "rerank/none"],
+        "note": "`Languages: *` — patterns, garde-fous, modèles servis par API : aucun runtime supposé."
+      }
     }
   },
   "targetCombo": "C1",
+  "combosDescription": "LA définition des combinaisons, et la seule : `bootstrap.py` construit son menu depuis cette liste (`bootstrapId`) et `preflight_stack_combo` y reconnaît la combinaison activée. Deux listes — celle-ci et une copie dans bootstrap — divergeaient déjà : C1 annonçait `repository-tools` (une stratégie d'ACCÈS DONNÉES, sans fiche, rangée ici parmi les outils) quand le bootstrap activait `mcp`. `orchestration` est la liste des patterns RACINE admis ; le bootstrap active le premier. `framework` est un ENSEMBLE exact (LangChain seul et LangChain+LangGraph sont deux stacks). Les autres champs de la signature sont des valeurs uniques ; `none` vaut « aucune fiche active dans la section ».",
   "combos": [
     {
       "id": "C1",
-      "label": "MVP — python + langchain/langgraph + router/sequential + hybrid/pgvector + view-per-agent + cli",
+      "bootstrapId": "c1",
+      "label": "Python + LangGraph + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
       "language": "python",
-      "framework": [
-        "langchain",
-        "langgraph"
-      ],
-      "orchestration": [
-        "router",
-        "sequential"
-      ],
+      "framework": ["langchain", "langgraph"],
+      "orchestration": ["router", "sequential"],
       "rag": "hybrid",
       "vectorstore": "pgvector",
       "embedding": "voyage",
       "rerank": "none",
       "dataaccess": "view-per-agent",
       "database": "PostgreSql",
-      "tools": [
-        "mcp",
-        "repository-tools"
-      ],
+      "tools": ["mcp"],
       "memory": "buffer",
       "eval": "pytest-eval",
       "observability": "otel-genai",
       "serving": "cli",
       "servingNext": "fastapi-sse",
       "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": ["injection-detection", "schema-validation"],
       "status": "design-phase",
       "slaCommitment": false,
       "validatedAt": null,
       "benchReportRef": null,
-      "notes": "Unique combinaison CIBLE du framework (ROADMAP « Le MVP : une seule combinaison, mesurée »). Choisie parce que l'écosystème agentic Python est le plus mûr, que LangGraph apporte cycles bornés / checkpointing / HITL (P12), que hybrid sert de référence pour mesurer tous les autres patterns RAG, que pgvector évite une seconde base, et que view-per-agent est l'accès données le plus sûr. RIEN n'a encore été exécuté : aucune gate n'a rendu de verdict sur cette combo. Elle ne devient une combo sous SLA qu'au Lot 6, après mesure sur un vrai produit — pas par déclaration. LangSmith reste optionnel (le tracing passe par la couche observabilité, pas par une dépendance fournisseur). single-agent est le défaut et n'est pas listé ici parce qu'il ne demande presque rien à implémenter — il est couvert de fait par C1."
+      "notes": "Unique combinaison CIBLE du framework (ROADMAP « Le MVP : une seule combinaison, mesurée »). Choisie parce que l'écosystème agentic Python est le plus mûr, que LangGraph apporte cycles bornés / checkpointing / HITL (P12), que hybrid sert de référence pour mesurer tous les autres patterns RAG, que pgvector évite une seconde base, et que view-per-agent est l'accès données le plus sûr. RIEN n'a encore été exécuté : aucune gate n'a rendu de verdict sur cette combo. Elle ne devient une combo sous SLA qu'au Lot 6, après mesure sur un vrai produit — pas par déclaration. LangSmith reste optionnel (le tracing passe par la couche observabilité, pas par une dépendance fournisseur)."
+    },
+    {
+      "id": "C1-API",
+      "bootstrapId": "c1-api",
+      "label": "Idem C1, exposé en API FastAPI + SSE",
+      "language": "python",
+      "framework": ["langchain", "langgraph"],
+      "orchestration": ["router", "sequential"],
+      "rag": "hybrid",
+      "vectorstore": "pgvector",
+      "embedding": "voyage",
+      "rerank": "none",
+      "dataaccess": "view-per-agent",
+      "database": "PostgreSql",
+      "tools": ["mcp"],
+      "memory": "buffer",
+      "eval": "pytest-eval",
+      "observability": "otel-genai",
+      "serving": "fastapi-sse",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "python-fastapi",
+      "deliverable": "backend-api",
+      "apiFramework": "fastapi",
+      "apiAuth": "oauth2",
+      "guardrails": ["injection-detection", "schema-validation"],
+      "status": "untested",
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "`ApiAuthMode: oauth2` et non `none` : une base en view-per-agent exposée en HTTP filtre par une identité qu'il faut établir au transport."
+    },
+    {
+      "id": "SOURCES",
+      "bootstrapId": "sources",
+      "label": "Python + LangGraph, sources déclarées (fichiers + API + MCP), sans base",
+      "language": "python",
+      "framework": ["langchain", "langgraph"],
+      "orchestration": ["router", "single-agent", "sequential"],
+      "rag": "none",
+      "vectorstore": "none",
+      "embedding": "none",
+      "rerank": "none",
+      "dataaccess": "declared-sources",
+      "database": "none",
+      "tools": ["mcp"],
+      "memory": "buffer",
+      "eval": "pytest-eval",
+      "observability": "otel-genai",
+      "serving": "cli",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": ["injection-detection", "schema-validation"],
+      "status": "untested",
+      "validatedAt": null,
+      "benchReportRef": null
+    },
+    {
+      "id": "BATCH",
+      "bootstrapId": "batch",
+      "label": "Python + LangGraph, traitement par lot (N entrées, reprise, budget par item)",
+      "language": "python",
+      "framework": ["langchain", "langgraph"],
+      "orchestration": ["sequential"],
+      "rag": "none",
+      "vectorstore": "none",
+      "embedding": "none",
+      "rerank": "none",
+      "dataaccess": "declared-sources",
+      "database": "none",
+      "tools": ["mcp"],
+      "memory": "buffer",
+      "eval": "pytest-eval",
+      "observability": "otel-genai",
+      "serving": "batch",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "batch-job",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": ["injection-detection", "schema-validation"],
+      "status": "untested",
+      "validatedAt": null,
+      "benchReportRef": null
+    },
+    {
+      "id": "MINIMAL",
+      "bootstrapId": "minimal",
+      "label": "Python + LangChain, agent unique, sans RAG ni base",
+      "language": "python",
+      "framework": ["langchain"],
+      "orchestration": ["single-agent", "router", "sequential"],
+      "rag": "none",
+      "vectorstore": "none",
+      "embedding": "none",
+      "rerank": "none",
+      "dataaccess": "none",
+      "database": "none",
+      "tools": [],
+      "memory": "buffer",
+      "eval": "pytest-eval",
+      "observability": "otel-genai",
+      "serving": "cli",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": ["injection-detection", "schema-validation"],
+      "status": "untested",
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "LangChain SANS LangGraph : la fiche langchain.md n'admet que des patterns sans cycle (single-agent, sequential, router)."
     }
   ],
   "componentLevels": {
@@ -268,37 +404,20 @@
     }
   },
   "refusedByDefault": {
-    "description": "Composants dont l'activation exige un ADR référencé, indépendamment de leur niveau de validation. Source : patterns.registry.json (status refused-by-default) et DATA-ACCESS.md / STACK.md (valeurs exigeant un ADR).",
+    "description": "Composants dont l'activation exige un ADR ACCEPTÉ, indépendamment de leur niveau de validation. Source : patterns.registry.json (status refused-by-default). Les VALEURS de configuration qui exigent un ADR (DbAgentRole, MemoryPIIPolicy, TracePIIPolicy, TlsVerify…) vivent dans `configValuesFrom` — une seule liste, appliquée par validate_adr (G2) et par preflight_stack_combo au spawn des agents de construction. `tests/test_stack_governance.py` vérifie que chaque composant d'ici y figure.",
     "components": [
       "orchestration/network"
     ],
-    "configValues": [
-      {
-        "key": "DbAgentRole",
-        "value": "full"
-      },
-      {
-        "key": "DbAgentRole",
-        "value": "scoped-write"
-      },
-      {
-        "key": "MemoryPIIPolicy",
-        "value": "allow"
-      },
-      {
-        "key": "TracePIIPolicy",
-        "value": "raw"
-      }
-    ]
+    "configValuesFrom": ".sdda/registry/adr-requirements.yml"
   },
   "catalogDiscrepancies": {
     "description": "Écarts constatés entre les sources au moment de la synchronisation, à trancher par le mainteneur (pas par ce fichier).",
     "items": [
       "ARCHITECTURE.md §2 liste `faiss.md` dans vectorstore/ ; STACK.md.template ne le propose pas. Conservé ici comme `untested`.",
       "ARCHITECTURE.md §2 liste `none.md` dans dataaccess/ et STACK.md.template le propose ; l'enum `dataAccess[].strategy` de ir.schema.json ne le contient pas (cohérent si `none` = absence d'entrée dataAccess, à confirmer dans AGENTIC-IR.md).",
-      "STACK.md.template et ARCHITECTURE.md §2 proposent 18 frameworks sur 4 langages ; 4 fiches existent sur disque (Python : langchain, langgraph — .NET : ms-agent-framework, avec lang/csharp.md). Les 14 autres sont un catalogue d'intentions : `untested` ici, et AUCUN fichier derrière. Une ligne activée dans STACK.md pour l'une d'elles ne charge rien.",
+      "STACK.md.template et ARCHITECTURE.md §2 proposent 18 frameworks sur 4 langages ; 5 fiches existent sur disque (Python : langchain, langgraph — .NET : ms-agent-framework — TypeScript : langgraph-js — Kotlin : spring-ai). Les 13 autres sont un catalogue d'intentions : `untested` ici, et AUCUN fichier derrière. Une ligne activée dans STACK.md pour l'une d'elles ne charge rien — preflight_stack_combo la refuse ([STACK_COMBO_UNLOADABLE]). Décompte vérifié par tests/test_stack_governance.py.",
       "ARCHITECTURE.md §2 place `combos.json` dans templates/ ; config.base.yml et STACK.md.template pointent `registry/compatibility.matrix.json`. Ce fichier est la SSoT ; `templates/combos.json` ne doit pas être créé en doublon.",
-      "lang/ : python.md et csharp.md existent ; typescript.md et java.md sont annoncés par STACK.md.template et ARCHITECTURE.md §2 sans fiche sur disque.",
+      "lang/ : python.md, csharp.md, typescript.md et kotlin.md existent ; seul java.md est annoncé par STACK.md.template sans fiche sur disque. Décompte vérifié par tests/test_stack_governance.py.",
       "OUVERT — `DeliverableType: cli-exe` est le défaut du framework dans les quatre langages (config.base.yml), mais la surface console n'existe que pour python (serving/cli.md) et csharp (serving/cli-dotnet.md, ajoutée le 2026-09-22). `cli-java.md` et `cli-node.md` sont annoncées sans fiche, ce qui est cohérent : lang/java.md et lang/typescript.md n'existent pas non plus. Un défaut qu'un langage ne peut pas honorer se voit au preflight ([STACK_LANGUAGE_MISMATCH]) et non en silence.",
       "OUVERT — aucune combo de bootstrap n'est .NET. Avant d'en ajouter une, il manque une fiche `eval/` et une fiche `observability/` en .NET : les deux actives sont `[python]`, donc une combo C# activerait des fiches Python et serait refusée par preflight_stack_combo. C'est le même piège qui avait fait retirer la combo `dotnet-api`.",
       "RÉSOLU le 2026-09-22 — les 9 catalogues portent désormais versionsVerified: true, avec verifiedAt et verifiedAgainst. Python : l'UNION des catalogues est passée à `uv pip compile --python-version 3.12`, donc les pins sont mutuellement compatibles et non « la dernière de chaque paquet » (pgvector reste en 0.3.6 parce que langchain-postgres le contraint, alors que PyPI publie 0.5.0). 6 pins étaient introuvables sur PyPI et auraient fait échouer `uv sync`, tous dans la famille LangChain, c'est-à-dire le cœur du MVP : langchain 1.1.6, langchain-core 1.1.6, langchain-anthropic 1.2.3, langchain-mcp-adapters 0.2.3, langchain-text-splitters 1.0.2, langgraph-checkpoint 3.0.2. .NET : nuget.org, 13/13 pins de ms-agent-framework confirmés exacts ; aspnet-minimal épinglait OpenTelemetry 1.13.0 quand ms-agent-framework épinglait 1.19.1 — les deux catalogues d'un même projet .NET se contredisaient sur la même famille, désormais alignés.",
