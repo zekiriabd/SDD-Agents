@@ -381,6 +381,29 @@ def _cross_key_issues(config: dict[str, Any]) -> list[ConfigIssue]:
         if a is not None and b is not None and b < a:
             out.append(ConfigIssue("CONFIG_VALUE_INVALID", f"`{high}: {config.get(high)}` < `{low}: {config.get(low)}`",
                                    f"{why} : relever `{high}` ou baisser `{low}`", loc))
+
+    # Observabilité : quatre clés que le gabarit déclarait et qu'aucun script
+    # ne lisait. Leur sens se lit ici, contre les invariants qu'elles touchent.
+    oloc = f"{STACK_LOC} ## Active Observability"
+    level = str(config.get("TraceLevel") or "full").strip().lower()
+    if level == "off" and config.get("TraceRequiredPerRun") is not False:
+        out.append(ConfigIssue("CONFIG_VALUE_INVALID", "`TraceLevel: off` alors que `TraceRequiredPerRun: true`",
+                               "un run sans trace est un échec (invariant trace-emitted-per-run) : `off` n'est "
+                               "tenable qu'en POC jetable, avec `TraceRequiredPerRun: false` assumé", oloc))
+    rate = _number(config.get("TraceSampleRate"))
+    if rate is not None and rate < 1.0:
+        if level != "sampled":
+            out.append(ConfigIssue("CONFIG_VALUE_INVALID", f"`TraceSampleRate: {rate}` ignoré : `TraceLevel: {level}`",
+                                   "le taux ne s'applique qu'à `TraceLevel: sampled`", oloc, blocking=False))
+        else:
+            out.append(ConfigIssue("CONFIG_VALUE_INVALID", f"`TraceLevel: sampled` à {rate} : des runs n'auront pas de trace",
+                                   "les graders de trajectoire rendront `[EVAL_OUTPUT_UNGRADABLE]` sur les runs non "
+                                   "tracés — garder 1.0 pendant les évaluations", oloc, blocking=False))
+    if config.get("CostTrackingEnabled") is False and _number(config.get("CostPerRunHardCapUsd")) is not None:
+        out.append(ConfigIssue("CONFIG_VALUE_INVALID",
+                               "`CostTrackingEnabled: false` avec un `CostPerRunHardCapUsd` déclaré",
+                               "sans coût par appel dans les traces, G6 ne peut pas mesurer le plafond "
+                               "([BUDGET_EXCEEDED_MEASURED] devient invérifiable) : réactiver le suivi", oloc))
     return out
 
 

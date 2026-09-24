@@ -365,7 +365,6 @@ def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str]) -> str:
     has_db = combo.database != "none"
     mapping = {
         "{{AppName}}": app_name,
-        "{{SystemName}}": app_name,
         "{{Language}}": combo.language,
         "{{FrameworkActiveLines}}": framework_lines,
         "{{OrchestrationPattern}}": combo.orchestration,
