@@ -80,7 +80,7 @@ def ensure_utf8_stdout() -> None:
             pass
 
 
-_MANGLED_SLASH_COMMAND = __import__("re").compile(r"^[A-Za-z]:[\/](?:.*?[\/])?(sdda[\w-]*)((?:\s.*)?)$")
+_MANGLED_SLASH_COMMAND = __import__("re").compile(r"^[A-Za-z]:[\\/](?:.*?[\\/])?(sdda[\w-]*)((?:\s.*)?)$")
 
 
 def slash_command(value: str) -> str:
