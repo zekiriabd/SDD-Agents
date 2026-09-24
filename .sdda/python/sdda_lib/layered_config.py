@@ -11,6 +11,12 @@ Clé inconnue (absente du schéma `templates/project-config.schema.json` ou, tan
 qu'il n'existe pas, des clés de la couche base) -> WARN `[CONFIG_UNKNOWN_KEY]`.
 `SDDA_CONFIG_STRICT=1` la rend fatale.
 
+VALEURS : `validate_config` confronte chaque valeur (Project Config effectif
+et sections `## Active *`, schéma `x-stackSections`) à son type, son
+énumération et ses bornes -> `[CONFIG_VALUE_INVALID]`, que `smoke-check` et
+`preflight_stack_combo` rendent bloquant. Les clés `x-section` (TraceLevel,
+GoldenSetMinItems…) se lisent aussi dans leur section, comme couche projet.
+
 PROTECTION SECURITY-DOWN : le projet ne peut pas relâcher ce que la couche team a
 durci sur les clés de `security_down_protected` (config.base.yml). Le sens de
 « plus strict » dépend de la clé : sévérité (`critical` < `serious` < …), mode
@@ -20,7 +26,9 @@ plafond), booléen (`true` = durci). Violation -> `SddaError`
 """
 from __future__ import annotations
 
+import io
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,6 +68,9 @@ class LayeredConfig:
     sources: dict[str, str]                 # clé -> base | team | project
     warnings: list[str] = field(default_factory=list)
     layer_paths: dict[str, str] = field(default_factory=dict)
+    #: (clé, section, valeur de `## Project Config`, valeur de la section) —
+    #: une clé écrite aux deux endroits avec deux valeurs. Cf. `x-section`.
+    conflicts: list[tuple[str, str, Any, Any]] = field(default_factory=list)
 
     def get(self, key: str, default: Any = None) -> Any:
         v = self.config.get(key)
@@ -172,17 +183,39 @@ def check_security_down(team: dict[str, Any], project: dict[str, Any], protected
 # --------------------------------------------------------------------------
 # Clés connues
 # --------------------------------------------------------------------------
+def load_schema(root: Path) -> dict[str, Any]:
+    """`templates/project-config.schema.json`, ou `{}` s'il est absent ou illisible."""
+    import json
+
+    schema_path = paths.project_config_schema_path(root)
+    if not schema_path.is_file():
+        return {}
+    try:
+        schema = json.loads(markdown_io.read_text(schema_path))
+    except ValueError:
+        return {}
+    return schema if isinstance(schema, dict) else {}
+
+
 def known_keys(root: Path, base: dict[str, Any]) -> set[str]:
     """Clés du schéma `project-config.schema.json` s'il existe, sinon celles de la base."""
-    schema_path = paths.project_config_schema_path(root)
-    if schema_path.is_file():
-        import json
-        try:
-            props = json.loads(markdown_io.read_text(schema_path)).get("properties", {})
-            return set(props) | set(base)
-        except (ValueError, AttributeError):
-            pass
-    return set(base)
+    props = load_schema(root).get("properties")
+    return (set(props) | set(base)) if isinstance(props, dict) else set(base)
+
+
+def section_resident_keys(schema: dict[str, Any]) -> dict[str, str]:
+    """{clé de Project Config: section} pour les clés qui portent `x-section`.
+
+    `TraceLevel` ou `GoldenSetMinItems` s'écrivent, dans le gabarit, sous
+    `## Active Observability` et `## Active Eval Stack` — là où l'humain les
+    cherche. Mais tous les scripts les lisent dans la config en 3 couches, qui
+    ne regardait que `## Project Config` : la valeur écrite dans la section
+    n'était lue par PERSONNE, et `GoldenSetMinItems: 100` y laissait le
+    framework exiger 50. La section devient donc, pour ces clés, une autre
+    écriture de la couche projet.
+    """
+    props = schema.get("properties") or {}
+    return {k: str(v["x-section"]) for k, v in props.items() if isinstance(v, dict) and v.get("x-section")}
 
 
 # --------------------------------------------------------------------------
@@ -199,6 +232,15 @@ def read_layered_config(root: Path, *, team_path: Path | None = None, warn_strea
     team = _read_yaml(tpath)
     team.pop("security_down_protected", None)
     project = read_project_section(root)
+    conflicts: list[tuple[str, str, Any, Any]] = []
+    for key, heading in section_resident_keys(load_schema(root)).items():
+        section = read_stack_section_kv(root, heading)
+        if key not in section:
+            continue
+        if key in project and project[key] != section[key]:
+            conflicts.append((key, heading, project[key], section[key]))
+        else:
+            project[key] = section[key]
 
     check_security_down(team, project, protected)
 
@@ -231,23 +273,44 @@ def read_layered_config(root: Path, *, team_path: Path | None = None, warn_strea
         sources=sources,
         warnings=warnings,
         layer_paths={"base": str(base_path), "team": str(tpath), "project": str(paths.stack_md_path(root))},
+        conflicts=conflicts,
     )
+
+
+#: ` - DB_HOST: ${DB_HOST}` — une DÉCLARATION de variable (nom -> référence),
+#: pas une clé de configuration. Au milieu de clés YAML, ces lignes rendaient
+#: la section entière illisible : `## Active Data Access` se lisait `{}`, donc
+#: `DbAgentRole: full` n'exigeait plus d'ADR et aucune valeur n'était vue.
+_ENV_DECLARATION_RE = re.compile(r"^\s?-\s+[A-Z][A-Z0-9_]*\s*:")
+
+
+def section_kv(root: Path, heading: str) -> tuple[dict[str, Any] | None, str | None]:
+    """`(valeurs, erreur)` d'une section : `(None, None)` si elle est absente.
+
+    La forme qui DIT l'échec de lecture. `read_stack_section_kv` rend `{}` sur
+    une section illisible — commode pour un lecteur qui a un défaut, fatal pour
+    un validateur : une section qu'on ne sait pas lire passerait pour conforme.
+    """
+    p = paths.stack_md_path(root)
+    if not p.is_file():
+        return None, None
+    body = markdown_io.section_body(markdown_io.read_text(p), heading)
+    if body is None:
+        return None, None
+    # Les lignes ` - .sdda/stacks/...` (stacks actives) et ` - NOM: ${NOM}`
+    # (déclarations de variables) ne sont pas du YAML clé/valeur.
+    kept = "\n".join(l for l in body.split("\n")
+                     if not l.lstrip().startswith("- .sdda/") and not _ENV_DECLARATION_RE.match(l))
+    try:
+        return yaml_mini.parse_mapping(kept), None
+    except yaml_mini.YamlMiniError as exc:
+        return {}, str(exc)
 
 
 def read_stack_section_kv(root: Path, heading: str) -> dict[str, Any]:
     """Une section `## …` de STACK.md lue comme YAML (ex. `Runtime Models`)."""
-    p = paths.stack_md_path(root)
-    if not p.is_file():
-        return {}
-    body = markdown_io.section_body(markdown_io.read_text(p), heading)
-    if body is None:
-        return {}
-    # Les lignes ` - .sdda/stacks/...` (stacks actives) ne sont pas du YAML clé/valeur.
-    kept = "\n".join(l for l in body.split("\n") if not l.lstrip().startswith("- .sdda/"))
-    try:
-        return yaml_mini.parse_mapping(kept)
-    except yaml_mini.YamlMiniError:
-        return {}
+    values, _ = section_kv(root, heading)
+    return values or {}
 
 
 def active_stacks(root: Path, heading: str) -> list[str]:
@@ -281,3 +344,127 @@ def read_runtime_tier_map(root: Path) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
     return {str(k): str(v) for k, v in raw.items() if v not in (None, "")}
+
+
+# --------------------------------------------------------------------------
+# Valeurs — le schéma validait les NOMS, jamais ce qu'on y écrivait
+# --------------------------------------------------------------------------
+@dataclass
+class ConfigIssue:
+    """Un constat sur la configuration, prêt à devenir finding ou refus de hook."""
+    cls: str
+    message: str
+    fix: str
+    location: str
+    blocking: bool = True
+
+
+STACK_LOC = "workspace/stack/STACK.md"
+
+
+def _number(value: Any) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _cross_key_issues(config: dict[str, Any]) -> list[ConfigIssue]:
+    """Les contraintes entre clés que JSON Schema n'exprime pas (le schéma les annonçait)."""
+    out: list[ConfigIssue] = []
+    loc = f"{STACK_LOC} ## Project Config"
+    pairs = (
+        ("CostPerRunTargetUsd", "CostPerRunHardCapUsd", "le plafond dur est au moins égal à la cible"),
+        ("EvalRuns", "EvalRunsCritical", "une CAP critique se mesure sur au moins autant de runs qu'une autre"),
+        ("CapGranularityTarget", "CapGranularityWarnAt", "l'avertissement tombe au-delà de la cible"),
+        ("CapGranularityWarnAt", "CapGranularityHardCap", "le plafond tombe au-delà de l'avertissement"),
+    )
+    for low, high, why in pairs:
+        a, b = _number(config.get(low)), _number(config.get(high))
+        if a is not None and b is not None and b < a:
+            out.append(ConfigIssue("CONFIG_VALUE_INVALID", f"`{high}: {config.get(high)}` < `{low}: {config.get(low)}`",
+                                   f"{why} : relever `{high}` ou baisser `{low}`", loc))
+    return out
+
+
+def validate_config(root: Path, lc: LayeredConfig | None = None) -> list[ConfigIssue]:
+    """Types, énumérations et bornes des VALEURS — Project Config et sections `## Active *`.
+
+    `OnBoundExceeded: foo` passait : `known_keys` ne regardait que le nom de la
+    clé, et le schéma portait ~35 énumérations que personne n'appliquait. Une
+    valeur hors domaine n'échoue pas ici, elle échoue plus tard et ailleurs —
+    ou pas du tout : un script qui compare `== "strict"` traite `stirct` comme
+    `warn`, c'est-à-dire qu'il desserre une gate sur une faute de frappe.
+
+    Rend des constats, ne lève rien : c'est `smoke-check` et
+    `preflight_stack_combo` qui en font des refus. `read_layered_config` reste
+    tolérant, pour que chaque script ne rougisse pas sur une clé qui ne le
+    concerne pas.
+    """
+    from sdda_lib.jsonschema_mini import SchemaValidator
+
+    schema = load_schema(root)
+    if not schema:
+        return []
+    if lc is None:
+        try:
+            lc = read_layered_config(root, warn_stream=io.StringIO())
+        except SddaError:
+            return []  # security-down : déjà un refus, porté par qui lit la config
+    validator = SchemaValidator(schema)
+    props: dict[str, Any] = schema.get("properties") or {}
+    issues: list[ConfigIssue] = []
+    loc = f"{STACK_LOC} ## Project Config"
+
+    for key, value in sorted(lc.config.items()):
+        if key == "security_down_protected" or not isinstance(props.get(key), dict):
+            continue
+        for err in validator.validate(value, props[key], path=key):
+            issues.append(ConfigIssue(
+                "CONFIG_VALUE_INVALID", f"{err} (couche {lc.sources.get(key, '?')})",
+                "corriger la valeur — domaine admis : templates/project-config.schema.json", loc))
+    issues += _cross_key_issues(lc.config)
+    for key, heading, in_config, in_section in lc.conflicts:
+        issues.append(ConfigIssue(
+            "CONFIG_KEY_CONFLICT",
+            f"`{key}` vaut {in_config!r} dans `## Project Config` et {in_section!r} dans `## {heading}`",
+            "n'écrire la clé qu'à un endroit : deux valeurs pour une clé, c'est celle que personne ne relit qui gouverne",
+            f"{STACK_LOC} ## {heading}"))
+
+    resident = section_resident_keys(schema)
+    sections: dict[str, Any] = schema.get("x-stackSections") or {}
+    for heading, section_schema in sections.items():
+        if not isinstance(section_schema, dict):
+            continue                                    # `description`
+        values, error = section_kv(root, heading)
+        sloc = f"{STACK_LOC} ## {heading}"
+        if error:
+            issues.append(ConfigIssue(
+                "CONFIG_VALUE_INVALID", f"`## {heading}` illisible ({error}) : aucune de ses valeurs n'est lue",
+                "réaligner la section sur .sdda/templates/STACK.md.template (une clé par ligne, `NOM: ${NOM}` pour une variable)",
+                sloc))
+            continue
+        section_props = section_schema.get("properties") or {}
+        for key, value in sorted((values or {}).items()):
+            if key in section_props:
+                for err in validator.validate(value, section_props[key], path=key):
+                    issues.append(ConfigIssue("CONFIG_VALUE_INVALID", err,
+                                              "corriger la valeur — domaine admis : x-stackSections de "
+                                              "templates/project-config.schema.json", sloc))
+            elif resident.get(key) == heading:
+                continue                                # validée plus haut, dans la config effective
+            elif key in props:
+                # Une clé de Project Config écrite dans une section qui ne la
+                # porte pas : aucun script ne l'y lit. Rouge si elle dit autre
+                # chose que la valeur effective — c'est alors un réglage
+                # silencieusement ignoré.
+                effective = lc.config.get(key)
+                ignored = value != effective
+                issues.append(ConfigIssue(
+                    "CONFIG_KEY_MISPLACED",
+                    f"`{key}: {value!r}` écrit sous `## {heading}` n'est lu par personne"
+                    + (f" — la valeur appliquée est {effective!r}" if ignored else ""),
+                    f"déplacer `{key}` dans `## Project Config`", sloc, blocking=ignored))
+            elif not key.startswith("_"):
+                issues.append(ConfigIssue(
+                    "CONFIG_UNKNOWN_KEY", f"clé « {key} » inconnue de `## {heading}` : faute de frappe ou clé retirée ?",
+                    "la retirer, ou la déclarer dans x-stackSections de templates/project-config.schema.json",
+                    sloc, blocking=False))
+    return issues

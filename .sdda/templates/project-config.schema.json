@@ -177,25 +177,29 @@
       "type": "integer",
       "minimum": 1,
       "default": 50,
-      "description": "Taille minimale d'un jeu golden (ajustement)."
+      "description": "Taille minimale d'un jeu golden (ajustement).",
+      "x-section": "Active Eval Stack"
     },
     "HoldoutSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 30,
-      "description": "Taille minimale d'un jeu holdout (verdict)."
+      "description": "Taille minimale d'un jeu holdout (verdict).",
+      "x-section": "Active Eval Stack"
     },
     "CalibrationSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 50,
-      "description": "Taille minimale d'un jeu de calibration (labels humains)."
+      "description": "Taille minimale d'un jeu de calibration (labels humains).",
+      "x-section": "Active Eval Stack"
     },
     "AdversarialSetMinItems": {
       "type": "integer",
       "minimum": 1,
       "default": 25,
-      "description": "Taille minimale du jeu adversarial. Le jeu grandit : toute attaque réussie devient un item permanent."
+      "description": "Taille minimale du jeu adversarial. Le jeu grandit : toute attaque réussie devient un item permanent.",
+      "x-section": "Active Eval Stack"
     },
     "HoldoutDisjointCheck": {
       "enum": [
@@ -563,14 +567,16 @@
         "full"
       ],
       "default": "full",
-      "description": "Niveau de trace. `off` n'est acceptable qu'en POC jetable (invariant trace-emitted-per-run)."
+      "description": "Niveau de trace. `off` n'est acceptable qu'en POC jetable (invariant trace-emitted-per-run).",
+      "x-section": "Active Observability"
     },
     "TraceSampleRate": {
       "type": "number",
       "minimum": 0,
       "maximum": 1,
       "default": 1.0,
-      "description": "Taux d'échantillonnage des traces quand TraceLevel = sampled."
+      "description": "Taux d'échantillonnage des traces quand TraceLevel = sampled.",
+      "x-section": "Active Observability"
     },
     "TracePIIPolicy": {
       "enum": [
@@ -579,12 +585,14 @@
         "raw"
       ],
       "default": "redact",
-      "description": "Traitement des PII dans les spans. `raw` exige un ADR."
+      "description": "Traitement des PII dans les spans. `raw` exige un ADR.",
+      "x-section": "Active Observability"
     },
     "CostTrackingEnabled": {
       "type": "boolean",
       "default": true,
-      "description": "Enregistre tokens et coût par appel LLM dans les traces (nécessaire aux graders cost et au coût par CAP)."
+      "description": "Enregistre tokens et coût par appel LLM dans les traces (nécessaire aux graders cost et au coût par CAP).",
+      "x-section": "Active Observability"
     },
     "TraceRequiredPerRun": {
       "type": "boolean",
@@ -738,8 +746,485 @@
         ]
       },
       "then": {
-        "$comment": "Contrainte inter-clés non exprimable en JSON Schema pur (HardCap >= Target) : vérifiée par validate_config.py."
+        "$comment": "Contrainte inter-clés non exprimable en JSON Schema pur (HardCap >= Target) : vérifiée par sdda_lib/layered_config.py `validate_config` ([CONFIG_VALUE_INVALID]), avec EvalRunsCritical >= EvalRuns et CapGranularityTarget <= WarnAt <= HardCap."
       }
     }
-  ]
+  ],
+  "x-stackSections": {
+    "description": "Clés des sections `## Active *` de STACK.md (lues par `read_stack_section_kv`), validées EN VALEUR par `layered_config.validate_stack` au smoke-check et au preflight -> [CONFIG_VALUE_INVALID], bloquant. Une clé absente d'ici -> WARN [CONFIG_UNKNOWN_KEY]. Les clés de Project Config qui portent `x-section` peuvent AUSSI s'écrire dans la section nommée : elles y sont lues comme couche projet (une valeur dans les deux endroits qui diffère -> [CONFIG_KEY_CONFLICT]).",
+    "Active Harness": {
+      "type": "object",
+      "properties": {
+        "Harness": {
+          "enum": [
+            "claude-code",
+            "codex",
+            "gemini-cli",
+            "antigravity"
+          ],
+          "description": "Harnais de CONSTRUCTION. Liste close : `.sdda/capability-matrix.yml` `harnesses`."
+        }
+      }
+    },
+    "Runtime Models": {
+      "type": "object",
+      "properties": {
+        "RuntimeProvider": {
+          "enum": [
+            "anthropic",
+            "openai",
+            "google",
+            "azure-openai",
+            "local-ollama"
+          ],
+          "description": "Fournisseur du produit généré — un fichier `.sdda/providers/{id}.yaml` par valeur."
+        },
+        "RuntimeTierMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deep": {
+              "type": "string",
+              "minLength": 1
+            },
+            "balanced": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fast": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Tier -> identifiant de modèle du PRODUIT (jamais un nom de fournisseur)."
+        },
+        "EmbeddingModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "RerankModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "JudgeModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifiant du modèle juge, ou un tier (`deep`…) résolu par RuntimeTierMap. Doit différer des modèles évalués si JudgeMustDifferFromEvaluated."
+        }
+      }
+    },
+    "Active Retrieval Stack": {
+      "type": "object",
+      "properties": {
+        "VectorStoreConnection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Mode": {
+              "enum": [
+                "same-as-database",
+                "dedicated"
+              ]
+            },
+            "Endpoint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "Collection": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ApiKeyEnv": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "description": "NOM de variable d'environnement, jamais la valeur."
+            },
+            "Dimensions": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "Metric": {
+              "enum": [
+                "cosine",
+                "dot",
+                "l2"
+              ]
+            },
+            "TlsVerify": {
+              "type": "boolean"
+            }
+          }
+        },
+        "ChunkStrategy": {
+          "enum": [
+            "fixed",
+            "recursive-structural",
+            "semantic",
+            "document-aware",
+            "parent-child"
+          ]
+        },
+        "ChunkSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ChunkOverlap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ParentChildEnabled": {
+          "type": "boolean"
+        },
+        "HybridEnabled": {
+          "type": "boolean"
+        },
+        "HybridWeights": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vector": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "lexical": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "RerankEnabled": {
+          "type": "boolean"
+        },
+        "RetrievalTopK": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "RerankTopN": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "CitationMode": {
+          "enum": [
+            "required",
+            "optional",
+            "none"
+          ]
+        },
+        "IngestionMode": {
+          "enum": [
+            "batch",
+            "incremental",
+            "streaming"
+          ]
+        },
+        "IndexRefreshPolicy": {
+          "enum": [
+            "manual",
+            "scheduled",
+            "on-source-change"
+          ]
+        }
+      }
+    },
+    "Active Data Access": {
+      "type": "object",
+      "properties": {
+        "DatabaseType": {
+          "enum": [
+            "none",
+            "PostgreSql",
+            "SqlServer",
+            "MySql",
+            "Oracle",
+            "Sqlite",
+            "MongoDb"
+          ]
+        },
+        "DbAgentRole": {
+          "enum": [
+            "readonly",
+            "scoped-write",
+            "full"
+          ]
+        },
+        "DbStatementTimeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "DbMaxRowsReturned": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "DbAllowedSchemas": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "DbForbiddenStatements": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "DbQueryLogging": {
+          "enum": [
+            "full"
+          ],
+          "description": "Seule valeur admise (DATA-ACCESS.md) : sans journal, aucun post-mortem."
+        }
+      }
+    },
+    "Active Data Sources": {
+      "type": "object",
+      "properties": {
+        "SourceSecretsFile": {
+          "type": "string"
+        },
+        "SourceManifestRoot": {
+          "type": "string"
+        },
+        "SourceManifests": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "Stores": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "Sources": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "SourceAgentRole": {
+          "enum": [
+            "readonly"
+          ]
+        },
+        "SourceReadTimeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "SourceMaxRecordsReturned": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "SourceMaxObjectBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "SourceSchemaCheckSample": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "SourceMaxStalenessHours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "SourceForbiddenOps": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "SourceAllowedStores": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "SourceAllowedSources": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "SourceEgressAllowlist": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "SourceQueryLogging": {
+          "enum": [
+            "full"
+          ]
+        }
+      }
+    },
+    "Active Tools & Integrations": {
+      "type": "object",
+      "properties": {
+        "MCPServers": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "ExternalAPIs": {
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      }
+    },
+    "Active Memory Strategy": {
+      "type": "object",
+      "properties": {
+        "ShortTermPolicy": {
+          "enum": [
+            "none",
+            "sliding-window",
+            "summarize-over",
+            "hybrid"
+          ]
+        },
+        "ShortTermMaxTurns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "SummarizeTriggerTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "LongTermEnabled": {
+          "type": "boolean"
+        },
+        "LongTermStore": {
+          "enum": [
+            "none",
+            "pgvector",
+            "redis",
+            "store-backed"
+          ]
+        },
+        "LongTermWritePolicy": {
+          "enum": [
+            "explicit",
+            "automatic"
+          ]
+        },
+        "LongTermRetentionDays": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MemoryPIIPolicy": {
+          "enum": [
+            "forbid",
+            "redact-before-write",
+            "allow"
+          ]
+        },
+        "CrossAgentSharedState": {
+          "enum": [
+            "none",
+            "scoped",
+            "full"
+          ]
+        }
+      }
+    },
+    "Active Guardrails": {
+      "type": "object",
+      "properties": {
+        "InputGuardrails": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          }
+        },
+        "OutputGuardrails": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          }
+        },
+        "OnGuardrailTrip": {
+          "enum": [
+            "block-and-log",
+            "sanitize-and-continue",
+            "escalate-human"
+          ]
+        }
+      }
+    },
+    "Active Serving Surface": {
+      "type": "object",
+      "properties": {
+        "ServingLocalPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "StreamingEnabled": {
+          "type": "boolean"
+        },
+        "HumanInTheLoopEnabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Active Secrets": {
+      "type": "object",
+      "properties": {
+        "SecretsFile": {
+          "type": "string"
+        }
+      }
+    },
+    "Active Observability": {
+      "type": "object",
+      "properties": {}
+    },
+    "Active Eval Stack": {
+      "type": "object",
+      "properties": {
+        "BaselineStorage": {
+          "type": "string"
+        }
+      }
+    }
+  }
 }

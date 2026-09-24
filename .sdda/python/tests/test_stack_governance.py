@@ -124,3 +124,108 @@ def test_bootstrap_offers_exactly_the_matrix_combos() -> None:
     c1 = next(c for c in _matrix()["combos"] if c["id"] == "C1")
     assert bs.COMBOS["c1"].orchestration == c1["orchestration"][0]
     assert bs.COMBOS["c1"].tools == c1["tools"]
+
+
+# ---------------------------------------------------------------------------
+# C1 — les VALEURS sont validées, pas seulement les noms
+# ---------------------------------------------------------------------------
+import subprocess  # noqa: E402
+
+HOOK = PYTHON_DIR / "sdda_hooks" / "preflight_stack_combo.py"
+STACK_REL = Path("workspace") / "stack" / "STACK.md"
+
+
+def patch_stack(project: Path, old: str, new: str) -> Path:
+    stack = project / STACK_REL
+    text = stack.read_text(encoding="utf-8")
+    assert old in text, f"ancre absente de la fixture : {old!r}"
+    stack.write_text(text.replace(old, new, 1), encoding="utf-8")
+    return project
+
+
+def issues(project: Path) -> list:
+    from sdda_lib.layered_config import validate_config
+
+    return validate_config(project)
+
+
+def blocking_classes(project: Path) -> set[str]:
+    return {i.cls for i in issues(project) if i.blocking}
+
+
+def run_hook(project: Path, *env: tuple[str, str]) -> tuple[int, str]:
+    import os
+
+    environment = {k: v for k, v in os.environ.items() if not k.startswith("SDDA_")}
+    environment.update(dict(env))
+    proc = subprocess.run([sys.executable, str(HOOK), "--root", str(project)], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=environment, stdin=subprocess.DEVNULL, cwd=project)
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+def test_the_fixture_and_the_base_layer_are_valid(tmp_path: Path) -> None:
+    assert not [i for i in issues(make_project(tmp_path)) if i.blocking]
+
+
+def test_an_enum_value_out_of_domain_is_blocking(tmp_path: Path) -> None:
+    """`OnBoundExceeded: foo` passait : seuls les NOMS de clés étaient contrôlés."""
+    project = patch_stack(make_project(tmp_path), "AdversarialSetMinItems: 2\n",
+                          "AdversarialSetMinItems: 2\nOnBoundExceeded: foo\n")
+    found = [i for i in issues(project) if i.cls == "CONFIG_VALUE_INVALID"]
+    assert found and "OnBoundExceeded" in found[0].message and found[0].blocking
+
+
+def test_a_section_value_out_of_domain_is_blocking_at_preflight(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "CitationMode: required", "CitationMode: requried")
+    code, out = run_hook(project)
+    assert code == 2, out
+    assert "CONFIG_VALUE_INVALID" in out and "CitationMode" in out
+
+
+def test_the_smoke_check_reports_it_too(tmp_path: Path) -> None:
+    from sdda_scripts import smoke_check
+
+    project = patch_stack(make_project(tmp_path), "ShortTermMaxTurns: 12", "ShortTermMaxTurns: douze")
+    report = smoke_check.run(project)
+    assert report.has("CONFIG_VALUE_INVALID")
+
+
+def test_cross_key_constraints_announced_by_the_schema_are_enforced(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "AdversarialSetMinItems: 2\n",
+                          "AdversarialSetMinItems: 2\nCostPerRunTargetUsd: 0.5\nCostPerRunHardCapUsd: 0.1\n")
+    assert any("CostPerRunHardCapUsd" in i.message for i in issues(project) if i.cls == "CONFIG_VALUE_INVALID")
+
+
+def test_env_declarations_no_longer_blind_the_data_access_section(tmp_path: Path) -> None:
+    """` - DB_HOST: ${DB_HOST}` rendait `## Active Data Access` illisible — donc `{}`."""
+    from sdda_lib.layered_config import read_stack_section_kv
+
+    project = patch_stack(make_project(tmp_path), "DatabaseType: none\n",
+                          "DatabaseType: PostgreSql\n - DB_HOST: ${DB_HOST}\n - DB_PASSWORD: ${DB_PASSWORD}\n"
+                          "DbAgentRole: readonly\n")
+    values = read_stack_section_kv(project, "Active Data Access")
+    assert values.get("DbAgentRole") == "readonly" and values.get("DatabaseType") == "PostgreSql"
+
+
+def test_a_minimum_written_in_its_section_is_the_one_applied(tmp_path: Path) -> None:
+    """`GoldenSetMinItems` sous `## Active Eval Stack` n'était lu par personne."""
+    from sdda_lib.layered_config import read_layered_config
+
+    project = patch_stack(make_project(tmp_path), "GoldenSetMinItems: 5\n", "")
+    patch_stack(project, " - .sdda/stacks/eval/pytest-eval.md\n",
+                " - .sdda/stacks/eval/pytest-eval.md\nGoldenSetMinItems: 77\n")
+    assert read_layered_config(project).get("GoldenSetMinItems") == 77
+
+
+def test_a_key_written_twice_with_two_values_is_a_conflict(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "GoldenSetMinItems: 5\n", "GoldenSetMinItems: 5\n")
+    patch_stack(project, " - .sdda/stacks/eval/pytest-eval.md\n",
+                " - .sdda/stacks/eval/pytest-eval.md\nGoldenSetMinItems: 50\n")
+    assert "CONFIG_KEY_CONFLICT" in blocking_classes(project)
+
+
+def test_a_project_key_in_the_wrong_section_is_said(tmp_path: Path) -> None:
+    project = patch_stack(make_project(tmp_path), "OnGuardrailTrip: block-and-log\n",
+                          "OnGuardrailTrip: block-and-log\nMaxIterations: 99\n")
+    found = [i for i in issues(project) if i.cls == "CONFIG_KEY_MISPLACED"]
+    assert found and found[0].blocking, "99 n'est pas la valeur appliquée (12) : réglage ignoré en silence"
