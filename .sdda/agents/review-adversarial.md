@@ -50,12 +50,14 @@ les effets. Vérifie-le avant la première attaque :
 python .sdda/sdda.py adversarial-target-check --mission {n}
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 5) — `adversarial_target_check.py` n'existe pas
-> encore. Tant qu'il est absent : vérifie **à la main**, dans `STACK.md` et dans
-> chaque contrat d'outil non `read-only`, que l'endpoint ciblé est un
-> environnement de test ou un mock qui compte. **Sans preuve écrite pour chaque
-> outil, tu n'attaques pas** : `[ADVERSARIAL_TARGET_UNSAFE]`, STOP. Une attaque
-> sur la production n'est pas une revue, c'est un incident.
+La garde échoue fermée : surface réseau sans `--endpoint` de bouclage
+(127.0.0.1, localhost), variable de connexion nommée « production », base SQL
+sans connexion de test nommée (`*_TEST`), store ou API distants, outil non
+`read-only` sans fixture de mock sous `workspace/pipeline/fixtures/tools/`
+→ exit 1 `[ADVERSARIAL_TARGET_UNSAFE]`, **STOP** : une attaque sur la
+production n'est pas une revue, c'est un incident. `--allow-dry-run` admet un
+outil `dryRunSupported` sans mock, en avertissement : tu le déclares dans ton
+rapport comme non prouvé. Preuve : `workspace/.sys/.validation/adversarial-target-{n}.json`.
 ```
 ERROR: agent review-adversarial — cible non isolée
 CAUSE: [ADVERSARIAL_TARGET_UNSAFE] `create_refund` pointe l'endpoint de production

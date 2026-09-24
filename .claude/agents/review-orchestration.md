@@ -37,12 +37,13 @@ Exécute (0 token) :
 python .sdda/sdda.py trajectory-report --mission {n} --traces workspace/.sys/traces/runs --ir workspace/.sys/.ir/{n}-system.ir.json --out workspace/.sys/.validation/trajectories-{n}.json
 ```
 
-> ⏳ **Planifié** (ROADMAP Lot 5) — `trajectory_report.py` n'existe pas encore.
-> Tant qu'il est absent : les trajectoires et les hops se lisent avec
-> `python -c "from sdda_lib import tracing; ..."` sur `tracing.summarize_all(root)`
-> (champs `trajectory`, `boundsExceeded`). Sans distribution par classe ni
-> arêtes jamais empruntées, **écris « non mesuré »** sur ces lignes du rapport
-> plutôt qu'une estimation.
+Exit 1 sur `[MEASUREMENT_MISSING]` (< 30 runs, `--min-runs`),
+`[TRAJECTORY_VIOLATION]`, `[UNBOUNDED_LOOP]` ou `[MISROUTE_TO_DESTRUCTIVE]` ; les
+autres constats du STEP 3-5 arrivent en avertissements classés. Les nœuds
+`function` n'émettent pas de span : une transition qui ne traverse qu'eux est
+admise. La matrice par classe exige que l'item du jeu porte `expected_class` ou
+`expected_trajectory.route` (run `{item}-{k}`) ; sans elle, la ligne porte
+« non mesuré ».
 Le rapport donne : chemins distincts observés et leur fréquence, distribution
 des hops, arêtes de l'IR **jamais empruntées**, arêtes observées **absentes de
 l'IR**, nœuds terminaux atteints, occurrences de `bound_exceeded` par borne,
