@@ -624,12 +624,11 @@ def check_documented_classes() -> None:
 # ---------------------------------------------------------------------------
 # 4.quater Parité des jumeaux de documentation (`X.md` anglais / `X.fr.md`)
 # ---------------------------------------------------------------------------
-#: Un jumeau manquant est-il un ÉCHEC ou un AVERTISSEMENT ? Avertissement tant
-#: que la traduction est en cours (les jumeaux arrivent par lots) ; à passer à
-#: `True` une fois tous les jumeaux fusionnés, pour qu'une nouvelle page sans
-#: jumeau ne puisse plus entrer. Une paire DIVERGENTE est toujours un échec :
-#: deux pages qui disent deux choses différentes sont pire qu'une page seule.
-MISSING_TWIN_IS_FAILURE = False
+#: Un jumeau manquant est un ÉCHEC : toutes les docs ont leur référence anglaise
+#: et leur jumeau français depuis le lot 2 de traduction, et une nouvelle page
+#: sans jumeau ne doit plus pouvoir entrer. Une paire DIVERGENTE est toujours un
+#: échec : deux pages qui disent deux choses différentes sont pire qu'une page seule.
+MISSING_TWIN_IS_FAILURE = True
 
 #: Où vivent les paires. Hors de ces emplacements, rien n'a de jumeau : les
 #: prompts (`agents/`, `commands/`, `rules/`, `stacks/`, `templates/`,
@@ -639,6 +638,8 @@ TWIN_GLOBS: tuple[str, ...] = ("*.md", ".sdda/*.md", ".sdda/docs/*.md", ".sdda/p
 #: Pages anglaises qui n'ont pas de jumeau, par nature : journal de versions
 #: anglais, pointeurs racine générés pour Codex et Gemini CLI.
 TWIN_EXEMPT: frozenset[str] = frozenset({"CHANGELOG.md", "AGENTS.md", "GEMINI.md"})
+_TOOL_CACHE_DIRS: frozenset[str] = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                                              ".venv", "venv", "node_modules", "build", "dist"})
 
 #: Blocs dont les COMMANDES doivent être identiques dans les deux langues : une
 #: commande traduite n'est plus la même commande. Leurs commentaires se
@@ -736,7 +737,9 @@ def twin_candidates(root: Path) -> list[Path]:
         for path in root.glob(pattern):
             if path.name.endswith(".fr.md") or path.name in TWIN_EXEMPT:
                 continue
-            if {"__pycache__"} & set(path.parts):
+            # Caches d'outils : leurs README sont écrits par pytest, mypy, ruff…
+            # (gitignorés), pas par nous — ils n'ont ni lecteur ni jumeau.
+            if _TOOL_CACHE_DIRS & set(path.parts):
                 continue
             # Les fixtures de test sont des données, sauf leur README.
             if "fixtures" in path.relative_to(root).parts and path.name != "README.md":
