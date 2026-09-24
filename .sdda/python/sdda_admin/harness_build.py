@@ -293,6 +293,38 @@ SECRET_READ_DENY = tuple(
 )
 
 
+def hook_command(script: str) -> str:
+    """La commande shell d'un hook câblé — interpréteur configurable, échec de LANCEMENT visible.
+
+    La forme d'avant, `python "<hook>"`, avait deux pannes silencieuses :
+
+    - `python` absent du PATH (courant sous Windows, où seul `py` est installé,
+      ou où `python` est l'alias du Store qui rend 9009) : le hook ne démarre
+      pas, le code de sortie n'est pas 2, et le harnais AUTORISE. Les quatorze
+      invariants disparaissaient sans un mot. `SDDA_PYTHON` choisit
+      l'interpréteur (`SDDA_PYTHON="py -3"`, un chemin absolu…), `python` restant
+      le repli documenté ;
+    - un lancement raté (code ∉ {0, 2}) ne se distinguait pas d'un hook qui juge.
+      Il est désormais DIT sur stderr, et REFUSÉ en mode strict
+      (`SDDA_HOOKS_STRICT=1`, la CI) — même règle que `_hook.degrade` pour une
+      exception, étendue au cas où Python n'a jamais démarré.
+
+    Le shell est celui du harnais (Git Bash sous Windows, sh ailleurs) : la
+    syntaxe reste POSIX. Le chemin est ancré sur `$CLAUDE_PROJECT_DIR`, entre
+    guillemets (cf. `emit_settings`). `hooks-selfcheck` exécute chaque commande
+    ainsi générée avec un payload inoffensif et un payload à refuser.
+    """
+    name = script.rsplit("/", 1)[-1]
+    return (
+        f'${{SDDA_PYTHON:-python}} "$CLAUDE_PROJECT_DIR/{script}"; rc=$?; '
+        f'if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then '
+        # Message ASCII : il traverse un shell dont l'encodage de stderr n'est
+        # pas garanti, au moment précis où il doit être lu.
+        f'echo "[hook] {name} ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${{SDDA_PYTHON:-python}}" >&2; '
+        f'if [ "${{SDDA_HOOKS_STRICT:-0}}" = "1" ]; then exit 2; fi; fi; exit $rc'
+    )
+
+
 class ClaudeAdapter(Adapter):
     """Harnais de référence (niveau A) : tout est natif."""
 
@@ -380,11 +412,10 @@ class ClaudeAdapter(Adapter):
         # `$CLAUDE_PROJECT_DIR` est la variable que le harnais pose pour cet
         # usage précis. Les guillemets sont obligatoires : un chemin de projet
         # sous Windows contient des espaces bien plus souvent qu'ailleurs.
-        anchor = "$CLAUDE_PROJECT_DIR"
         for (event, matcher), scripts in sorted(by_slot.items()):
             hooks.setdefault(event, []).append({
                 "matcher": matcher,
-                "hooks": [{"type": "command", "command": f'python "{anchor}/{s}"'} for s in sorted(scripts)],
+                "hooks": [{"type": "command", "command": hook_command(s)} for s in sorted(scripts)],
             })
 
         if undeclared:
