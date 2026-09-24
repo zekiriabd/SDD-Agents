@@ -91,6 +91,46 @@ def sha256_spec_file(path: Path) -> str:
     return sha256_spec_text(Path(path).read_text(encoding="utf-8-sig"))
 
 
+#: Sections d'une CAP écrites par un AUTRE owner que celui de la spécification.
+#: `## Allocated To` appartient à `architect-topology` (Edit narrow, PHASE 2) :
+#: c'est une projection de la topologie dans la CAP, pas une exigence.
+CAP_FOREIGN_SECTIONS: tuple[str, ...] = ("Allocated To",)
+
+
+def cap_spec_text(text: str) -> str:
+    """Le texte d'une CAP tel que G1 le juge : sans `Status:` NI `## Allocated To`.
+
+    G1 valide ce que `po-capabilities` a écrit — AC, métriques, seuils, `Covers`.
+    `## Allocated To` est rempli ensuite par `architect-topology` en PHASE 2
+    (`rules/ownership.md` : Edit narrow, ce champ seul). Le laisser dans le hash
+    de G1 faisait de la PHASE 2 la cause de la péremption de la PHASE 1 : la
+    topologie remplissait l'allocation, le hash de la CAP bougeait, G1 devenait
+    `stale`, la MISSION redescendait à `Draft` et `--resume` repartait en PHASE 1
+    — pour repayer `po-capabilities` sur une spécification que personne n'avait
+    touchée. Une gate ne doit se périmer que sur ce qu'elle a jugé.
+
+    Ce n'est pas une porte ouverte : l'allocation reste dans le hash COMPLET de
+    la CAP (`sha256_spec_text`), que G2 et l'IR épinglent (`cap:{id}`). Une
+    réallocation après compilation périme donc la topologie, qui est bien le
+    niveau qu'elle remet en cause.
+    """
+    body = spec_text(text)
+    for title in CAP_FOREIGN_SECTIONS:
+        # La section court de son titre jusqu'au titre `## ` suivant (ou la fin).
+        body = re.sub(rf"^## {re.escape(title)}[ \t]*\n(?:(?!## ).*\n?)*", "", body, flags=re.M)
+    return body
+
+
+def sha256_cap_spec_text(text: str) -> str:
+    """Hash d'une CAP tel que G1 l'épingle — `Status:` et `## Allocated To` exclus."""
+    return sha256_text(cap_spec_text(text), normalize=False)
+
+
+def sha256_cap_spec_file(path: Path) -> str:
+    """Hash d'un fichier de CAP tel que G1 l'épingle, cf. `cap_spec_text`."""
+    return sha256_cap_spec_text(Path(path).read_text(encoding="utf-8-sig"))
+
+
 def canonical_json(obj: Any) -> str:
     """Sérialisation JSON canonique : clés triées, séparateurs compacts, UTF-8."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
