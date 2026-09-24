@@ -128,3 +128,19 @@ def test_g3_is_required_only_for_the_tools_the_ir_wires(g2_project: Path) -> Non
     write_gate_report(g2_project, "G4", "1-contracts-index", Report(name="G4", target="1-contracts-index"), {})
     _, data = _status(g2_project)
     assert _mission(data)["state"] == "Implemented", _mission(data)
+
+
+def test_suites_are_read_without_pyyaml(g2_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """L'outillage est stdlib seul : les suites se lisent même quand PyYAML est absent.
+
+    `sys.modules["yaml"] = None` fait échouer tout `import yaml` comme sur un
+    clone nu. Avant la correction, l'ImportError était avalée comme « suite
+    illisible » et G3 ne voyait plus aucune suite.
+    """
+    monkeypatch.setitem(sys.modules, "yaml", None)
+    found = run_tool_suites.find_suites(g2_project)
+    assert TOOL in found
+    _, suite = found[TOOL]
+    assert suite["level"] == "L2"
+    assert [c["id"] for c in suite["cases"]] == ["happy-1", "not-found", "timeout"]
+    assert "import yaml" not in Path(run_tool_suites.__file__).read_text(encoding="utf-8")
