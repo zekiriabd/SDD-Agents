@@ -288,7 +288,7 @@ def run(root: Path, ir: dict[str, Any], traces: Path, *, min_runs: int = MIN_RUN
     fallbacks = [e for e in graph.edges if e.get("isFallback")]
     taken = sum(1 for r in rows if r["fallbackTaken"])
     if fallbacks and not taken:
-        report.warn("ROUTER_FALLBACK_UNTESTED", f"repli {[f'{e['from']} -> {e['to']}' for e in fallbacks]} jamais emprunté sur {len(rows)} runs",
+        report.warn("ROUTER_FALLBACK_UNTESTED", f"repli {[e['from'] + ' -> ' + e['to'] for e in fallbacks]} jamais emprunté sur {len(rows)} runs",
                     "ajouter au golden des items « aucune classe » ; un repli jamais exercé est un repli non testé", loc)
     if graph.pattern in SUPERVISOR_PATTERNS and graph.entry:
         declared_next = {b for (a, b) in graph.projected if a == graph.entry}

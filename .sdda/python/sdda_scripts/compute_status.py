@@ -143,6 +143,7 @@ def current_hash(root: Path, key: str, artifact: str) -> str | None:
         except ValueError:
             return ""
     if key.startswith("prompt:"):
+        from sdda_lib.layered_config import app_name  # noqa: E402  (seule branche qui en a besoin)
         p = paths.prompts_dir(root, app_name(root)) / f"{key[7:]}.system.md"
         return hashing.sha256_file(p) if p.is_file() else ""
     if ":" in key and "/" in key:

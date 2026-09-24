@@ -66,17 +66,6 @@ extend-exclude = ["tests/fixtures"]
 # fichiers produirait des conflits pour un gain nul à l'exécution.
 select = ["E9", "F63", "F7", "F82"]
 
-[tool.ruff.lint.per-file-ignores]
-# Deux F821 RÉELS, laissés en baseline plutôt que masqués globalement — chaque
-# ligne est un bug connu, à corriger dans le lot qui possède le fichier, puis à
-# retirer d'ici :
-#   compute_status.py:139 — `app_name` n'est pas défini : la branche `prompt:`
-#     lève NameError dès qu'une clé d'empreinte de prompt est évaluée.
-#   lint_prompts.py:429   — `{App}` dans une f-string : NameError au moment de
-#     construire le FIX de [PROMPT_MISSING] (il faut `{{App}}`).
-"sdda_scripts/compute_status.py" = ["F821"]
-"sdda_scripts/lint_prompts.py" = ["F821"]
-
 [tool.mypy]
 # Non strict, sur `sdda_lib` : la bibliothèque partagée par tous les scripts.
 # Étendre `files` à un paquet quand il passe, jamais l'inverse.

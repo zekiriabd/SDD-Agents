@@ -83,7 +83,7 @@ SECRET_ENV: dict[str, dict[str, str]] = {
     "anthropic": {"llmApiKey": "ANTHROPIC_API_KEY"},
     "openai": {"llmApiKey": "OPENAI_API_KEY"},
     "azure": {"llmApiKey": "AZURE_OPENAI_API_KEY"},
-    "google": {"llmApiKey": "GOOGLE_API_KEY"},
+    "google": {"llmApiKey": "GEMINI_API_KEY"},  # = `auth_env` de providers/google.yaml
     "local": {},
     "none": {},
 }
