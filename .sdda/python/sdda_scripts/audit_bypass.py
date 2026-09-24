@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io, paths  # noqa: E402
+from sdda_lib.runtime_io import slash_command  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import append_bypass_audit  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
@@ -105,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdout()
     args = build_parser().parse_args(argv)
     root = resolve_root(args)
-    report = run(root, command=args.command, bypass=args.bypass, reason=args.reason,
+    report = run(root, command=slash_command(args.command), bypass=args.bypass, reason=args.reason,
                  gate=args.gate, operator=args.operator, write=not args.no_report)
     if report.ok and not args.json:
         print(f"  bypass `{args.bypass}` ({report.data['gate']}) journalisé -> {report.data.get('audit', '(non écrit)')}")

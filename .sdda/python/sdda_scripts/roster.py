@@ -42,6 +42,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
+from sdda_lib.runtime_io import slash_command  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import append_bypass_audit  # noqa: E402
 from sdda_lib.layered_config import active_stacks  # noqa: E402
@@ -466,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
     root = resolve_root(args)
     if args.cmd == "scaffold":
         reason = args.reason if args.reason is not None else os.environ.get("SDDA_BYPASS_REASON")
-        report = scaffold(root, args.mission, force=args.force, reason=reason, command=args.command)
+        report = scaffold(root, args.mission, force=args.force, reason=reason, command=slash_command(args.command) if args.command else None)
         if report.ok and not args.json:
             action = report.data.get("action")
             holes = report.data.get("placeholders", 0)

@@ -78,3 +78,25 @@ def ensure_utf8_stdout() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
         except Exception:
             pass
+
+
+_MANGLED_SLASH_COMMAND = __import__("re").compile(r"^[A-Za-z]:[\/](?:.*?[\/])?(sdda[\w-]*)((?:\s.*)?)$")
+
+
+def slash_command(value: str) -> str:
+    """Rend `/sdda-full` tel que l'opérateur l'a tapé, quel que soit le shell.
+
+    Git Bash (MSYS) réécrit tout argument qui commence par `/` en chemin
+    Windows : `--command /sdda-full` arrivait en `C:/Program Files/Git/sdda-full`,
+    et c'est ce chemin que l'état du run et le journal d'audit gardaient. Un
+    audit qui nomme une commande qui n'existe pas ne se relit plus par commande.
+    `sdda-full` sans barre est accepté pour la même raison : c'est la forme
+    qu'on écrit quand on sait que le shell mange la barre.
+    """
+    text = str(value or "").strip()
+    match = _MANGLED_SLASH_COMMAND.match(text)
+    if match:
+        return "/" + match.group(1) + match.group(2)
+    if text.startswith("sdda"):
+        return "/" + text
+    return text

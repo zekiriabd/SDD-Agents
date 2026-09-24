@@ -73,7 +73,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import hashing, paths, tracing  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
-from sdda_lib.runtime_io import atomic_write_json, now_iso, run_id_now  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_json, now_iso, run_id_now, slash_command  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, load_config, resolve_root  # noqa: E402
 
 #: Les phases canoniques du pipeline, DANS L'ORDRE. C'est cette liste que
@@ -722,7 +722,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "new-run":
         tags = [t.strip() for t in str(args.tags or "").replace(" ", ",").split(",") if t.strip()]
-        run = new_run(root, mission=str(args.mission), command=args.command, tags=tags, run_id=args.run_id)
+        run = new_run(root, mission=str(args.mission), command=slash_command(args.command), tags=tags, run_id=args.run_id)
         print(json.dumps(run_summary(root, run), indent=2, ensure_ascii=False, sort_keys=True) if args.json else run["runId"])
         return 0
 
