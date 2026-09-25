@@ -41,9 +41,11 @@ Read **uniquement** :
   sont à `dev-data`), `dataAccess[]` pour connaître les frontières.
 - `workspace/pipeline/contracts/tools/{n}-*.tool.md` — la prose que l'IR a compilée :
   description, stratégie de sûreté, erreurs, §9 si `untrusted`.
-- `workspace/stack/STACK.md` — `## Active Language & Runtime`,
-  `## Active Agent Framework`, `## Active Tools & Integrations` (`MCPServers`,
-  `ExternalAPIs`), `## Active Secrets` (**noms** d'env uniquement).
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active Language & Runtime`,
+  `### Active Agent Framework`, `### Active Tools & Integrations` (`MCPServers`,
+  `ExternalAPIs`), `### Active Secrets` (**noms** d'env uniquement).
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/lang/{lang}.md`, `.sdda/stacks/framework/{fw}.md` +
   `.libs.json`, `.sdda/stacks/tools/{transport}.md` actifs — idiomes, versions
   épinglées, mapping de couches. **Tu n'inventes ni lib ni version.**

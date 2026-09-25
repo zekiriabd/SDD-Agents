@@ -16,6 +16,17 @@ A release is cut by pushing a `v*` tag whose version equals
 
 ### Added
 
+- `project-init` (`/sdda-build` STEP 3.0): the command, not an agent, initialises
+  the generated project before any `dev-*` — skeleton, `uv sync`, then
+  `gen-app-context`, which writes `workspace/src/{App}/CLAUDE.md` (the active
+  harness's `memory_file`: `AGENTS.md` under Codex, `GEMINI.md` under Gemini).
+  The file carries the resolved project, each layer's owner (derived from
+  `loader.yml`), commands, pinned dependencies, an IR extract and the resolved
+  stack (STACK.md without comments, ~10 KB instead of 44 KB). Every `dev-*`
+  reads it instead of STACK.md (`{memoryfile}` in `loader.yml`); `--check`
+  reports `[PROJECT_NOT_INIT]` / `[PROJECT_CONTEXT_STALE]` before phases 4 and 5.
+  `dev-backend` no longer runs the generator itself (13 min measured on the
+  first real project) and may not write the file.
 - `LICENSE` (MIT) at the repository root; the `sdda` wheel and sdist embed it,
   and `pyproject.toml` declares the SPDX expression `MIT`.
 - `CHANGELOG.md`, a tag-triggered release workflow (wheel + sdist attached to a

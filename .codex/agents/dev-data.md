@@ -33,8 +33,10 @@ Read **uniquement** :
   `exposedTo`) et les `tools[]` d'id `{n}-data-*`.
 - `workspace/pipeline/contracts/tools/{n}-data-*.tool.md` — section `## Data Access` :
   SQL de la vue, chemin d'identité, classe d'effet de bord.
-- `workspace/stack/STACK.md` — `## Active Data Access` (`DatabaseType`, clés `Db*`),
-  `## Active Language & Runtime`, `## Active Secrets` (**nom** de la variable de connexion).
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active Data Access` (`DatabaseType`, clés `Db*`),
+  `### Active Language & Runtime`, `### Active Secrets` (**nom** de la variable de connexion).
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/dataaccess/{strategy}.md`, `.sdda/stacks/lang/{lang}.md` + `.libs.json`.
 - `workspace/src/{App}/data/**` existant — Edit-augment.
 

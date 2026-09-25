@@ -18,6 +18,7 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[IR_NOT_FOUND]`
+- `[PROJECT_NOT_INIT]`
 - `[SERVING_IDENTITY_FROM_PAYLOAD]`
 
 ## Classes universelles

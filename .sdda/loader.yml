@@ -330,6 +330,7 @@ dev-prompt:
   reads:
     - .sdda/rules/prompt-authoring.md                # stable — sa règle centrale
     - .sdda/templates/prompt.template.md             # stable
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet : `### Runtime Models` (tier de l'agent)
     - workspace/pipeline/contracts/agents/{n}-*.agent.md      # volatile — 1 par invocation
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — les CAPs servies
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile — descriptions d'outils
@@ -370,7 +371,7 @@ dev-tools:
   budget_bytes: 360000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-tools.md      # stable — stack tranchée
-    - workspace/stack/STACK.md                       # semi
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
@@ -394,7 +395,7 @@ dev-retrieval:
   budget_bytes: 160000
   reads:
     - workspace/.sys/.context/packs/dev-retrieval.md       # stable
-    - workspace/stack/STACK.md                       # semi
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md  # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
@@ -419,7 +420,7 @@ dev-data:
   budget_bytes: 290000      # recalibré sur le premier projet réel (était 140000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-data.md      # stable
-    - workspace/stack/STACK.md                       # semi — Stores/Sources inline (## Active Data Sources)
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes ; Stores/Sources inline (### Active Data Sources)
     - workspace/stack/mcp.json                       # semi — optionnel : config MCP standard importée
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/tools/{n}-data-*.tool.md   # volatile — SES contrats (enveloppe,
@@ -451,7 +452,7 @@ dev-agent:
   budget_bytes: 320000      # recalibré sur le premier projet réel (était 180000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-agent.md     # stable — framework tranché
-    - workspace/stack/STACK.md                       # semi
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
     - workspace/src/*/prompts/{agent}.system.md            # volatile — lecture seule
@@ -496,7 +497,7 @@ dev-orchestration:
   budget_bytes: 280000      # recalibré sur le premier projet réel (était 180000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-orchestration.md  # stable
-    - workspace/stack/STACK.md                       # semi
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — le graphe ET les bornes
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
@@ -535,7 +536,7 @@ dev-api:
   budget_bytes: 290000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/.sys/.context/packs/dev-api.md   # stable
-    - workspace/stack/STACK.md                       # semi
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
@@ -561,7 +562,7 @@ dev-backend:
   budget_bytes: 260000      # 170000 refusait le premier run réel : pack de fiches 76 Ko + IR ~100 Ko + STACK.md 35 Ko + MISSION 14 Ko + règles 22 Ko
   reads:
     - workspace/.sys/.context/packs/dev-backend.md   # stable — LE PACK
-    - workspace/stack/STACK.md                       # semi
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/missions/{n}-*.md                    # semi — Business Rules (le Domaine), Failure Policy
     - .sdda/stacks/framework/{framework}.libs.json   # stable — les versions, rien d'autre
@@ -576,6 +577,7 @@ dev-backend:
     - workspace/src/*/*
     - workspace/src/**/app/**
   forbidden_writes:
+    - workspace/src/*/{CLAUDE,AGENTS,GEMINI}.md        # contexte projet — écrit par `project-init`, jamais à la main
     - workspace/src/*/{prompts,skills,rules}/**        # [PROMPT_OWNERSHIP_VIOLATION] — dev-prompt
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
     - workspace/pipeline/baselines/**

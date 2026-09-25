@@ -33,9 +33,11 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration.entryNode`,
   `inputSchema` / `outputSchema` du système, `budget`, `guardrails.input`.
-- `workspace/stack/STACK.md` — `## Active Serving Surface` (`ServingLocalPort`,
-  `StreamingEnabled`, `HumanInTheLoopEnabled`), `## Active Language & Runtime`,
-  `## Active Observability`, `## Active Secrets` (**noms**).
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active Serving Surface` (`ServingLocalPort`,
+  `StreamingEnabled`, `HumanInTheLoopEnabled`), `### Active Language & Runtime`,
+  `### Active Observability`, `### Active Secrets` (**noms**).
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `workspace/pipeline/missions/{n}-*.md` — `## Actors` : qui appelle, avec quelle identité.
 - `.sdda/stacks/serving/{surface}.md` + `.libs.json`, `.sdda/stacks/lang/{lang}.md`.
 - `workspace/src/{App}/orchestration/**` — **en lecture** : le point d'entrée du run.

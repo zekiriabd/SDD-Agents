@@ -48,8 +48,10 @@ Read **uniquement**, pour chaque agent du périmètre :
 - `workspace/.sys/.ir/{n}-system.ir.json` — l'entrée `agents[]` de cet agent :
   outils réellement câblés, `trustPosture`, `refusalPolicy`, `bounds`.
 - `workspace/pipeline/missions/{n}-*.md` — `## Failure Policy`, `## Business Rules`.
-- `workspace/stack/STACK.md` — `## Runtime Models` (tier de l'agent),
-  `## Project Config` `PromptMaxTokens`, `CitationMode`.
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Runtime Models` (tier de l'agent),
+  `### Project Config` `PromptMaxTokens`, `CitationMode`.
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/rules/prompt-authoring.md`, `.sdda/digests/error-classification.dev-prompt.md`.
 
 IR absent ou plus ancien que les contrats :

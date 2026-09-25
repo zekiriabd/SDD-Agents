@@ -20,6 +20,7 @@ FIX: <l'action précise qui débloque>
 - `[DATA_ACCESS_ENVELOPE_MISSING]`
 - `[DATA_ACCESS_FILTER_POST_GENERATION]`
 - `[IR_NOT_FOUND]`
+- `[PROJECT_NOT_INIT]`
 
 ## Classes universelles
 

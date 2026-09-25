@@ -53,9 +53,11 @@ Read **uniquement** :
   de `dev-orchestration` (`/sdda-build` STEP 4.0) a posés et GELÉS. Tu les
   importes ; tu ne les crées pas, tu ne les modifies pas. Un type absent est
   `[SHARED_TYPE_MISSING]`, signalé dans ta sortie.
-- `workspace/stack/STACK.md` — `## Active Language & Runtime`, `## Active Agent Framework`,
-  `## Runtime Models` (résolution du tier via le provider), `## Active Guardrails`,
-  `## Active Observability`.
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active Language & Runtime`, `### Active Agent Framework`,
+  `### Runtime Models` (résolution du tier via le provider), `### Active Guardrails`,
+  `### Active Observability`.
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/framework/{fw}.md` + `.libs.json`, `.sdda/stacks/lang/{lang}.md`,
   `.sdda/stacks/guardrails/*.md` actifs.
 - `workspace/src/{App}/tools/**`, `workspace/src/{App}/retrieval/**`, `workspace/src/{App}/data/**` —

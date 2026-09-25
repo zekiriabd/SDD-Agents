@@ -45,8 +45,10 @@ Read **uniquement** :
   tour — un contexte qui ne laisse pas la place de travailler produit des tests
   tronqués et confiants. Pour une interface d'une AUTRE couche dont tu as besoin,
   l'IR la décrit (schémas, erreurs) : tu ne lis pas son code.
-- `workspace/stack/STACK.md` — `## Active Language & Runtime`, `## Active Eval Stack`
-  (runner de tests), `## Active Tools & Integrations` (endpoints pour `network`).
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active Language & Runtime`, `### Active Eval Stack`
+  (runner de tests), `### Active Tools & Integrations` (endpoints pour `network`).
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/lang/{lang}.md ## Testing`, `.sdda/stacks/eval/pytest-eval.md` ou équivalent.
 
 IR absent → `[IR_NOT_FOUND]`, STOP.

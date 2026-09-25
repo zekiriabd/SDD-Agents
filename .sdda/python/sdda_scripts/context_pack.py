@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import hashing, markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
-from sdda_lib.layered_config import active_stacks  # noqa: E402
+from sdda_lib.layered_config import active_stacks, harness_memory_file  # noqa: E402
 from sdda_lib.runtime_io import now_iso as _now_iso  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
@@ -171,6 +171,11 @@ def active_stack_values(root: Path) -> dict[str, list[str]]:
         values = [v for v in active_stacks(root, heading) if v]
         if values:
             out[name] = values
+    # `{memoryfile}` : le fichier de contexte de l'application générée
+    # (`workspace/src/{App}/{memoryfile}`), nommé comme le harnais actif le
+    # charge (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`). Sans lui, le motif
+    # s'élargissait en `*` et le budget comptait tous les `.md` de la racine.
+    out["memoryfile"] = [harness_memory_file(root)]
     return out
 
 

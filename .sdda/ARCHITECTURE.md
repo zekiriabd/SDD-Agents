@@ -146,7 +146,7 @@ SDD-Agents/
 │   ├── sdda.py                        # launcher: `python .sdda/sdda.py {cmd}` —
 │   │                                  #   works from a bare clone, no pip install
 │   └── python/                        # deterministic 0-token tooling
-│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->76<!--/sdda:count--> subcommands; registry
+│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->78<!--/sdda:count--> subcommands; registry
 │       │                              #   DERIVED from disk, also read by the scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (including judge_clients: the real LLM judge)
@@ -189,6 +189,8 @@ SDD-Agents/
     │   └── {AppName}/                       # the generated agentic application — FLAT layout (SDD_Pro):
     │       │                                #   this directory IS the package, one level
     │       ├── pyproject.toml · README.md   # the project (dev-backend)
+    │       ├── CLAUDE.md                    # project context (project-init, 0 tokens) — AGENTS.md / GEMINI.md
+    │       │                                #   depending on the harness; read by the dev-* instead of STACK.md
     │       ├── .env                         # copied from assets/.env when the project is created, no LLM
     │       ├── app/                         # composition, config, Domain (dev-backend)
     │       ├── shared/                      # shared types, laid down by the prepass (dev-orchestration)
@@ -304,7 +306,7 @@ refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`) instead of being swallowed.
 
 ### 2.ante One entry point for the tooling
 
-The <!--sdda:count subcommands-->76<!--/sdda:count--> deterministic subcommands are called in a single form:
+The <!--sdda:count subcommands-->78<!--/sdda:count--> deterministic subcommands are called in a single form:
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # from a bare clone
@@ -385,7 +387,8 @@ projection, regenerable, never edited by hand. Details and schema:
    |                                                         [TOPOLOGY GATE]  (runs on the IR)
  PHASE 6a  DATASETS           qa-evals --datasets-only: golden, calibration — BEFORE the code
    |
- PHASE 3   FOUNDATION         dev-backend (skeleton: project, composition, config, Domain — alone, first)
+ PHASE 3   FOUNDATION         project-init (script, 0 tokens): skeleton, uv sync, project context
+   |                          dev-backend (shell: composition, config, Domain — alone, first)
    |                          then dev-tools || dev-retrieval || dev-data     (parallel)
    |                          gen-source-tools --scope code right before dev-data
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
@@ -433,6 +436,15 @@ cost something:
 - **Sets before code (PHASE 6a).** G4 requires the retrieval golden, G5 the CAP
   goldens and the calibration sets; producing them before the code is also what
   keeps the code from influencing the set that will judge it.
+- **Project init is a script, not an agent.** `project-init` opens PHASE 3:
+  skeleton, `uv sync`, then `gen-app-context`, which writes
+  `workspace/src/{App}/CLAUDE.md` (the active harness's `memory_file`) — the
+  counterpart of SDD_Pro's per-project `CLAUDE.md`, projected from the IR
+  instead of being written by hand. Every `dev-*` reads it instead of STACK.md
+  (`[PROJECT_NOT_INIT]` when it is missing, `[PROJECT_CONTEXT_STALE]` when it
+  has drifted). Before it, `dev-backend` ran the generator itself — thirteen
+  measured minutes for three script calls — and eight agents re-read 44 KB of
+  STACK.md to rebuild the same project.
 - **Step 4.0 — the prepass.** `dev-orchestration --prepass` lays down the shared
   types (`shared/`) and the memory **interface** before the `dev-agent`
   instances run in parallel. Without it, every instance invented its own handoff
@@ -658,6 +670,7 @@ artefacts. Excerpt (the source is `loader.yml`, `writes:` keys):
 | `workspace/src/**/orchestration/**` · `memory/**` · `shared/**` | `dev-orchestration` | Exclusive create + edit; `shared/` and the memory interface in the prepass |
 | `workspace/src/**/serving/**` | `dev-api` | Exclusive edit-augment |
 | `workspace/src/*/*` · `workspace/src/**/app/**` | `dev-backend` | the shell: project, composition, config, Domain, packaging — nothing of the engine |
+| `workspace/src/*/{CLAUDE,AGENTS,GEMINI}.md` | `gen-app-context` script only | Atomic write; forbidden to `dev-backend` |
 | `workspace/src/**/tests/**` | `qa-tests` (zone shared with the `dev-*`, by layer) | Edit-augment |
 | `workspace/pipeline/datasets/**` | `qa-evals` | Exclusive create; **never** `dev-*` |
 | `workspace/pipeline/baselines/**` | deterministic script only | Atomic write |
@@ -769,7 +782,7 @@ failing tools.
 
 Inherited from SDD_Pro (193 classes): every ERROR block carries a `[CLASS]` code
 in its `CAUSE:`, so that hooks, retry loops and dashboards classify without
-interpreting text. SDD_Agents carries **<!--sdda:count classes-->440<!--/sdda:count-->**, a closed list regenerated from
+interpreting text. SDD_Agents carries **<!--sdda:count classes-->444<!--/sdda:count-->**, a closed list regenerated from
 the real emitters by `sdda_admin/sync_error_registry.py` — writing the list by
 hand would let it drift both ways (`rules/error-classification.md §6`). The
 figure above is itself regenerated (`sync-counters`), not copied.

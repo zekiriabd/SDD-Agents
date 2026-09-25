@@ -1,6 +1,6 @@
 ---
 name: dev-backend
-description: Construit la COQUILLE de l'application générée — projet, fichiers de build, composition (injection de dépendances), configuration par noms de variables, règles métier calculables de la MISSION, packaging (exécutable, image, README d'exploitation) — depuis STACK.md, l'IR et les fiches lang/archi/backend actives. Lance les générateurs déterministes quand ils existent (Python) et écrit le squelette à la main sinon. N'écrit ni agent, ni prompt, ni outil, ni orchestration, ni dataset — il est le septième dev-*, EN PLUS des six du moteur, jamais à leur place.
+description: Construit la COQUILLE de l'application générée — projet, fichiers de build, composition (injection de dépendances), configuration par noms de variables, règles métier calculables de la MISSION, packaging (exécutable, image, README d'exploitation) — depuis le contexte projet (stack résolue), l'IR et les fiches lang/archi/backend actives. Part d'un projet déjà initialisé par `project-init` (Python) et écrit le squelette à la main sinon. N'écrit ni agent, ni prompt, ni outil, ni orchestration, ni dataset — il est le septième dev-*, EN PLUS des six du moteur, jamais à leur place.
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast
@@ -53,8 +53,9 @@ fiches décident. Tu n'inventes ni couche, ni librairie, ni règle métier.
 `{n}` (numéro de MISSION) et `--phase skeleton | packaging`. Absent ou invalide
 → `[INVALID_ARG]`, STOP.
 
-- `skeleton` : PHASE 3.0, **avant** le socle — le projet doit exister pour que
-  `dev-tools`, `dev-retrieval` et `dev-data` écrivent dedans ;
+- `skeleton` : PHASE 3.0b, **après** `project-init` et **avant** le socle — la
+  composition doit exposer les points d'attache que `dev-tools`,
+  `dev-retrieval` et `dev-data` honoreront ;
 - `packaging` : PHASE 5.3, **après** `dev-api` — l'exécutable ou l'image
   embarque une surface qui existe.
 
@@ -62,13 +63,23 @@ fiches décident. Tu n'inventes ni couche, ni librairie, ni règle métier.
 
 Read **uniquement** :
 
-- `workspace/stack/STACK.md` — `## Project Config` (`AppName`,
+- `workspace/src/{AppName}/CLAUDE.md` — le **contexte projet** (`AGENTS.md`
+  sous Codex, `GEMINI.md` sous Gemini), écrit par `project-init` en 3.0 :
+  arborescence et propriétaires, commandes, libs épinglées, extrait de l'IR,
+  et la **stack résolue** (§6) — `### Project Config` (`AppName`,
   `DeliverableType`, `ApiFramework`, `ApiAuthMode`, bornes, budget),
-  `## Active Language & Runtime`, `## Active Agent Framework`,
-  `## Active Architecture Pattern`, `## Active Backend Stack`,
-  `## Active Serving Surface`, `## Active Observability`, `## Runtime Models`,
-  `## Active Secrets` (**les noms** — tu ne lis jamais `workspace/src/{App}/.env` ;
-  tu écris son `.env.example` à côté, noms seuls, valeurs vides).
+  `### Active Language & Runtime`, `### Active Agent Framework`,
+  `### Active Architecture Pattern`, `### Active Backend Stack`,
+  `### Active Serving Surface`, `### Active Observability`, `### Runtime Models`,
+  `### Active Secrets` (**les noms** — tu ne lis jamais `workspace/src/{App}/.env` ;
+  tu écris son `.env.example` à côté, noms seuls, valeurs vides). Il remplace
+  la lecture de `workspace/stack/STACK.md`. Absent → STOP :
+  ```
+  ERROR: dev-backend — projet non initialisé
+  CAUSE: [PROJECT_NOT_INIT] workspace/src/{AppName}/CLAUDE.md introuvable (project-init n'a pas tourné ?)
+  FIX: python .sdda/sdda.py project-init --mission {n}  (/sdda-build STEP 3.0)
+  ```
+  Tu ne l'édites jamais : il est régénéré par script (`forbidden_writes`).
 - `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (ids, tiers, bounds),
   `tools[]`, `retrievers[]`, `dataAccess[]`, `orchestration.entryNode`,
   `inputSchema` / `outputSchema`, `budget`. IR absent → `[IR_NOT_FOUND]`, STOP.
@@ -93,21 +104,24 @@ priment sur les noms ; les principes de `archi/*.md` priment sur tout.
 
 ## STEP 3 — `--phase skeleton` : le projet, la composition, le Domaine
 
-### 3.1 Les générateurs d'abord
+### 3.1 Le projet est déjà initialisé
+
+`project-init` (/sdda-build STEP 3.0, lancé par la commande, 0 token) a déjà
+tourné avant toi : squelette Python (`gen-app-skeleton --write`), environnement
+installé (`uv sync`), `.env` copié, contexte projet écrit. **Tu ne relances pas
+le générateur** — tu le vérifies, et tu écris ce qui demande un jugement :
 
 ```bash
-python .sdda/sdda.py gen-app-skeleton --write        # Python seulement : config, models, bounds, tracing, CLI, exécuteur d'eval, .env
-python .sdda/sdda.py gen-app-skeleton --check        # exit 0 : rien n'a dérivé
+python .sdda/sdda.py gen-app-skeleton --check        # exit 0 : rien n'a dérivé depuis l'init
 ```
 
-**Le `.env` du projet, c'est ce script qui le pose.** `--write` copie
-`workspace/assets/.env` (déposé par l'humain) vers `workspace/src/{App}/.env`,
-dans le répertoire qu'il vient de créer. Tu ne l'ouvres pas, tu ne le recopies
-pas, tu ne lances pas `install-env` à la main : le lire est refusé
-(`[SECRET_READ_FORBIDDEN]`), le copier n'est pas ton travail. Le rapport ne
-donne que des NOMS de variables ; un `[SECRET_FILE_MISSING]` ou
-`[SECRET_VAR_UNDECLARED]` est un avertissement à rapporter dans ta ligne de
-confirmation, pas un arrêt — la clé n'est exigée qu'aux évaluations.
+**Le `.env` du projet, c'est ce script qui l'a posé.** Il a copié
+`workspace/assets/.env` (déposé par l'humain) vers `workspace/src/{App}/.env`.
+Tu ne l'ouvres pas, tu ne le recopies pas, tu ne lances pas `install-env` à la
+main : le lire est refusé (`[SECRET_READ_FORBIDDEN]`), le copier n'est pas ton
+travail. Un `[SECRET_FILE_MISSING]` ou `[SECRET_VAR_UNDECLARED]` de l'init est
+un avertissement à rapporter dans ta ligne de confirmation, pas un arrêt — la
+clé n'est exigée qu'aux évaluations.
 
 `gen-source-tools` **n'est pas à toi**. Tu le lançais ici, et il écrivait
 d'un coup les contrats des outils de source — après l'IR et G2, qui ne les

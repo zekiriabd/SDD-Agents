@@ -19,6 +19,7 @@ FIX: <l'action précise qui débloque>
 
 - `[CAP_GAP]`
 - `[IR_STALE]`
+- `[PROJECT_NOT_INIT]`
 - `[PROMPT_CONTRADICTION]`
 - `[PROMPT_REFUSAL_POLICY_MISSING]`
 - `[PROMPT_TOOL_UNKNOWN]`

@@ -75,10 +75,12 @@ Read **uniquement** :
   que l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.
 - `workspace/pipeline/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
 - `workspace/pipeline/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
-- `workspace/stack/STACK.md` — `## Active Agent Framework`, `## Active Orchestration Pattern`,
-  `## Project Config` (`MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`,
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active Agent Framework`, `### Active Orchestration Pattern`,
+  `### Project Config` (`MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`,
   `AgentTimeoutSec`, `OnBoundExceeded`, `CostPerRunHardCapUsd`, `TokenCeilingPerRun`),
-  `## Active Serving Surface` (`HumanInTheLoopEnabled`).
+  `### Active Serving Surface` (`HumanInTheLoopEnabled`).
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/orchestration/{pattern}.md`, `.sdda/stacks/framework/{fw}.md` + `.libs.json`.
 - `workspace/src/{App}/agents/*/**` — **en lecture** : les points d'entrée que tu câbles.
   AGENT GATE verte exigée (P5) ; sinon `[AGENT_GATE_NOT_PASSED]`, STOP.

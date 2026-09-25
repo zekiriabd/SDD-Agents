@@ -12,7 +12,8 @@ Génère le code de la MISSION `{n}` depuis l'IR compilé, **couche par couche,
 une gate par couche** (PHILOSOPHY P5) :
 
 ```
-PHASE 3   SOCLE           dev-tools ∥ dev-retrieval ∥ dev-data            (parallèle, MaxParallel)
+PHASE 3   INIT            project-init (script, 0 token) : squelette, uv sync, contexte projet
+          SOCLE           dev-backend (coquille)  →  dev-tools ∥ dev-retrieval ∥ dev-data   (parallèle, MaxParallel)
                           [TOOL GATE G3]  [RETRIEVAL GATE G4]
 PHASE 4   PROMPTS+AGENTS  dev-orchestration --prepass (shared/ + memory/interface, gelés)
                           →  dev-prompt (seul)  →  dev-agent × N   (1 instance / agent, parallèle)
@@ -67,8 +68,8 @@ FIX: lister les agents avec /sdda-status {n}, ou relancer /sdda-topology {n} si 
    FIX: /sdda-topology {n} --recompile-only (recompile + rejoue G2), puis relancer /sdda-build {n}
    ```
 3. Le `.env` n'est **pas** une pré-condition : c'est l'étape qui crée le
-   projet qui l'y pose. `gen-app-skeleton --write` (STEP 3.0, lancé par
-   `dev-backend`) copie `workspace/assets/.env` (déposé par l'humain) vers
+   projet qui l'y pose. `project-init` (STEP 3.0, lancé par la commande, sans
+   agent) copie `workspace/assets/.env` (déposé par l'humain) vers
    `workspace/src/{App}/.env` (lu par l'application), 0 token, aucune valeur
    affichée. Absent : WARN, le build continue — la clé n'est exigée qu'aux
    évaluations (`install-env --require` dans `/sdda-eval`). Aucun agent ne lit
@@ -102,28 +103,70 @@ tronquée et confiante, indétectable en aval.
 
 ## STEP 3 — PHASE 3 : le socle (parallèle)
 
-### 3.0 — `dev-backend --phase skeleton` (seul, AVANT le socle)
+### 3.0 — Init projet (script, 0 token, AVANT tout `dev-*`)
+
+La mise en place du projet est une procédure, pas un jugement : la commande
+la lance elle-même, aucun agent ne part pour l'exécuter.
+
+```bash
+python .sdda/sdda.py project-init --mission {n}
+```
+
+Trois étapes idempotentes, dans cet ordre :
+
+1. **Squelette** — `gen-app-skeleton --write` (Python) : projet, `pyproject.toml`
+   épinglé, plomberie, `.env` copié depuis `workspace/assets/`. Autre langage :
+   sauté, `dev-backend` l'écrit en 3.0b depuis la fiche de langage.
+2. **Dépendances** — `uv sync` dans `workspace/src/{App}/` : l'environnement
+   est installé une fois, avant les agents. `uv` absent → WARN
+   `[PROJECT_DEPS_NOT_INSTALLED]`, le build continue ; `uv sync` en échec →
+   `[PROJECT_DEPS_INSTALL_FAILED]`, STOP (une version épinglée ne se résout pas).
+3. **Contexte projet** — `gen-app-context --write` écrit
+   `workspace/src/{App}/CLAUDE.md` (`AGENTS.md` sous Codex, `GEMINI.md` sous
+   Gemini : le `memory_file` du harnais actif), que le harnais charge seul en
+   entrant dans le répertoire. Il porte le projet résolu, l'arborescence et le
+   propriétaire de chaque couche, les commandes, les libs épinglées, l'extrait
+   de l'IR qui sert à coder et la stack résolue. **Chaque `dev-*` le lit à la
+   place de `STACK.md`** (`loader.yml`, `{memoryfile}`) ; l'IR reste la source
+   close.
+
+Exit ≠ 0 → STOP : sans projet, le socle n'a nulle part où s'écrire.
+
+Avant chaque vague suivante (3.1, 4.0, 5), la commande vérifie que le contexte
+n'a pas dérivé — un contexte périmé fait coder contre une stack qui n'est plus
+la bonne :
+
+```bash
+python .sdda/sdda.py gen-app-context --mission {n} --check
+```
+
+`[PROJECT_NOT_INIT]` → relancer `project-init` ; `[PROJECT_CONTEXT_STALE]` →
+`gen-app-context --write` (STACK.md ou l'IR a changé depuis l'init). Jamais
+d'édition à la main : le fichier est écrit par script, et `dev-backend` se
+l'interdit (`forbidden_writes`).
+
+### 3.0b — `dev-backend --phase skeleton` (seul, AVANT le socle)
 
 Agent : `dev-backend` (`.sdda/agents/dev-backend.md`). Tier `balanced`. Owner
 de la **coquille** : fichiers de projet (`workspace/src/{AppName}/*`),
-composition, configuration et Domaine (`workspace/src/**/app/**`). Il lance
-les générateurs déterministes quand ils existent (`gen-app-skeleton --write`
-en Python) et écrit le squelette depuis la fiche de
-langage sinon. Il part **seul et d'abord** : le projet doit exister pour que
-`dev-tools`, `dev-retrieval` et `dev-data` écrivent dedans, et la composition
-doit exposer les points d'attache que les agents et le graphe honoreront.
+composition, configuration et Domaine (`workspace/src/**/app/**`). Le projet
+existe déjà (3.0) : il écrit ce qui demande un jugement, et seulement cela. En
+Python, il ne relance pas le générateur ; dans un autre langage, il écrit le
+squelette depuis la fiche de langage. Il part **seul et d'abord** : la
+composition doit exposer les points d'attache que les outils, les agents et le
+graphe honoreront.
 
 Prompt d'invocation :
 ```
 Construire la coquille de la MISSION {n}-{MissionName} — phase skeleton.
 Livrable : {DeliverableType} · archi : {archi} · backend : {backend|aucune} · langage : {lang}.
-Générateur d'abord (gen-app-skeleton --write : il crée le projet ET y pose le .env de workspace/assets/), puis projet,
-composition contre l'IR, configuration par NOMS de variables, Domaine (BR-x calculables).
-N'écrire ni agent, ni outil, ni orchestration, ni prompt, ni dataset.
+Le projet est initialisé (project-init) : lire workspace/src/{App}/CLAUDE.md d'abord.
+Écrire la composition contre l'IR, la configuration par NOMS de variables, le Domaine (BR-x calculables).
+N'écrire ni agent, ni outil, ni orchestration, ni prompt, ni dataset, ni le fichier de contexte.
 Fin : `python .sdda/sdda.py gen-app-skeleton --check` et `validate-packaging` verts, une ligne de confirmation.
 ```
 
-Exit ≠ 0 → STOP : sans coquille, le socle n'a pas de projet où s'écrire.
+Exit ≠ 0 → STOP : sans coquille, le socle n'a pas de points d'attache.
 
 ### 3.1 — Dispatch
 
@@ -321,6 +364,12 @@ FIX: revoir le contrat de retrieval (chunking, hybridWeights, topK, rerank) via 
 ---
 
 ## STEP 4 — PHASE 4 : pré-passe, prompts, puis agents
+
+Contexte projet à jour avant la vague (cf. 3.0) — exit ≠ 0 → STOP avec la classe rendue :
+
+```bash
+python .sdda/sdda.py gen-app-context --mission {n} --check
+```
 
 ### 4.0 — `dev-orchestration --prepass` (SEUL — barrière de la phase 4)
 
@@ -570,6 +619,12 @@ et pour chaque agent porté 🔴 par le rapport :
 ---
 
 ## STEP 5 — PHASE 5 : orchestration puis serving
+
+Contexte projet à jour avant la vague (cf. 3.0) — exit ≠ 0 → STOP avec la classe rendue :
+
+```bash
+python .sdda/sdda.py gen-app-context --mission {n} --check
+```
 
 ### 5.1 — `dev-orchestration` (seul)
 

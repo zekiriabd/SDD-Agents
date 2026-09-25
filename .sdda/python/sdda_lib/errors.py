@@ -76,6 +76,11 @@ EXTRA_CLASSES: dict[str, str] = {
     "MEASUREMENT_MISSING": "EVAL",
     "BYPASS_REASON_MISSING": "CONFIG",
     "IR_NOT_FOUND": "TOPOLOGY",
+    # `project-init` / `gen-app-context` : le projet applicatif et son contexte.
+    "PROJECT_NOT_INIT": "CONFIG",
+    "PROJECT_CONTEXT_STALE": "CONFIG",
+    "PROJECT_DEPS_NOT_INSTALLED": "CONFIG",
+    "PROJECT_DEPS_INSTALL_FAILED": "CONFIG",
     "GOAL_NOT_MET": "EVAL",
     "REGRESSION": "EVAL",
 }

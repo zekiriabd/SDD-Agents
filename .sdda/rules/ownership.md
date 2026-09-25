@@ -59,6 +59,7 @@ ne peut plus rien conclure.
 | `workspace/src/**/orchestration/**` | `dev-orchestration` | Create + Edit exclusif | 5 |
 | `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif | 5 |
 | `workspace/src/{App}/*` (fichiers de projet, README, Dockerfile, .env.example) | `dev-backend` | Create + Edit — la coquille ; les fichiers générés par script se régénèrent, ne s'éditent pas | 3, 5 |
+| `workspace/src/{App}/{CLAUDE,AGENTS,GEMINI}.md` (contexte projet) | **script `gen-app-context` uniquement** (`project-init`) | write atomique ; lu par tous les `dev-*`, écrit par aucun — `dev-backend` se l'interdit malgré `src/{App}/*` | 3 |
 | `workspace/src/**/app/**` (composition, config, Domaine) | `dev-backend` | Create + Edit exclusif — **rien du moteur** : aucun droit sur agents/, tools/, orchestration/, retrieval/, data/, serving/ | 3, 5 |
 | `workspace/src/{App}/tests/**` (transverses) | `qa-tests` | Create/Edit exclusif — **jamais le code de production** | 6 |
 | `workspace/src/**/{couche}/tests/**` | le `dev-*` de la couche | Create/Edit — ses propres tests de contrat | 3-5 |

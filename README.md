@@ -386,10 +386,10 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 <!--sdda:count commands-->11<!--/sdda:count--> commands,
 <!--sdda:count invariants-->21<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->45<!--/sdda:count--> stack sheets,
-<!--sdda:count classes-->440<!--/sdda:count--> error classes,
+<!--sdda:count classes-->444<!--/sdda:count--> error classes,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks and
-<!--sdda:count subcommands-->76<!--/sdda:count--> deterministic subcommands exist on disk and
-are tested (<!--sdda:count tests-->1513<!--/sdda:count--> test functions). No script
+<!--sdda:count subcommands-->78<!--/sdda:count--> deterministic subcommands exist on disk and
+are tested (<!--sdda:count tests-->1524<!--/sdda:count--> test functions). No script
 cited by a prompt is missing ([PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md)
 is empty). What does **not** exist yet is the proof: no pipeline has run end to
 end on a real product, so no combination is validated. That is Lot 6 of the

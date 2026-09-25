@@ -329,6 +329,33 @@ def active_stacks(root: Path, heading: str) -> list[str]:
     return out
 
 
+#: Le harnais supporté, et le fichier mémoire qu'il charge : repli quand STACK.md
+#: ou la matrice ne disent rien.
+DEFAULT_HARNESS = "claude-code"
+DEFAULT_MEMORY_FILE = "CLAUDE.md"
+
+
+def active_harness(root: Path) -> str:
+    """`## Active Harness` -> `Harness:` (`claude-code` à défaut)."""
+    return str(read_stack_section_kv(root, "Active Harness").get("Harness") or DEFAULT_HARNESS).strip()
+
+
+def harness_memory_file(root: Path) -> str:
+    """`memory_file` du harnais actif dans `capability-matrix.yml` (`CLAUDE.md` à défaut).
+
+    Lu, pas codé en dur : c'est la clé que `harness_build` utilise déjà pour les
+    façades du framework. Le fichier de contexte d'une application générée doit
+    être celui que le MÊME harnais charge seul en entrant dans son répertoire.
+    """
+    sdda = root / ".sdda" if (root / ".sdda" / "capability-matrix.yml").is_file() else paths.FRAMEWORK_SDDA_DIR
+    matrix_path = sdda / "capability-matrix.yml"
+    if not matrix_path.is_file():
+        return DEFAULT_MEMORY_FILE
+    matrix = yaml_mini.parse_mapping(markdown_io.read_text(matrix_path))
+    entry = (matrix.get("harnesses") or {}).get(active_harness(root)) or {}
+    return str(entry.get("memory_file") or DEFAULT_MEMORY_FILE)
+
+
 def read_runtime_tier_map(root: Path) -> dict[str, str]:
     """`## Runtime Models` -> {tier: identifiant de modèle}.
 

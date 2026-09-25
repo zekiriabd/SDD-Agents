@@ -150,7 +150,7 @@ SDD-Agents/
 │   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
 │   │                                  #   marche depuis un clone nu, sans pip install
 │   └── python/                        # outillage déterministe 0-token
-│       ├── sdda_cli.py                # dispatcher des 76 sous-commandes ; registre
+│       ├── sdda_cli.py                # dispatcher des 78 sous-commandes ; registre
 │       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (dont judge_clients : le juge LLM réel)
@@ -193,6 +193,8 @@ SDD-Agents/
     │   └── {AppName}/                       # l'application agentic générée — layout PLAT (SDD_Pro) :
     │       │                                #   ce répertoire EST le paquet, un seul niveau
     │       ├── pyproject.toml · README.md   # le projet (dev-backend)
+    │       ├── CLAUDE.md                    # contexte projet (project-init, 0 token) — AGENTS.md / GEMINI.md
+    │       │                                #   selon le harnais ; lu par les dev-* à la place de STACK.md
     │       ├── .env                         # copié depuis assets/.env à la création du projet, sans LLM
     │       ├── app/                         # composition, config, Domaine (dev-backend)
     │       ├── shared/                      # types partagés, posés par la pré-passe (dev-orchestration)
@@ -309,7 +311,7 @@ refusée au preflight (`[STACK_VALUE_UNIMPLEMENTED]`) au lieu d'être avalée.
 
 ### 2.ante Un seul point d'entrée pour l'outillage
 
-Les 76 sous-commandes déterministes s'appellent par une forme unique :
+Les 78 sous-commandes déterministes s'appellent par une forme unique :
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
@@ -390,7 +392,8 @@ compilée, régénérable, jamais éditée à la main. Détail et schéma :
    |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
  PHASE 6a  DATASETS           qa-evals --datasets-only : golden, calibration — AVANT le code
    |
- PHASE 3   SOCLE              dev-backend (squelette : projet, composition, config, Domaine — seul, d'abord)
+ PHASE 3   SOCLE              project-init (script, 0 token) : squelette, uv sync, contexte projet
+   |                          dev-backend (coquille : composition, config, Domaine — seul, d'abord)
    |                          puis dev-tools || dev-retrieval || dev-data     (parallèle)
    |                          gen-source-tools --scope code juste avant dev-data
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
@@ -438,6 +441,15 @@ coûtait :
 - **Les jeux avant le code (PHASE 6a).** G4 exige le golden de retrieval, G5 les
   goldens de CAP et les sets de calibration ; les produire avant le code est
   aussi ce qui empêche le code d'influencer le jeu qui le jugera.
+- **L'init projet est un script, pas un agent.** `project-init` ouvre la
+  PHASE 3 : squelette, `uv sync`, puis `gen-app-context`, qui écrit
+  `workspace/src/{App}/CLAUDE.md` (le `memory_file` du harnais actif) — le
+  pendant du `CLAUDE.md` par projet de SDD_Pro, projeté depuis l'IR au lieu
+  d'être rédigé. Chaque `dev-*` le lit à la place de STACK.md
+  (`[PROJECT_NOT_INIT]` s'il manque, `[PROJECT_CONTEXT_STALE]` s'il a dérivé).
+  Avant lui, `dev-backend` lançait le générateur lui-même — treize minutes
+  mesurées pour trois appels de script — et huit agents relisaient 44 Ko de
+  STACK.md pour reconstituer le même projet.
 - **L'étape 4.0 — la pré-passe.** `dev-orchestration --prepass` pose les types
   partagés (`shared/`) et l'**interface** mémoire avant que les instances de
   `dev-agent` partent en parallèle. Sans elle, chaque instance inventait ses
@@ -662,6 +674,7 @@ artefacts agentic. Extrait (la source est `loader.yml`, clés `writes:`) :
 | `workspace/src/**/orchestration/**` · `memory/**` · `shared/**` | `dev-orchestration` | Create + Edit exclusif ; `shared/` et l'interface mémoire en pré-passe |
 | `workspace/src/**/serving/**` | `dev-api` | Edit-augment exclusif |
 | `workspace/src/*/*` · `workspace/src/**/app/**` | `dev-backend` | la coquille : projet, composition, config, Domaine, packaging — rien du moteur |
+| `workspace/src/*/{CLAUDE,AGENTS,GEMINI}.md` | script `gen-app-context` uniquement | Write atomique ; interdit à `dev-backend` |
 | `workspace/src/**/tests/**` | `qa-tests` (zone partagée avec les `dev-*`, par couche) | Edit-augment |
 | `workspace/pipeline/datasets/**` | `qa-evals` | Create exclusif ; **jamais** `dev-*` |
 | `workspace/pipeline/baselines/**` | script déterministe uniquement | Write atomique |
@@ -774,7 +787,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **440**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **444**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Le chiffre ci-dessus est lui-même régénéré (`sync-counters`), pas recopié.

@@ -19,6 +19,7 @@ FIX: <l'action précise qui débloque>
 
 - `[DATA_ACCESS_FILTER_POST_GENERATION]`
 - `[IR_NOT_FOUND]`
+- `[PROJECT_NOT_INIT]`
 - `[RETRIEVAL_CONFIG_DRIFT]`
 
 ## Classes universelles

@@ -40,13 +40,15 @@ Read **uniquement** :
   qui les consomment (`trustPosture`).
 - `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif,
   config retenue, contraintes de filtrage, fraîcheur, PII.
-- `workspace/stack/STACK.md` — `## Active RAG Pattern`, `## Active Retrieval Stack`
+- `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
+  `### Active RAG Pattern`, `### Active Retrieval Stack`
   (vectorstore, embedding, `VectorStoreConnection`, `IngestionMode`,
-  `IndexRefreshPolicy`), `## Active Reranker`, `## Runtime Models`
-  (`EmbeddingModel`, `RerankModel`), `## Active Language & Runtime`.
+  `IndexRefreshPolicy`), `### Active Reranker`, `### Runtime Models`
+  (`EmbeddingModel`, `RerankModel`), `### Active Language & Runtime`.
   `VectorStoreConnection.Mode: same-as-database` signifie que l'index vit dans
-  la base de `## Active Data Access` — c'est le cas pgvector, et seulement lui.
+  la base de `### Active Data Access` — c'est le cas pgvector, et seulement lui.
   Tout autre store porte son propre `Endpoint` : ne jamais le déduire des `DB_*`.
+  Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/rag/{pattern}.md`, `.sdda/stacks/vectorstore/{store}.md`,
   `.sdda/stacks/embedding/{emb}.md`, `.sdda/stacks/rerank/{reranker}.md`
   + `.libs.json` — idiomes, versions épinglées.
