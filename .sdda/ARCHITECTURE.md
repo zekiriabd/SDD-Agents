@@ -24,7 +24,7 @@ The same in spirit as SDD_Pro, adapted to agentic systems.
 | **Workspace** | `workspace/` | The user's project: specifications, contracts, prompts, datasets, generated code | The agents, at runtime |
 
 > `.sdda/` (not `.sdd/`): a deliberately short name — it is referenced hundreds
-> of times across <!--sdda:count agents-->23<!--/sdda:count--> agent prompts; two characters fewer are tokens
+> of times across <!--sdda:count agents-->24<!--/sdda:count--> agent prompts; two characters fewer are tokens
 > saved on every invocation. Distinct from `.sdd/` so that SDD_Pro and
 > SDD_Agents can be vendored into the same repository.
 
@@ -56,7 +56,7 @@ SDD-Agents/
 │   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache per agent
 │   ├── agent-bounds.yaml              # tier_default / floor / ceiling per agent
 │   ├── capability-matrix.yml          # harnesses x mechanisms; tier -> BUILD model
-│   ├── agents/                        # <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents (see docs/AGENT-ROSTER.md)
+│   ├── agents/                        # <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents (see docs/AGENT-ROSTER.md)
 │   ├── commands/                      # <!--sdda:count commands-->11<!--/sdda:count--> slash commands
 │   ├── rules/                         # operational rules
 │   │   ├── ownership.md               # write matrix (inherited from SDD_Pro)
@@ -146,7 +146,7 @@ SDD-Agents/
 │   ├── sdda.py                        # launcher: `python .sdda/sdda.py {cmd}` —
 │   │                                  #   works from a bare clone, no pip install
 │   └── python/                        # deterministic 0-token tooling
-│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->78<!--/sdda:count--> subcommands; registry
+│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->79<!--/sdda:count--> subcommands; registry
 │       │                              #   DERIVED from disk, also read by the scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (including judge_clients: the real LLM judge)
@@ -306,7 +306,7 @@ refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`) instead of being swallowed.
 
 ### 2.ante One entry point for the tooling
 
-The <!--sdda:count subcommands-->78<!--/sdda:count--> deterministic subcommands are called in a single form:
+The <!--sdda:count subcommands-->79<!--/sdda:count--> deterministic subcommands are called in a single form:
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # from a bare clone
@@ -314,7 +314,7 @@ sdda validate-mission --mission 1                     # after `pip install -e .s
 ```
 
 The first assumes **no installation**, and it is the one the
-<!--sdda:count agents-->23<!--/sdda:count--> agent sheets and the <!--sdda:count commands-->11<!--/sdda:count--> commands write. A framework whose prompts
+<!--sdda:count agents-->24<!--/sdda:count--> agent sheets and the <!--sdda:count commands-->11<!--/sdda:count--> commands write. A framework whose prompts
 require a prior `pip install` fails on the first clone — and the agent that gets
 `command not found` invents the script's output instead of stopping.
 
@@ -462,6 +462,16 @@ cost something:
   on disk.
 - **Phase 5 is sequential**: orchestration, then surface, then packaging. The
   surface attaches to the graph, packaging to the surface.
+- **The `poc` profile takes another path.** `Profile: poc` (`## Project Config`)
+  is both a config layer — `.sdda/profiles/poc.yml`, between the base and the
+  team: smaller sets — and a switch for the commands: `/sdda-build` replaces
+  PHASES 3 to 5 with `dev-prompt` ∥ `qa-evals`, then a single `dev-app` agent for
+  the whole application; gates G3→G6 are played and reported without blocking
+  or looping; `/sdda-full` skips review and acceptance. Without G7,
+  `compute-status` caps the MISSION at `Tested`: a poc is never `Approved`. What
+  does not move: the judging boundary, hashed prompts, bounds in code. `dev-app`
+  overlaps the layer `dev-*` zones by construction; the sharing is declared pair
+  by pair (`exclusive-by-profile`), so detection between `dev-*` stays whole.
 - **Resume follows the lineage.** `/sdda-full {n} --resume` opens a run linked to
   the previous one (`resumedFrom`); skip, retry and the attempt counter are read
   over the whole lineage, at item granularity (`--inputs-hash`), and
@@ -611,7 +621,7 @@ mandatory for agentic systems:
 | Notion | Who executes | Declared in |
 |---|---|---|
 | **Harness** | where the *build* orchestration runs (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
-| **Build models** | which models pay for the *build* tokens (the <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
+| **Build models** | which models pay for the *build* tokens (the <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
 | **Runtime models** | which models the **generated application** runs | `STACK.md ## Runtime Models` |
 
 The three are independent. Building with Claude Code + Opus an application that

@@ -107,6 +107,70 @@ tronquée et confiante, indétectable en aval.
 
 ---
 
+## STEP P — Profil `poc` : deux agents, gates rapportées
+
+```bash
+PROFILE=$(python .sdda/sdda.py project-profile)      # poc | standard | production
+```
+
+La valeur effective de `Profile` (`## Project Config`, défaut `standard`).
+`standard` ou `production` → STEP 3. **`poc` → ce STEP remplace les STEP 3 à 5
+entiers**, puis STEP 6. Un prototype doit marcher et être mesuré, pas être
+prouvé : au premier run réel, un chat à un agent et deux outils de lecture a
+traversé huit agents de construction et quatre-vingt-quinze minutes de
+phases 3 à 5. Ce qui ne change pas en `poc` : la frontière du jugement (aucun
+`dev-*` n'écrit ni ne lit les jeux), les prompts écrits et hashés par
+`dev-prompt`, les bornes en code, les secrets.
+
+**P.1 — Init projet.** `python .sdda/sdda.py project-init --mission {n}`, comme
+en 3.0.
+
+**P.2 — Prompts et jeux, en parallèle.** Un seul message multi-`Agent` :
+
+- `dev-prompt`, prompt de 4.1 ;
+- `qa-evals`, prompt de `/sdda-eval` STEP 3 (`--datasets-only`) — les tailles
+  minimales sont celles du profil (`.sdda/profiles/poc.yml`), sauf si STACK.md
+  en écrit d'autres.
+
+Jonction : `lint-prompts` (4.1) vert, sinon STOP ; `qa-evals` en
+`[AC_NOT_EVALUABLE]` → STOP, FIX `/sdda-caps {n}` ; puis `/sdda-eval` STEP 4 et
+4.bis (`validate-datasets --freeze`, `calibrate-judge`) et
+`set-phase --phase eval_datasets --status pass`.
+
+**P.3 — `dev-app`, seul** (`.sdda/agents/dev-app.md`), qui écrit toute
+l'application — coquille, outils, données, agents, orchestration, mémoire,
+surface, tests de couche :
+
+```
+Construire l'application de la MISSION {n}-{MissionName} — profil poc, un seul agent.
+Le projet est initialisé (project-init) : lire workspace/src/{App}/CLAUDE.md d'abord.
+IR : workspace/.sys/.ir/{n}-system.ir.json (source close). Prompts déjà écrits et hashés : les charger, ne pas les écrire.
+Ordre : outils/données → agents → orchestration/mémoire → surface → composition. Tests de couche seulement, LLM mocké.
+Aucune écriture sous workspace/pipeline/ ni prompts/, skills/, rules/ ; aucune lecture des jeux d'évaluation.
+Budget build_loop : BuildLoopMaxCostUsd={…}, BuildLoopMaxIter={…}.
+```
+
+Exit ≠ 0 → STOP : sans application, il n'y a rien à mesurer.
+
+**P.4 — Gates jouées, rapportées, jamais bloquantes.** Les mêmes scripts, dans
+cet ordre : 3.2 (G3), 3.3 (G4, si `retrievers[]`), 4.3 (G5), 5.3 et 5.3 bis
+(G6, parts `api` et `framework`), 5.4 (G6). Ils écrivent leurs rapports comme
+d'habitude — c'est la mesure. Un **rouge** ne déclenche **ni STOP ni boucle
+de correction** : il est rapporté dans le récap (`🔴 G5 … — poc : rapporté,
+pas corrigé`). Seule une erreur d'EXÉCUTION d'un script (IR absent, rapport
+illisible) arrête la commande. Les hooks `preflight_tool_gate` et
+`preflight_retrieval_gate` ne s'appliquent pas : ils gardent le lancement de
+`dev-agent` et `dev-orchestration`, que ce profil ne lance pas.
+
+**State tracking** : `set-phase` `build_socle`, `build_agents` et `build_orch`
+en `pass` une fois P.3 et P.4 terminés, avec
+`--payload-json '{"profile":"poc","gates":{"G3":…,"G5":…,"G6":…}}'` : la phase
+est faite, et le verdict des gates reste lu dans leurs rapports.
+`compute-status` n'en tire que ce qu'elles valent — sans G7, la MISSION
+plafonne à `Tested`.
+
+---
+
 ## STEP 3 — PHASE 3 : le socle (parallèle)
 
 ### 3.0 — Init projet (script, 0 token, AVANT tout `dev-*`)

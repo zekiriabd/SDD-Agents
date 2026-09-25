@@ -1,0 +1,27 @@
+# Profil `poc` — défauts d'un prototype qu'on veut voir marcher, pas prouver.
+#
+# Activé par `Profile: poc` dans `workspace/stack/STACK.md ## Project Config`.
+# Couche 1b de la config (layered_config.py) : base < PROFIL < team < projet.
+# Une valeur écrite dans STACK.md l'emporte donc toujours — y compris celles que
+# le gabarit écrit sous `## Active Eval Stack` (GoldenSetMinItems: 50…) : pour
+# qu'un poc profite de ces défauts, les retirer de STACK.md.
+#
+# Ce que le profil change AILLEURS que dans ces valeurs — le chemin des
+# commandes — est décrit là où il s'exécute :
+#   - /sdda-build  STEP P : project-init, puis dev-prompt ∥ qa-evals, puis UN
+#     agent `dev-app` pour tout src/{App}/ ; gates G3→G6 jouées et rapportées,
+#     jamais bloquantes ni corrigées en boucle ;
+#   - /sdda-full   PHASE 7 (revue) et PHASE 8 (acceptation) sautées.
+#
+# Ce que le profil NE change PAS, et qui doit être dit : la frontière du
+# jugement (aucun dev-* n'écrit ni ne lit les jeux), le hash des prompts, les
+# bornes en code, les secrets. Et un poc ne franchit pas G7 : compute-status le
+# plafonne à `Tested`, jamais `Approved`. Passer en production = `Profile:
+# standard`, puis `/sdda-full {n}` rejoue ce que le poc a sauté.
+
+# Jeux d'évaluation : de quoi voir, pas de quoi conclure.
+GoldenSetMinItems: 15
+HoldoutSetMinItems: 10
+AdversarialSetMinItems: 10
+CalibrationSetMinItems: 15
+JudgeCalibrationMinItems: 15

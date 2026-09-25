@@ -24,7 +24,7 @@ Identique en esprit à SDD_Pro, adapté à l'agentic.
 | **Workspace** | `workspace/` | Le projet de l'utilisateur : spécifications, contrats, prompts, datasets, code généré | Les agents, au runtime |
 
 > `.sdda/` (et non `.sdd/`) : nom court volontaire — il est référencé des centaines
-> de fois dans <!--sdda:count agents-->23<!--/sdda:count--> prompts d'agents ; deux caractères de moins sont des tokens
+> de fois dans <!--sdda:count agents-->24<!--/sdda:count--> prompts d'agents ; deux caractères de moins sont des tokens
 > économisés à chaque invocation. Distinct de `.sdd/` pour permettre de vendorer
 > SDD_Pro et SDD_Agents dans un même dépôt.
 
@@ -56,7 +56,7 @@ SDD-Agents/
 │   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache par agent
 │   ├── agent-bounds.yaml              # tier_default / floor / ceiling par agent
 │   ├── capability-matrix.yml          # harnais x mécanismes ; tier -> modèle de CONSTRUCTION
-│   ├── agents/                        # <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents (cf. docs/AGENT-ROSTER.md)
+│   ├── agents/                        # <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents (cf. docs/AGENT-ROSTER.md)
 │   ├── commands/                      # <!--sdda:count commands-->11<!--/sdda:count--> commandes slash
 │   ├── rules/                         # règles opérationnelles
 │   │   ├── ownership.md               # matrice d'écriture (hérité SDD_Pro)
@@ -146,7 +146,7 @@ SDD-Agents/
 │   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
 │   │                                  #   marche depuis un clone nu, sans pip install
 │   └── python/                        # outillage déterministe 0-token
-│       ├── sdda_cli.py                # dispatcher des <!--sdda:count subcommands-->78<!--/sdda:count--> sous-commandes ; registre
+│       ├── sdda_cli.py                # dispatcher des <!--sdda:count subcommands-->79<!--/sdda:count--> sous-commandes ; registre
 │       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (dont judge_clients : le juge LLM réel)
@@ -307,7 +307,7 @@ refusée au preflight (`[STACK_VALUE_UNIMPLEMENTED]`) au lieu d'être avalée.
 
 ### 2.ante Un seul point d'entrée pour l'outillage
 
-Les <!--sdda:count subcommands-->78<!--/sdda:count--> sous-commandes déterministes s'appellent par une forme unique :
+Les <!--sdda:count subcommands-->79<!--/sdda:count--> sous-commandes déterministes s'appellent par une forme unique :
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
@@ -315,7 +315,7 @@ sdda validate-mission --mission 1                     # après `pip install -e .
 ```
 
 La première ne suppose **aucune installation**, et c'est elle qu'écrivent les
-<!--sdda:count agents-->23<!--/sdda:count--> fiches d'agents et les <!--sdda:count commands-->11<!--/sdda:count--> commandes. Un framework dont les prompts exigent un
+<!--sdda:count agents-->24<!--/sdda:count--> fiches d'agents et les <!--sdda:count commands-->11<!--/sdda:count--> commandes. Un framework dont les prompts exigent un
 `pip install` préalable échoue au premier clone — et l'agent qui reçoit
 `command not found` invente la sortie du script au lieu de s'arrêter.
 
@@ -464,6 +464,17 @@ coûtait :
   disque.
 - **La phase 5 est séquentielle** : orchestration, puis surface, puis
   packaging. La surface s'attache au graphe, le packaging à la surface.
+- **Le profil `poc` prend un autre chemin.** `Profile: poc` (`## Project Config`)
+  est à la fois une couche de config — `.sdda/profiles/poc.yml`, entre la base
+  et l'équipe : des jeux plus petits — et un aiguillage des commandes :
+  `/sdda-build` remplace les PHASES 3 à 5 par `dev-prompt` ∥ `qa-evals`, puis un
+  seul agent `dev-app` pour toute l'application ; les gates G3→G6 sont jouées et
+  rapportées sans bloquer ni boucler ; `/sdda-full` saute la revue et
+  l'acceptation. Sans G7, `compute-status` plafonne la MISSION à `Tested` : un
+  poc n'est jamais `Approved`. Ce qui ne bouge pas : la frontière du jugement,
+  les prompts hashés, les bornes en code. `dev-app` recouvre les zones des
+  `dev-*` de couche par construction ; le partage est déclaré paire par paire
+  (`exclusive-by-profile`), pour que la détection entre `dev-*` reste entière.
 - **La reprise suit la lignée.** `/sdda-full {n} --resume` ouvre un run lié au
   précédent (`resumedFrom`) ; saut, reprise et compteur de tentatives se lisent
   sur toute la lignée, à la granularité de l'item (`--inputs-hash`), et
@@ -611,7 +622,7 @@ obligatoire en agentic :
 | Notion | Qui exécute | Déclaré dans |
 |---|---|---|
 | **Harness** | où tourne l'orchestration de *construction* (Claude Code, Codex, Gemini CLI…) | `STACK.md ## Active Harness` |
-| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
+| **Build models** | quels modèles paient les tokens de *construction* (les <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents) | `capability-matrix.yml` > `harnesses.{Harness}.tier_models` |
 | **Runtime models** | quels modèles fait tourner l'**application générée** | `STACK.md ## Runtime Models` |
 
 Les trois sont indépendants. Construire avec Claude Code + Opus une application

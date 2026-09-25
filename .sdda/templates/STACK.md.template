@@ -98,6 +98,10 @@ JudgeModel: claude-opus-5             # grader LLM — DOIT être calibré (inva
 
 ## Project Config
 AppName: {{AppName}}
+Profile: standard                   # poc | standard | production — `poc` : 2 agents de build au lieu de 8,
+                                    # jeux réduits (.sdda/profiles/poc.yml : retirer alors les *SetMinItems
+                                    # de `## Active Eval Stack`), gates rapportées non bloquantes, pas de
+                                    # revue ni d'acceptation — la MISSION plafonne à `Tested`
 
 # --- Budget d'EXECUTION du produit généré (exigence fonctionnelle, cf. P6) ---
 CostPerRunTargetUsd: 0.05           # coût cible d'une exécution bout-en-bout

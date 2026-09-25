@@ -331,7 +331,7 @@ its available languages.
 | [DOMAIN-MODEL.md](.sdda/docs/DOMAIN-MODEL.md) | The closed vocabulary: MISSION, CAP, AGENT, TOOL, RETRIEVER… |
 | [AGENTIC-IR.md](.sdda/docs/AGENTIC-IR.md) | The intermediate representation that makes multi-framework deterministic |
 | [LIFECYCLE.md](.sdda/docs/LIFECYCLE.md) | State machine Draft → Approved, derived from the gates |
-| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | The <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents and their internal orchestration |
+| [AGENT-ROSTER.md](.sdda/docs/AGENT-ROSTER.md) | The <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents and their internal orchestration |
 | [ORCHESTRATION-PATTERNS.md](.sdda/docs/ORCHESTRATION-PATTERNS.md) | Catalogue + selection matrix |
 | [RAG-PATTERNS.md](.sdda/docs/RAG-PATTERNS.md) | Catalogue + gate metrics |
 | [MEMORY-PATTERNS.md](.sdda/docs/MEMORY-PATTERNS.md) | Scopes, costs, and memory as a persistent attack surface |
@@ -382,14 +382,14 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 
 ## Status
 
-**Design phase.** <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents,
+**Design phase.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commands,
 <!--sdda:count invariants-->21<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->45<!--/sdda:count--> stack sheets,
 <!--sdda:count classes-->444<!--/sdda:count--> error classes,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks and
-<!--sdda:count subcommands-->78<!--/sdda:count--> deterministic subcommands exist on disk and
-are tested (<!--sdda:count tests-->1531<!--/sdda:count--> test functions). No script
+<!--sdda:count subcommands-->79<!--/sdda:count--> deterministic subcommands exist on disk and
+are tested (<!--sdda:count tests-->1538<!--/sdda:count--> test functions). No script
 cited by a prompt is missing ([PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md)
 is empty). What does **not** exist yet is the proof: no pipeline has run end to
 end on a real product, so no combination is validated. That is Lot 6 of the

@@ -196,6 +196,28 @@ avant que le moindre agent ne soit payé.
 
 ---
 
+## STEP 1.quinquies — Le profil décide du chemin
+
+```bash
+PROFILE=$(python .sdda/sdda.py project-profile)      # poc | standard | production
+```
+
+| Étape | `standard` / `production` | `poc` |
+|---|---|---|
+| PHASES 0 → 2 | inchangées | inchangées — la MISSION, les CAPs et l'IR restent ce que tout le reste lit |
+| STEP 4.5 (PHASE 6a) | avec la coquille : `/sdda-build --with-datasets` | avec les prompts : `/sdda-build` STEP P.2 |
+| STEP 5 (PHASES 3 → 5) | sept `dev-*`, une gate bloquante par couche | `/sdda-build` STEP P : `dev-prompt` + `dev-app`, gates **rapportées** |
+| STEP 6 (PHASE 6) | `/sdda-eval {n}` | `/sdda-eval {n} --run-only` — `dev-app` a écrit les tests de couche |
+| STEP 7 (revue) | jouée | `⊘ PHASE 7 skipped (Profile: poc)` |
+| STEP 8 (acceptation) | jouée | `⊘ PHASE 8 skipped (Profile: poc)` |
+
+Un poc s'arrête donc à `Tested` au mieux : sans G7, `compute-status` ne monte
+pas plus haut, et le récap le dit (`POC — non revu, non accepté`). Passer le
+même projet en `Profile: standard` puis relancer `/sdda-full {n}` rejoue ce que
+le poc a sauté, à partir de l'état dérivé des gates.
+
+---
+
 ## STEP 2 — Résoudre la MISSION et le point de départ (déterministe)
 
 Mode création → exécuter `/sdda-mission {Name}` (STEP 3.0), puis continuer.
@@ -348,7 +370,9 @@ Garde `should-skip-step eval_datasets`. **Ne pas l'exécuter seule** : la PHASE
 message et referme les jeux avant le socle. Les deux ne peuvent pas se lire
 (`forbidden_reads`) ; les enchaîner faisait attendre la coquille 17 minutes au
 premier run réel. Garde « skip » (jeux déjà verts, reprise) → STEP 5 sans le
-flag. Hors `/sdda-full`, `/sdda-eval {n} --datasets-only` reste la forme seule.
+flag. Sous `Profile: poc`, rien ici non plus : `/sdda-build` STEP P.2 les joue
+avec les prompts. Hors `/sdda-full`, `/sdda-eval {n} --datasets-only` reste la
+forme seule.
 
 Pourquoi ici et non en PHASE 6 : la RETRIEVAL GATE (G4) exige le golden de
 retrieval et l'AGENT GATE (G5) exige les goldens de CAP et les sets de
@@ -375,6 +399,9 @@ sous-commande accepte `--layer` pour reprendre à la bonne couche).
 
 Exécuter `/sdda-build {n} --with-datasets` si la PHASE 6a n'est pas encore
 verte (STEP 4.5), `/sdda-build {n}` sinon, ou `--layer {couche}` en reprise.
+Sous `Profile: poc`, `/sdda-build {n}` sans flag : son STEP P joue la PHASE 6a
+lui-même, avec les prompts, et ses gates sont rapportées sans bloquer — la
+table ci-dessous ne s'applique pas.
 Les sorties de la PHASE 6a (table du STEP 4.5) s'appliquent à la jonction.
 
 À l'intérieur de la couche reprise, `/sdda-build` applique ses propres gardes
@@ -400,7 +427,8 @@ Le plafond de construction `MaxCostPerRun` s'applique au **cumul du run**
 
 ## STEP 6 — PHASE 6 : `/sdda-eval {n}`
 
-Garde `should-skip-step eval`. Exécuter `/sdda-eval {n}` (agents + L0→L7).
+Garde `should-skip-step eval`. Exécuter `/sdda-eval {n}` (agents + L0→L7) ;
+sous `Profile: poc`, `/sdda-eval {n} --run-only` (STEP 1.quinquies).
 
 `qa-tests` et `qa-evals` ont déjà tourné en partie (6a) :
 `/sdda-eval` est idempotent — `qa-evals` complète (suites, baselines),
@@ -419,6 +447,10 @@ Garde `should-skip-step eval`. Exécuter `/sdda-eval {n}` (agents + L0→L7).
 
 Si `--no-review` → `⊘ PHASE 7 skipped (--no-review, dev local)` + audit-log +
 **aller à STEP 9** (PHASE 8 non exécutable sans G7).
+
+Si `Profile: poc` → `⊘ PHASE 7 skipped (Profile: poc)` + `⊘ PHASE 8 skipped
+(Profile: poc)` et **aller à STEP 9** : le récap porte `POC — non revu, non
+accepté` et l'état dérivé (`Tested` au mieux).
 
 Garde `should-skip-step review`. Exécuter `/sdda-review {n}`.
 

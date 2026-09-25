@@ -16,6 +16,17 @@ A release is cut by pushing a `v*` tag whose version equals
 
 ### Added
 
+- `Profile: poc | standard | production` (`## Project Config`, default
+  `standard`). A config layer — `.sdda/profiles/poc.yml` between base and team
+  (smaller sets; STACK.md still wins) — and a switch read through the new
+  `project-profile` subcommand: under `poc`, `/sdda-build` STEP P runs
+  `project-init`, `dev-prompt` ∥ `qa-evals`, then one new agent, `dev-app`, for
+  the whole application (2 build agents instead of 8); gates G3→G6 are played
+  and reported, never blocking nor looping; `/sdda-full` skips review and
+  acceptance, and `compute-status` caps the MISSION at `Tested`. `dev-app` may
+  not write prompts, skills, rules, the context file or anything under
+  `pipeline/`, nor read the datasets; its overlap with the layer `dev-*` is
+  declared pair by pair under the new `exclusive-by-profile` sharing mode.
 - `/sdda-build --with-datasets` (used by `/sdda-full`): PHASE 6a (`qa-evals`)
   starts in the same message as the shell (`dev-backend`, 3.0b) and closes
   before the foundation — neither agent can read the other. On the first real

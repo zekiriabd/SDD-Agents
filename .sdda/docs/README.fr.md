@@ -2,7 +2,7 @@
 
 > **Spec Driven Development pour applications agentic, multi-harnais** (Claude
 > Code, Codex, Gemini CLI) — un framework qui transforme une MISSION en système
-> d'agents LLM testé, par **<!--sdda:count agents-->23<!--/sdda:count--> Developer Agents**, une orchestration Python
+> d'agents LLM testé, par **<!--sdda:count agents-->24<!--/sdda:count--> Developer Agents**, une orchestration Python
 > déterministe (**0 token**) et **9 gates**.
 
 Ceci est le hub de la documentation. Chaque document a un objet et un public.
@@ -72,7 +72,7 @@ et [../registry/compatibility.matrix.json](../registry/compatibility.matrix.json
 | Sujet | Document | Langues |
 |---|---|---|
 | L'Agentic IR — la représentation intermédiaire qui rend le multi-framework déterministe | [AGENTIC-IR.fr.md](AGENTIC-IR.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
-| Les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents et leur orchestration interne | [AGENT-ROSTER.fr.md](AGENT-ROSTER.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
+| Les <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents et leur orchestration interne | [AGENT-ROSTER.fr.md](AGENT-ROSTER.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Compilation vers Claude Code / Codex / Gemini CLI | [MULTI-HARNESS.fr.md](MULTI-HARNESS.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Tests et évaluation — la pyramide L0→L9, *un test affirme, une eval note* | [TESTING-AND-EVAL.fr.md](TESTING-AND-EVAL.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Les <!--sdda:count invariants-->21<!--/sdda:count--> invariants porteurs et leurs enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | fichier machine |

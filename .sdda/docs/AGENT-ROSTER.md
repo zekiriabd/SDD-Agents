@@ -1,6 +1,6 @@
 # The SDD_Agents Developer Agents
 
-<!--sdda:count agents-->23<!--/sdda:count--> specialised agents. **These are the agents that *build*** — not to be
+<!--sdda:count agents-->24<!--/sdda:count--> specialised agents. **These are the agents that *build*** — not to be
 confused with the agents of the generated product, described in
 `workspace/pipeline/contracts/agents/`.
 
@@ -16,7 +16,7 @@ Five prefixes, one per trade, in pipeline order:
 |---|---|:---:|---|
 | `po-` | product owner — the need and how it is broken down | 0-1 | `po-elicitor`, `po-capabilities` |
 | `architect-` | architecture — materialising, contracting and costing the declared structure | 2 | `architect-topology`, `architect-rag`, `architect-data`, `architect-memory`, `architect-tools` |
-| `dev-` | implementation | 3-5 | `dev-backend` (the shell), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` |
+| `dev-` | implementation | 3-5 | `dev-backend` (the shell), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api`; `dev-app` (profile `poc` only) |
 | `qa-` | what proves | 6a, 6 | `qa-tests`, `qa-evals` |
 | `review-` | what contests | 7 | `review-spec`, `review-safety`, `review-cost`, `review-orchestration`, `review-rag`, `review-adversarial` |
 
@@ -61,6 +61,7 @@ The "Writes to" column is a summary; the source of truth is each agent's
 | **`architect-data`** | 2 | balanced | `pipeline/contracts/tools/{n}-data-*`, ADRs | How does the agent touch the data without being able to harm it? |
 | **`architect-memory`** | 2 | balanced | `pipeline/contracts/memory/` | What persists, for how long, with which PII? |
 | **`dev-backend`** | 3.0, 5 | balanced | `src/{App}/*`, `src/**/app/` | — the shell: project, composition, config, computable rules (3.0), then packaging (5) — inherited from SDD_Pro, IN ADDITION to the six engine agents |
+| **`dev-app`** | 3-5, `poc` only | balanced | `src/{App}/**` except `prompts/`, `skills/`, `rules/`, the context file | — the whole application in one agent under `Profile: poc`, after `dev-prompt`; replaces the seven agents above and never runs alongside them (`exclusive-by-profile`) |
 | **`dev-tools`** | 3 | balanced | `src/**/tools/` | — implements the tools |
 | **`dev-retrieval`** | 3 | balanced | `src/**/retrieval/` | — implements ingestion + retriever |
 | **`dev-data`** | 3 | balanced | `src/**/data/` | — implements views, repositories, envelope |

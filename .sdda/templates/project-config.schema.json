@@ -832,6 +832,20 @@
       },
       "description": "Clés que la couche projet ne peut pas relâcher si la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. La liste ne peut contenir que des clés dont la direction « plus dur » est définie (l'enum ci-dessus). Seule la couche base ou team peut modifier cette liste."
     },
+    "Profile": {
+      "enum": [
+        "poc",
+        "standard",
+        "production"
+      ],
+      "default": "standard",
+      "description": "Profil du projet. `poc` : défauts de .sdda/profiles/poc.yml (jeux réduits), /sdda-build en deux agents (dev-prompt + dev-app), gates rapportées sans être bloquantes, revue et acceptation sautées — la MISSION plafonne à `Tested`. `standard` : le pipeline complet. `production` : réservé (aujourd'hui identique à standard).",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py",
+        "command:sdda-build",
+        "command:sdda-full"
+      ]
+    },
     "DeliverableType": {
       "enum": [
         "backend-api",

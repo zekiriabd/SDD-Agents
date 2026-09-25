@@ -636,6 +636,10 @@ SHARED_MODES = frozenset({
     # ici c'est la couche, et un agent peut en servir plusieurs.
     "disjoint-by-layer",
     "append-only", "serialized", "exclusive-pipeline",
+    # `exclusive-by-profile` : les deux agents ne tournent jamais dans le même
+    # profil (`dev-app` sous `Profile: poc`, les `dev-*` de couche sinon) — la
+    # commande choisit un chemin ou l'autre, jamais les deux.
+    "exclusive-by-profile",
 })
 
 

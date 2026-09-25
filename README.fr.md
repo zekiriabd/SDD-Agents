@@ -341,7 +341,7 @@ liste chaque document et ses langues disponibles.
 | [DOMAIN-MODEL.fr.md](.sdda/docs/DOMAIN-MODEL.fr.md) | Le vocabulaire clos : MISSION, CAP, AGENT, TOOL, RETRIEVER… |
 | [AGENTIC-IR.fr.md](.sdda/docs/AGENTIC-IR.fr.md) | La représentation intermédiaire qui rend le multi-framework déterministe |
 | [LIFECYCLE.fr.md](.sdda/docs/LIFECYCLE.fr.md) | Machine à états Draft → Approved, dérivée des gates |
-| [AGENT-ROSTER.fr.md](.sdda/docs/AGENT-ROSTER.fr.md) | Les <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents et leur orchestration interne |
+| [AGENT-ROSTER.fr.md](.sdda/docs/AGENT-ROSTER.fr.md) | Les <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents et leur orchestration interne |
 | [ORCHESTRATION-PATTERNS.fr.md](.sdda/docs/ORCHESTRATION-PATTERNS.fr.md) | Catalogue + matrice de sélection |
 | [RAG-PATTERNS.fr.md](.sdda/docs/RAG-PATTERNS.fr.md) | Catalogue + métriques de gate |
 | [MEMORY-PATTERNS.fr.md](.sdda/docs/MEMORY-PATTERNS.fr.md) | Portées, coûts, et la mémoire comme surface d'attaque persistante |
@@ -393,14 +393,14 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 
 ## Statut
 
-**Phase de conception.** <!--sdda:count agents-->23<!--/sdda:count--> Developer Agents,
+**Phase de conception.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commandes,
 <!--sdda:count invariants-->21<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->45<!--/sdda:count--> fiches de stack,
 <!--sdda:count classes-->444<!--/sdda:count--> classes d'erreur,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks et
-<!--sdda:count subcommands-->78<!--/sdda:count--> sous-commandes déterministes existent sur
-disque et sont testés (<!--sdda:count tests-->1531<!--/sdda:count--> fonctions de test).
+<!--sdda:count subcommands-->79<!--/sdda:count--> sous-commandes déterministes existent sur
+disque et sont testés (<!--sdda:count tests-->1538<!--/sdda:count--> fonctions de test).
 Aucun script cité par un prompt ne manque
 ([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
 n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en

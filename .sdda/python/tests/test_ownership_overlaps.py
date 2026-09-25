@@ -15,6 +15,9 @@ from sdda_lib.errors import Report
 from sdda_scripts import audit_ownership as ao
 
 APP = "workspace/src/SupportDesk"
+#: Les agents du profil `poc` : leurs zones recouvrent celles des `dev-*` de couche
+#: par construction, et le partage est déclaré `exclusive-by-profile`.
+POC_ONLY = {"dev-app"}
 
 
 @pytest.fixture(scope="module")
@@ -75,8 +78,11 @@ def test_a_declared_shared_zone_excuses_the_overlap() -> None:
     (f"{APP}/shared/types.py", "dev-orchestration"),
 ])
 def test_a_nested_path_belongs_to_the_outermost_layer_only(loader: dict, path: str, owner: str) -> None:
+    """Un seul propriétaire PAR PROFIL. `dev-app` (poc) écrit toute l'application,
+    et ne tourne jamais dans le profil des `dev-*` de couche (`exclusive-by-profile`)."""
     owners = [a for a in ao.agent_names(loader) if ao.check_write(loader, a, path, Report(name="t", target="."))]
-    assert owners == [owner], (path, owners)
+    assert [a for a in owners if a not in POC_ONLY] == [owner], (path, owners)
+    assert set(owners) & POC_ONLY == POC_ONLY, (path, owners)
 
 
 def test_architect_tools_cannot_take_the_reserved_data_prefix(loader: dict) -> None:

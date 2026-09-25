@@ -79,6 +79,11 @@ agents:
     # facture non bornée en production.
   dev-api:
     { tier_default: balanced, tier_floor: fast, tier_ceiling: balanced }
+  dev-app:
+    { tier_default: balanced, tier_floor: balanced, tier_ceiling: deep }
+    # Profil poc seulement : toute l'application en un agent. Floor balanced :
+    # il câble la boucle d'agent et ses bornes, que `fast` écrit mal ; ceiling
+    # deep pour un poc multi-agents.
   dev-backend:
     { tier_default: balanced, tier_floor: fast, tier_ceiling: deep }
     # La coquille : projet, composition, config, règles calculables, packaging.
@@ -118,8 +123,8 @@ agents:
 
 # ── Bilan ──────────────────────────────────────────────────────────────────
 # sdda:bilan-begin — régénéré par sdda_admin/sync_counters.py depuis les entrées ci-dessus, ne pas éditer
-# 23 agents : 8 tier_default=deep, 14 balanced, 1 fast.
-#             17 floor=balanced, 6 floor=fast, 0 floor=deep.
+# 24 agents : 8 tier_default=deep, 15 balanced, 1 fast.
+#             18 floor=balanced, 6 floor=fast, 0 floor=deep.
 #             6 plafonnés balanced (architect-memory, dev-api, dev-data, po-elicitor, qa-tests, review-cost).
 # sdda:bilan-end
 #

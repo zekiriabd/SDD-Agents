@@ -1,6 +1,6 @@
 # Les Developer Agents de SDD_Agents
 
-<!--sdda:count agents-->23<!--/sdda:count--> agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
+<!--sdda:count agents-->24<!--/sdda:count--> agents spécialisés. **Ce sont les agents qui *construisent*** — à ne pas
 confondre avec les agents du produit généré, décrits dans
 `workspace/pipeline/contracts/agents/`.
 
@@ -16,7 +16,7 @@ Cinq préfixes, un par métier, dans l'ordre du pipeline :
 |---|---|:---:|---|
 | `po-` | product owner — le besoin et son découpage | 0-1 | `po-elicitor`, `po-capabilities` |
 | `architect-` | architecture — matérialiser, contractualiser et chiffrer la structure déclarée | 2 | `architect-topology`, `architect-rag`, `architect-data`, `architect-memory`, `architect-tools` |
-| `dev-` | implémentation | 3-5 | `dev-backend` (la coquille), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` |
+| `dev-` | implémentation | 3-5 | `dev-backend` (la coquille), `dev-tools`, `dev-retrieval`, `dev-data`, `dev-prompt`, `dev-agent`, `dev-orchestration`, `dev-api` ; `dev-app` (profil `poc` seulement) |
 | `qa-` | ce qui prouve | 6a, 6 | `qa-tests`, `qa-evals` |
 | `review-` | ce qui conteste | 7 | `review-spec`, `review-safety`, `review-cost`, `review-orchestration`, `review-rag`, `review-adversarial` |
 
@@ -62,6 +62,7 @@ La colonne « Écrit dans » est un résumé ; la source qui fait foi est la cl�
 | **`architect-data`** | 2 | balanced | `pipeline/contracts/tools/{n}-data-*`, ADR | Comment l'agent touche la donnée sans pouvoir lui nuire ? |
 | **`architect-memory`** | 2 | balanced | `pipeline/contracts/memory/` | Qu'est-ce qui persiste, pour combien de temps, avec quelles PII ? |
 | **`dev-backend`** | 3.0, 5 | balanced | `src/{App}/*`, `src/**/app/` | — la coquille : projet, composition, config, règles calculables (3.0), puis packaging (5) — hérité de SDD_Pro, EN PLUS des six du moteur |
+| **`dev-app`** | 3-5, `poc` seulement | balanced | `src/{App}/**` sauf `prompts/`, `skills/`, `rules/`, le fichier de contexte | — toute l'application en un agent sous `Profile: poc`, après `dev-prompt` ; remplace les sept agents ci-dessus et ne tourne jamais avec eux (`exclusive-by-profile`) |
 | **`dev-tools`** | 3 | balanced | `src/**/tools/` | — implémente les outils |
 | **`dev-retrieval`** | 3 | balanced | `src/**/retrieval/` | — implémente ingestion + retriever |
 | **`dev-data`** | 3 | balanced | `src/**/data/` | — implémente vues, repositories, enveloppe |

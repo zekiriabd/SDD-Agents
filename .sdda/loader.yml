@@ -102,7 +102,7 @@ shared_writes:
       comparaison de chaînes d'avant non.
 
   - path: workspace/src/**/tests/**
-    agents: [qa-tests, dev-tools, dev-retrieval, dev-data, dev-agent, dev-orchestration, dev-api, dev-backend]
+    agents: [qa-tests, dev-tools, dev-retrieval, dev-data, dev-agent, dev-orchestration, dev-api, dev-backend, dev-app]
     mode: disjoint-by-layer
     why: |
       G3 exige des tests de contrat d'outil en PHASE 3, quand `qa-tests` ne
@@ -118,7 +118,59 @@ shared_writes:
       Les chemins sont donc disjoints par couche, et le mode le dit.
       `dev-backend` y figure pour les tests de SA couche (`app/tests/`) : sans
       lui, `src/**/app/**` et `src/**/tests/**` se recouvraient sans
-      déclaration, et `real_overlaps` le signale.
+      déclaration, et `real_overlaps` le signale. `dev-app` (profil poc) y
+      figure pour la même raison : il écrit les tests de toutes les couches,
+      et ne tourne jamais dans le profil où les autres tournent.
+
+  # `dev-app` (profil poc) écrit tout `src/{App}/` ; chaque `dev-*` n'en écrit
+  # qu'une couche. Les deux ne tournent JAMAIS dans le même profil : `/sdda-build`
+  # prend le chemin STEP P sous `Profile: poc`, le chemin STEP 3→5 sinon. Une
+  # entrée PAR PAIRE, sur la zone du dev-* : une seule entrée à neuf agents
+  # excuserait aussi les recouvrements ENTRE dev-*, que la détection doit voir.
+  - path: workspace/src/*/*
+    agents: [dev-app, dev-backend]
+    mode: exclusive-by-profile
+    why: racine du projet — dev-backend hors poc, dev-app en poc
+  - path: workspace/src/**/app/**
+    agents: [dev-app, dev-backend]
+    mode: exclusive-by-profile
+    why: coquille — dev-backend hors poc, dev-app en poc
+  - path: workspace/src/**/tools/**
+    agents: [dev-app, dev-tools]
+    mode: exclusive-by-profile
+    why: outils — dev-tools hors poc, dev-app en poc
+  - path: workspace/src/**/retrieval/**
+    agents: [dev-app, dev-retrieval]
+    mode: exclusive-by-profile
+    why: retrieval — dev-retrieval hors poc, dev-app en poc
+  - path: workspace/src/**/data/**
+    agents: [dev-app, dev-data]
+    mode: exclusive-by-profile
+    why: données — dev-data hors poc, dev-app en poc
+  - path: workspace/src/**/agents/{agent}/**
+    agents: [dev-app, dev-agent]
+    mode: exclusive-by-profile
+    why: agents du produit — dev-agent (une instance par agent) hors poc, dev-app en poc
+  - path: workspace/src/**/orchestration/**
+    agents: [dev-app, dev-orchestration]
+    mode: exclusive-by-profile
+    why: graphe — dev-orchestration hors poc, dev-app en poc
+  - path: workspace/src/**/memory/**
+    agents: [dev-app, dev-orchestration]
+    mode: exclusive-by-profile
+    why: mémoire — dev-orchestration hors poc, dev-app en poc
+  - path: workspace/src/**/shared/**
+    agents: [dev-app, dev-orchestration]
+    mode: exclusive-by-profile
+    why: types partagés — dev-orchestration (pré-passe) hors poc, dev-app en poc
+  - path: workspace/src/**/serving/**
+    agents: [dev-app, dev-api]
+    mode: exclusive-by-profile
+    why: surface — dev-api hors poc, dev-app en poc
+  - path: workspace/src/*/tests/**
+    agents: [dev-app, qa-tests]
+    mode: exclusive-by-profile
+    why: tests transverses — qa-tests hors poc, dev-app en poc (qa-tests ne tourne pas en poc)
 
 # ============================================================================
 # Budget de contexte par agent
@@ -592,6 +644,33 @@ dev-backend:
   forbidden_reads:
     - workspace/pipeline/datasets/**
     - workspace/src/*/prompts/**        # il charge un prompt par HASH, il ne le lit pas
+
+dev-app:
+  model_tier: balanced
+  # Profil `poc` SEULEMENT (`/sdda-build` STEP P) : toute l'application en un
+  # agent, à la place des sept `dev-*` du moteur et de la coquille. Ses zones
+  # recouvrent les leurs — le partage est déclaré dans `shared_writes:`, mode
+  # `exclusive-by-profile` : jamais dans le même profil, donc jamais en course.
+  budget_bytes: 360000
+  reads:
+    - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init)
+    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/pipeline/missions/{n}-*.md           # semi — Business Rules, Failure Policy
+    - workspace/pipeline/contracts/agents/{n}-*.agent.md      # volatile
+    - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
+    - workspace/src/*/prompts/*.system.md            # volatile — lecture seule, chargés par hash
+  pack_sources:
+    - .sdda/stacks/lang/{lang}.md
+    - .sdda/stacks/framework/{framework}.md
+    - .sdda/stacks/serving/{serving}.md
+  writes:
+    - workspace/src/*/**
+  forbidden_writes:
+    - workspace/src/*/{CLAUDE,AGENTS,GEMINI}.md      # contexte projet — écrit par `project-init`
+    - workspace/src/*/{prompts,skills,rules}/**      # [PROMPT_OWNERSHIP_VIOLATION] — dev-prompt, même en poc
+    - workspace/pipeline/**                          # jeux, suites, baselines, contrats : jamais un dev-*
+  forbidden_reads:
+    - workspace/pipeline/datasets/**     # la frontière du jugement ne dépend pas du profil
 
 # ---------------------------------------------------------------------------
 # Phase 6 — evaluation et tests

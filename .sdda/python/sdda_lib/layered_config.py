@@ -1,6 +1,7 @@
-"""Project Config en 3 couches : base < team < projet, avec protection security-down.
+"""Project Config en couches : base < profil < team < projet, avec protection security-down.
 
     1. `.sdda/config.base.yml`                 défauts du framework
+    1b. `.sdda/profiles/{Profile}.yml`          défauts du profil (`poc` : jeux plus petits…)
     2. `~/.sdda/config.team.yml`               politique d'équipe (override : $SDDA_TEAM_CONFIG)
     3. `workspace/stack/STACK.md ## Project Config`   override final du projet
 
@@ -244,8 +245,19 @@ def read_layered_config(root: Path, *, team_path: Path | None = None, warn_strea
 
     check_security_down(team, project, protected)
 
-    effective = deep_merge(deep_merge(base, team), project)
+    # Le profil (`Profile: poc | standard | production`) est un JEU DE DÉFAUTS,
+    # rangé entre la base et l'équipe : `.sdda/profiles/{profil}.yml`. Il change
+    # ce que le framework suppose quand STACK.md ne dit rien — des jeux plus
+    # petits pour un poc — sans jamais passer au-dessus de la politique d'équipe
+    # (security-down reste jugé team contre projet) ni de ce que le projet écrit.
+    profile_name = str(project.get("Profile") or team.get("Profile") or base.get("Profile") or "standard").strip()
+    profile_path = profile_config_path(root, profile_name)
+    profile = _read_yaml(profile_path)
+    profile.pop("security_down_protected", None)
+
+    effective = deep_merge(deep_merge(deep_merge(base, profile), team), project)
     sources = {k: "base" for k in base}
+    sources.update({k: "profile" for k in profile})
     sources.update({k: "team" for k in team})
     sources.update({k: "project" for k in project})
 
@@ -272,9 +284,24 @@ def read_layered_config(root: Path, *, team_path: Path | None = None, warn_strea
         config=effective,
         sources=sources,
         warnings=warnings,
-        layer_paths={"base": str(base_path), "team": str(tpath), "project": str(paths.stack_md_path(root))},
+        layer_paths={"base": str(base_path), "profile": str(profile_path), "team": str(tpath),
+                     "project": str(paths.stack_md_path(root))},
         conflicts=conflicts,
     )
+
+
+def profile_config_path(root: Path, profile: str) -> Path:
+    """`.sdda/profiles/{profil}.yml` du projet s'il vendore le framework, du framework sinon."""
+    sdda = root / ".sdda" if (root / ".sdda" / "profiles").is_dir() else paths.FRAMEWORK_SDDA_DIR
+    return sdda / "profiles" / f"{profile}.yml"
+
+
+def active_profile(root: Path) -> str:
+    """`Profile` effectif (`standard` à défaut) — ce que les commandes lisent pour choisir leur chemin."""
+    try:
+        return str(read_layered_config(root, warn_stream=io.StringIO()).get("Profile", "standard")).strip()
+    except SddaError:
+        return str(read_project_section(root).get("Profile") or "standard").strip()
 
 
 #: ` - DB_HOST: ${DB_HOST}` — une DÉCLARATION de variable (nom -> référence),

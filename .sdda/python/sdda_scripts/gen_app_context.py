@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
-from sdda_lib.layered_config import active_harness, active_stacks, harness_memory_file  # noqa: E402
+from sdda_lib.layered_config import active_harness, active_profile, active_stacks, harness_memory_file  # noqa: E402
 from sdda_scripts import gen_app_skeleton as gas  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
@@ -263,7 +263,8 @@ def render(root: Path, ctx: gas.Context, report: Report) -> str:
         "ir-hash": _short_hash(system),
     }
     project_rows = [
-        ("AppName", ctx.app), ("MISSION", ctx.mission or "—"), ("Langage", ctx.language or "—"),
+        ("AppName", ctx.app), ("MISSION", ctx.mission or "—"), ("Profil", active_profile(root)),
+        ("Langage", ctx.language or "—"),
         ("Framework agentic", frameworks), ("Livrable", ctx.deliverable),
         ("Surface", ctx.surfaces), ("Fournisseur runtime", ctx.provider),
         ("Tiers runtime", [f"{k}={v}" for k, v in sorted(ctx.tier_map.items())]),
