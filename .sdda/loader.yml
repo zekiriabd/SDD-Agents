@@ -507,9 +507,15 @@ dev-agent:
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
+    - workspace/pipeline/contracts/memory/{n}-memory.md    # semi — SES scopes ; absent en mémoire courte seule (ir.memory)
     - workspace/src/*/prompts/{agent}.system.md            # volatile — lecture seule
     - workspace/src/*/shared/**                            # semi — types partagés, gelés par la pré-passe 4.0
     - workspace/src/*/memory/interface.*                   # semi — interface mémoire, gelée par la pré-passe 4.0
+    # Les interfaces qu'il câble, en lecture : sa fiche (STEP 2) les nomme,
+    # et un agent qui code contre un outil qu'il n'a pas lu invente sa signature.
+    - workspace/src/*/tools/**                             # semi — G3 verte avant lui
+    - workspace/src/*/retrieval/**                         # semi — G4 verte avant lui
+    - workspace/src/*/data/**                              # semi — enveloppe et repositories
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -551,6 +557,13 @@ dev-orchestration:
     - workspace/.sys/.context/packs/dev-orchestration.md  # stable
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
     - workspace/.sys/.ir/{n}-system.ir.json          # semi — le graphe ET les bornes
+    # Ce que sa fiche (STEP 2) lit et que la pré-passe PROJETTE : les handoffs
+    # (§13) deviennent shared/, le contrat de mémoire devient memory/interface.*.
+    # Un `reads:` qui ne les ouvrait pas laissait la pré-passe inventer ce
+    # qu'elle est censée recopier.
+    - workspace/pipeline/topology/{n}-topology.md    # semi — le dessin que l'IR compile
+    - workspace/pipeline/contracts/agents/{n}-*.agent.md   # volatile — §13 handoffs
+    - workspace/pipeline/contracts/memory/{n}-memory.md    # semi — absent en mémoire courte seule (ir.memory)
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -686,6 +699,7 @@ qa-evals:
     - .sdda/rules/eval-protocol.md                   # stable — sa règle centrale
     - .sdda/templates/eval-suite.template.md         # stable
     - .sdda/templates/golden-set.schema.json         # stable
+    - workspace/stack/STACK.md                       # semi — ## Active Eval Stack, tailles minimales, JudgeModel
     - workspace/pipeline/missions/{n}-*.md                    # semi — où est la ground truth
     - workspace/seed/**                        # semi — la ground truth ELLE-MÊME, fournie par l'humain
                                                # (+ le fichier sous assets/ que `## Ground Truth → Source`
@@ -748,9 +762,12 @@ review-spec:
   model_tier: balanced
   budget_bytes: 290000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
+    - workspace/pipeline/missions/{n}-*.md           # BR, AC système, Quantified Goal, out_of_scope
     - workspace/pipeline/caps/{n}-*-*.md
     - workspace/pipeline/suites/**
-    - workspace/.sys/reports/**
+    - workspace/pipeline/calibration/*.json          # statut de chaque juge
+    - workspace/.sys/reports/{n}-*.json              # les rapports d'eval-runner de CETTE mission
+    - workspace/.sys/.validation/G*-*.json           # rapports de gate G3→G6, à plat (gate_reports.report_path)
     - workspace/.sys/.ir/{n}-system.ir.json
   writes:
     - workspace/.sys/.validation/reports/spec-compliance-{n}.md
@@ -777,7 +794,10 @@ review-cost:
   reads:
     - workspace/pipeline/missions/{n}-*.md                    # le budget déclaré
     - workspace/.sys/.ir/{n}-system.ir.json          # le budget estimé
-    - workspace/.sys/reports/**                     # le budget mesuré
+    - workspace/pipeline/topology/{n}-topology.md    # le budget ESTIMÉ en G2 (nominal, pire cas)
+    - workspace/pipeline/caps/{n}-*-*.md             # criticité, valeur métier déclarée
+    - workspace/.sys/reports/{n}-*.json              # le budget mesuré — suites L7 d'eval-runner
+    - workspace/.sys/.validation/cost-{n}.json       # le rapport que sa fiche produit (cost-report)
   writes:
     - workspace/.sys/.validation/reports/cost-latency-{n}.md
     # Écrit par le script que l'agent LANCE (`cost-report --out …`, fiche
@@ -815,6 +835,8 @@ review-rag:
     # La groundedness est une suite d'eval-runner, dans le rapport de son run —
     # il lisait `groundedness-*.json`, que rien n'écrit.
     - workspace/.sys/reports/{n}-*.json
+    - workspace/pipeline/calibration/*.json              # κ de chaque juge
+    - workspace/src/*/retrieval/*/index.manifest.json    # indexHash et config effective
   writes:
     - workspace/.sys/.validation/reports/rag-quality-{n}.md
 
@@ -831,6 +853,7 @@ review-adversarial:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/src/*/prompts/*.system.md            # volatile — lecture seule
     - workspace/.sys/.validation/reports/agent-safety-{n}.md  # « Cibles pour l'étage C »
+    - workspace/stack/STACK.md                       # semi — ## Active Serving Surface : comment appeler le système
   writes:
     - workspace/.sys/.validation/reports/adversarial-{n}.md
     - workspace/.sys/.validation/adversarial-findings/{n}.jsonl

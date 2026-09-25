@@ -84,8 +84,8 @@ explicite au démarrage, pas un WARN. Le hash est attaché à chaque span LLM de
 cet agent (P10).
 
 Aucune chaîne de prompt dans le code : pas de préambule ajouté, pas de « petit
-rappel » concaténé, pas de f-string. `PromptInlineForbidden: true` est un
-invariant vérifié par le lint L0 ; une phrase de prompt dans une constante est
+rappel » concaténé, pas de f-string. l'invariant `prompts-are-files` est
+vérifié par le lint L0 ; une phrase de prompt dans une constante est
 `[PROMPT_INLINE_FORBIDDEN]`.
 
 ## STEP 4 — Câbler exactement les outils de l'IR

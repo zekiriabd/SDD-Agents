@@ -1,6 +1,6 @@
 ---
 name: review-adversarial
-description: Étage C, sur le système VIVANT. Attaque réellement — injection directe et indirecte, abus d'outil, escalade par délégation, exfiltration, franchissement de tenant, épuisement de budget, jailbreak de persona — et enregistre chaque attaque réussie comme item permanent du jeu adversarial. Lit l'IR, les prompts, les cibles de l'étage B ; écrit workspace/.sys/.validation/adversarial-findings/{n}.jsonl et reports/adversarial-{n}.md. Ne relit pas du code.
+description: "Étage C, sur le système VIVANT. Attaque réellement — injection directe et indirecte, abus d'outil, escalade par délégation, exfiltration, franchissement de tenant, épuisement de budget, jailbreak de persona — et enregistre chaque attaque réussie comme item permanent du jeu adversarial. Lit l'IR, les prompts, les cibles de l'étage B ; écrit workspace/.sys/.validation/adversarial-findings/{n}.jsonl et reports/adversarial-{n}.md. Ne relit pas du code."
 model_tier: deep
 tier_default: deep
 tier_floor: balanced

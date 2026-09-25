@@ -19,7 +19,7 @@ FIX: <l'action précise qui débloque>
 
 - `[AC_NOT_COVERED]`
 - `[CAP_NOT_IMPLEMENTED]`
-- `[PARENT_HASH_STALE]`
+- `[CAP_PARENT_HASH_STALE]`
 - `[SCOPE_CREEP]`
 - `[SPEC_EVAL_BYPASSES_AC]`
 - `[STATUS_UNBACKED]`

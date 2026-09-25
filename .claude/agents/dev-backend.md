@@ -1,6 +1,6 @@
 ---
 name: dev-backend
-description: Construit la COQUILLE de l'application générée — projet, fichiers de build, composition (injection de dépendances), configuration par noms de variables, règles métier calculables de la MISSION, packaging (exécutable, image, README d'exploitation) — depuis le contexte projet (stack résolue), l'IR et les fiches lang/archi/backend actives. Part d'un projet déjà initialisé par `project-init` (Python) et écrit le squelette à la main sinon. N'écrit ni agent, ni prompt, ni outil, ni orchestration, ni dataset — il est le septième dev-*, EN PLUS des six du moteur, jamais à leur place.
+description: "Construit la COQUILLE de l'application générée — projet, fichiers de build, composition (injection de dépendances), configuration par noms de variables, règles métier calculables de la MISSION, packaging (exécutable, image, README d'exploitation) — depuis le contexte projet (stack résolue), l'IR et les fiches lang/archi/backend actives. Part d'un projet déjà initialisé par `project-init` (Python) et écrit le squelette à la main sinon. N'écrit ni agent, ni prompt, ni outil, ni orchestration, ni dataset — il est le septième dev-*, EN PLUS des six du moteur, jamais à leur place."
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast

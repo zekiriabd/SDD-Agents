@@ -1,6 +1,6 @@
 ---
 name: architect-memory
-description: Décide ce qui persiste entre les tours et entre les runs, pour combien de temps, avec quelles PII, et quel état est partagé entre agents. Lit la topologie, les contrats d'agents et la section Active Memory Strategy de STACK.md ; écrit workspace/pipeline/contracts/memory/{n}-memory.md. Refuse toute mémoire long terme sans rétention ni politique PII déclarées.
+description: "Décide ce qui persiste entre les tours et entre les runs, pour combien de temps, avec quelles PII, et quel état est partagé entre agents. Lit la topologie, les contrats d'agents et la section Active Memory Strategy de STACK.md ; écrit workspace/pipeline/contracts/memory/{n}-memory.md. Refuse toute mémoire long terme sans rétention ni politique PII déclarées."
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast

@@ -153,16 +153,18 @@ rendu — les confondre rend le budget d'exécution incalculable
 python .sdda/sdda.py smoke-check
 ```
 
-Vérifie : `STACK.md` parsable et sans `{{`, exactement 1 stack active par
-catégorie obligatoire (`lang`, `framework`, `orchestration`, `serving`),
-`rag`/`dataaccess`/`memory` = `none` ou 1 stack, chaque enforcer listé dans
-`INVARIANTS.yml` présent sur disque, `MaxParallel ≥ 1`.
+Vérifie : `STACK.md` présent, parsable et sans `{{`, exactement 1 stack active
+par catégorie obligatoire (`lang`, `framework`, `orchestration`, `serving`),
+`rag`/`dataaccess`/`memory` = `none` ou 1 stack, combinaison chargeable,
+arborescence du workspace, `feats/` en Markdown seul, `stack/` sans autre
+fichier, aucun secret en clair. Les enforcers d'`INVARIANTS.yml` sont
+vérifiés par `framework-smoke` (contrôle `invariants.enforcers`), sur le
+framework, pas sur le projet.
 
 | Exit | Sens |
 |:-:|---|
 | `0` | projet prêt — `/sdda-mission` peut démarrer |
-| `1` | `[STACK_MALFORMED]` — clé manquante ou stack ambiguë, détail sur stderr |
-| `2` | `[INVARIANT_ENFORCER_MISSING]` — un enforcer déclaré n'existe pas (doc-theater détecté) |
+| `1` | `[STACK_FILE_MISSING]`, `[STACK_PLACEHOLDER_UNRESOLVED]`, `[STACK_SECTION_MISSING]`, `[STACK_CARDINALITY_INVALID]`, `[STACK_COMBO_UNLOADABLE]`, `[WORKSPACE_TREE_INCOMPLETE]`, `[FEATS_NOT_MARKDOWN]`, `[STACK_DIR_UNEXPECTED_FILE]`, `[STACK_SECRET_IN_CLEAR]` — détail sur stderr |
 
 Un workspace amorcé par un framework plus ancien sort `[WORKSPACE_VERSION_MISSING]`
 ou `[WORKSPACE_VERSION_OUTDATED]` : le faire monter avec

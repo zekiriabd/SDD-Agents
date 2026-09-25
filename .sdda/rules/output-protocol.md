@@ -130,7 +130,7 @@ Le dire, avec la raison :
 WARN: agent review-rag — verdict indisponible
 CAUSE: [EVAL_BASELINE_STALE] l'index a changé (indexHash différent) ; la
        baseline du 2026-09-14 ne mesure plus le même système
-FIX: relancer /sdda-eval 1 --retrieval-only pour régénérer la baseline
+FIX: relancer /sdda-eval 1 --run-only, puis promote-baseline --mission 1 --run {RUN_ID} pour déplacer la baseline
 ```
 
 C'est plus utile qu'un verdict fabriqué, et infiniment moins cher qu'un verdict

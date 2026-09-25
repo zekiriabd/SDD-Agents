@@ -155,7 +155,7 @@ critères ne peut être vrai ou faux.
 Chaque `BR-i` et `AC-i` de la MISSION doit apparaître dans le `Covers` d'au moins
 une CAP. Un élément non couvert → `[TRACEABILITY_GAP]`, bloquant.
 
-À l'inverse, un `Covers` qui référence un élément inexistant → `[TRACEABILITY_DANGLING]`.
+À l'inverse, un `Covers` qui référence un élément inexistant → `[CAP_COVERS_UNKNOWN_ITEM]`.
 
 ## STEP 7 — Décliner la Failure Policy
 
@@ -166,11 +166,20 @@ dans sa section `Failure Behavior` : que se passe-t-il quand *cette* compétence
 ## STEP 8 — Épingler le hash de la MISSION
 
 ```bash
-python .sdda/python/sdda_lib/hashing.py --file workspace/pipeline/missions/{n}-*.md --short
+python .sdda/sdda.py hash-file --file workspace/pipeline/missions/{n}-*.md --spec --short
 ```
-Écrire `Parent MISSION hash: sha256:{8}` dans chaque CAP. Il détecte une MISSION
-modifiée sous les pieds des CAPs — descendant direct du `Parent FEAT hash` de
-SDD_Pro.
+Écrire la valeur rendue (`sha256:{12 hex}`) dans `Parent MISSION hash:` de
+chaque CAP. `--spec` exclut la ligne `Status:` de l'en-tête : c'est le hash que
+`validate-cap` compare (`[CAP_PARENT_HASH_STALE]`), et un `Status:` réécrit par
+`compute-status` ne doit pas périmer une CAP que personne n'a touchée. Il
+détecte une MISSION modifiée sous les pieds des CAPs — descendant direct du
+`Parent FEAT hash` de SDD_Pro.
+
+Si la commande échoue (shell indisponible, script absent), écris le sentinel
+`Parent MISSION hash: sha256:COMPUTE_REQUIRED` et dis-le dans ta sortie :
+`/sdda-caps` le résout en post-step (`resolve-cap-hash-sentinel`, 0 token).
+Un hash inventé passerait G1 jusqu'à la première édition de la MISSION, puis
+bloquerait une CAP juste pour une valeur fausse.
 
 ## STEP 9 — Écrire
 

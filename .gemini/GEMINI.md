@@ -150,7 +150,7 @@ SDD-Agents/
 │   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
 │   │                                  #   marche depuis un clone nu, sans pip install
 │   └── python/                        # outillage déterministe 0-token
-│       ├── sdda_cli.py                # dispatcher des 79 sous-commandes ; registre
+│       ├── sdda_cli.py                # dispatcher des 80 sous-commandes ; registre
 │       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (dont judge_clients : le juge LLM réel)
@@ -311,7 +311,7 @@ refusée au preflight (`[STACK_VALUE_UNIMPLEMENTED]`) au lieu d'être avalée.
 
 ### 2.ante Un seul point d'entrée pour l'outillage
 
-Les 79 sous-commandes déterministes s'appellent par une forme unique :
+Les 80 sous-commandes déterministes s'appellent par une forme unique :
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
@@ -496,7 +496,7 @@ un enforcer sur disque déclaré dans `INVARIANTS.yml`.
 |---|---|---|---|
 | G0 | **MISSION** | objectif chiffré présent, budget déclaré (coût/latence/tokens), ground truth identifiée, aucun `<à préciser>` résiduel | `[MISSION_INCOMPLETE]` |
 | G1 | **CAP** | chaque AC nomme métrique + seuil + dataset ; chaque élément de la MISSION couvert par >= 1 CAP | `[AC_NOT_EVALUABLE]`, `[TRACEABILITY_GAP]` |
-| G2 | **TOPOLOGY** | pattern justifié + alternative plus simple explicitement écartée ; budget estimé <= budget déclaré ; toute boucle bornée ; tout agent a un contrat ; graphe atteignable sans cycle non borné ; **parts** `packaging`, `architecture`, `adr` | `[TOPOLOGY_UNJUSTIFIED]`, `[BUDGET_EXCEEDED_ESTIMATE]`, `[UNBOUNDED_LOOP]`, `[TOPOLOGY_CONTRACT_MISSING]`, `[ADR_MISSING]` |
+| G2 | **TOPOLOGY** | architecture déclarée complète pour le pattern actif (l'alternative plus simple écartée reste consultative : P7, l'architecte décide) ; budget estimé <= budget déclaré ; toute boucle bornée ; tout agent a un contrat ; graphe atteignable sans cycle non borné ; **parts** `packaging`, `architecture`, `adr` | `[ARCH_SPEC_INCOMPLETE]`, `[BUDGET_EXCEEDED_ESTIMATE]`, `[UNBOUNDED_LOOP]`, `[TOPOLOGY_CONTRACT_MISSING]`, `[ADR_MISSING]` |
 | G3 | **TOOL** | schéma valide ; tests de contrat verts (happy + chaque erreur déclarée + timeout + auth KO) ; connectivité live vérifiée ; classe d'effet de bord déclarée ; stratégie de sûreté présente si destructif | `[TOOL_CONTRACT_FAILED]`, `[SIDE_EFFECT_UNDECLARED]` |
 | G4 | **RETRIEVAL** | golden set présent (>= n queries) ; recall@k, nDCG, groundedness, taux de citations résolues au-dessus des seuils | `[RETRIEVAL_BELOW_THRESHOLD]` |
 | G5 | **AGENT** | chaque agent évalué **isolé** (outils mockés, retrieval figé) contre ses CAP ACs, sur k runs ; **parts** `calibration` (une calibration rouge bloque), `prompts` (hash épinglé de chaque prompt attendu par l'IR), `ownership` | `[AGENT_EVAL_FAILED]`, `[PROMPT_MISSING]`, `[PROMPT_HASH_MISMATCH]` |
@@ -640,6 +640,10 @@ refusent l'appel d'outil au moment où il a lieu. Codex CLI et Gemini CLI sont
 a validées, et elles n'ont **aucune gate bloquante au runtime** — ce que les
 hooks appliquent est reporté au CI et aux scripts déterministes. Les fichiers
 racine `AGENTS.md` et `GEMINI.md` sont des pointeurs générés vers leur façade.
+Un quatrième harnais, `antigravity`, est déclaré `planned` dans
+`capability-matrix.yml` : il partage l'adaptateur et la façade `.gemini/` de
+Gemini CLI, ne se compile que sur demande explicite (`--harness antigravity`),
+et porte la même réserve — expérimental, aucune gate bloquante au runtime.
 Détail : [docs/MULTI-HARNESS.fr.md](docs/MULTI-HARNESS.fr.md).
 
 **Les agents déclarent un tier** (`fast` / `balanced` / `deep`), jamais un nom de
@@ -800,7 +804,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **444**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **439**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Le chiffre ci-dessus est lui-même régénéré (`sync-counters`), pas recopié.

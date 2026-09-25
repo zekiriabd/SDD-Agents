@@ -74,8 +74,15 @@ CAUSE: [MISSION_GATE_NOT_PASSED] aucun rapport workspace/.sys/.validation/G0-{n}
 FIX: relancer /sdda-mission {n} (G0 doit être verte avant toute découpe)
 ```
 
-Stocker `{MissionName}`, `{MissionConfidence}`, le hash sha256 du fichier
-MISSION (8 premiers caractères → `Parent MISSION hash` des CAPs).
+Stocker `{MissionName}`, `{MissionConfidence}` et le hash de spécification de
+la MISSION — `Status:` exclu, celui que `validate-cap` compare :
+
+```bash
+python .sdda/sdda.py hash-file --file workspace/pipeline/missions/{n}-*.md --spec --short
+```
+
+(`sha256:{12 hex}` → `Parent MISSION hash` des CAPs ; un préfixe suffit,
+`hashes_match` compare par préfixe).
 
 ---
 
@@ -87,7 +94,7 @@ Glob `workspace/pipeline/caps/{n}-*.md` :
 |---|---|
 | aucune CAP | génération complète |
 | CAPs présentes, `Parent MISSION hash` == hash courant | `⊘ /sdda-caps {n}: CAPs à jour (hash MISSION inchangé)` — sauter STEP 5, aller à STEP 6 (re-jouer G1 seulement) |
-| CAPs présentes, hash différent | WARN `[MISSION_HASH_MISMATCH]` : la MISSION a bougé sous les CAPs. L'agent **régénère** en conservant les identifiants `{m}` des CAPs dont le `Statement` est inchangé, et marque `Status: Draft` les autres |
+| CAPs présentes, hash différent | WARN `[CAP_PARENT_HASH_STALE]` : la MISSION a bougé sous les CAPs. L'agent **régénère** en conservant les identifiants `{m}` des CAPs dont le `Statement` est inchangé, et marque `Status: Draft` les autres |
 
 > Le hash de MISSION dans la CAP est le descendant direct du `Parent FEAT hash`
 > de SDD_Pro : il rend visible une spécification qui a changé après découpe.
@@ -116,7 +123,7 @@ Découper la MISSION {n}-{MissionName} en capabilities. Template :
 .sdda/templates/capability.template.md.
 Cible CapGranularityTarget={…}, warn à {CapGranularityWarnAt}, hard cap {CapGranularityHardCap}
 {(bypass SDDA_ALLOW_LARGE_MISSION actif)}.
-Parent MISSION hash : sha256:{hash-8}. Confidence plafond : {MissionConfidence} (R4).
+Parent MISSION hash : {hash-spec, STEP 2} — ou le recalculer : hash-file --file … --spec --short. Confidence plafond : {MissionConfidence} (R4).
 Chaque AC : metric + threshold + dataset (chemin sous workspace/pipeline/datasets/) + grader + runs
 (3, ou 5 si Criticality: critical). Laisser ## Allocated To vide (décision de PHASE 2).
 Couvrir chaque BR-i et AC-i de la MISSION dans ## Covers d'au moins une CAP.
@@ -135,8 +142,11 @@ Attendre la fin ; relayer la sortie. ERROR → `set-phase --phase caps --status 
 
 ### STEP 5.bis — Résolution du sentinel de hash (déterministe)
 
-L'agent n'a pas `Bash` et écrit `Parent MISSION hash: sha256:COMPUTE_REQUIRED`.
-Résoudre en post-step (0 token, ~50 ms, idempotent) :
+L'agent calcule le hash lui-même (`hash-file --file … --spec --short`, fiche
+STEP 8). Le sentinel `Parent MISSION hash: sha256:COMPUTE_REQUIRED` reste son
+repli documenté quand la commande ne lui a pas répondu — un hash inventé
+passerait G1 jusqu'à la première édition de la MISSION. Résoudre en post-step,
+sans condition (0 token, ~50 ms, idempotent : rien à faire si aucun sentinel) :
 
 ```bash
 python .sdda/sdda.py resolve-cap-hash-sentinel --mission {n}
@@ -169,15 +179,20 @@ Contrôles (INVARIANTS `cap-ac-must-be-evaluable`, G1) :
 | 1 | Chaque AC a `metric`, `threshold`, `dataset`, `grader`, `runs` non vides | `[AC_NOT_EVALUABLE]` |
 | 2 | `threshold` est un comparateur numérique (`>= 0.85`, `<= 1200`, `== 0`) | `[AC_NOT_EVALUABLE]` |
 | 3 | `grader` ∈ liste close ; `llm-judge` ⇒ la CAP nomme la grille (`notes` ou `Metadata.judgeRubric`) | `[AC_GRADER_UNKNOWN]` |
-| 4 | `runs ≥ EvalRuns` ; `runs ≥ 5` si `Criticality: critical` | `[AC_RUNS_INSUFFICIENT]` |
+| 4 | `runs ≥ EvalRuns` ; `runs ≥ 5` si `Criticality: critical` | `[CAP_RUNS_INSUFFICIENT]` |
 | 5 | `dataset` pointe sous `workspace/pipeline/datasets/golden/` (jamais `holdout/`) | `[AC_DATASET_IS_HOLDOUT]` |
 | 6 | Chaque `BR-i` / `AC-i` de la MISSION apparaît dans ≥ 1 `## Covers` | `[TRACEABILITY_GAP]` |
-| 7 | Chaque `Covers` référence un identifiant existant dans la MISSION | `[TRACEABILITY_DANGLING]` |
-| 8 | `Parent MISSION hash` == hash courant de la MISSION | `[MISSION_HASH_MISMATCH]` |
+| 7 | Chaque `Covers` référence un identifiant existant dans la MISSION | `[CAP_COVERS_UNKNOWN_ITEM]` |
+| 8 | `Parent MISSION hash` == hash courant de la MISSION (`Status:` exclu) | `[CAP_PARENT_HASH_STALE]` |
 | 9 | `Confidence` CAP ≤ `Confidence` MISSION | `[CONFIDENCE_ESCALATION]` |
-| 10 | `## Allocated To` vide ou `<à déterminer>` à la création (pas de topologie figée en PHASE 1). La section est ensuite remplie par `architect-topology` en PHASE 2 et **exclue du hash que G1 épingle** : la remplir ne périme pas G1 | `[CAP_PREMATURE_ALLOCATION]` |
-| 11 | Nombre de CAPs ≤ `CapGranularityHardCap` sauf bypass | `[CAP_GRANULARITY_EXCEEDED]` |
-| 12 | Aucun identifiant de framework — P11 | `[FRAMEWORK_LEAK_IN_CONTRACT]` |
+| 10 | Nombre de CAPs ≤ `CapGranularityHardCap` sauf bypass | `[CAP_GRANULARITY_EXCEEDED]` |
+| 11 | Aucun identifiant de framework — P11 | `[FRAMEWORK_LEAK_IN_CONTRACT]` |
+
+`## Allocated To` n'est pas contrôlé ici : l'agent la laisse vide (fiche
+STEP 10), `architect-topology` la remplit en PHASE 2, et la section est
+**exclue du hash que G1 épingle** — la remplir ne périme pas G1. Un contrôle
+qui bloquerait sur une allocation précoce ferait de la PHASE 2 la cause d'un
+rouge de PHASE 1.
 
 | Exit | Verdict | Action |
 |:-:|---|---|

@@ -111,9 +111,10 @@ ces questions et **écrire la réponse** :
 > est confiée se traiterait par un outil déterministe. C'est une information que
 > l'architecte peut utiliser ; la taire ne l'est pas.
 
-Un agent du roster auquel **aucune CAP** n'est allouée est
-`[TOPOLOGY_AGENT_UNUSED]` : soit une CAP manque, soit l'agent est de trop — dans
-les deux cas, c'est à l'architecte de trancher, pas à toi.
+Un agent du roster auquel **aucune CAP** n'est allouée et qui ne porte aucune
+`reason:` est `[ARCH_ROSTER_AGENT_IDLE]` (`validate-architecture`) : soit une
+CAP manque, soit l'agent est de trop — dans les deux cas, c'est à l'architecte
+de trancher, pas à toi.
 
 Produire le tableau §1 du template.
 
@@ -272,6 +273,18 @@ même quand elle ne change rien.
 Écrire `workspace/pipeline/topology/{n}-topology.md` depuis le template, puis remplir le
 champ `Allocated To` de chaque CAP (Edit ciblé, tu es l'owner de ce champ).
 
+Écrire **un contrat par agent du roster** :
+`workspace/pipeline/contracts/agents/{n}-{agent}.agent.md`, depuis
+`.sdda/templates/agent-contract.template.md` — rôle, CAPs servies, outils,
+skills et règles **tels que le roster les déclare**, retrievers, schémas,
+bornes du STEP 7, posture de confiance, politique de refus, mémoire,
+handoffs (§13, avec le schéma d'état), dégradation. Le `## 3. Prompt` ne
+porte que le chemin `workspace/src/{App}/prompts/{agent}.system.md` et un
+`Hash` vide : le prompt appartient à `dev-prompt` (PHASE 4), tu ne l'écris
+pas. `validate-topology` refuse de compiler l'IR d'un agent sans contrat
+(`[AGENT_CONTRACT_MISSING]`) : un agent que la topologie nomme et que rien ne
+spécifie serait implémenté depuis une intention.
+
 Déclarer les contrats à produire par les agents de la phase 2 en parallèle :
 `architect-tools`, `architect-rag`, `architect-data`, `architect-memory`.
 **Tu ne les écris pas toi-même** — tu fixes le périmètre.
@@ -287,7 +300,11 @@ Avant de rendre la main, vérifie sur ta propre production :
 - [ ] **Le roster est celui de l'architecte** : aucun agent ajouté, retiré,
       renommé ni re-scopé par toi (`[ARCH_ROSTER_MUTATED]` sinon)
 - [ ] Chaque CAP est allouée à un membre du roster, et l'allocation est justifiée
-- [ ] Chaque agent du roster sert au moins une CAP (`[TOPOLOGY_AGENT_UNUSED]` sinon)
+- [ ] Chaque agent du roster sert au moins une CAP ou porte une `reason:`
+      (`[ARCH_ROSTER_AGENT_IDLE]` sinon)
+- [ ] Un contrat `workspace/pipeline/contracts/agents/{n}-{agent}.agent.md` par
+      agent du roster, sans prompt (`[AGENT_CONTRACT_MISSING]` sinon, à
+      `validate-topology`)
 - [ ] Chaque outil câblé à un agent est exigé par une de ses CAPs
       (`[TOOL_SCOPE_EXCESS]` sinon)
 - [ ] Chaque cycle est coupé par une borne nommée
@@ -327,7 +344,7 @@ Une ligne, conforme à ``.sdda/rules/output-protocol.md` (Read ce fichier avant 
   ```
   WARN: agent architect-topology — besoin non couvert détecté
   CAUSE: [CAP_GAP] la MISSION exige une trace d'audit, aucune CAP ne la porte
-  FIX: ajouter une CAP via /sdda-caps {n} --append avant de figer la topologie
+  FIX: l'humain ajoute l'exigence à la MISSION, puis /sdda-caps {n} régénère les CAPs (index {m} stables) avant de figer la topologie
   ```
 
 ### Le biais que tu dois combattre chez toi-même

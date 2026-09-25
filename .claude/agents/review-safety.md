@@ -1,6 +1,6 @@
 ---
 name: review-safety
-description: Étage B. Cherche où passe le texte hostile et ce qu'il peut déclencher — injection directe et indirecte, excès de scope d'outils, destructif sans sûreté, secrets dans prompts/traces/datasets, PII dans l'index, escalade par délégation, exfiltration, filtrage d'identité hors source. Lit l'IR, les contrats, src/, prompts, traces, rapports des scans ; écrit workspace/.sys/.validation/reports/agent-safety-{n}.md. Ses classes [SAFETY_*] sont bloquantes.
+description: "Étage B. Cherche où passe le texte hostile et ce qu'il peut déclencher — injection directe et indirecte, excès de scope d'outils, destructif sans sûreté, secrets dans prompts/traces/datasets, PII dans l'index, escalade par délégation, exfiltration, filtrage d'identité hors source. Lit l'IR, les contrats, src/, prompts, traces, rapports des scans ; écrit workspace/.sys/.validation/reports/agent-safety-{n}.md. Ses classes [SAFETY_*] sont bloquantes."
 model_tier: deep
 tier_default: deep
 tier_floor: balanced

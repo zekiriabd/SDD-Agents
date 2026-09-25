@@ -453,7 +453,7 @@ avec `bypassed: true` — la SAFETY GATE et le récap le montrent.
 
 ```
 ERROR: /sdda-build {n} — RETRIEVAL GATE rouge
-CAUSE: [RETRIEVAL_GATE_FAILED] [RETRIEVAL_BELOW_THRESHOLD] recall@8 0.61 < 0.80 sur {index} (golden {file}, n={N}) — rapport workspace/.sys/.validation/{n}-G4-retrieval.json
+CAUSE: [RETRIEVAL_GATE_FAILED] [RETRIEVAL_BELOW_THRESHOLD] recall@8 0.61 < 0.80 sur {index} (golden {file}, n={N}) — rapport workspace/.sys/.validation/G4-{n}.json
 FIX: revoir le contrat de retrieval (chunking, hybridWeights, topK, rerank) via /sdda-topology {n} puis /sdda-build {n} --layer socle — NE PAS compenser côté prompt d'agent
 ```
 
@@ -589,7 +589,7 @@ Prompt par instance — **la première ligne n'est pas facultative** :
 SDDA-INSTANCE: {agent}
 Implémenter l'agent {agent} de la MISSION {n}. IR : agents[{agent}] (bornes, outils, retrievers,
 schémas, trustPosture, refusalPolicy). Prompt : workspace/src/{App}/prompts/{agent}.system.md — CHARGÉ AU
-RUNTIME par chemin, jamais copié dans le code (P1, [PROMPT_INLINE_DETECTED]). Stack : {framework}.md.
+RUNTIME par chemin, jamais copié dans le code (P1, [PROMPT_INLINE_FORBIDDEN]). Stack : {framework}.md.
 Bornes obligatoires : maxIterations, maxToolCalls, maxDelegationDepth, timeoutSec, budgetUsd +
 onBoundExceeded implémenté (P12). Types partagés et mémoire : importer workspace/src/{App}/shared/
 et memory/interface.{ext} (gelés par la pré-passe 4.0), ne rien y écrire. Tests L1 avec LLM mocké. Interdiction absolue d'écrire sous
@@ -677,9 +677,15 @@ CAP sont advisory → la CAP ne peut pas être verte → 🟡 au mieux, WARN
 
 ```bash
 python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
-  --executor {module}:{InProcessExecutor} --json \
-  > workspace/.sys/.validation/{n}-G5-agent.json
+  --executor {module}:{InProcessExecutor} --json
 ```
+
+Le script écrit lui-même ses rapports de gate, **un par CAP** —
+`workspace/.sys/.validation/G5-{n}-{m}-{Cap}.json`, la clé que `compute_status`
+relit — et le rapport complet du run sous `workspace/.sys/reports/{n}-{RUN_ID}.json`.
+La sortie `--json` ne sert qu'au récap : redirigée sous `.validation/`, elle y
+déposait un fichier que personne ne relisait, sous un nom qui ressemblait à un
+rapport de gate.
 
 `--isolated` : **outils mockés, retrieval figé** (L4). Chaque agent contre les
 AC de ses `servesCaps`, `k = runs` de l'AC. Rapport par AC : `score_mean`,
@@ -702,7 +708,7 @@ Verdict G5 = **minimum** sur toutes les AC (R3 — pas de moyenne).
 
 ```
 ERROR: /sdda-build {n} — AGENT GATE rouge
-CAUSE: [AGENT_GATE_FAILED] [AGENT_EVAL_FAILED] {agent} · CAP {n}-{m} AC-{i} groundedness mean 0.71 < 0.85 (k=3, pass_rate 0.33) — rapport workspace/.sys/.validation/{n}-G5-agent.json
+CAUSE: [AGENT_GATE_FAILED] [AGENT_EVAL_FAILED] {agent} · CAP {n}-{m} AC-{i} groundedness mean 0.71 < 0.85 (k=3, pass_rate 0.33) — rapport workspace/.sys/.validation/G5-{n}-{m}-{Cap}.json
 FIX: /sdda-build {n} --agent {agent} (dev-prompt + dev-agent relisent le rapport) ; si le retrieval est en cause, G4 l'aurait montré — ne pas compenser dans le prompt
 ```
 
@@ -824,9 +830,13 @@ architecture que la fiche relue en revue ne décrit pas.
 
 ```bash
 python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
-  --executor {module}:{CliExecutor} --json \
-  > workspace/.sys/.validation/{n}-G6-orch.json
+  --executor {module}:{CliExecutor} --json
 ```
+
+Même règle qu'en 4.3 : le script écrit `workspace/.sys/.validation/G6-{n}-{MissionName}.json`
+(L5 et L7 mesurent la même gate sous deux angles, un seul rapport) et le
+rapport du run sous `workspace/.sys/reports/{n}-{RUN_ID}.json` ; rien n'est
+redirigé sous `.validation/`.
 
 L5 (trajectoire, sur la trace) + L7 (bout-en-bout sur le **golden de mission**) :
 
@@ -845,7 +855,7 @@ Un run qui atteint le score en dépassant le hard cap est **rouge, pas jaune**.
 
 ```
 ERROR: /sdda-build {n} — ORCH GATE rouge
-CAUSE: [ORCH_GATE_FAILED] [BUDGET_EXCEEDED_MEASURED] coût p50 $0.09 > cible $0.05 ; 3/50 runs > cap $0.25 ; [TRAJECTORY_VIOLATION] 4 misroutes vers `refund` (classe critique) — rapport workspace/.sys/.validation/{n}-G6-orch.json
+CAUSE: [ORCH_GATE_FAILED] [BUDGET_EXCEEDED_MEASURED] coût p50 $0.09 > cible $0.05 ; 3/50 runs > cap $0.25 ; [TRAJECTORY_VIOLATION] 4 misroutes vers `refund` (classe critique) — rapport workspace/.sys/.validation/G6-{n}-{MissionName}.json
 FIX: lire la distribution des trajectoires dans le rapport ; si le graphe est en cause → /sdda-topology {n} ; si un agent → /sdda-build {n} --agent {agent}
 ```
 

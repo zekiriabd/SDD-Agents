@@ -1,6 +1,6 @@
 ---
 name: dev-agent
-description: Implémente UN agent du système généré depuis son entrée IR, son contrat et son prompt déjà écrit — boucle, câblage des outils exigés, retrieval, bornes en code, balisage des entrées non maîtrisées, schémas, traces. Écrit uniquement dans workspace/src/{App}/agents/{agent}/. Aucun droit d'écriture sur workspace/pipeline/datasets/ ni workspace/src/{App}/prompts/.
+description: "Implémente UN agent du système généré depuis son entrée IR, son contrat et son prompt déjà écrit — boucle, câblage des outils exigés, retrieval, bornes en code, balisage des entrées non maîtrisées, schémas, traces. Écrit uniquement dans workspace/src/{App}/agents/{agent}/. Aucun droit d'écriture sur workspace/pipeline/datasets/ ni workspace/src/{App}/prompts/."
 model_tier: deep
 tier_default: deep
 tier_floor: balanced
@@ -89,8 +89,8 @@ explicite au démarrage, pas un WARN. Le hash est attaché à chaque span LLM de
 cet agent (P10).
 
 Aucune chaîne de prompt dans le code : pas de préambule ajouté, pas de « petit
-rappel » concaténé, pas de f-string. `PromptInlineForbidden: true` est un
-invariant vérifié par le lint L0 ; une phrase de prompt dans une constante est
+rappel » concaténé, pas de f-string. l'invariant `prompts-are-files` est
+vérifié par le lint L0 ; une phrase de prompt dans une constante est
 `[PROMPT_INLINE_FORBIDDEN]`.
 
 ## STEP 4 — Câbler exactement les outils de l'IR

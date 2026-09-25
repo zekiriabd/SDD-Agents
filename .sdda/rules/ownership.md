@@ -42,7 +42,7 @@ ne peut plus rien conclure.
 | `workspace/pipeline/caps/{n}-{m}-*.md` | `po-capabilities` | Create exclusif (1 fichier = 1 CAP) | 1 |
 | `workspace/pipeline/caps/**` champ `Allocated To` | `architect-topology` | **Edit narrow** (ce champ seul) | 2 |
 | `workspace/pipeline/topology/{n}-topology.md` | `architect-topology` | Create exclusif — graphe Mermaid inclus (§4) ; le roster qu'il matérialise est dans `feats/`, chez l'humain | 2 |
-| `workspace/pipeline/contracts/agents/*` | `architect-topology` (squelette) → `dev-prompt` (§Prompt: ref + hash) | Sérialisé par section | 2, 4 |
+| `workspace/pipeline/contracts/agents/*` | `architect-topology` (squelette) → `dev-prompt` (`## 3. Prompt` : champs `Fichier` + `Hash`, lus par `ir-compiler`) | Sérialisé par section | 2, 4 |
 | `workspace/pipeline/contracts/tools/{n}-*.tool.md` | `architect-tools` | Create exclusif | 2 |
 | `workspace/pipeline/contracts/tools/{n}-data-*.tool.md` | `architect-data` | Create exclusif — **préfixe `data-` réservé**, namespace disjoint | 2 |
 | `workspace/pipeline/contracts/retrieval/*` | `architect-rag` | Create exclusif | 2 |
@@ -163,8 +163,9 @@ Violation → `[BASELINE_OWNERSHIP_VIOLATION]`, bloquant.
 ## 3. Modes d'écriture
 
 - **Create exclusif** — l'owner crée le fichier ; personne d'autre n'y touche.
-  Une re-création préserve les édits humains (`PreserveHumanEdits: true`,
-  détectés par empreinte du contenu généré).
+  Une re-création ne se fait que sur demande (le fichier existant est relu, pas
+  écrasé en silence) : un édit humain se préserve en relançant l'owner sur le
+  fichier, jamais par un réglage.
 - **Edit-augment exclusif** — l'owner peut modifier le fichier existant ; les
   autres agents le lisent au plus.
 - **Edit narrow** — l'agent ne modifie qu'une section ou un champ nommé. Toute

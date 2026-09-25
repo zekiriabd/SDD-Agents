@@ -65,7 +65,7 @@ Chaque bypass est une **env var** lue par le script de gate, écrite dans
 |---|---|---|---|
 | G0 MISSION | **aucun** | — | tout |
 | G1 CAP | **aucun** | — | tout |
-| G2 TOPOLOGY | `SDDA_BYPASS_BUDGET_ESTIMATE=1` | le budget estimé (contrôle B) | `[UNBOUNDED_LOOP]`, `[TOPOLOGY_UNJUSTIFIED]`, références, scopes |
+| G2 TOPOLOGY | `SDDA_BYPASS_BUDGET_ESTIMATE=1` | le budget estimé (contrôle B) | `[UNBOUNDED_LOOP]`, `[ARCH_SPEC_INCOMPLETE]`, références, scopes |
 | G3 TOOL | `SDDA_BYPASS_TOOL_GATE=1` | tests de contrat, connectivité live des outils `read-only` | `[SIDE_EFFECT_UNDECLARED]`, `[SAFETY_STRATEGY_MISSING]`, live KO d'un `write-destructive` |
 | G4 RETRIEVAL | `SDDA_BYPASS_RETRIEVAL_GATE=1` | seuils recall / nDCG / groundedness | le rapport est écrit avec `bypassed: true` et remonte en G7 et au récap |
 | G5 AGENT | **aucun** | — | tout |
@@ -125,7 +125,14 @@ Sans `--resume` :
 RUN_ID=$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-full" --tags "$TAGS")     # TAGS = force,from-phase=…,no-review
 export SDDA_RUN_ID="$RUN_ID"      # propagé à toutes les sous-commandes : un seul audit-trail
+RESUME_TARGET=${FROM_PHASE:-mission}   # --from-phase, sinon la première phase : aucune garde ne saute
 ```
+
+`RESUME_TARGET` est défini dans **tous** les modes, parce que chaque STEP le
+passe à `should-skip-step --target`, argument obligatoire : vide, argparse
+refuse, et « échec de la primitive → RUN » rejouait chaque phase par défaut —
+le comportement voulu, obtenu par accident, sans qu'aucune garde n'ait jamais
+été évaluée.
 
 **Avec `--resume`** — un seul appel, qui lit le run à reprendre **avant** d'ouvrir le nouveau :
 ```bash
@@ -155,6 +162,13 @@ Chaque STEP majeur commence par la garde
 
 **Si `--from-phase`** : `RESUME_TARGET` = la phase demandée. STEP 2 vérifiera
 que les gates amont sont vertes.
+
+**Deux sources, une seule vérité.** Le point de départ **effectif** est celui
+que STEP 2 dérive des rapports de gate sur disque (R1) ; `RESUME_TARGET` ne
+fait que dire jusqu'où les gardes `should-skip-step` peuvent sauter, et STEP 2
+le **ramène** au point dérivé s'il le dépasse. Le journal d'un run dit ce
+qu'on a payé, les rapports disent ce qui tient encore — et seuls les seconds
+autorisent un saut.
 
 ---
 
@@ -208,7 +222,7 @@ PROFILE=$(python .sdda/sdda.py project-profile)      # poc | standard | producti
 | PHASES 0 → 2 | inchangées | inchangées — la MISSION, les CAPs et l'IR restent ce que tout le reste lit |
 | STEP 4.5 (PHASE 6a) | avec la coquille : `/sdda-build --with-datasets` | avec les prompts : `/sdda-build` STEP P.2 |
 | STEP 5 (PHASES 3 → 5) | sept `dev-*`, une gate bloquante par couche | `/sdda-build` STEP P : `dev-prompt` + `dev-app`, gates **rapportées** |
-| STEP 6 (PHASE 6) | `/sdda-eval {n}` | `/sdda-eval {n} --run-only` — `dev-app` a écrit les tests de couche |
+| STEP 6 (PHASE 6) | `/sdda-eval {n}` | `/sdda-eval {n} --run-only` — `dev-app` a écrit les tests de couche ; sous `poc`, ce mode exige **G2** et non G6 (`/sdda-eval` STEP 2) : les gates G3→G6 y sont rapportées, pas franchies |
 | STEP 7 (revue) | jouée | `⊘ PHASE 7 skipped (Profile: poc)` |
 | STEP 8 (acceptation) | jouée | `⊘ PHASE 8 skipped (Profile: poc)` |
 
@@ -252,6 +266,13 @@ FIX: /sdda-full {n} (démarre au bon endroit) ou /sdda-topology {n} puis --from-
 
 Un `Status:` écrit dans un fichier sans rapport correspondant → WARN
 `[STATUS_UNBACKED]`, écrasé, et le point de départ reste celui des rapports.
+
+Puis borner la cible des gardes (STEP 1.ter) : si `RESUME_TARGET` désigne une
+phase **postérieure** au point dérivé, `RESUME_TARGET` := la phase du point
+dérivé (`mission` · `caps` · `topology` · `eval_datasets` · `build_socle` ·
+`build_agents` · `build_orch` · `eval` · `review` · `acceptance`, l'ordre de
+`PIPELINE_PHASES`). Un run interrompu après une
+gate qu'un hash a depuis périmée ne reprend pas derrière elle.
 
 Émettre : `MISSION {n}-{Name} — pipeline démarré à la PHASE {p} (état dérivé : {State})`.
 

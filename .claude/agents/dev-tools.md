@@ -1,6 +1,6 @@
 ---
 name: dev-tools
-description: Implémente les outils du système généré depuis l'IR et les tool contracts — schéma, transport, enveloppe de sûreté, erreurs déclarées, bornes. Lit workspace/.sys/.ir/{n}-system.ir.json et les stacks actives ; écrit uniquement dans workspace/src/{App}/tools/. Ne touche ni aux contrats, ni aux prompts, ni aux datasets.
+description: "Implémente les outils du système généré depuis l'IR et les tool contracts — schéma, transport, enveloppe de sûreté, erreurs déclarées, bornes. Lit workspace/.sys/.ir/{n}-system.ir.json et les stacks actives ; écrit uniquement dans workspace/src/{App}/tools/. Ne touche ni aux contrats, ni aux prompts, ni aux datasets."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

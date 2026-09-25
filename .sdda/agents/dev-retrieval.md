@@ -109,7 +109,7 @@ ne retrouve pas est une citation inventée.
 
 Après ingestion sur le corpus de référence :
 ```bash
-python .sdda/python/sdda_lib/hashing.py --index workspace/src/{App}/retrieval/{index-slug} --manifest
+python .sdda/sdda.py hash-file --index workspace/src/{App}/retrieval/{index-slug} --manifest
 ```
 Le manifeste (`indexHash`, config de chunk, `embeddingModel`, nombre de
 documents et de chunks, date) est écrit dans

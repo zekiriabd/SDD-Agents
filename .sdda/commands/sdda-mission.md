@@ -152,11 +152,11 @@ Contrôles (INVARIANTS `mission-budget-declared`, G0) :
 | 1 | `## Quantified Goal` : `Metric`, `Target`, `Deadline` renseignés, `Target` numérique ou comparatif | `[MISSION_GOAL_UNQUANTIFIED]` |
 | 2 | `## Execution Budget` : les 4 clés présentes, `HardCap ≥ Target`, valeurs > 0 | `[MISSION_BUDGET_MISSING]` |
 | 3 | `## Ground Truth` : `Source`, `Owner`, `Volume available` renseignés | `[MISSION_GROUND_TRUTH_MISSING]` |
-| 4 | `## Trust Boundaries` : au moins une ligne `Untrusted` ou `NONE` explicite | `[MISSION_TRUST_UNDECLARED]` |
+| 4 | `## Trust Boundaries` : au moins une ligne `Untrusted` ou `NONE` explicite | `[MISSION_TRUST_BOUNDARIES_MISSING]` |
 | 5 | `## Failure Policy` : les 4 cas (hors compétence, confiance faible, outil indisponible, budget atteint) | `[MISSION_FAILURE_POLICY_MISSING]` |
 | 6 | Aucun `<à préciser>` / `{…}` / `TODO` résiduel dans le fichier | `[MISSION_INCOMPLETE]` |
 | 7 | `## Required Stack` ⊆ stacks actives de `STACK.md` | `[MISSION_STACK_MISMATCH]` |
-| 8 | Toute Business Rule et tout AC système portent un identifiant stable `BR-i` / `AC-i` | `[MISSION_ID_UNSTABLE]` |
+| 8 | Toute Business Rule et tout AC système portent un identifiant stable `BR-i` / `AC-i` | `[MISSION_ID_MISMATCH]` |
 | 9 | Aucun identifiant de framework (`StateGraph`, `Kernel`, `AgentExecutor`, …) — P11 | `[FRAMEWORK_LEAK_IN_CONTRACT]` |
 
 | Exit | Verdict | Action |
@@ -187,7 +187,7 @@ du domaine (PHILOSOPHY P6). `SDDA_BYPASS_MISSION_GATE` n'existe pas.
 python .sdda/sdda.py compute-status --mission {n}
 ```
 
-L'état est **dérivé** des rapports `workspace/.sys/.validation/{n}-G*.json`,
+L'état est **dérivé** des rapports `workspace/.sys/.validation/G*-{n}-*.json`,
 jamais déclaré. Si l'agent a écrit un `Status:` non couvert par un rapport, le
 script émet `[STATUS_UNBACKED]` (WARN) et écrase.
 

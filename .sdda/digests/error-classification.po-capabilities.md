@@ -18,11 +18,12 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[AC_NOT_EVALUABLE]`
+- `[CAP_COVERS_UNKNOWN_ITEM]`
+- `[CAP_PARENT_HASH_STALE]`
 - `[MISSION_AMBIGUOUS]`
 - `[MISSION_GATE_NOT_PASSED]`
 - `[MISSION_GROUND_TRUTH_INSUFFICIENT]`
 - `[MISSION_NOT_FOUND]`
-- `[TRACEABILITY_DANGLING]`
 - `[TRACEABILITY_GAP]`
 
 ## Classes universelles

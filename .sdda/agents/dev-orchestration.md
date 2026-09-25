@@ -33,34 +33,10 @@ facture.
 
 Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 
-Argument `--prepass` (ligne `SDDA-PREPASS` du prompt) → **mode pré-passe**, ci-dessous, puis STOP.
-
-## Mode pré-passe — `/sdda-build` STEP 4.0, AVANT les agents
-
-Les instances de `dev-agent` tournent en parallèle et se passent des états
-(handoffs §13) ; elles lisent et écrivent la mémoire selon leurs
-`memoryScopes`. Si chacune inventait ses types et son accès mémoire, la phase 4
-produirait N dialectes qu'aucun graphe ne relie — et la phase 5, où tu écris
-la mémoire, arriverait APRÈS les agents qui s'en servent. La pré-passe inverse
-l'ordre : tu poses d'abord ce que tous partagent, puis tu le GÈLES.
-
-Tu écris **uniquement** :
-- `workspace/src/{App}/shared/` — les types partagés : chaque schéma d'état de
-  handoff du §13 des contrats d'agents, chaque `inputSchema`/`outputSchema` de
-  l'IR qu'un autre agent ou le graphe consomme. Des types, aucune logique.
-- `workspace/src/{App}/memory/interface.{ext}` — l'INTERFACE de la mémoire du
-  contrat de `architect-memory` : une opération de lecture et d'écriture par
-  scope nommé, leurs signatures, les erreurs (`[MEMORY_SHARED_STATE_UNSCOPED]`).
-  Aucune implémentation : elle vient en phase 5, DERRIÈRE cette interface.
-
-Rien sous `orchestration/` : l'AGENT GATE n'est pas passée, le graphe n'a rien
-à câbler. `/sdda-build` le vérifie sur le disque (instantané de la phase 4.0,
-`orchestration/**` gelé), puis gèle `shared/**` et `memory/**` pendant la
-phase 4, et `shared/**` et `memory/interface.*` pendant la phase 5 : un type
-qui change sous des agents déjà construits invalide ce qu'ils ont fait.
-
-Un type manquant découvert plus tard ne s'ajoute pas en douce : c'est
-`[SHARED_TYPE_MISSING]`, et la pré-passe se rejoue.
+Argument `--prepass` (ligne `SDDA-PREPASS` du prompt) → **mode pré-passe** :
+charger le contexte (STEP 2, sans l'exigence G5), puis STEP 2.bis, puis STOP.
+La pré-passe projette le §13 des contrats et le contrat de mémoire : elle ne
+peut pas les projeter sans les avoir lus.
 
 ## STEP 2 — Charger le contexte
 
@@ -83,7 +59,13 @@ Read **uniquement** :
   Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
 - `.sdda/stacks/orchestration/{pattern}.md`, `.sdda/stacks/framework/{fw}.md` + `.libs.json`.
 - `workspace/src/{App}/agents/*/**` — **en lecture** : les points d'entrée que tu câbles.
-  AGENT GATE verte exigée (P5) ; sinon `[AGENT_GATE_NOT_PASSED]`, STOP.
+  AGENT GATE verte exigée (P5), vérifiée sur les rapports et non sur une
+  ligne `Status:` — **hors pré-passe**, qui précède les agents :
+  ```bash
+  python .sdda/sdda.py compute-status --mission {n} --require-gate G5
+  ```
+  Exit ≠ 0 → `[AGENT_GATE_NOT_PASSED]`, STOP. Un graphe câblé sur un agent
+  non évalué isolément ne permet plus d'attribuer une baisse de score.
 - `workspace/src/{App}/orchestration/**` existant — Create + Edit.
 
 Validation préalable, 0 token :
@@ -91,6 +73,59 @@ Validation préalable, 0 token :
 python .sdda/sdda.py validate-ir workspace/.sys/.ir/{n}-system.ir.json
 ```
 Rouge → tu ne construis pas sur un graphe invalide : `[IR_INVALID]`, STOP.
+
+## STEP 2.bis — Mode pré-passe — `/sdda-build` STEP 4.0, AVANT les agents
+
+Les instances de `dev-agent` tournent en parallèle et se passent des états
+(handoffs §13) ; elles lisent et écrivent la mémoire selon leurs
+`memoryScopes`. Si chacune inventait ses types et son accès mémoire, la phase 4
+produirait N dialectes qu'aucun graphe ne relie — et la phase 5, où tu écris
+la mémoire, arriverait APRÈS les agents qui s'en servent. La pré-passe inverse
+l'ordre : tu poses d'abord ce que tous partagent, puis tu le GÈLES.
+
+Tu écris **uniquement**, depuis ce que STEP 2 a chargé (IR, §13 des contrats,
+contrat de mémoire ou `ir.memory`) :
+- `workspace/src/{App}/shared/` — les types partagés : chaque schéma d'état de
+  handoff du §13 des contrats d'agents, chaque `inputSchema`/`outputSchema` de
+  l'IR qu'un autre agent ou le graphe consomme. Des types, aucune logique.
+- `workspace/src/{App}/memory/interface.{ext}` — l'INTERFACE de la mémoire du
+  contrat de `architect-memory` : une opération de lecture et d'écriture par
+  scope nommé, leurs signatures, les erreurs (`[MEMORY_SHARED_STATE_UNSCOPED]`).
+  Aucune implémentation : elle vient en phase 5, DERRIÈRE cette interface.
+
+Rien sous `orchestration/` : l'AGENT GATE n'est pas passée, le graphe n'a rien
+à câbler. `/sdda-build` le vérifie sur le disque (instantané de la phase 4.0,
+`orchestration/**` gelé), puis gèle `shared/**` et `memory/**` pendant la
+phase 4, et `shared/**` et `memory/interface.*` pendant la phase 5 : un type
+qui change sous des agents déjà construits invalide ce qu'ils ont fait.
+
+Un type manquant découvert plus tard ne s'ajoute pas en douce : c'est
+`[SHARED_TYPE_MISSING]`, et la pré-passe se rejoue. Puis **STOP** : les STEPs
+suivants sont la phase 5.
+
+---
+
+## STEP 3.0 — Le squelette a déjà un graphe : le tien le remplace, il ne le double pas
+
+`project-init` (Python) pose `workspace/src/{App}/app/orchestration/` —
+`base.py` (boucle bornée, `Graph`, `dump_graph()`), `router.py`,
+`sequential.py` — **sans framework**, générés depuis
+`.sdda/templates/runtime/python/`, marqués « GÉNÉRÉ, ne pas éditer » et dans
+la zone de `dev-backend`. Ils font tourner un `single-agent` avant qu'une
+topologie existe, donc valident la plomberie (surface, traces, bornes) à vide.
+`app/run_service.py` expose le point d'extension `agent_factory` : tant qu'il
+est absent, le service câble la boucle de `base.py` ; fourni, il rend l'objet
+exécutable que tu construis.
+
+Ton graphe vit sous `workspace/src/{App}/orchestration/`, dans l'idiome du
+framework actif, et c'est lui que la composition passe en `agent_factory` —
+tu ne modifies pas `app/orchestration/`, tu n'y ajoutes rien. **Un seul
+`graph.manifest.json`** existe sous `src/` : `diff-code-vs-ir` cherche tout
+`**/orchestration/graph.manifest.json` et refuse d'en trouver deux
+(`[ORCH_MANIFEST_MISSING]`, « N manifestes trouvés ») — c'est le tien, émis par
+ton `dump_graph()`, jamais un second laissé par le squelette. Deux graphes
+dans un même livrable, c'est deux réponses à « qu'est-ce qui tourne ? », et la
+gate n'en juge qu'une.
 
 ---
 

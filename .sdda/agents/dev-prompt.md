@@ -59,7 +59,7 @@ IR absent ou plus ancien que les contrats :
 ```
 ERROR: agent dev-prompt — IR périmé
 CAUSE: [IR_STALE] .sys/.ir/{n}-system.ir.json antérieur à contracts/agents/{n}-{agent-slug}.agent.md
-FIX: recompiler l'IR (/sdda-compile-ir {n}) avant d'écrire le prompt
+FIX: recompiler l'IR (/sdda-topology {n} --recompile-only) avant d'écrire le prompt
 ```
 
 ---
@@ -152,14 +152,21 @@ d'API de framework, un secret, une variable de template non résolue.
 
 ```bash
 python .sdda/sdda.py lint-prompts --mission {n}
-python .sdda/python/sdda_lib/hashing.py --file workspace/src/{App}/prompts/{agent-slug}.system.md
+python .sdda/sdda.py hash-file --file workspace/src/{App}/prompts/{agent-slug}.system.md
 ```
 
+Le prompt est hashé **brut** (sans `--spec` : il n'a pas de ligne `Status:`,
+et c'est le fichier chargé au runtime qui est épinglé), exactement comme
+`lint-prompts` et `ir-compiler` le recalculent — un hash pris sur autre chose
+que l'exécutable rend `[PROMPT_HASH_MISMATCH]` au premier `dev-agent`.
+
 Le lint vérifie : aucun secret, aucun outil référencé absent de `agents[].tools`
-de l'IR (`[PROMPT_TOOL_UNKNOWN]`), aucune variable de template non résolvable,
-aucune contradiction détectable (`[PROMPT_CONTRADICTION]`), taille ≤
-`PromptMaxTokens` (`[PROMPT_TOO_LONG]`), section refus présente
-(`[PROMPT_REFUSAL_POLICY_MISSING]`).
+de l'IR (`[PROMPT_TOOL_UNKNOWN]`), aucune variable de template non résolvable
+(`[PROMPT_TEMPLATE_UNRESOLVED]`), aucune contradiction détectable
+(`[PROMPT_CONTRADICTION]`), taille ≤ `PromptMaxTokens` (`[PROMPT_TOO_LONG]`),
+symétrie des skills et des règles avec le contrat. La présence de la section
+de refus n'est vérifiée par aucun script : c'est toi qui la garantis
+(checklist finale), et `review-safety` la relit.
 
 ```
 ERROR: agent dev-prompt — prompt trop long
@@ -167,8 +174,11 @@ CAUSE: [PROMPT_TOO_LONG] 5 210 tokens > PromptMaxTokens 4 000 pour billing-speci
 FIX: retirer la redescription des outils (## Outils) et les exemples redondants ; un prompt long dilue
 ```
 
-Le hash est **épinglé** : tu l'écris dans le §3 du contrat d'agent (Edit ciblé,
-champ `Hash`, c'est le seul champ du contrat que tu possèdes). Il entre dans le
+Le hash est **épinglé** : tu l'écris dans `## 3. Prompt` du contrat d'agent
+(Edit ciblé, champs `Fichier` et `Hash` — les seuls du contrat que tu
+possèdes). C'est là que `ir-compiler` le lit (`agents[].promptHash`, repli
+quand le fichier n'est pas encore sur disque) ; `lint-prompts` le recalcule
+depuis le fichier, sans faire confiance à ce que tu as écrit. Il entre dans le
 tuple `(prompt_hash, model_id, index_hash, tool_schema_hash, dataset_hash)` de
 P10 : toute baseline d'eval qui ne le porte pas est périmée.
 
@@ -200,9 +210,13 @@ fragment n'est PAS chargé au runtime : l'exécutable reste le seul
 ## STEP final — Anti-dérive
 
 - [ ] Le prompt n'existe **que** dans `workspace/src/{App}/prompts/{agent-slug}.system.md`
-- [ ] Sept sections dans l'ordre ; aucune ajoutée hors contrat
+- [ ] Les onze sections du STEP 3 dans l'ordre — les conditionnelles
+      (`## Compétences`, `## Règles`, `## Sources et citations`, `## Passage de
+      main`) seulement si le contrat les alimente ; aucune ajoutée hors contrat
 - [ ] Chaque entrée `untrusted` du contrat est nommée dans la posture P8
-- [ ] Chaque item de la refusal policy est une règle testable
+- [ ] `## Ce que tu refuses` présente, chaque item de la refusal policy est une
+      règle testable — aucun script ne le vérifie à ta place
+      (`[PROMPT_REFUSAL_POLICY_MISSING]` est ton propre constat)
 - [ ] Chaque outil mentionné existe dans `agents[].tools` de l'IR ; aucun outil de l'IR oublié
 - [ ] Comportement de dégradation : quoi dire à l'utilisateur, pour chaque situation
 - [ ] Aucun nombre de borne, aucun nom de modèle, aucune API de framework, aucun secret
@@ -213,7 +227,7 @@ fragment n'est PAS chargé au runtime : l'exécutable reste le seul
 ## Sortie chat
 
 ```
-[PROMPT] 1-billing-specialist — 2 840 tokens, 7 sections, 4 règles de refus, 2 entrées untrusted
+[PROMPT] 1-billing-specialist — 2 840 tokens, 9 sections, 4 règles de refus, 2 entrées untrusted
          hash sha256:a91f… épinglé — lint ✅
 ```
 
@@ -224,7 +238,7 @@ fragment n'est PAS chargé au runtime : l'exécutable reste le seul
 ### Ce que tu ne fais jamais
 
 - **Tu n'écris jamais de prompt dans du code** — ni f-string, ni constante, ni
-  « juste pour le test ». `PromptInlineForbidden: true` est un invariant, et un
+  « juste pour le test ». `prompts-are-files` est un invariant, et un
   prompt dans le code est un changement de comportement invisible à la revue.
 - **Tu n'ajoutes aucune capacité au contrat.** Une règle métier découverte
   ailleurs se signale (`[CAP_GAP]`), elle ne s'écrit pas dans le prompt.

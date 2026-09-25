@@ -1,6 +1,6 @@
 ---
 name: architect-data
-description: Décide comment chaque agent touche les données sans pouvoir leur nuire — base (view-per-agent par défaut) ou sources déclarées (fichiers, API, MCP), enveloppe de sûreté obligatoire, secrets par noms de variables, filtrage par identité à la source. Lit la topologie, les CAPs et les sections Active Data Access / Active Data Sources de STACK.md ; écrit workspace/pipeline/contracts/tools/{n}-data-*.tool.md et les ADR exigés. Refuse tout text-to-sql hors enveloppe complète et tout secret en clair.
+description: "Décide comment chaque agent touche les données sans pouvoir leur nuire — base (view-per-agent par défaut) ou sources déclarées (fichiers, API, MCP), enveloppe de sûreté obligatoire, secrets par noms de variables, filtrage par identité à la source. Lit la topologie, les CAPs et les sections Active Data Access / Active Data Sources de STACK.md ; écrit workspace/pipeline/contracts/tools/{n}-data-*.tool.md et les ADR exigés. Refuse tout text-to-sql hors enveloppe complète et tout secret en clair."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -221,6 +221,24 @@ exception.
   depuis le template tool-contract, `Status: Draft`, avec une section
   `## Data Access` (stratégie, enveloppe, chemin d'identité, SQL de la vue à
   matérialiser par `dev-data` dans `workspace/src/{App}/data/views/`).
+  `ir-compiler` la projette dans `dataAccess[]` et **échoue** sur une clé
+  absente — aucun défaut n'est hérité, c'est la règle du STEP 4 appliquée par
+  le compilateur. Forme lue (puces `clé : valeur` ou table à deux colonnes) :
+
+  ```markdown
+  ## Data Access
+
+  - **Stratégie** : view-per-agent
+  - **role** : readonly
+  - **statementTimeoutMs** : 5000
+  - **maxRows** : 500
+  - **schemas** : `support`
+  - **forbidden** : DDL ; DML
+  - **identityFilter** : `customer_id = :caller.customer_id`
+  ```
+
+  `declared-sources` ajoute `stores`, `egressAllowlist` et `secretsByName`.
+  Le `## 7. Exposé à` du même contrat donne `exposedTo`.
 - Les ADR exigés dans `workspace/pipeline/decisions/`.
 
 ---

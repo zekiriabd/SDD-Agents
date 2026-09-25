@@ -1,6 +1,6 @@
 ---
 name: qa-evals
-description: Construit ce qui prouve — golden, holdout, calibration, adversarial, graders, suites d'eval, baselines épinglées. Seul autorisé à écrire dans workspace/pipeline/datasets/. Lit les CAPs, l'IR et les contrats ; écrit workspace/pipeline/datasets/** et workspace/pipeline/suites/**. Renvoie toute AC non mesurable avec [AC_NOT_EVALUABLE] ; passe tout juge LLM non calibré en advisory.
+description: "Construit ce qui prouve — golden, holdout, calibration, adversarial, graders, suites d'eval, baselines épinglées. Seul autorisé à écrire dans workspace/pipeline/datasets/. Lit les CAPs, l'IR et les contrats ; écrit workspace/pipeline/datasets/** et workspace/pipeline/suites/**. Renvoie toute AC non mesurable avec [AC_NOT_EVALUABLE] ; passe tout juge LLM non calibré en advisory."
 model_tier: deep
 tier_default: deep
 tier_floor: balanced

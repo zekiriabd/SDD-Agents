@@ -13,7 +13,7 @@ variance, budget estimé vs mesuré, bypasses actifs, résultats périmés.
 > **LIFECYCLE R1 — l'état est dérivé, pas déclaré.** Cette commande ne lit
 > **jamais** la ligne `Status:` d'un fichier pour décider : elle appelle
 > `compute_status.py`, qui calcule l'état depuis les rapports
-> `workspace/.sys/.validation/{n}-G*.json` et les tuples d'épinglage. Un
+> `workspace/.sys/.validation/G*-{n}-*.json` et les tuples d'épinglage. Un
 > `Status:` non couvert par un rapport est signalé `[STATUS_UNBACKED]`. Un état
 > auto-proclamé est le mécanisme par lequel un pipeline agentic se déclare vert.
 
@@ -148,7 +148,7 @@ Cas à flagger explicitement (`⚠️`) :
 | Situation | Ligne |
 |---|---|
 | `Status:` dans un fichier ≠ état dérivé | `⚠️ [STATUS_UNBACKED] caps/1-2-*.md déclare Tested — aucun rapport G5 vert · écrasé` |
-| tuple d'épinglage bougé | `⚠️ [EVAL_STALE] prompt billing-specialist modifié depuis G5 — MISSION redescendue à Implemented (R2)` |
+| tuple d'épinglage bougé | `⚠️ [STATUS_PINNED_HASH_MOVED] prompt billing-specialist modifié depuis G5 — MISSION redescendue à Implemented (R2)` |
 | IR périmé | `⚠️ [IR_STALE] topology hash ≠ compiledFrom — /sdda-topology {n} --recompile-only` |
 | bypass actif sur le dernier run | `⚠️ bypass G4 (SDDA_BYPASS_RETRIEVAL_GATE) — recall 0.61 sous seuil, résultat porté en G7` |
 | juge advisory | `⚠️ juge {g} advisory (κ {x} < {min}) — la CAP ne peut pas être 🟢` |

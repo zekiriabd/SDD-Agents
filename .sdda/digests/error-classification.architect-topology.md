@@ -17,6 +17,8 @@ FIX: <l'action précise qui débloque>
 
 ## Classes propres à cet agent
 
+- `[AGENT_CONTRACT_MISSING]`
+- `[ARCH_ROSTER_AGENT_IDLE]`
 - `[ARCH_ROSTER_DUPLICATE_SOURCE]`
 - `[ARCH_ROSTER_MUTATED]`
 - `[BUDGET_EXCEEDED_ESTIMATE]`
@@ -27,7 +29,6 @@ FIX: <l'action précise qui débloque>
 - `[MISSION_NOT_FOUND]`
 - `[ROUTER_NO_FALLBACK]`
 - `[TOOL_SCOPE_EXCESS]`
-- `[TOPOLOGY_AGENT_UNUSED]`
 - `[TOPOLOGY_PATTERN_MISMATCH]`
 - `[TOPOLOGY_SIMPLICITY_ADVISORY]`
 

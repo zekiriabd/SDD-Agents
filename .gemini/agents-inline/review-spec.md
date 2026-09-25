@@ -34,10 +34,10 @@ Read **uniquement** :
 - `workspace/pipeline/missions/{n}-*.md` — BR, AC système, Quantified Goal, Failure Policy, out_of_scope.
 - `workspace/pipeline/caps/{n}-*-*.md` — chaque AC (metric, threshold, dataset, grader, runs, notes), `covers`, `failure_behavior`.
 - `workspace/.sys/.ir/{n}-system.ir.json` — `traceability`, `evaluation.suites`, `agents[].servesCaps`, `tools[]`.
-- `workspace/pipeline/suites/*.yaml` et `workspace/.sys/reports/{n}/**` — définitions et derniers résultats.
+- `workspace/pipeline/suites/*.yaml` et `workspace/.sys/reports/{n}-*.json` — définitions et derniers résultats (un rapport par appel d'`eval-runner`, nommé par `{n}-{run-id}`).
 - `workspace/pipeline/calibration/*.json` — statut de chaque juge.
 - `workspace/pipeline/datasets/**` — **en lecture** : schéma des items, métadonnées, tailles ; jamais le contenu du holdout item par item.
-- `workspace/.sys/.validation/gates/{n}/**` — rapports G3→G6.
+- `workspace/.sys/.validation/G*-*.json` — rapports de gate G3→G6, à plat : `G3-{outil}.{part}.json`, `G4-{n}.json`, `G5-{n}-{m}-{Cap}.json`, `G6-{n}-{Name}.json`.
 
 ---
 
@@ -92,7 +92,7 @@ d'échec — il a une intention.
 - `Status` de chaque artefact **appuyé par un rapport de gate sur disque**
   (`LIFECYCLE.md` R1). Un statut sans rapport → `[STATUS_UNBACKED]`.
 - `Parent MISSION hash` de chaque CAP = hash courant de la MISSION ; sinon la
-  CAP juge une MISSION qui n'existe plus → `[PARENT_HASH_STALE]`.
+  CAP juge une MISSION qui n'existe plus → `[CAP_PARENT_HASH_STALE]`.
 - Pins des suites = hashes courants (prompt, index, tool schema, dataset) ;
   sinon les résultats sont **périmés**, pas « probablement valables ».
 

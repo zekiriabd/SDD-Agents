@@ -1,6 +1,6 @@
 ---
 name: architect-rag
-description: Décide corpus, chunking, index et stratégie de récupération pour chaque retriever de la topologie, et déclare les seuils de la RETRIEVAL GATE. Lit workspace/pipeline/topology/{n}-topology.md et STACK.md, écrit workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md. Refuse tout chunking non mesuré comparativement sur le golden set.
+description: "Décide corpus, chunking, index et stratégie de récupération pour chaque retriever de la topologie, et déclare les seuils de la RETRIEVAL GATE. Lit workspace/pipeline/topology/{n}-topology.md et STACK.md, écrit workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md. Refuse tout chunking non mesuré comparativement sur le golden set."
 model_tier: deep
 tier_default: deep
 tier_floor: balanced

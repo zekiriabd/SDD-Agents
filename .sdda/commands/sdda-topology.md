@@ -356,7 +356,7 @@ Les 11 contrôles de `AGENTIC-IR.md §4` + budget :
 | 9 | Tout agent avec une entrée `untrusted` a une suite d'injection dans `evaluation.suites` | `[INJECTION_SUITE_MISSING]` |
 | 10 | Aucun identifiant de framework dans l'IR | `[FRAMEWORK_LEAK_IN_CONTRACT]` |
 | 11 | Tout agent porte les 5 bornes + `onBoundExceeded` | `[AGENT_BOUNDS_MISSING]` |
-| 12 | Justification P7 par agent > 1 (rejoué depuis la topologie) | `[TOPOLOGY_UNJUSTIFIED]` |
+| 12 | Justification P7 par agent > 1 (part `topology`, `validate-topology`) — **WARN**, jamais bloquant : le roster est la décision de l'architecte | `[TOPOLOGY_SIMPLICITY_ADVISORY]` · `[TOPOLOGY_JUSTIFICATION_UNPROVEN]` |
 | B | Budget estimé (coût, latence p95, tokens) ≤ budget déclaré de la MISSION | `[BUDGET_EXCEEDED_ESTIMATE]` |
 
 | Verdict | Condition | Action |

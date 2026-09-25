@@ -1,6 +1,6 @@
 ---
 name: dev-api
-description: Implémente la surface d'exposition du système généré (CLI, SSE, serveur MCP, bot, batch…) depuis la section Active Serving Surface de STACK.md et l'IR — point d'entrée, identité de l'appelant, streaming, arrêt propre, exposition des traces. Écrit uniquement dans workspace/src/{App}/serving/. Ne porte aucune logique métier, aucun prompt, aucun outil.
+description: "Implémente la surface d'exposition du système généré (CLI, SSE, serveur MCP, bot, batch…) depuis la section Active Serving Surface de STACK.md et l'IR — point d'entrée, identité de l'appelant, streaming, arrêt propre, exposition des traces. Écrit uniquement dans workspace/src/{App}/serving/. Ne porte aucune logique métier, aucun prompt, aucun outil."
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast

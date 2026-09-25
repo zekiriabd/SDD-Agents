@@ -1,6 +1,6 @@
 ---
 name: review-cost
-description: Étage B, tier fast. Lit les mesures de coût et de latence produites par les scripts (traces, rapports d'eval L7) et les compare aux seuils de la MISSION et de l'IR. Dit où part l'argent, quelle CAP coûte plus qu'elle ne vaut, quelle queue de trajectoire fait exploser le p95. Écrit workspace/.sys/.validation/reports/cost-latency-{n}.md. Aucun jugement ouvert.
+description: "Étage B, tier fast. Lit les mesures de coût et de latence produites par les scripts (traces, rapports d'eval L7) et les compare aux seuils de la MISSION et de l'IR. Dit où part l'argent, quelle CAP coûte plus qu'elle ne vaut, quelle queue de trajectoire fait exploser le p95. Écrit workspace/.sys/.validation/reports/cost-latency-{n}.md. Aucun jugement ouvert."
 model_tier: fast
 tier_default: fast
 tier_floor: fast
@@ -66,7 +66,7 @@ Read **uniquement** :
   `costPerRunHardCapUsd`, `latencyP95TargetMs`, `tokenCeilingPerRun`),
   `orchestration.maxHops`, `agents[].bounds.budgetUsd`, `agents[].modelTier` ;
 - `workspace/pipeline/topology/{n}-topology.md §4` — le budget **estimé** en G2 (nominal, pire cas) ;
-- `workspace/.sys/reports/{n}/L7-*.json` — coût et latence mesurés par l'ORCH GATE ;
+- `workspace/.sys/reports/{n}-*.json` — les rapports d'`eval-runner`, suites `L7` : coût et latence mesurés par l'ORCH GATE ;
 - `workspace/pipeline/caps/{n}-*-*.md` — `criticality` et, si présent, la valeur métier
   déclarée d'une CAP.
 

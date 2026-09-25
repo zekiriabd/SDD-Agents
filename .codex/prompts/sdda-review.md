@@ -60,7 +60,7 @@ Invalide → ERROR `[INVALID_ARG]`. MISSION absente → `[MISSION_NOT_FOUND]`.
    Absente ou périmée → ERROR :
    ```
    ERROR: /sdda-review {n} — évaluation absente ou périmée
-   CAUSE: [EVAL_STALE] aucun workspace/.sys/reports/{n}-*.json, ou prompt_hash de {agent} a changé depuis
+   CAUSE: [EVAL_REPORT_NOT_FOUND] aucun workspace/.sys/reports/{n}-*.json — ou [STATUS_PINNED_HASH_MOVED] prompt_hash de {agent} a changé depuis (compute-status)
    FIX: /sdda-eval {n} --run-only puis relancer /sdda-review {n}
    ```
 4. Lire `## Project Config` :

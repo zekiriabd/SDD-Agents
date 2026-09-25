@@ -1,6 +1,6 @@
 ---
 name: qa-tests
-description: Écrit les tests déterministes L0→L2 du système généré — lint statique, unitaires sur les fonctions pures, tests de contrat d'outil (happy, chaque erreur, timeout, auth, idempotence, rate limit) et connectivité live. LLM toujours mocké. Lit l'IR, les contrats et src/ ; écrit uniquement dans workspace/src/**/tests/. Ne touche ni aux datasets ni aux prompts.
+description: "Écrit les tests déterministes L0→L2 du système généré — lint statique, unitaires sur les fonctions pures, tests de contrat d'outil (happy, chaque erreur, timeout, auth, idempotence, rate limit) et connectivité live. LLM toujours mocké. Lit l'IR, les contrats et src/ ; écrit uniquement dans workspace/src/**/tests/. Ne touche ni aux datasets ni aux prompts."
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast
@@ -70,7 +70,7 @@ un test qui appelle le script correspondant :
 - validation de l'IR (`validate_ir.py`) ;
 - **hash du prompt sur disque = `promptHash` de l'IR** pour chaque agent ;
 - **aucune chaîne de prompt dans `src/`** — scan pour les motifs de prompt
-  inline (`PromptInlineForbidden`) ;
+  inline (invariant `prompts-are-files`) ;
 - disjonction `golden ∩ holdout = ∅` (`validate_datasets.py`) ;
 - fraîcheur des baselines (tuple P10) ;
 - audit d'ownership : `src/agents/**` et `src/orchestration/**` ne contiennent

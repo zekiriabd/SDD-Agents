@@ -66,7 +66,7 @@ un test qui appelle le script correspondant :
 - validation de l'IR (`validate_ir.py`) ;
 - **hash du prompt sur disque = `promptHash` de l'IR** pour chaque agent ;
 - **aucune chaîne de prompt dans `src/`** — scan pour les motifs de prompt
-  inline (`PromptInlineForbidden`) ;
+  inline (invariant `prompts-are-files`) ;
 - disjonction `golden ∩ holdout = ∅` (`validate_datasets.py`) ;
 - fraîcheur des baselines (tuple P10) ;
 - audit d'ownership : `src/agents/**` et `src/orchestration/**` ne contiennent

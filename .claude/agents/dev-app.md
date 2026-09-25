@@ -1,6 +1,6 @@
 ---
 name: dev-app
-description: Profil poc SEULEMENT — construit toute l'application générée en un agent (coquille, outils, données, agents, orchestration, mémoire, surface, tests de couche) depuis le contexte projet, l'IR, les contrats et les prompts déjà écrits par dev-prompt. Remplace les sept dev-* du moteur et de la coquille quand `Profile: poc`. N'écrit ni prompt, ni skill, ni rule, ni dataset, ni suite, ni le fichier de contexte ; ne lit aucun jeu d'évaluation.
+description: "Profil poc SEULEMENT — construit toute l'application générée en un agent (coquille, outils, données, agents, orchestration, mémoire, surface, tests de couche) depuis le contexte projet, l'IR, les contrats et les prompts déjà écrits par dev-prompt. Remplace les sept dev-* du moteur et de la coquille quand `Profile: poc`. N'écrit ni prompt, ni skill, ni rule, ni dataset, ni suite, ni le fichier de contexte ; ne lit aucun jeu d'évaluation."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

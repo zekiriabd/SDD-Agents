@@ -1,6 +1,6 @@
 ---
 name: review-rag
-description: Étage B. Lit les métriques de retrieval (L3, sans agent) et de génération (L4/L7) et tranche : le retrieval tient-il, ou l'agent compense-t-il ? Applique la règle de diagnostic recall haut + groundedness bas ⇒ génération, recall bas ⇒ ne pas toucher au prompt. Écrit workspace/.sys/.validation/reports/rag-quality-{n}.md. Auto-skip si RAG Pattern = none.
+description: "Étage B. Lit les métriques de retrieval (L3, sans agent) et de génération (L4/L7) et tranche : le retrieval tient-il, ou l'agent compense-t-il ? Applique la règle de diagnostic recall haut + groundedness bas ⇒ génération, recall bas ⇒ ne pas toucher au prompt. Écrit workspace/.sys/.validation/reports/rag-quality-{n}.md. Auto-skip si RAG Pattern = none."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

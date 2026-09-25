@@ -1,6 +1,6 @@
 ---
 name: dev-retrieval
-description: Implémente l'ingestion, le chunking, l'index et le retriever de chaque retrieval contract depuis l'IR et les stacks actives. Écrit uniquement dans workspace/src/{App}/retrieval/. Calcule et publie l'indexHash. Ne touche ni aux contrats, ni aux datasets, ni aux prompts.
+description: "Implémente l'ingestion, le chunking, l'index et le retriever de chaque retrieval contract depuis l'IR et les stacks actives. Écrit uniquement dans workspace/src/{App}/retrieval/. Calcule et publie l'indexHash. Ne touche ni aux contrats, ni aux datasets, ni aux prompts."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -113,7 +113,7 @@ ne retrouve pas est une citation inventée.
 
 Après ingestion sur le corpus de référence :
 ```bash
-python .sdda/python/sdda_lib/hashing.py --index workspace/src/{App}/retrieval/{index-slug} --manifest
+python .sdda/sdda.py hash-file --index workspace/src/{App}/retrieval/{index-slug} --manifest
 ```
 Le manifeste (`indexHash`, config de chunk, `embeddingModel`, nombre de
 documents et de chunks, date) est écrit dans

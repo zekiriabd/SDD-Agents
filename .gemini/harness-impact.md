@@ -25,6 +25,7 @@ appliqués au moment de l'action mais **en différé (CI)** :
 - `tool-gate-before-agent-wiring` — **appliqué en différé (CI)**
 - `cap-ac-must-be-evaluable` — partiellement différé (un enforcer déterministe subsiste)
 - `no-unbounded-loop` — partiellement différé (un enforcer déterministe subsiste)
+- `build-budget-bounded` — partiellement différé (un enforcer déterministe subsiste)
 - `tool-side-effect-declared` — partiellement différé (un enforcer déterministe subsiste)
 - `db-safety-envelope-present` — partiellement différé (un enforcer déterministe subsiste)
 - `retrieval-gate-before-agent` — partiellement différé (un enforcer déterministe subsiste)

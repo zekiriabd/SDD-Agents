@@ -1,6 +1,6 @@
 ---
 name: review-orchestration
-description: Étage B. Lit les trajectoires mesurées (traces, evals L5/L7) contre le graphe de l'IR et cherche les hops inutiles, les boucles, les impasses, les handoffs sans contrat, les misroutes par classe, le ping-pong superviseur. Écrit workspace/.sys/.validation/reports/orchestration-{n}.md. Une réponse correcte par une trajectoire aberrante est un faux vert.
+description: "Étage B. Lit les trajectoires mesurées (traces, evals L5/L7) contre le graphe de l'IR et cherche les hops inutiles, les boucles, les impasses, les handoffs sans contrat, les misroutes par classe, le ping-pong superviseur. Écrit workspace/.sys/.validation/reports/orchestration-{n}.md. Une réponse correcte par une trajectoire aberrante est un faux vert."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

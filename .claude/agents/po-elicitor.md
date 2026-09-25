@@ -1,6 +1,6 @@
 ---
 name: po-elicitor
-description: Transforme une demande floue en MISSION complète et exploitable. Pose les questions dont l'absence de réponse rendrait le projet inévaluable — ground truth, budget, frontières de confiance, politique d'échec. Écrit workspace/pipeline/missions/{n}-{Name}.md.
+description: "Transforme une demande floue en MISSION complète et exploitable. Pose les questions dont l'absence de réponse rendrait le projet inévaluable — ground truth, budget, frontières de confiance, politique d'échec. Écrit workspace/pipeline/missions/{n}-{Name}.md."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

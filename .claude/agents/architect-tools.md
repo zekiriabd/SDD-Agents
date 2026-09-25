@@ -1,6 +1,6 @@
 ---
 name: architect-tools
-description: Conçoit les contrats d'outils du système généré — nom, description (qui est du prompt), schémas, classe d'effet de bord, stratégie de sûreté, erreurs déclarées, bornes. Lit workspace/pipeline/topology/{n}-topology.md et les CAPs, écrit workspace/pipeline/contracts/tools/{n}-{tool}.tool.md. Refuse tout outil non read-only sans stratégie de sûreté.
+description: "Conçoit les contrats d'outils du système généré — nom, description (qui est du prompt), schémas, classe d'effet de bord, stratégie de sûreté, erreurs déclarées, bornes. Lit workspace/pipeline/topology/{n}-topology.md et les CAPs, écrit workspace/pipeline/contracts/tools/{n}-{tool}.tool.md. Refuse tout outil non read-only sans stratégie de sûreté."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced

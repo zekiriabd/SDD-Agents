@@ -1,6 +1,6 @@
 ---
 name: sdda-eval
-description: /sdda-eval — PHASE 6 : datasets + graders + tests (qa-evals ∥ qa-tests), exécution L0→L7, rapport vert/jaune/rouge
+description: "/sdda-eval — PHASE 6 : datasets + graders + tests (qa-evals ∥ qa-tests), exécution L0→L7, rapport vert/jaune/rouge"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-eval.md.
      NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
@@ -71,6 +71,15 @@ Invalide → ERROR `[INVALID_ARG]`.
    ```
    KO → ERROR `[CAP_GATE_NOT_PASSED]` ou `[ORCH_GATE_NOT_PASSED]` (FIX :
    `/sdda-caps {n}` ou `/sdda-build {n}`).
+
+   **Sous `Profile: poc`** (`python .sdda/sdda.py project-profile`), le mode
+   `--run-only` exige **G2** et non G6 : `/sdda-build` STEP P joue G3→G6 et les
+   **rapporte** sans bloquer — un G6 rouge est le cas nominal d'un prototype,
+   et exiger G6 ici fermait la PHASE 6 à tout poc qui n'était pas déjà parfait.
+   ```bash
+   python .sdda/sdda.py compute-status --mission {n} --require-gate G2   # Profile: poc, mode run-only
+   ```
+   `--acceptance` reste hors du profil `poc` (`/sdda-full` STEP 1.quinquies).
 3. Les clés de l'application sont là — c'est ici qu'elle appelle vraiment ses
    modèles (0 token, aucune valeur affichée) :
    ```bash
@@ -96,7 +105,7 @@ Si `--run-only` → STEP 5. Si `--acceptance` → STEP 7.
 
 | Agent | Tier | Écrit dans (Create exclusif) | Skippé si |
 |---|:-:|---|---|
-| `qa-evals` | **deep** | `workspace/pipeline/datasets/**`, `workspace/pipeline/{suites,calibration}/**` | jamais |
+| `qa-evals` | **deep** | `workspace/pipeline/datasets/**`, `workspace/pipeline/{suites,calibration,fixtures}/**` | jamais |
 | `qa-tests` | balanced | `workspace/src/**/tests/**` (L0→L2) | `--datasets-only` |
 
 Un seul message multi-`Agent` (2 ≤ `MaxParallel`). Chemins disjoints.
@@ -104,17 +113,38 @@ Un seul message multi-`Agent` (2 ≤ `MaxParallel`). Chemins disjoints.
 Prompt `qa-evals` :
 ```
 MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/pipeline/caps/{n}-*.md), produire :
-- golden/{dataset}.jsonl  (≥ 50 items, schéma .sdda/templates/golden-set.schema.json)
-- holdout/mission-{n}-v{k}.jsonl  (≥ 30 items, DISJOINT du golden — vérifié par hash)
+- golden/{dataset}.jsonl  (≥ {GoldenSetMinItems} items, schéma .sdda/templates/golden-set.schema.json)
+- holdout/mission-{n}-v{k}.jsonl  (≥ {HoldoutSetMinItems} items, DISJOINT du golden — vérifié par hash)
 - calibration/{grader}.jsonl  (≥ {JudgeCalibrationMinItems} items labellisés HUMAINEMENT — signaler
   les items à faire labelliser, ne jamais les inventer)
 - adversarial/{n}-*.jsonl  (≥ {AdversarialSetMinItems} : injection directe, indirecte via corpus
   empoisonné, via outil, abus d'outil, escalade, exfiltration, tenant, budget, persona)
 - workspace/pipeline/suites/{n}-*.yaml  (grader, seuil, runs, dataset, niveau L3..L7 — depuis les AC)
+- workspace/pipeline/suites/tool-{n}-{outil}.yaml pour CHAQUE outil câblé de l'IR (agents[].tools) :
+  `level: L2`, `toolRef: {outil}`, `id` stable, `cases[]` à `id` stable — happy, chaque erreur
+  déclarée du contrat, timeout, auth KO, idempotence si non read-only (part `suites` de G3)
+- workspace/pipeline/fixtures/ : tools/**/*.jsonl (une ligne par réponse mockée) et
+  {index}-v{k}.json (retrieval figé) — les doubles L4, dérivés des CONTRATS, jamais du code
 Droit de veto : un AC non mesurable → [AC_NOT_EVALUABLE] renvoyé à po-capabilities, STOP.
 Ground truth : ## Ground Truth de la MISSION (Source, Volume). Aucune écriture hors
-workspace/pipeline/{datasets,suites,calibration}/.
+workspace/pipeline/{datasets,suites,calibration,fixtures}/.
 ```
+
+Les tailles `{GoldenSetMinItems}`, `{HoldoutSetMinItems}`,
+`{JudgeCalibrationMinItems}` et `{AdversarialSetMinItems}` sont les valeurs
+**résolues** en couches — `config.base.yml` < `.sdda/profiles/{Profile}.yml`
+(`python .sdda/sdda.py project-profile --json` nomme le fichier) < `STACK.md`
+(`## Project Config` ou `## Active Eval Stack`) — la résolution que
+`validate-datasets` applique au STEP 4. Un nombre écrit en dur dans le prompt
+faisait produire à l'agent ce que la gate n'exigeait pas : `Profile: poc`
+abaisse le golden à 15 items, et `/sdda-build` STEP P.2 réemploie ce prompt.
+
+Les suites `tool-{n}-{outil}.yaml` sont ce que `run-tool-suites` cherche
+(`toolRef`, `level: L2`, `cases[].id`) et ce que `qa-tests` joue en `pytest`
+(`/sdda-build` 3.1 bis) : sans elles, la part `suites` de G3 n'a aucun
+écrivain et reste rouge par construction. Les fixtures sont ce que
+l'exécuteur isolé de L4 sert à la place des outils et de l'index : un appel
+qu'aucune ligne ne couvre rend `TOOL_FIXTURE_MISSING`, pas une réponse vide.
 
 `qa-tests` part **une fois par couche présente** dans `workspace/src/{App}/`
 (`tools`, `retrieval`, `data`, `agents`, `orchestration`, `serving`, puis `tests`
@@ -154,7 +184,7 @@ Le script écrit lui-même la part `datasets` de G8
 | # | Contrôle | Classe si KO |
 |---|---|---|
 | 1 | Chaque `dataset` nommé par une AC existe et respecte `golden-set.schema.json` | `[EVAL_DATASET_MISSING]` |
-| 2 | Tailles minimales : golden 50, holdout 30, calibration `JudgeCalibrationMinItems`, adversarial `AdversarialSetMinItems` | `[EVAL_DATASET_TOO_SMALL]` |
+| 2 | Tailles minimales, valeurs résolues du profil (STEP 3) : golden `GoldenSetMinItems`, holdout `HoldoutSetMinItems`, calibration `CalibrationSetMinItems` (sinon `JudgeCalibrationMinItems`), adversarial `AdversarialSetMinItems` | `[EVAL_DATASET_TOO_SMALL]` |
 | 3 | `golden ∩ holdout = ∅` par hash d'item (`HoldoutDisjointCheck: strict`) | `[HOLDOUT_NOT_DISJOINT]` |
 | 4 | Aucun secret, aucune PII non déclarée dans les items | `[SECRET_LEAK]` / `[PII_IN_DATASET]` |
 | 5 | `dataset_hash` écrit pour chaque fichier (épinglage P10) | — |
@@ -231,7 +261,7 @@ Chaque eval LLM porte `runs: k`, rapporte `score_mean`, `score_stddev`,
 
 **Fraîcheur** : avant d'exécuter, `check_baseline_freshness.py` compare le tuple
 courant à celui de la baseline. Si un hash a bougé, les résultats précédents
-sont **marqués périmés** (`[EVAL_STALE]`, WARN) et la ré-exécution est
+sont **marqués périmés** (`[EVAL_BASELINE_STALE]`, WARN) et la ré-exécution est
 obligatoire — c'est précisément ce qui se passe ici. Aucun résultat périmé
 n'est réutilisé.
 
@@ -339,7 +369,7 @@ pas `[REGRESSION]` — bloquer sur un tirage apprend à relever la tolérance. E
 
 | # | Contrôle | Classe si KO |
 |---|---|---|
-| 1 | Tuple d'épinglage identique à celui des rapports G5/G6 (sinon les gates amont sont périmées) | `[EVAL_STALE]` |
+| 1 | Tuple d'épinglage identique à celui de la baseline et des rapports G5/G6 (`check-baseline-freshness --strict` ; sinon les gates amont sont périmées) | `[EVAL_BASELINE_STALE]` |
 | 2 | `## Quantified Goal` de la MISSION atteint sur holdout (`Metric ≥ Target`, k runs, pass_rate 1.0) | `[GOAL_NOT_MET]` |
 | 3 | Aucune métrique en baisse > `RegressionTolerancePct` **et** hors de `RegressionNoiseSigma` σ de la baseline (si baseline existe) — `check_regression.py` | `[REGRESSION]` |
 | 4 | `golden ∩ holdout = ∅` re-vérifié | `[HOLDOUT_NOT_DISJOINT]` |

@@ -1,6 +1,6 @@
 ---
 name: dev-data
-description: Implémente les vues, repositories et l'enveloppe de sûreté d'accès base depuis les contrats {n}-data-* et l'IR (dataAccess[]). Écrit uniquement dans workspace/src/{App}/data/. Le filtre d'identité est dans le SQL, jamais dans le prompt. Ne touche ni aux contrats, ni aux prompts, ni aux datasets.
+description: "Implémente les vues, repositories et l'enveloppe de sûreté d'accès base depuis les contrats {n}-data-* et l'IR (dataAccess[]). Écrit uniquement dans workspace/src/{App}/data/. Le filtre d'identité est dans le SQL, jamais dans le prompt. Ne touche ni aux contrats, ni aux prompts, ni aux datasets."
 model_tier: balanced
 tier_default: balanced
 tier_floor: fast
