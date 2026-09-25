@@ -89,7 +89,10 @@ A declared source becomes a tool without an LLM writing its contract:
    proposes it from the data; a human **reviews** it. It lives in
    `workspace/src/{App}/data/schemas/{id}.schema.json` and ships with the
    application: it is a runtime asset, revalidated at startup on
-   `SourceSchemaCheckSample` records.
+   `SourceSchemaCheckSample` records. `/sdda-full` does not wait for PHASE 2
+   to ask for it: `gen-source-tools --infer --missing` infers, before PHASE 0,
+   every source that has no schema, and the review is the only question asked
+   before the first agent.
 2. **The contracts, in PHASE 2.** `gen-source-tools --write --scope contracts`
    (`/sdda-topology` STEP 4.bis, before IR compilation): the IR and G2 see source
    tools like any other. A source without a frozen schema is

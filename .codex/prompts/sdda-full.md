@@ -160,6 +160,45 @@ que les gates amont sont vertes.
 
 ---
 
+## STEP 1.quater — Schémas des sources déclarées, avant le premier token
+
+Si `## Active Data Access` = `declared-sources` :
+
+```bash
+python .sdda/sdda.py gen-source-tools --infer --missing --json
+```
+
+Il infère le schéma figé de **chaque** source déclarée qui n'en a pas encore,
+depuis la donnée réelle, et ne touche jamais un schéma existant. Au premier
+run réel, ce schéma manquant arrêtait `/sdda-topology` 25 minutes après le
+départ (`[DATA_SOURCE_SCHEMA_MISSING]`, STOP humain, puis reprise du run) ;
+l'inférence n'a besoin que de la donnée, qui est là dès le bootstrap.
+
+| Sortie | Action |
+|---|---|
+| exit 0, `reviewRequired: false` | rien à relire → STEP 2 |
+| exit 0, `reviewRequired: true` | **une question à l'humain, puis on continue dans le même run** (ci-dessous) |
+| exit 1 `[DATA_SCHEMA_SAMPLE_REQUIRED]` | STOP avant toute dépense : source distante sans échantillon — `gen-source-tools --infer --source {id} --from-sample {fichier}` |
+| exit 1 autre (`[DATA_SOURCE_EMPTY]`, `[DATA_SOURCE_UNREADABLE]`…) | STOP avant toute dépense, avec la classe rendue |
+
+Si `reviewRequired: true`, montrer pour chaque source de `inferred` son
+chemin, le tableau `fields` (champ → type, format, enum) et `required`, puis
+les avertissements `[DATA_SCHEMA_REVIEW_REQUIRED]`, et poser **une** question :
+
+```
+Schémas inférés depuis la donnée réelle — à relire avant de lancer le pipeline :
+  {path} · {n} champs · required : {…}
+  {champ} : {type}  …
+Les descriptions de champ sont des gabarits : elles deviennent la description
+des outils que lit le modèle. Valider tel quel, ou corriger le fichier puis répondre ?
+```
+
+Réponse « valider » ou « corrigé » → STEP 2, **même run**. C'est, avec la
+PHASE 0, le seul dialogue humain nominal de `/sdda-full` : les deux ont lieu
+avant que le moindre agent ne soit payé.
+
+---
+
 ## STEP 2 — Résoudre la MISSION et le point de départ (déterministe)
 
 Mode création → exécuter `/sdda-mission {Name}` (STEP 3.0), puis continuer.
@@ -207,8 +246,8 @@ Garde `should-skip-step mission`. Exécuter `/sdda-mission {Name|n}`.
 | G0 🟢 | continuer |
 | ERROR | propager + STOP (aucun bypass de G0) |
 
-C'est la **seule** phase où un dialogue humain est nominal ; `/sdda-full`
-laisse `po-elicitor` poser ses questions.
+C'est, avec la relecture des schémas du STEP 1.quater, la **seule** phase où un
+dialogue humain est nominal ; `/sdda-full` laisse `po-elicitor` poser ses questions.
 
 ---
 

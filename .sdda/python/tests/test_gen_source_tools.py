@@ -378,6 +378,34 @@ def test_infer_requires_a_source(sources_project: Path) -> None:
     assert "INVALID_ARG" in classes(gst.run(sources_project, mode="infer"))
 
 
+def test_infer_missing_drafts_only_what_has_no_frozen_schema(sources_project: Path) -> None:
+    """`/sdda-full` le joue avant la PHASE 0 : au premier run réel, le schéma manquant
+    arrêtait `/sdda-topology` 25 minutes après le départ, pour une relecture qu'on
+    pouvait demander avant le premier token."""
+    target = sources_project / SCHEMAS / "order_tracking.schema.json"
+    frozen_customer = (sources_project / SCHEMAS / "crm_customer.schema.json").read_text(encoding="utf-8")
+    target.unlink()
+    report = gst.run(sources_project, mode="infer", missing=True)
+    assert report.ok, report.render_text()
+    assert list(report.data["inferred"]) == ["order_tracking"] and report.data["reviewRequired"] is True
+    assert "crm_customer" in report.data["alreadyFrozen"]
+    assert report.data["inferred"]["order_tracking"]["fields"]["last_scan_at"].startswith("string (format=date-time")
+    assert target.is_file()
+    # Un schéma figé n'est jamais touché, et un second passage n'a plus rien à relire.
+    assert (sources_project / SCHEMAS / "crm_customer.schema.json").read_text(encoding="utf-8") == frozen_customer
+    again = gst.run(sources_project, mode="infer", missing=True)
+    assert again.ok and again.data["inferred"] == {} and again.data["reviewRequired"] is False
+
+
+def test_infer_missing_says_up_front_that_a_remote_source_needs_a_sample(sources_project: Path) -> None:
+    (sources_project / SCHEMAS / "crm_customer.schema.json").unlink()
+    assert "DATA_SCHEMA_SAMPLE_REQUIRED" in classes(gst.run(sources_project, mode="infer", missing=True))
+
+
+def test_infer_missing_is_not_combined_with_a_named_source(sources_project: Path) -> None:
+    assert "INVALID_ARG" in classes(gst.run(sources_project, mode="infer", missing=True, source="order_tracking"))
+
+
 def test_cli_check_exits_nonzero_then_zero(sources_project: Path) -> None:
     code, _ = run_main(gst.main, ["--root", str(sources_project), "--check", "--json", "--no-report"])
     assert code == 1

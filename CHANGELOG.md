@@ -16,6 +16,16 @@ A release is cut by pushing a `v*` tag whose version equals
 
 ### Added
 
+- G1 settles, at 0 token, the three `[AC_NOT_EVALUABLE]` returns that
+  `qa-evals` made mechanically after 17 minutes on the first real run:
+  `exact` without `fields:` on an output with a required free-text field (AC
+  and Quantified Goal), and one dataset file read by graders expecting
+  incompatible `expected` shapes (schema object vs regex pattern vs number…).
+  `po-capabilities` states both rules; `qa-evals` keeps the judgement ones.
+- `gen-source-tools --infer --missing`, run by `/sdda-full` STEP 1.quater
+  before PHASE 0: every declared source without a frozen schema is inferred
+  and reviewed once, in the same run, instead of stopping `/sdda-topology`
+  25 minutes in with `[DATA_SOURCE_SCHEMA_MISSING]`.
 - `project-init` (`/sdda-build` STEP 3.0): the command, not an agent, initialises
   the generated project before any `dev-*` — skeleton, `uv sync`, then
   `gen-app-context`, which writes `workspace/src/{App}/CLAUDE.md` (the active

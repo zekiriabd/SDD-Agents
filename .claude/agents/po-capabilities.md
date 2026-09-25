@@ -119,6 +119,22 @@ Pour **chaque** critère d'acceptation, produire les cinq champs. Sans exception
    — et c'est exactement la classe qui compte.
 5. `notes` dit **ce que l'AC ne couvre pas**. Un trou déclaré est un trou géré ;
    un trou tu deviendra un incident.
+6. **`exact` compare la sortie ENTIÈRE.** Si le `- output:` de la CAP exige un
+   champ en texte libre (`message`, `answer`… : `string` sans `enum`, `const`,
+   `pattern` ni `format`), une réponse parfaite y rend 0.0. Projeter la
+   comparaison (`fields: status, total_amount`) ou passer au grader `schema`
+   avec un `const` par champ mesuré. Même règle pour le `Grader:` du Quantified
+   Goal de la MISSION : le signaler s'il est `exact`.
+7. **Un fichier de dataset, une forme d'`expected`.** `schema` attend un objet
+   JSON Schema, `regex` un motif, `numeric-tolerance` un nombre, `exact` et
+   `semantic-similarity` un texte (un objet avec `fields:`). Deux AC aux formes
+   différentes ne partagent pas un fichier — donner à chacune le sien
+   (`…-unknown-schema-v1.jsonl`, `…-unknown-regex-v1.jsonl`). `llm-judge`,
+   `trajectory`, `cost` et `latency` n'imposent rien et partagent librement.
+
+Les règles 6 et 7 sont vérifiées par G1 (`validate-cap`, 0 token) : au premier
+run réel, `qa-evals` les renvoyait au bout de 17 minutes, et chaque renvoi
+coûtait un tour de CAPs et une reprise du run.
 
 Tu ne peux pas écrire :
 ```
@@ -182,6 +198,8 @@ C'est la décision de `architect-topology`, en phase 2.
 - [ ] **Chaque AC porte metric + threshold + dataset + grader + runs**
 - [ ] Chaque seuil est un nombre
 - [ ] Classification → `accuracy_per_class`
+- [ ] Aucun `exact` sans `fields:` sur une sortie à texte libre requis (AC et Quantified Goal)
+- [ ] Un dataset n'est partagé que par des graders à la même forme d'`expected`
 - [ ] Couverture montante complète, aucun `Covers` orphelin
 - [ ] Chaque CAP a un `Failure Behavior`
 - [ ] `Allocated To` vide

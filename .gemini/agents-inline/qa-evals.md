@@ -71,6 +71,14 @@ mesurent exactement ce que l'AC énonce**. Cas de renvoi :
 - l'AC mesure une **proxy** plutôt que la compétence (« le schéma est valide »
   pour une CAP dont l'enjeu est l'exactitude du montant).
 
+Les cas **mécaniques** sont déjà tranchés par G1, que la CAP a franchie avant
+toi : champs manquants, seuil non chiffré, grader hors liste, `exact` sans
+`fields:` sur une sortie à texte libre requis, un même dataset lu par deux
+graders aux `expected` incompatibles. Ton veto porte sur ce qu'aucun script ne
+tranche — le sens : la proxy, la vérité terrain qui ne labellise pas, une sortie
+qui n'a pas de champ pour ce que l'AC mesure (un ensemble de numéros dans un
+`order_number` unique).
+
 ```
 ERROR: agent qa-evals — AC non mesurable
 CAUSE: [AC_NOT_EVALUABLE] CAP 1-2 AC-2 « les explications sont claires » : aucune vérité terrain, aucun grader ne l'opérationnalise

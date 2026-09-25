@@ -91,7 +91,10 @@ Une source déclarée devient un outil sans qu'un LLM écrive son contrat :
    le propose depuis les données ; un humain le **relit**. Il vit dans
    `workspace/src/{App}/data/schemas/{id}.schema.json` et part avec
    l'application : c'est un actif d'exécution, revalidé au démarrage sur
-   `SourceSchemaCheckSample` enregistrements.
+   `SourceSchemaCheckSample` enregistrements. `/sdda-full` n'attend pas la
+   PHASE 2 pour le demander : `gen-source-tools --infer --missing` infère,
+   avant la PHASE 0, chaque source sans schéma, et la relecture est la seule
+   question posée avant le premier agent.
 2. **Les contrats, en PHASE 2.** `gen-source-tools --write --scope contracts`
    (`/sdda-topology` STEP 4.bis, avant la compilation de l'IR) : l'IR et G2 voient
    les outils de source comme les autres. Une source sans schéma figé est

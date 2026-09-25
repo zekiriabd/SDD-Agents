@@ -31,6 +31,7 @@ Usage :
     python .sdda/sdda.py gen-source-tools --check --json
     python .sdda/sdda.py gen-source-tools --infer --source order_tracking
     python .sdda/sdda.py gen-source-tools --infer --source crm_customer --from-sample sample.json
+    python .sdda/sdda.py gen-source-tools --infer --missing --json   # /sdda-full, avant la PHASE 0
     python .sdda/sdda.py gen-source-tools --write --mission 1 --scope contracts   # PHASE 2, avant ir-compiler
     python .sdda/sdda.py gen-source-tools --write --mission 1 --scope code        # PHASE 3, couche dev-data
 
@@ -389,6 +390,45 @@ def infer_source(ctx: Context, source_id: str, report: Report, *, sample: Path |
         location=paths.rel(ctx.root, target),
     )
     return result.schema
+
+
+def schema_summary(schema: dict[str, Any]) -> dict[str, Any]:
+    """Ce qu'un humain relit d'abord : champ -> type, `required`, valeurs d'`enum`."""
+    fields: dict[str, str] = {}
+    for name, spec in sorted((schema.get("properties") or {}).items()):
+        if not isinstance(spec, dict):
+            continue
+        raw = spec.get("type", "?")
+        kind = "|".join(str(t) for t in raw) if isinstance(raw, list) else str(raw)
+        extra = [f"{k}={spec[k]}" for k in ("format", "pattern") if spec.get(k)]
+        if isinstance(spec.get("enum"), list):
+            extra.append("enum=" + ",".join(str(v) for v in spec["enum"]))
+        fields[str(name)] = kind + (f" ({'; '.join(extra)})" if extra else "")
+    return {"fields": fields, "required": list(schema.get("required") or [])}
+
+
+def infer_missing(ctx: Context, report: Report) -> dict[str, Any]:
+    """Infère le schéma de CHAQUE source déclarée qui n'en a pas encore — au début, pas en PHASE 2.
+
+    Premier run réel : le schéma manquant arrêtait `/sdda-topology` 25 minutes
+    après le départ (`[DATA_SOURCE_SCHEMA_MISSING]`), pour une relecture humaine
+    qu'on pouvait demander avant le premier token — l'inférence n'a besoin que de
+    la donnée, qui est là dès le bootstrap. `/sdda-full` joue ce mode avant la
+    PHASE 0 et soumet les brouillons à l'humain une seule fois. Un schéma figé
+    existant n'est jamais touché ; une source distante sans échantillon rend
+    `[DATA_SCHEMA_SAMPLE_REQUIRED]`, dit lui aussi avant toute dépense.
+    """
+    inferred: dict[str, Any] = {}
+    frozen: list[str] = []
+    for source_id in sorted(ctx.registry.sources):
+        target = ctx.schema_path(source_id)
+        if target.is_file():
+            frozen.append(source_id)
+            continue
+        schema = infer_source(ctx, source_id, report, sample=None, force=False)
+        if schema is not None:
+            inferred[source_id] = {"path": paths.rel(ctx.root, target), **schema_summary(schema)}
+    return {"inferred": inferred, "alreadyFrozen": frozen, "reviewRequired": bool(inferred)}
 
 
 # ---------------------------------------------------------------------------
@@ -1199,6 +1239,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fichier JSON d'échantillon, pour une source distante (http-api, mcp, store non local)")
     p.add_argument("--src-root", type=Path, default=None, help="racine du paquet applicatif généré")
     p.add_argument("--force", action="store_true", help="--infer : réécrire un schéma figé existant")
+    p.add_argument("--missing", action="store_true",
+                   help="--infer : toutes les sources déclarées sans schéma figé (/sdda-full, avant la PHASE 0)")
     p.add_argument("--scope", choices=list(SCOPES), default="all",
                    help="contracts : les squelettes de contrats seuls (PHASE 2, avant ir-compiler) ; "
                         "code : wrappers + runtime seuls (PHASE 3, couche dev-data) ; all : les deux (défaut)")
@@ -1208,7 +1250,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(root: Path, *, mode: str, source: str | None = None, mission: str | None = None,
         sample: Path | None = None, src_root: Path | None = None, force: bool = False,
-        scope: str = "all") -> Report:
+        scope: str = "all", missing: bool = False) -> Report:
     report = Report(name="GEN-SOURCE-TOOLS", target=str(root))
 
     if not paths.stack_md_path(root).is_file():
@@ -1237,8 +1279,17 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
         return report
 
     if mode == "infer":
+        if missing:
+            if source or sample or force:
+                report.error("INVALID_ARG", "`--missing` ne se combine ni avec `--source`, ni avec `--from-sample`, "
+                             "ni avec `--force`",
+                             fix="`--missing` n'infère que ce qui n'a pas de schéma ; une source précise se "
+                                 "réinfère avec `--source <id> [--force]`")
+                return report
+            report.data.update(infer_missing(ctx, report))
+            return report
         if not source:
-            report.error("INVALID_ARG", "`--infer` exige `--source <id>`",
+            report.error("INVALID_ARG", "`--infer` exige `--source <id>` ou `--missing`",
                          fix="un schéma s'infère source par source, et se relit source par source")
             return report
         infer_source(ctx, source, report, sample=sample, force=force)
@@ -1261,7 +1312,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     mode = "infer" if args.infer else ("write" if args.write else "check")
     report = run(resolve_root(args), mode=mode, source=args.source, mission=args.mission,
-                 sample=args.sample, src_root=args.src_root, force=args.force, scope=args.scope)
+                 sample=args.sample, src_root=args.src_root, force=args.force, scope=args.scope,
+                 missing=args.missing)
     return finish(report, args)
 
 

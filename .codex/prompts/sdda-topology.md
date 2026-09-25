@@ -224,7 +224,7 @@ Le code, lui, se génère en PHASE 3, dans la couche de `dev-data`
 | Exit | Cause | Action |
 |:-:|---|---|
 | `0` | contrats créés ou déjà présents, aucune dérive (`name`, `Trust`) | → STEP 5 |
-| `1` | `[DATA_SOURCE_SCHEMA_MISSING]` — une source sans schéma figé | **STOP humain** : `gen-source-tools --infer --source {id}`, **relire** le schéma, puis relancer. Un contrat se dérive du schéma figé ; sans lui il n'y a rien à contracter |
+| `1` | `[DATA_SOURCE_SCHEMA_MISSING]` — une source sans schéma figé | **STOP humain** : `gen-source-tools --infer --missing`, **relire** le schéma, puis relancer. Un contrat se dérive du schéma figé ; sans lui il n'y a rien à contracter. Sous `/sdda-full`, ce cas ne se produit plus : son STEP 1.quater infère et fait relire les schémas avant la PHASE 0 — il ne reste que `/sdda-topology` lancé seul, ou une source ajoutée en cours de route |
 | `1` | `[DATA_TOOL_CONTRACT_DRIFT]` | STOP + ERROR : le contrat existant contredit la déclaration de la source |
 
 ---

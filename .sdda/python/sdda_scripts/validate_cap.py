@@ -15,6 +15,7 @@ Rapports : `G1-{capId}.json` par CAP, `G1-{missionId}.json` pour la traçabilit�
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections import defaultdict
@@ -165,6 +166,83 @@ def ac_problems(ac: AcSpec, config: LayeredConfig | None, criticality: str) -> t
     return problems, warnings
 
 
+# --------------------------------------------------------------------------
+# Ce que `qa-evals` renvoyait au bout de 17 minutes, tranché ici à 0 token
+# --------------------------------------------------------------------------
+# Premier run réel (OrderLookup) : trois des quatre renvois `[AC_NOT_EVALUABLE]`
+# de `qa-evals` étaient MÉCANIQUES — un `exact` sur une sortie à texte libre, et
+# deux graders aux `expected` incompatibles sur le même fichier. Ils coûtaient
+# un tour de `qa-evals` (deep), un retour à `po-capabilities` et une reprise du
+# run. Restent à `qa-evals` les renvois de SENS (proxy, vérité terrain qui ne
+# labellise pas), qu'aucun script ne tranche.
+
+#: La forme d'`expected` que chaque grader lit (`sdda_lib/graders/`). Absent : le
+#: grader n'impose rien sur `expected` (`llm-judge` le lit comme référence
+#: facultative, `trajectory` lit `expected_trajectory`, `cost`/`latency` la trace).
+EXPECTED_KIND: dict[str, str] = {
+    "exact": "texte de référence",
+    "semantic-similarity": "texte de référence",
+    "regex": "motif regex",
+    "schema": "objet JSON Schema",
+    "numeric-tolerance": "nombre",
+}
+_EXACT_FIELDS_KIND = "objet champ -> valeur"
+_OUTPUT_INLINE_RE = re.compile(r"^\s*-\s*output\s*:\s*(\{.*\})\s*$", re.M)
+_OUTPUT_BLOCK_RE = re.compile(r"^\s*-\s*output\s*:\s*$\s*```(?:json)?\s*$(.*?)^\s*```", re.M | re.S)
+
+
+def expected_kind(ac: AcSpec) -> str | None:
+    grader = ac.fields.get("grader", "").strip().lower()
+    if grader == "exact" and not markdown_io.is_placeholder(ac.fields.get("fields")):
+        return _EXACT_FIELDS_KIND
+    return EXPECTED_KIND.get(grader)
+
+
+def output_schema(spec: CapSpec) -> dict | None:
+    """Le schéma `- output:` de `## Inputs / Outputs` (sur la ligne ou en bloc ```json), None sinon."""
+    body = markdown_io.section_body(spec.text, "Inputs / Outputs") or ""
+    match = _OUTPUT_BLOCK_RE.search(body) or _OUTPUT_INLINE_RE.search(body)
+    if not match:
+        return None
+    try:
+        schema = json.loads(match.group(1))
+    except ValueError:
+        return None
+    return schema if isinstance(schema, dict) else None
+
+
+def free_text_required(schema: dict | None) -> list[str]:
+    """Champs REQUIS de la sortie en texte libre : `string` sans `enum`, `const`, `pattern` ni `format`.
+
+    Un tel champ n'a pas de valeur attendue — deux réponses justes le
+    formulent différemment. Un grader qui compare la sortie ENTIÈRE ne peut
+    donc rien rendre d'autre que 0.0, même à une réponse parfaite.
+    """
+    if not isinstance(schema, dict) or not isinstance(schema.get("properties"), dict):
+        return []
+    out = []
+    for name in schema.get("required") or []:
+        prop = schema["properties"].get(name)
+        if not isinstance(prop, dict):
+            continue
+        types = prop.get("type")
+        types = [types] if isinstance(types, str) else list(types or [])
+        if "string" in types and not ({"enum", "const", "pattern", "format"} & prop.keys()):
+            out.append(str(name))
+    return out
+
+
+def exact_on_free_text(ac: AcSpec, spec: CapSpec) -> str | None:
+    """Le problème d'un `exact` sans `fields:` sur une sortie à texte libre, None sinon."""
+    if ac.fields.get("grader", "").strip().lower() != "exact" or not markdown_io.is_placeholder(ac.fields.get("fields")):
+        return None
+    free = free_text_required(output_schema(spec))
+    if not free:
+        return None
+    return (f"grader `exact` sans `fields:` compare la sortie ENTIÈRE, dont le texte libre requis {free} : "
+            "une réponse parfaite y rend 0.0")
+
+
 def validate_cap_text(text: str, *, path: Path | None, root: Path | None, config: LayeredConfig | None, mission: MissionSpec | None = None) -> tuple[Report, CapSpec]:
     spec = parse_cap(text, path)
     loc = paths.rel(root, path) if (root and path) else (str(path) if path else "<texte>")
@@ -213,6 +291,11 @@ def validate_cap_text(text: str, *, path: Path | None, root: Path | None, config
                 report.error("CAP_INCOMPLETE", f"{ac.id} déclaré deux fois", "les ids d'AC sont uniques et stables", loc)
             seen.add(ac.id)
             problems, warns = ac_problems(ac, config, spec.criticality)
+            free_text = exact_on_free_text(ac, spec)
+            if free_text:
+                report.error("AC_NOT_EVALUABLE", f"{ac.id} : {free_text}",
+                             "projeter la comparaison sur les champs mesurés (`fields: status, total_amount…`), ou "
+                             "passer au grader `schema` avec un `const` par champ attendu dans chaque item", loc)
             for p in problems:
                 report.error("AC_NOT_EVALUABLE", f"{ac.id} : {p}",
                              "réécrire l'AC : `metric`, `threshold` (ex. `>= 0.85`), `dataset` (workspace/pipeline/datasets/…), `grader` (liste close), `runs` (>= 3, 5 si critical)", loc)
@@ -248,6 +331,38 @@ def validate_traceability(mission: MissionSpec, caps: list[CapSpec], config: Lay
     if gaps:
         report.error("TRACEABILITY_GAP", f"MISSION {mission.id} : {gaps} couvert(s) par aucune CAP",
                      "ajouter l'élément au `## Covers` d'une CAP existante, ou créer la CAP qui le porte", f"workspace/pipeline/missions/{mission.id}.md")
+    mission_loc = f"workspace/pipeline/missions/{mission.id}.md"
+
+    # Un fichier de dataset, une forme d'`expected`. Deux graders qui lisent le
+    # même fichier en attendant l'un un objet JSON Schema, l'autre un motif,
+    # rendent chaque item invalide pour l'un des deux : `[DATASET_ITEM_INVALID]`
+    # sur tout le jeu, découvert par qa-evals après son tour entier.
+    kinds: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for cap in caps:
+        for ac in cap.acs:
+            kind, ds = expected_kind(ac), ac.fields.get("dataset", "").strip()
+            if kind and ds and not markdown_io.is_placeholder(ds):
+                kinds[ds][kind].append(f"{cap.id} {ac.id} ({ac.fields.get('grader', '').strip()})")
+    for ds, by_kind in sorted(kinds.items()):
+        if len(by_kind) > 1:
+            detail = " ; ".join(f"{k} pour {', '.join(v)}" for k, v in sorted(by_kind.items()))
+            report.error("AC_NOT_EVALUABLE", f"`{ds}` est lu avec des `expected` incompatibles — {detail}",
+                         "un fichier de dataset par forme d'`expected` : donner à chaque grader son propre jeu "
+                         "(ex. `…-unknown-schema-v1.jsonl` et `…-unknown-regex-v1.jsonl`)",
+                         f"workspace/pipeline/caps/{mission.number}-*.md")
+
+    # L'objectif chiffré se mesure sur la sortie du système : un `exact` y
+    # compare aussi le texte libre qu'une CAP exige.
+    goal_grader = ((mission.goal.get("Grader") or "").split() or [""])[0].strip("`*,;:.").lower()
+    if goal_grader == "exact":
+        free = sorted({f for cap in caps for f in free_text_required(output_schema(cap))})
+        if free:
+            report.error("AC_NOT_EVALUABLE",
+                         f"MISSION {mission.id} : Quantified Goal `Grader: exact` compare la sortie ENTIÈRE, dont le "
+                         f"texte libre requis {free} — une réponse parfaite y rend 0.0",
+                         "passer l'objectif au grader `schema` (un `const` par champ mesuré dans chaque item du holdout)",
+                         mission_loc)
+
     n = len(caps)
     hard = config.get_int("CapGranularityHardCap", 15) if config else 15
     warn_at = config.get_int("CapGranularityWarnAt", 8) if config else 8
