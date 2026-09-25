@@ -184,7 +184,8 @@ production or CI run.
 
 ## 3. Review stages — two stages, then adversarial
 
-Inherited from SDD_Pro (`AuditorBatchMode: two-stage`), adapted:
+Inherited from SDD_Pro's two-stage review, adapted — the staging is the
+sequence of `/sdda-review`, not a configuration key:
 
 ```
 Stage A   review-spec  (ALONE)

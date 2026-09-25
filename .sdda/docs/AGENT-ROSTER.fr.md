@@ -187,7 +187,8 @@ sur un run de production ou de CI.
 
 ## 3. Étage de revue — deux étages puis adversarial
 
-Hérité de SDD_Pro (`AuditorBatchMode: two-stage`), adapté :
+Hérité de la revue en deux étages de SDD_Pro, adapté — l'étagement est le
+déroulé de `/sdda-review`, pas une clé de configuration :
 
 ```
 Étage A   review-spec  (SEUL)

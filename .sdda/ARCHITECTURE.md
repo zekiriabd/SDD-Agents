@@ -146,7 +146,7 @@ SDD-Agents/
 │   ├── sdda.py                        # launcher: `python .sdda/sdda.py {cmd}` —
 │   │                                  #   works from a bare clone, no pip install
 │   └── python/                        # deterministic 0-token tooling
-│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->79<!--/sdda:count--> subcommands; registry
+│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->80<!--/sdda:count--> subcommands; registry
 │       │                              #   DERIVED from disk, also read by the scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (including judge_clients: the real LLM judge)
@@ -306,7 +306,7 @@ refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`) instead of being swallowed.
 
 ### 2.ante One entry point for the tooling
 
-The <!--sdda:count subcommands-->79<!--/sdda:count--> deterministic subcommands are called in a single form:
+The <!--sdda:count subcommands-->80<!--/sdda:count--> deterministic subcommands are called in a single form:
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # from a bare clone
@@ -489,7 +489,7 @@ has an on-disk enforcer declared in `INVARIANTS.yml`.
 |---|---|---|---|
 | G0 | **MISSION** | quantified goal present, budget declared (cost/latency/tokens), ground truth identified, no residual `<à préciser>` | `[MISSION_INCOMPLETE]` |
 | G1 | **CAP** | every AC names metric + threshold + dataset; every MISSION element covered by >= 1 CAP | `[AC_NOT_EVALUABLE]`, `[TRACEABILITY_GAP]` |
-| G2 | **TOPOLOGY** | pattern justified + simpler alternative explicitly ruled out; estimated budget <= declared budget; every loop bounded; every agent has a contract; graph reachable with no unbounded cycle; **parts** `packaging`, `architecture`, `adr` | `[TOPOLOGY_UNJUSTIFIED]`, `[BUDGET_EXCEEDED_ESTIMATE]`, `[UNBOUNDED_LOOP]`, `[TOPOLOGY_CONTRACT_MISSING]`, `[ADR_MISSING]` |
+| G2 | **TOPOLOGY** | architecture declared complete for the active pattern (the simpler alternative ruled out stays advisory: P7, the architect decides); estimated budget <= declared budget; every loop bounded; every agent has a contract; graph reachable with no unbounded cycle; **parts** `packaging`, `architecture`, `adr` | `[ARCH_SPEC_INCOMPLETE]`, `[BUDGET_EXCEEDED_ESTIMATE]`, `[UNBOUNDED_LOOP]`, `[TOPOLOGY_CONTRACT_MISSING]`, `[ADR_MISSING]` |
 | G3 | **TOOL** | valid schema; green contract tests (happy + every declared error + timeout + auth failure); live connectivity verified; side-effect class declared; safety strategy present if destructive | `[TOOL_CONTRACT_FAILED]`, `[SIDE_EFFECT_UNDECLARED]` |
 | G4 | **RETRIEVAL** | golden set present (>= n queries); recall@k, nDCG, groundedness, resolved-citation rate above thresholds | `[RETRIEVAL_BELOW_THRESHOLD]` |
 | G5 | **AGENT** | every agent evaluated **in isolation** (mocked tools, frozen retrieval) against its CAP ACs, over k runs; **parts** `calibration` (a red calibration blocks), `prompts` (pinned hash of every prompt the IR expects), `ownership` | `[AGENT_EVAL_FAILED]`, `[PROMPT_MISSING]`, `[PROMPT_HASH_MISMATCH]` |
@@ -634,7 +634,11 @@ the tool call at the moment it happens. Codex CLI and Gemini CLI are
 **experimental**: their facades compile, no conformance run has validated them,
 and they have **no blocking gate at runtime** — what the hooks enforce is
 deferred to CI and the deterministic scripts. The root `AGENTS.md` and
-`GEMINI.md` files are generated pointers to their facade. Details:
+`GEMINI.md` files are generated pointers to their facade. A fourth harness,
+`antigravity`, is declared in `capability-matrix.yml` as `planned`: it shares
+Gemini CLI's adapter and `.gemini/` facade, is compiled only on explicit request
+(`--harness antigravity`), and carries the same reserve — experimental, no
+blocking gate at runtime. Details:
 [docs/MULTI-HARNESS.md](docs/MULTI-HARNESS.md).
 
 **Agents declare a tier** (`fast` / `balanced` / `deep`), never a model name.
@@ -794,7 +798,7 @@ failing tools.
 
 Inherited from SDD_Pro (193 classes): every ERROR block carries a `[CLASS]` code
 in its `CAUSE:`, so that hooks, retry loops and dashboards classify without
-interpreting text. SDD_Agents carries **<!--sdda:count classes-->444<!--/sdda:count-->**, a closed list regenerated from
+interpreting text. SDD_Agents carries **<!--sdda:count classes-->439<!--/sdda:count-->**, a closed list regenerated from
 the real emitters by `sdda_admin/sync_error_registry.py` — writing the list by
 hand would let it drift both ways (`rules/error-classification.md §6`). The
 figure above is itself regenerated (`sync-counters`), not copied.

@@ -96,7 +96,6 @@ RetrievalK: 8
 RetrievalNdcgMin: 0.70
 RetrievalContextPrecisionMin: 0.60
 GroundednessMin: 0.85
-AnswerRelevanceMin: 0.80
 CitationResolveRateMin: 0.98
 RetrievalGoldenMinQueries: 50
 
@@ -110,44 +109,39 @@ OrchestrationReviewMode: full
 RagQualityMode: full                  # auto-skip si pas de RAG
 AdversarialMode: full
 
-# AgentSafetyMode: off est REFUSÉ quand un run est marqué production
-# (SDDA_RUN_PROFILE=production) -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION].
-# La raison est simple : la surface d'attaque d'un système agentic, c'est
-# chaque document qu'il récupère. Débrayer la revue sécurité, c'est livrer
-# sans avoir regardé.
+# AgentSafetyMode: off est REFUSÉ sur un run de production — SDDA_ENV=production
+# ou ci, ou CI=true, la même lecture que `/sdda-full --no-review` — :
+# validate_safety_gate.py émet [SAFETY_REVIEW_DISABLED_IN_PRODUCTION] et exige
+# le rapport de review-safety. La raison est simple : la surface d'attaque d'un
+# système agentic, c'est chaque document qu'il récupère. Débrayer la revue
+# sécurité, c'est livrer sans avoir regardé.
 AgentSafetyRequiredInProduction: true
 
-# Étagement de la revue (hérité SDD_Pro two-stage)
-AuditorBatchMode: three-stage         # three-stage | parallel
-                                      # A: spec-compliance seul
-                                      # B: safety ∥ cost ∥ orchestration ∥ rag
-                                      # C: adversarial sur système vivant
+# L'étagement de la revue (A spec-compliance seul ; B safety ∥ cost ∥
+# orchestration ∥ rag ; C adversarial sur système vivant) n'est pas une clé :
+# c'est le déroulé de /sdda-review, et `AuditorBatchMode` n'était lu par personne.
 
 # Seuils de blocage : info | minor | moderate | serious | critical
+# Seuls les reviewers dont un script applique le seuil en portent un :
+# spec-compliance (review-spec), agent-safety et orchestration
+# (validate_safety_gate.py), adversarial (review-adversarial). Les rapports de
+# review-cost et review-rag sont lus en revue, sans seuil de blocage propre.
 SpecComplianceFailOn: serious
 AgentSafetyFailOn: critical
-CostLatencyFailOn: serious
 OrchestrationFailOn: serious
-RagQualityFailOn: serious
 AdversarialFailOn: critical
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Gates — mode de chacune : strict | warn | off
+# Contournements — il n'existe AUCUN mode par gate
 # ═══════════════════════════════════════════════════════════════════════════
-# `off` sur une gate ne la contourne pas silencieusement : elle est inscrite
-# dans workspace/.sys/.audit/bypasses.jsonl et apparaît dans le rapport final.
-MissionGate: strict          # G0
-CapGate: strict              # G1
-TopologyGate: strict         # G2
-ToolGate: strict             # G3
-RetrievalGate: strict        # G4
-AgentGate: strict            # G5
-OrchGate: strict             # G6
-SafetyGate: strict           # G7
-AcceptanceGate: strict       # G8
-
-# Cumul de bypasses — hérité de SDD_Pro (preflight_force_cumul)
-MaxBypassesPerRun: 1                  # >= 2 bypasses sur un même run -> bloquant
+# Les gates n'ont pas de clé `strict | warn | off` : un contournement est une
+# env var nominative (SDDA_BYPASS_BUDGET_ESTIMATE, SDDA_BYPASS_TOOL_GATE,
+# SDDA_BYPASS_RETRIEVAL_GATE) avec SDDA_BYPASS_REASON, ou `--force` sur les
+# gates jaunes — chacun journalisé dans workspace/.sys/.audit/bypasses.jsonl
+# (R5). G0, G1, G5, G6 et G8 n'en ont aucun.
+# Cumul — hérité de SDD_Pro (preflight_force_cumul) : au-delà de ce nombre sur
+# un même run -> [FORCE_CUMUL_REJECTED], sauf SDDA_ALLOW_FORCE=1, lui-même tracé.
+MaxBypassesPerRun: 1
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Granularité de la spécification
@@ -158,15 +152,19 @@ CapGranularityHardCap: 15
 
 # Simplicité topologique (P7)
 MaxAgentsWarnAt: 4                    # au-delà, justification renforcée exigée
-MaxNestingDepth: 2                    # imbrication de patterns — dur
-TopologyJustificationRequired: true   # la section « Alternative écartée » est obligatoire
+# L'imbrication de patterns est bornée à 2 par ORCHESTRATION-PATTERNS.md §3 et
+# la section « Alternative plus simple écartée » est exigée par validate_topology
+# — inconditionnellement. Ni l'un ni l'autre n'est un réglage : `MaxNestingDepth`
+# et `TopologyJustificationRequired` n'étaient lus par personne.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Prompts
 # ═══════════════════════════════════════════════════════════════════════════
-PromptMaxTokens: 4000                 # au-delà, WARN : un prompt long dilue
-PromptInlineForbidden: true           # invariant prompts-are-files (P1)
-PromptHashPinning: true               # invariant eval-baseline-hash-pinned (P10)
+PromptMaxTokens: 4000                 # au-delà, dev-prompt refuse : un prompt long dilue
+# « Aucun prompt inline » (P1, lint_prompts + postflight_no_inline_prompt) et
+# « le hash du prompt est épinglé » (P10, eval_pinning) sont des INVARIANTS,
+# pas des clés : `PromptInlineForbidden` et `PromptHashPinning` ne pouvaient
+# être mis à `false` par personne — ils ne sont donc plus déclarés ici.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Observabilité
@@ -178,22 +176,16 @@ CostTrackingEnabled: true
 TraceRequiredPerRun: true             # invariant trace-emitted-per-run
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Modèles — sélection de tier
+# Inférence locale (RuntimeProvider: local-ollama)
 # ═══════════════════════════════════════════════════════════════════════════
-BuildModelMode: static                # static | dynamic
-                                      # dynamic : scorer déterministe par work-item,
-                                      # CLAMPÉ par tier_floor/tier_ceiling de
-                                      # agent-bounds.yaml (bornes non surchargeables)
-
-# Inférence locale (provider local-ollama, vLLM…) : le prix par token est nul,
-# mais le coût ne l'est pas. Sans cette clé, `estimate_budget.py` verrait un
-# budget gratuit et la TOPOLOGY GATE laisserait passer n'importe quelle
-# topologie — un faux vert budgétaire, exactement ce que P6 refuse.
-# 0 = ne pas modéliser (assumé, et le rapport de budget le dit).
+# Le prix par token est nul, mais le coût ne l'est pas. Sans ces clés,
+# `estimate_budget.py` verrait un budget gratuit et la TOPOLOGY GATE laisserait
+# passer n'importe quelle topologie — un faux vert budgétaire, exactement ce que
+# P6 refuse. Chaque appel est chiffré en tokens / débit x tarif horaire.
+# 0 = ne pas modéliser : coût local à zéro ASSUMÉ, et le rapport de budget le
+# dit ([BUDGET_LOCAL_COMPUTE_UNMODELLED], WARN).
 LocalComputeCostPerHourUsd: 0.0
-LocalComputeThroughputTokensPerSec: 0  # 0 = inconnu -> la latence estimée est
-                                       # marquée « non modélisable » plutôt
-                                       # qu'affichée à zéro
+LocalComputeThroughputTokensPerSec: 0  # tokens/s (entrée + sortie) ; 0 = inconnu
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Livrable
@@ -295,13 +287,10 @@ ApiAuthMode: none                     # none | api-key | oauth2 | azure-ad | mtl
 # lit. Les dupliquer donnerait deux sources de vérité pour la même valeur, et
 # c'est toujours celle que personne ne relit qui finit par gouverner.
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Reprise / idempotence
-# ═══════════════════════════════════════════════════════════════════════════
-CheckpointMode: "on"                  # on | off — reprise après interruption
-ResumeReusesIdentifiers: true         # pas d'orphelins, pas de doublons
-PreserveHumanEdits: true              # empreinte du contenu généré ; un fichier
-                                      # édité à la main n'est jamais écrasé
+# La reprise (`/sdda-full {n} --resume`, lignée `resumedFrom`, identifiants
+# réutilisés à la granularité de l'item) est le comportement de sdda_state, pas
+# un réglage : `CheckpointMode`, `ResumeReusesIdentifiers` et
+# `PreserveHumanEdits` n'étaient lus par personne, et ne sont plus déclarés.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Combos de stack
@@ -321,6 +310,8 @@ StackComboCheck: strict               # strict | warn | off
 # ═══════════════════════════════════════════════════════════════════════════
 # Si la couche team les a durcies, le projet peut durcir davantage mais
 # jamais relâcher. Violation -> [CONFIG_SECURITY_DOWNGRADE].
+# Le sens de « plus dur » est défini clé par clé dans layered_config.is_downgrade
+# — pour ApiAuthMode : none < api-key < oauth2 = azure-ad = mtls.
 security_down_protected:
   - ApiAuthMode
   - ApiContractFirst
@@ -328,7 +319,6 @@ security_down_protected:
   - AgentSafetyMode
   - AgentSafetyRequiredInProduction
   - AdversarialFailOn
-  - SafetyGate
   - EvalRuns
   - HoldoutDisjointCheck
   - GroundednessMin
@@ -336,5 +326,3 @@ security_down_protected:
   - CitationResolveRateMin
   - JudgeCalibrationMinKappa
   - MaxBypassesPerRun
-  - PromptInlineForbidden
-  - TopologyJustificationRequired

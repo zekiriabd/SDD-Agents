@@ -72,7 +72,7 @@ and [../registry/compatibility.matrix.json](../registry/compatibility.matrix.jso
 | The <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents and their internal orchestration | [AGENT-ROSTER.md](AGENT-ROSTER.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Compilation to Claude Code / Codex / Gemini CLI | [MULTI-HARNESS.md](MULTI-HARNESS.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Testing and evaluation — the L0→L9 pyramid, *a test asserts, an eval scores* | [TESTING-AND-EVAL.md](TESTING-AND-EVAL.md) | 🇬🇧 EN · 🇫🇷 FR |
-| The <!--sdda:count invariants-->21<!--/sdda:count--> load-bearing invariants and their enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | machine file |
+| The <!--sdda:count invariants-->22<!--/sdda:count--> load-bearing invariants and their enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | machine file |
 | The deterministic Python layer | [../python/README.md](../python/README.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Test fixtures | [../python/tests/fixtures/README.md](../python/tests/fixtures/README.md) | 🇬🇧 EN · 🇫🇷 FR |
 

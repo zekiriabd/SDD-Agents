@@ -113,8 +113,11 @@ marque ce qui est élidé) :
       "skills": ["1-explain-invoice-line"],
       "retrievers": ["1-contracts-index"],
       "memoryScopes": { "read": ["conversation"], "write": [] },
-      "inputSchema":  { "$ref": "#/schemas/BillingRequest" },
-      "outputSchema": { "$ref": "#/schemas/BillingAnswer" },
+      "inputSchema":  { "type": "object", "required": ["question"],
+                        "properties": { "question": { "type": "string" } } },
+      "outputSchema": { "type": "object", "required": ["answer", "citations"],
+                        "properties": { "answer": { "type": "string" },
+                                        "citations": { "type": "array", "items": { "type": "string" } } } },
       "bounds": {
         "maxIterations": 8, "maxToolCalls": 15,
         "maxDelegationDepth": 1, "timeoutSec": 60, "budgetUsd": 0.08

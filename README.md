@@ -50,7 +50,7 @@ implied.
 | **.NET** | ✅ | Microsoft Agent Framework | ❌ **no sheet** | cli-dotnet · aspnet-minimal | **no RAG** |
 | **TypeScript** | ✅ sheet | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **sheets only** — no bootstrap combo (eval/observability are `[python]`), no skeleton generator |
 | **Kotlin** | ✅ sheet | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **sheets only** — same reserve; Maven pins unverified |
-| **Java** | ❌ | — | ❌ | ❌ | not planned |
+| **Java** | ❌ | — | ❌ | ❌ | **untested, no sheet** — `lang/java.md` and `serving/cli-java.md` are announced in `STACK.md.template` but absent from disk; the matrix lists `java: untested` |
 
 Two catalogue families are inherited from SDD_Pro since 2026-09-23: `archi/`
 (mvc · ddd · microservice — the architecture of the application **shell**,
@@ -78,6 +78,7 @@ component is `untested` until a measured run has taken place (Lot 6).
 | **Claude Code** | **supported** — the reference harness | yes — hooks in `.claude/settings.json` refuse the tool call |
 | **Codex CLI** | **experimental** — compiled to `.codex/`, never validated by a conformance run | **no** — deferred to CI and the deterministic scripts |
 | **Gemini CLI** | **experimental** — compiled to `.gemini/`, same reserve | **no** — same |
+| **Antigravity** | **planned** — shares Gemini CLI's adapter and `.gemini/` facade, built only on explicit request (`--harness antigravity`) | **no** — same |
 
 Under Codex or Gemini CLI nothing stops an out-of-ownership write or an agent
 wired before its TOOL GATE at the moment it happens; CI catches it later. The
@@ -339,7 +340,7 @@ its available languages.
 | [DATA-SOURCES.md](.sdda/docs/DATA-SOURCES.md) | Data sources outside a database — registry, connectors, secrets |
 | [MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md) | Compilation to Claude Code / Codex / Gemini CLI |
 | [TESTING-AND-EVAL.md](.sdda/docs/TESTING-AND-EVAL.md) | The L0→L9 pyramid |
-| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | The <!--sdda:count invariants-->21<!--/sdda:count--> load-bearing contracts + their enforcer |
+| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | The <!--sdda:count invariants-->22<!--/sdda:count--> load-bearing contracts + their enforcer |
 | [ROADMAP.md](.sdda/docs/ROADMAP.md) | Build order + the MVP |
 | [PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md) | The deterministic backlog, generated — who asks for what |
 | [python/README.md](.sdda/python/README.md) | The deterministic Python layer |
@@ -384,12 +385,12 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 
 **Design phase.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commands,
-<!--sdda:count invariants-->21<!--/sdda:count--> invariants,
+<!--sdda:count invariants-->22<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->45<!--/sdda:count--> stack sheets,
-<!--sdda:count classes-->444<!--/sdda:count--> error classes,
+<!--sdda:count classes-->439<!--/sdda:count--> error classes,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks and
-<!--sdda:count subcommands-->79<!--/sdda:count--> deterministic subcommands exist on disk and
-are tested (<!--sdda:count tests-->1538<!--/sdda:count--> test functions). No script
+<!--sdda:count subcommands-->80<!--/sdda:count--> deterministic subcommands exist on disk and
+are tested (<!--sdda:count tests-->1616<!--/sdda:count--> test functions). No script
 cited by a prompt is missing ([PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md)
 is empty). What does **not** exist yet is the proof: no pipeline has run end to
 end on a real product, so no combination is validated. That is Lot 6 of the

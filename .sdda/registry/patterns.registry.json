@@ -29,8 +29,8 @@
       "compositionRules": {
         "nestingAllowed": true,
         "maxNestingDepth": 2,
-        "rationale": "Au-delà de 2, plus personne ne peut raisonner sur le coût ni sur les trajectoires — et une architecture sur laquelle on ne peut pas raisonner ne peut pas être évaluée.",
-        "configKey": "MaxNestingDepth"
+        "rationale": "Au-delà de 2, plus personne ne peut raisonner sur le coût ni sur les trajectoires — et une architecture sur laquelle on ne peut pas raisonner ne peut pas être évaluée. Borne DURE, pas un réglage : aucune clé de configuration ne la déplace.",
+        "configKey": null
       },
       "selectionMatrix": {
         "description": "Transcription de ORCHESTRATION-PATTERNS.md §2. Valeurs : suited (●), possible (◐), unsuited (○).",
@@ -201,7 +201,7 @@
           "id": "one-agent-per-tool",
           "label": "Un agent par outil",
           "why": "Confusion entre « séparation des responsabilités » et topologie. Un outil est un outil",
-          "errorClass": "TOPOLOGY_UNJUSTIFIED"
+          "errorClass": "TOPOLOGY_SIMPLICITY_ADVISORY"
         },
         {
           "id": "supervisor-single-specialist",
@@ -393,7 +393,8 @@
             "id": "answer_relevance",
             "measures": "la réponse répond-elle à la question posée",
             "defaultThreshold": 0.8,
-            "configKey": "AnswerRelevanceMin",
+            "configKey": null,
+            "note": "Aucune clé de Project Config : run_retrieval_eval.py ne mesure pas cette métrique en G4 — elle se juge en G5/G6 par les AC des CAPs. `AnswerRelevanceMin` était déclarée et lue par personne.",
             "deterministic": false,
             "requiresCalibratedJudge": true
           },

@@ -213,6 +213,54 @@ A release is cut by pushing a `v*` tag whose version equals
   gate parts or the hooks.
 - `PLANNED-SCRIPTS.md` listed callers with the OS path separator; it is now
   POSIX on every platform.
+- Audit of 2026-09-25, first real `poc` run (MISSION 1 OrderLookup):
+  - Generated frontmatter was written unquoted: a description holding
+    `Profile: poc` was invalid YAML, and Claude Code silently dropped `dev-app`
+    and `review-rag` (`Agent type not found`, restart or not) and showed seven
+    commands without description. `harness_build.yaml_scalar` now leaves only a
+    bare identifier unquoted; `framework-smoke facades.frontmatter_strict` and a
+    stdlib test (no PyYAML needed) check every facade.
+  - `compiledFrom.contractHashes` hashed contracts raw while `compute-status`
+    rewrites their `Status:`: every gate transition made the IR `[IR_STALE]`.
+    Contracts now use the spec hash, and an IR compiled with raw hashes stays
+    fresh while its contracts are unchanged (no recompile forced on existing
+    projects).
+  - The `poc` path dead-ended at PHASE 6: `/sdda-eval --run-only` required G6,
+    which `poc` reports without blocking; it now requires G2 under `poc`.
+  - Three agent sheets called `sdda_lib/hashing.py` as a CLI, which it is not:
+    new `hash-file` subcommand (`--file [--spec] [--short]`,
+    `--index DIR --manifest`, the missing `indexHash` producer).
+  - `dataAccess[]` was never compiled into the IR, so the envelope checks
+    iterated over nothing: compiled from `{n}-data-*.tool.md` `## Data Access`,
+    failing on any missing envelope key.
+  - Gate tables cited classes no script emitted: G6 never checked measured
+    latency (`[LATENCY_EXCEEDED_MEASURED]` now emitted by `eval_runner`), nor
+    datasets secrets/PII (`[SECRET_LEAK]`, `[PII_IN_DATASET]`), unreachable
+    live tools (`[TOOL_LIVE_UNREACHABLE]`), tenant breach (`[TENANT_BREACH]`);
+    twelve prose classes renamed to what the scripts emit, and
+    `framework-smoke gates.classes_emitted` fails on a "Classe si KO" class
+    without a Python emitter.
+  - `scan-secrets` flagged `src/{App}/.env`, the designated location of the
+    values, and code expressions such as `api_key=settings.secret(...)`.
+  - Gate reports are written atomically; `runs.jsonl` and `bypasses.jsonl` are
+    appended under lock (`runtime_io.append_line`).
+  - `migrate-workspace` on a current tree whose `workspace.json` was deleted
+    replayed v0 → v6 and recreated empty legacy directories; the tree is now
+    recognised and dated (`[WORKSPACE_VERSION_INFERRED]`).
+  - Hooks run through the launcher executed on `--help` and ignored unknown
+    options (`[HOOK_ARG_UNKNOWN]` in strict mode); an ownership snapshot that
+    cannot replace the previous one on Windows fails loudly
+    (`[OWNERSHIP_SNAPSHOT_FAILED]`); every `--help` works under cp1252.
+  - Dead Project Config keys wired or removed (the nine `*Gate` modes and
+    twelve others); `x-readBy` is now checked recursively on every schema
+    property; `MaxBypassesPerRun`, `LocalCompute*`,
+    `AgentSafetyRequiredInProduction` are enforced; `ApiAuthMode` and
+    `ApiContractFirst` are security-down protected.
+  - Stale prompt references fixed: reviewer report paths, gate report names,
+    `/sdda-build` redirections to unread files, `RESUME_TARGET` undefined
+    without `--resume`, the prepass that stopped before loading its inputs,
+    `architect-topology` never asked for agent contracts, `loader.yml` reads
+    aligned with the sheets.
 
 ### Security
 
@@ -248,6 +296,11 @@ A release is cut by pushing a `v*` tag whose version equals
   `test_promote_adversarial_findings.py::test_successful_attacks_are_appended_with_their_provenance`
   fails: the fixture is checked out with CRLF line endings and the test strips
   only `\n`. CI (LF checkout) is not affected.
+- `mypy` outside `sdda_lib` (scripts and tests, not in CI) reports 184 errors
+  in 49 files.
+- `.gitattributes` pins `eol=lf` for `*.jsonl` only; `.py` and `.md` get CRLF
+  warnings on Windows checkouts. Renormalising is a repository-wide diff, left
+  to a dedicated commit.
 
 ## [0.1.0] - 2026-09-24
 

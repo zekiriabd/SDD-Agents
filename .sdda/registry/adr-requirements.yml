@@ -28,9 +28,16 @@
 #   source    documents du framework d'où vient la règle — elle n'est pas inventée ici
 #   why       ce que l'ADR doit rendre lisible en revue
 #
-# Cohérence vérifiée par tests/test_adr_requirements.py : toute entrée
+# Cohérence vérifiée par tests/test_stack_governance.py : toute entrée
 # `adr_required: true` de `architecture-requirements.yml` et tout composant de
 # `compatibility.matrix.json refusedByDefault.components` figure ici.
+#
+# Une exigence n'entre ici que si la décision est ATTEIGNABLE : le pattern
+# `network` (refused-by-default) n'a ni fiche `orchestration/network.md` ni
+# valeur dans l'enum de ir.schema.json — validate_topology le refuse
+# ([TOPOLOGY_PATTERN_REFUSED]) et aucun ADR ne le débloque. Une règle d'ADR
+# sur une valeur que rien ne peut activer est une promesse que personne ne
+# vérifiera jamais.
 
 requirements:
   - id: api-contract-divergence
@@ -87,10 +94,3 @@ requirements:
     values: ["off"]
     source: config.base.yml StackComboCheck · registry/compatibility.matrix.json
     why: couper la reconnaissance des combinaisons, c'est renoncer à savoir si la stack activée a jamais été pensée d'un bloc
-
-  - id: orchestration-network
-    key: orchestration
-    section: Active Orchestration Pattern
-    values: [network]
-    source: registry/architecture-requirements.yml adr_required · registry/patterns.registry.json refused-by-default · ORCHESTRATION-PATTERNS.md
-    why: un réseau libre rend trajectoires et coût non bornables par construction — l'ADR démontre qu'aucun graph ne convient

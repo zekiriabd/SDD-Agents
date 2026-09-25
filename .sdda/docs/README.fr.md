@@ -75,7 +75,7 @@ et [../registry/compatibility.matrix.json](../registry/compatibility.matrix.json
 | Les <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents et leur orchestration interne | [AGENT-ROSTER.fr.md](AGENT-ROSTER.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Compilation vers Claude Code / Codex / Gemini CLI | [MULTI-HARNESS.fr.md](MULTI-HARNESS.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Tests et évaluation — la pyramide L0→L9, *un test affirme, une eval note* | [TESTING-AND-EVAL.fr.md](TESTING-AND-EVAL.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
-| Les <!--sdda:count invariants-->21<!--/sdda:count--> invariants porteurs et leurs enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | fichier machine |
+| Les <!--sdda:count invariants-->22<!--/sdda:count--> invariants porteurs et leurs enforcers | [../INVARIANTS.yml](../INVARIANTS.yml) | fichier machine |
 | La couche Python déterministe | [../python/README.fr.md](../python/README.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 | Fixtures de test | [../python/tests/fixtures/README.fr.md](../python/tests/fixtures/README.fr.md) | 🇬🇧 EN · 🇫🇷 FR |
 

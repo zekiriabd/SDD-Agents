@@ -12,9 +12,10 @@ Usage :
     python bootstrap.py                      # interactif
     python bootstrap.py --combo c1           # combo validée, sans question
     python bootstrap.py --combo c1 --auto    # CI : aucune interaction
+    python bootstrap.py --combo c1 --profile poc   # prototype : jeux réduits
 
 Variables d'environnement pour le mode CI :
-    SDDA_APP_NAME, SDDA_COMBO
+    SDDA_APP_NAME, SDDA_COMBO, SDDA_PROFILE
 
 Principe : ce script ne fait AUCUN appel LLM et n'installe rien sans le dire.
 Il pose peu de questions, et chacune a une conséquence architecturale réelle.
@@ -202,6 +203,19 @@ else:
 # COMBINAISON préfabriquée qui était incohérente, pas les fiches.
 # --------------------------------------------------------------------------
 
+#: Les profils du projet — l'enum `Profile` de templates/project-config.schema.json,
+#: dans le même ordre. `poc` : les défauts de `.sdda/profiles/poc.yml` (jeux
+#: réduits) ne s'appliquent que si STACK.md ne les recouvre pas ; le bootstrap
+#: omet donc les `*SetMinItems` de `## Active Eval Stack` pour ce profil, au
+#: lieu de demander à l'utilisateur de les retirer à la main.
+PROFILES: tuple[str, ...] = ("poc", "standard", "production")
+DEFAULT_PROFILE = "standard"
+#: Les clés que le gabarit écrit sous `## Active Eval Stack` et que le profil
+#: `poc` veut voir absentes.
+PROFILE_DEFAULTED_KEYS: tuple[str, ...] = (
+    "GoldenSetMinItems", "HoldoutSetMinItems", "AdversarialSetMinItems", "CalibrationSetMinItems",
+)
+
 STATUS_BADGE = {
     "validated": "🟢 validée de bout en bout",
     "bench-validated": "🟢 runtime mesuré",
@@ -337,8 +351,43 @@ def preflight() -> None:
 # ---------------------------------------------------------------------------
 # Génération
 # ---------------------------------------------------------------------------
-def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str]) -> str:
-    text = TEMPLATE.read_text(encoding="utf-8")
+def apply_profile(text: str, profile: str) -> str:
+    """`Profile:` écrit, et pour `poc` les `*SetMinItems` de `## Active Eval Stack` omis.
+
+    Le profil est une couche de DÉFAUTS sous la couche projet : une valeur
+    écrite dans STACK.md l'emporte toujours. Laisser `GoldenSetMinItems: 50`
+    dans un STACK.md `poc` ferait exiger 50 items à un prototype qui en
+    déclare 15 — et l'utilisateur ne verrait la contradiction qu'au premier
+    `validate-datasets`.
+    """
+    if profile not in PROFILES:
+        fail(
+            "profil inconnu",
+            f"[BOOTSTRAP_UNKNOWN_PROFILE] « {profile} » n'est pas dans {', '.join(PROFILES)}",
+            "choisir --profile poc | standard | production",
+        )
+    anchor = f"Profile: {DEFAULT_PROFILE}"
+    if anchor not in text:
+        fail(
+            "template sans ligne Profile",
+            f"[BOOTSTRAP_TEMPLATE_UNRESOLVED] « {anchor} » absent de STACK.md.template",
+            "signaler ce bug : STACK.md.template et bootstrap.py ont divergé",
+        )
+    text = text.replace(anchor, f"Profile: {profile}", 1)
+    if profile != "poc":
+        return text
+    kept, section = [], None
+    for line in text.splitlines(keepends=True):
+        if line.startswith("## "):
+            section = line[3:].strip()
+        if section == "Active Eval Stack" and line.split(":", 1)[0].strip() in PROFILE_DEFAULTED_KEYS:
+            continue        # le profil poc fournit la valeur (.sdda/profiles/poc.yml)
+        kept.append(line)
+    return "".join(kept)
+
+
+def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str], profile: str = DEFAULT_PROFILE) -> str:
+    text = apply_profile(TEMPLATE.read_text(encoding="utf-8"), profile)
 
     framework_lines = "\n".join(
         f" - .sdda/stacks/framework/{f}.md" for f in combo.frameworks
@@ -625,9 +674,19 @@ def main() -> int:
     parser.add_argument("--app-name", help="nom du système (PascalCase)")
     parser.add_argument("--auto", action="store_true", help="aucune interaction (CI)")
     parser.add_argument("--force", action="store_true", help="écraser un STACK.md existant")
+    parser.add_argument("--profile", choices=PROFILES, default=None,
+                        help="profil du projet (défaut : standard ; `poc` omet les *SetMinItems pour que "
+                             ".sdda/profiles/poc.yml s'applique) ; SDDA_PROFILE en mode CI")
     args = parser.parse_args()
 
     preflight()
+    profile = args.profile or os.environ.get("SDDA_PROFILE", "").strip() or DEFAULT_PROFILE
+    if profile not in PROFILES:
+        fail(
+            "profil inconnu",
+            f"[BOOTSTRAP_UNKNOWN_PROFILE] SDDA_PROFILE=« {profile} » n'est pas dans {', '.join(PROFILES)}",
+            "choisir poc | standard | production",
+        )
 
     stack_path = WORKSPACE / "stack" / "STACK.md"
     if stack_path.is_file() and not args.force:
@@ -678,8 +737,8 @@ def main() -> int:
         shutil.copy2(stack_path, backup)
         step(f"sauvegarde de l'ancien STACK.md -> {backup.name}")
 
-    stack_path.write_text(build_stack_md(app_name, combo, secrets), encoding="utf-8")
-    step("workspace/stack/STACK.md  (versionné — noms de variables seulement)")
+    stack_path.write_text(build_stack_md(app_name, combo, secrets, profile), encoding="utf-8")
+    step(f"workspace/stack/STACK.md  (versionné — noms de variables seulement ; Profile: {profile})")
 
     write_env(app_name, combo, secrets)
     step(f"workspace/assets/.env -> workspace/src/{app_name}/.env  (gitignoré — les valeurs ; complété, jamais réécrit)")
@@ -698,7 +757,7 @@ def main() -> int:
 
     say()
     say("=" * 74)
-    say(f"  {app_name} initialisé — {combo.label}")
+    say(f"  {app_name} initialisé — {combo.label} — profil {profile}")
     say("=" * 74)
     say()
     say("  Étapes suivantes")

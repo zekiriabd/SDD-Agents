@@ -22,8 +22,11 @@
 # chaque enforcer listé existe sur disque.
 
 schema_version: 1
-status: design-phase-0        # enforcers à implémenter — cf. docs/ROADMAP.md
-total: 21
+status: enforced              # chaque enforcer listé existe sur disque et, pour
+                              # les hooks, est câblé (framework-smoke
+                              # invariants.enforcers + hooks.reachable). Ce qui
+                              # reste planifié vit dans docs/ROADMAP.md, pas ici.
+total: 22
 
 invariants:
 
@@ -101,7 +104,7 @@ invariants:
       - .sdda/python/sdda_scripts/validate_architecture.py
       - .sdda/registry/architecture-requirements.yml
       - .sdda/python/sdda_scripts/validate_topology.py
-      - .sdda/agents/architect-topology.md
+      - .sdda/python/sdda_scripts/roster.py
     bypasses: []
 
   - id: no-unbounded-loop
@@ -166,6 +169,28 @@ invariants:
       - .sdda/python/sdda_scripts/estimate_budget.py
     bypasses:
       - "Env: SDDA_BYPASS_BUDGET_ESTIMATE=1 (audit-loggué)"
+
+  - id: build-budget-bounded
+    name: La construction est bornée en coût par run et en contexte par agent, avant le spawn
+    rationale: |
+      Le pipeline qui construit paie des tokens lui aussi, et c'est la facture
+      que l'utilisateur voit en premier (ARCHITECTURE §8). `MaxCostPerRun`
+      plafonne le cumul dépensé sur un run ; un plafond vérifié après coup
+      n'est pas un plafond, c'est une facture — le hook lit le cumul dans
+      l'état du run et refuse le spawn qui le dépasserait. Le contexte de
+      chaque agent tient dans son `budget_bytes` (loader.yml), lui-même
+      plafonné par la fenêtre du tier : un agent qui déborde produit une
+      sortie tronquée et confiante, pire qu'un échec net. Ces deux hooks
+      étaient câblés sans qu'aucun invariant ne les réclame : un enforcer que
+      rien ne déclare peut disparaître sans que ce manifeste le dise.
+    severity: major
+    principle: P6
+    enforcers:
+      - .sdda/python/sdda_hooks/preflight_cost_cap.py
+      - .sdda/python/sdda_hooks/preflight_agent_budget.py
+      - .sdda/python/sdda_scripts/sdda_state.py
+    bypasses:
+      - "Project Config: MaxCostPerRun: 0 (plafond de run désactivé, visible dans le diff de STACK.md)"
 
   - id: activated-stack-is-loadable
     name: Toute ligne activée dans STACK.md a sa fiche sur disque
@@ -386,7 +411,10 @@ invariants:
       La matrice vit dans `loader.yml` ; elle est appliquée sur `Write`/`Edit`,
       sur `Bash` (redirections, rm, mv, cp, tee, sed -i…) et sur
       `Read`/`Glob`/`Grep` — sans le hook Bash, `echo > datasets/x.jsonl`
-      contournait tout.
+      contournait tout. Et `dev-agent` tourne en N instances : sa zone
+      `agents/{agent}/**` n'a de sens que si l'on sait QUELLE instance écrit —
+      la liaison se prend au spawn (`SDDA-INSTANCE`) et une instance qui
+      écrit chez une autre est `[OWNERSHIP_INSTANCE_ESCAPE]`.
     severity: critical
     principle: P4
     enforcers:
@@ -394,4 +422,5 @@ invariants:
       - .sdda/python/sdda_hooks/preflight_ownership.py
       - .sdda/python/sdda_hooks/preflight_bash_ownership.py
       - .sdda/python/sdda_hooks/preflight_forbidden_reads.py
+      - .sdda/python/sdda_hooks/preflight_instance_bind.py
     bypasses: []

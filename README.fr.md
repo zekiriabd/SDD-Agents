@@ -52,7 +52,7 @@ sous-entendu.
 | **.NET** | ✅ | Microsoft Agent Framework | ❌ **aucune fiche** | cli-dotnet · aspnet-minimal | **sans RAG** |
 | **TypeScript** | ✅ fiche | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **fiches seulement** — aucune combo bootstrap (eval/observability sont `[python]`), pas de générateur de squelette |
 | **Kotlin** | ✅ fiche | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **fiches seulement** — même réserve ; pins Maven non vérifiés |
-| **Java** | ❌ | — | ❌ | ❌ | non planifié |
+| **Java** | ❌ | — | ❌ | ❌ | **non testé, fiche absente** — `lang/java.md` et `serving/cli-java.md` sont annoncées dans `STACK.md.template` sans exister sur disque ; la matrice dit `java: untested` |
 
 Deux familles du catalogue sont héritées de SDD_Pro depuis le 2026-09-23 :
 `archi/` (mvc · ddd · microservice — l'architecture de la **coquille**
@@ -80,6 +80,7 @@ composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
 | **Claude Code** | **supporté** — le harnais de référence | oui — les hooks de `.claude/settings.json` refusent l'appel d'outil |
 | **Codex CLI** | **expérimental** — compilé vers `.codex/`, jamais validé par un run de conformance | **non** — reportées au CI et aux scripts déterministes |
 | **Gemini CLI** | **expérimental** — compilé vers `.gemini/`, même réserve | **non** — idem |
+| **Antigravity** | **planifié** — partage l'adaptateur et la façade `.gemini/` de Gemini CLI, compilé seulement sur demande explicite (`--harness antigravity`) | **non** — idem |
 
 Sous Codex ou Gemini CLI, rien n'empêche au moment de l'action une écriture
 hors ownership ou un agent câblé avant sa TOOL GATE ; le CI la rattrape plus
@@ -349,7 +350,7 @@ liste chaque document et ses langues disponibles.
 | [DATA-SOURCES.fr.md](.sdda/docs/DATA-SOURCES.fr.md) | Sources de données hors base — registre, connecteurs, secrets |
 | [MULTI-HARNESS.fr.md](.sdda/docs/MULTI-HARNESS.fr.md) | Compilation vers Claude Code / Codex / Gemini CLI |
 | [TESTING-AND-EVAL.fr.md](.sdda/docs/TESTING-AND-EVAL.fr.md) | La pyramide L0→L9 |
-| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les <!--sdda:count invariants-->21<!--/sdda:count--> contrats porteurs + leur enforcer |
+| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les <!--sdda:count invariants-->22<!--/sdda:count--> contrats porteurs + leur enforcer |
 | [ROADMAP.fr.md](.sdda/docs/ROADMAP.fr.md) | Ordre de construction + le MVP |
 | [PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) | Le backlog déterministe, généré — qui réclame quoi |
 | [python/README.fr.md](.sdda/python/README.fr.md) | La couche Python déterministe |
@@ -395,12 +396,12 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 
 **Phase de conception.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commandes,
-<!--sdda:count invariants-->21<!--/sdda:count--> invariants,
+<!--sdda:count invariants-->22<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->45<!--/sdda:count--> fiches de stack,
-<!--sdda:count classes-->444<!--/sdda:count--> classes d'erreur,
+<!--sdda:count classes-->439<!--/sdda:count--> classes d'erreur,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks et
-<!--sdda:count subcommands-->79<!--/sdda:count--> sous-commandes déterministes existent sur
-disque et sont testés (<!--sdda:count tests-->1538<!--/sdda:count--> fonctions de test).
+<!--sdda:count subcommands-->80<!--/sdda:count--> sous-commandes déterministes existent sur
+disque et sont testés (<!--sdda:count tests-->1616<!--/sdda:count--> fonctions de test).
 Aucun script cité par un prompt ne manque
 ([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
 n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en

@@ -105,9 +105,39 @@ Model Tier: <fast | balanced | deep>      # un TIER, jamais un nom de modèle (P
 
 ## 8. Schémas
 
-- **Entrée** : <JSON Schema inline ou $ref>
-- **Sortie** : <JSON Schema inline ou $ref>
+- **Entrée** :
 
+```json
+{
+  "type": "object",
+  "required": ["<champ>"],
+  "properties": {
+    "<champ>": { "type": "string", "description": "<ce que l'agent reçoit>" }
+  },
+  "additionalProperties": false
+}
+```
+
+- **Sortie** :
+
+```json
+{
+  "type": "object",
+  "required": ["<champ>"],
+  "properties": {
+    "<champ>": { "type": "string", "description": "<ce que l'agent rend>" }
+  },
+  "additionalProperties": false
+}
+```
+
+> Le bloc ```json sous la puce est la forme de référence : un schéma de trente
+> lignes ne tient pas sur une ligne. Un schéma minuscule peut rester inline —
+> `- **Entrée** : {"type": "string"}` — ; le compilateur prend le bloc s'il
+> existe, la valeur inline sinon. Pas de `$ref` : l'IR ne porte aucune table
+> `schemas`, chaque schéma est écrit en entier là où il s'applique, et c'est ce
+> texte complet que `dev-agent` valide et que l'API GATE dérive.
+>
 > Une sortie structurée validée est le guardrail le moins cher et le plus
 > efficace. `schema-validation` devrait être actif sauf raison contraire.
 

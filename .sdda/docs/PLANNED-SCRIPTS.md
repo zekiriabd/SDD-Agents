@@ -10,7 +10,7 @@ implementation lots, not a list of bugs.
 six places is an established need; a script requested once may have
 been invented in passing and deserves a question before it is written.
 
-- **71** written · **0** to write · **0** cited without declaration
+- **77** written · **0** to write · **0** cited without declaration
 
 **Declared**: the prompt that calls the script says « Planifié » on the
 following line, with what to do while it is missing. A missing script
@@ -25,6 +25,9 @@ already does the job.
 
 | Name | Cited by |
 |---|---|
+| `base.py` | `agents/dev-orchestration.md` |
 | `bootstrap.py` | `commands/sdda-bootstrap.md` |
 | `framework_smoke.py` | `INVARIANTS.yml`, `rules/error-classification.md` |
+| `router.py` | `agents/dev-orchestration.md` |
+| `sequential.py` | `agents/dev-orchestration.md` |
 

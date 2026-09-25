@@ -199,7 +199,7 @@ Fichier de mesure : `workspace/.sys/reports/retrieval-{n}-{index-slug}-chunking.
 | `nDCG@k` | ≥ 0.70 | `RetrievalNdcgMin` | oui | — |
 | `context_precision` | ≥ 0.60 | `RetrievalContextPrecisionMin` | non | llm-judge **calibré** |
 | `groundedness` | ≥ 0.85 | `GroundednessMin` | non | llm-judge **calibré** — `workspace/pipeline/calibration/groundedness.json` |
-| `answer_relevance` | ≥ 0.80 | `AnswerRelevanceMin` | non | llm-judge **calibré** |
+| `answer_relevance` | ≥ 0.80 | — (aucune clé G4 : `run_retrieval_eval.py` ne la mesure pas ; elle se juge en G5/G6 par les AC des CAPs servies) | non | llm-judge **calibré** |
 | `citation_resolve_rate` | ≥ 0.98 | `CitationResolveRateMin` | oui | — |
 
 - k runs pour les métriques à juge LLM : `EvalRuns` (3 ; 5 si une CAP servie est `critical`)

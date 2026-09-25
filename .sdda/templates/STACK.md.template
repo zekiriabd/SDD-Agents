@@ -1,7 +1,14 @@
 # Agentic Stack
 #
 # Généré par bootstrap.py — éditer les choix ci-dessous.
-# Lu par TOUS les agents SDD_Agents à CHAQUE invocation.
+# QUI LE LIT : les scripts déterministes (smoke-check, preflight, ir-compiler,
+# les gates) et les agents de conception et de revue (po-capabilities lit sa
+# section Project Config seulement, architect-*, qa-*, review-*). Qui ne le
+# lit PAS, et c'est voulu (loader.yml `forbidden_reads`) : `po-elicitor` — une
+# MISSION teintée de choix techniques n'est plus une MISSION — ; et les `dev-*`,
+# qui lisent le contexte projet `workspace/src/{AppName}/CLAUDE.md` que
+# `project-init` projette depuis ce fichier et l'IR, au lieu de relire 40 Ko
+# à chaque invocation.
 # `workspace/stack/STACK.md` est VERSIONNÉ. L'entrée de l'utilisateur tient en
 # QUATRE dépôts (ARCHITECTURE §2.ter) : `stack/` (ce fichier, seul), `feats/`
 # (ses specs Markdown : brief puis roster), `assets/` (ses données et `.env`)
@@ -99,9 +106,10 @@ JudgeModel: claude-opus-5             # grader LLM — DOIT être calibré (inva
 ## Project Config
 AppName: {{AppName}}
 Profile: standard                   # poc | standard | production — `poc` : 2 agents de build au lieu de 8,
-                                    # jeux réduits (.sdda/profiles/poc.yml : retirer alors les *SetMinItems
-                                    # de `## Active Eval Stack`), gates rapportées non bloquantes, pas de
-                                    # revue ni d'acceptation — la MISSION plafonne à `Tested`
+                                    # jeux réduits (.sdda/profiles/poc.yml — `bootstrap.py --profile poc`
+                                    # omet alors les *SetMinItems de `## Active Eval Stack` ; les retirer
+                                    # à la main si le profil change après coup), gates rapportées non
+                                    # bloquantes, pas de revue ni d'acceptation — la MISSION plafonne à `Tested`
 
 # --- Budget d'EXECUTION du produit généré (exigence fonctionnelle, cf. P6) ---
 CostPerRunTargetUsd: 0.05           # coût cible d'une exécution bout-en-bout
@@ -405,8 +413,9 @@ IndexRefreshPolicy: on-source-change   # manual | scheduled | on-source-change
 
 DatabaseType: {{DatabaseType}}        # none | PostgreSql | SqlServer | MySql | Oracle | Sqlite | MongoDb
 # La DÉCLARATION est ici, les VALEURS sont dans `workspace/assets/.env`
-# (gitignoré, copié vers `workspace/src/{AppName}/.env` par `install-env`) —
-# même mécanisme que SDD_Pro. STACK.md est versionné : une valeur en clair ici
+# (gitignoré, copié vers `workspace/src/{AppName}/.env` à la création du projet
+# par `project-init` / `gen-app-skeleton --write` ; `install-env` ne sert qu'à
+# recopier une clé changée APRÈS le build) — même mécanisme que SDD_Pro. STACK.md est versionné : une valeur en clair ici
 # partirait en commit ([STACK_SECRET_IN_CLEAR] au smoke).
  - DB_HOST: ${DB_HOST}
  - DB_PORT: ${DB_PORT}
@@ -435,8 +444,9 @@ DbQueryLogging: full                  # toute requête émise par un agent est t
 # Secrets : les déclarations ne portent que des NOMS de variables (clés `*_env`).
 # Les valeurs vivent dans `workspace/assets/.env` (gitignoré) ; le chemin
 # ci-dessous est RELATIF À `workspace/src/{AppName}/`, c'est-à-dire la copie que
-# `install-env` y dépose — celle que lit l'application. Jamais de secret en clair
-# dans STACK.md.
+# la création du projet y dépose (`project-init` / `gen-app-skeleton --write`,
+# puis `install-env` pour une clé changée après coup) — celle que lit
+# l'application. Jamais de secret en clair dans STACK.md.
 SourceSecretsFile: .env
 
 # La déclaration est INLINE, ici : STACK.md est versionné, il ne porte que des

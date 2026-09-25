@@ -34,7 +34,7 @@ from .bounds import Bounds
 from .config import ConfigError, Settings
 from .guardrails import Guardrails, GuardrailTripped
 from .models import LLMClient, RecordingClient, StubClient, provider_client, provider_error_class, resolve
-from .orchestration.base import AgentResult, BoundedLoop, DictToolset
+from .orchestration.base import AgentResult, BoundedLoop, DictToolset, declare_framework_graph
 from .tracing import Tracer, new_run_id
 from .trust import untrusted
 
@@ -132,6 +132,10 @@ class RunService:
         self._guardrails = guardrails
         self._client = client
         self._agent_factory = agent_factory
+        if agent_factory is not None:
+            # Un graphe de framework porte l'orchestration : c'est lui qui émet
+            # le manifeste, et la boucle de démarrage cesse d'écrire le sien.
+            declare_framework_graph(getattr(agent_factory, "__module__", None) or "agent_factory")
         self._toolset = toolset or DictToolset()
         self._bounds = bounds
         self._system_prompt = system_prompt

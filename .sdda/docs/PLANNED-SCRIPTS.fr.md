@@ -10,7 +10,7 @@ lots d'implémentation, pas une liste de bugs.
 six endroits est un besoin établi ; un script réclamé une seule fois a pu
 être inventé au fil de la plume et mérite une question avant d'être écrit.
 
-- **71** écrits · **0** à écrire · **0** cité(s) sans déclaration
+- **77** écrits · **0** à écrire · **0** cité(s) sans déclaration
 
 **Déclaré** : le prompt qui appelle le script dit « Planifié » à la ligne
 suivante, avec la conduite à tenir tant qu'il manque. Un script absent cité
@@ -25,6 +25,9 @@ qui fait déjà le travail.
 
 | Nom | Cité par |
 |---|---|
+| `base.py` | `agents/dev-orchestration.md` |
 | `bootstrap.py` | `commands/sdda-bootstrap.md` |
 | `framework_smoke.py` | `INVARIANTS.yml`, `rules/error-classification.md` |
+| `router.py` | `agents/dev-orchestration.md` |
+| `sequential.py` | `agents/dev-orchestration.md` |
 

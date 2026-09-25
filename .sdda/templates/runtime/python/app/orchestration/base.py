@@ -55,6 +55,34 @@ GENERATED_BY = "orchestration.dump_graph"
 #: et une troisième graphie ferait diverger deux graphes identiques.
 ALWAYS = "always"
 
+#: Le graphe de FRAMEWORK qui tient l'orchestration, s'il y en a un. Quand
+#: `dev-orchestration` écrit un graphe LangGraph sous `orchestration/`, c'est
+#: LUI qui émet le manifeste, et le squelette se tait : `diff_code_vs_ir.py`
+#: refuse deux manifestes sous `**/orchestration/`, et le manifeste trivial de
+#: la boucle de démarrage écraserait celui du vrai graphe — un diff vert contre
+#: un dessin qui n'est plus celui du code. `RunService` le déclare dès qu'une
+#: `agent_factory` lui est fournie ; un orchestrateur peut aussi le déclarer
+#: lui-même.
+_FRAMEWORK_GRAPH: dict[str, str | None] = {"origin": None}
+
+
+def declare_framework_graph(origin: str | None) -> None:
+    """Déclare (ou retire, avec `None`) le graphe de framework qui porte l'orchestration."""
+    _FRAMEWORK_GRAPH["origin"] = origin
+
+
+def framework_graph_origin() -> str | None:
+    return _FRAMEWORK_GRAPH["origin"]
+
+
+def foreign_manifest(path: Path) -> bool:
+    """Vrai si `path` est un manifeste écrit par autre chose que ce module."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and str(data.get("generatedBy") or "") not in ("", GENERATED_BY)
+
 
 # ---------------------------------------------------------------------------
 # Le graphe et son manifeste
@@ -136,15 +164,23 @@ class Graph:
                       for e in self.edges],
         }
 
-    def write_manifest(self, directory: Path) -> Path:
+    def write_manifest(self, directory: Path) -> Path | None:
         """Écrit `graph.manifest.json` à côté du code d'orchestration.
 
         Écrit à CHAQUE construction du graphe, pas à la génération : c'est ce
         qui fait qu'un graphe modifié à la main produit un manifeste modifié,
         donc un diff rouge, plutôt qu'un fichier figé qui continue de décrire un
         code qui a changé.
+
+        Rend `None`, sans rien écrire, quand un graphe de FRAMEWORK tient
+        l'orchestration — déclaré (`declare_framework_graph`) ou reconnu à un
+        manifeste déjà présent qui ne vient pas d'ici (`generatedBy` étranger).
+        Le squelette n'a alors rien à dire : le graphe comparé à l'IR est celui
+        du framework, pas la boucle de démarrage.
         """
         path = Path(directory) / MANIFEST_NAME
+        if framework_graph_origin() is not None or foreign_manifest(path):
+            return None
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(self.dump_graph(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",

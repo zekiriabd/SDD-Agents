@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sdd-agents.dev/schemas/project-config.schema.json",
   "title": "SDD_Agents Project Config",
-  "description": "Schéma de TOUTES les clés du Project Config à 3 couches : .sdda/config.base.yml (défauts du framework), ~/.sdda/config.team.yml (politique d'équipe), workspace/stack/STACK.md ## Project Config (override final). Deep-merge : scalaires remplacés, listes remplacées. additionalProperties: false est ce qui permet de détecter [CONFIG_UNKNOWN_KEY] (WARN ; fatal avec SDDA_CONFIG_STRICT=1). Les clés listées dans security_down_protected ne peuvent pas être relâchées par la couche projet quand la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. Les valeurs `default` ci-dessous MIROIRENT config.base.yml : toute modification de l'un doit être répercutée dans l'autre. AppName et SystemName figurent dans STACK.md ## Project Config sans être dans config.base.yml : ils sont acceptés ici pour ne pas être signalés comme inconnus.",
+  "description": "Schéma de TOUTES les clés du Project Config à 3 couches : .sdda/config.base.yml (défauts du framework), ~/.sdda/config.team.yml (politique d'équipe), workspace/stack/STACK.md ## Project Config (override final). Deep-merge : scalaires remplacés, listes remplacées. additionalProperties: false est ce qui permet de détecter [CONFIG_UNKNOWN_KEY] (WARN ; fatal avec SDDA_CONFIG_STRICT=1). Les clés listées dans security_down_protected ne peuvent pas être relâchées par la couche projet quand la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. Les valeurs `default` ci-dessous MIROIRENT config.base.yml : toute modification de l'un doit être répercutée dans l'autre. AppName figure dans STACK.md ## Project Config sans être dans config.base.yml : il est accepté ici pour ne pas être signalé comme inconnu. CHAQUE propriété, imbriquées comprises, porte `x-readBy` : un lecteur réel qui nomme la clé (tests/test_stack_governance.py le vérifie récursivement) — une clé sans lecteur est retirée, pas documentée.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -14,10 +14,6 @@
         "script:sdda_lib/layered_config.py",
         "script:sdda_scripts/gen_app_skeleton.py"
       ]
-    },
-    "SystemName": {
-      "type": "string",
-      "description": "Nom métier du système agentic. Présent dans STACK.md ## Project Config uniquement."
     },
     "CostPerRunTargetUsd": {
       "type": [
@@ -177,7 +173,12 @@
       "minimum": 1,
       "maximum": 20,
       "default": 5,
-      "description": "k runs pour les CAPs Criticality: critical. Doit être >= EvalRuns."
+      "description": "k runs pour les CAPs Criticality: critical. Doit être >= EvalRuns.",
+      "x-readBy": [
+        "script:sdda_scripts/eval_runner.py",
+        "script:sdda_scripts/validate_cap.py",
+        "script:sdda_scripts/ir_compiler.py"
+      ]
     },
     "EvalVarianceWarnPct": {
       "type": "number",
@@ -194,7 +195,10 @@
       "minimum": 1,
       "maximum": 32,
       "default": 4,
-      "description": "Items mesures simultanement DANS un run d'eval. C'est le poste qui domine la duree murale du pipeline. L'ordre des resultats est reconstruit avant agregation, donc la mesure ne depend pas de l'ordonnanceur (P10). Mettre 1 pour un executeur qui ne supporte pas les appels concurrents."
+      "description": "Items mesures simultanement DANS un run d'eval. C'est le poste qui domine la duree murale du pipeline. L'ordre des resultats est reconstruit avant agregation, donc la mesure ne depend pas de l'ordonnanceur (P10). Mettre 1 pour un executeur qui ne supporte pas les appels concurrents.",
+      "x-readBy": [
+        "script:sdda_scripts/eval_runner.py"
+      ]
     },
     "EvalSeedPolicy": {
       "enum": [
@@ -202,7 +206,10 @@
         "fixed"
       ],
       "default": "vary",
-      "description": "`fixed` masque la variance : réservé au débogage d'un cas précis."
+      "description": "`fixed` masque la variance : réservé au débogage d'un cas précis.",
+      "x-readBy": [
+        "script:sdda_scripts/eval_runner.py"
+      ]
     },
     "JudgeCalibrationMinKappa": {
       "type": "number",
@@ -226,7 +233,10 @@
     "JudgeAdvisoryFallback": {
       "type": "boolean",
       "default": true,
-      "description": "Sous le seuil de calibration, le juge devient advisory (informe, ne bloque plus) au lieu de faire échouer la suite."
+      "description": "Sous le seuil de calibration, le juge devient advisory (informe, ne bloque plus) au lieu de faire échouer la suite.",
+      "x-readBy": [
+        "script:sdda_scripts/calibrate_judge.py"
+      ]
     },
     "JudgeMustDifferFromEvaluated": {
       "type": "boolean",
@@ -261,7 +271,10 @@
       "minimum": 1,
       "default": 50,
       "description": "Taille minimale d'un jeu de calibration (labels humains).",
-      "x-section": "Active Eval Stack"
+      "x-section": "Active Eval Stack",
+      "x-readBy": [
+        "script:sdda_scripts/validate_datasets.py"
+      ]
     },
     "AdversarialSetMinItems": {
       "type": "integer",
@@ -299,7 +312,10 @@
       "minimum": 0,
       "maximum": 10,
       "default": 2.0,
-      "description": "Bande de bruit (L9) : une baisse au-delà de la tolérance mais sous N écarts-types de la baseline est signalée [REGRESSION_WITHIN_NOISE] (WARN) au lieu de [REGRESSION]. 0 = ne pas lire l'écart-type."
+      "description": "Bande de bruit (L9) : une baisse au-delà de la tolérance mais sous N écarts-types de la baseline est signalée [REGRESSION_WITHIN_NOISE] (WARN) au lieu de [REGRESSION]. 0 = ne pas lire l'écart-type.",
+      "x-readBy": [
+        "script:sdda_scripts/check_regression.py"
+      ]
     },
     "BaselinePromotionPolicy": {
       "enum": [
@@ -307,7 +323,10 @@
         "auto"
       ],
       "default": "explicit",
-      "description": "`auto` rend la dérive lente invisible : la baseline doit se déplacer par une action tracée."
+      "description": "`auto` rend la dérive lente invisible : la baseline doit se déplacer par une action tracée.",
+      "x-readBy": [
+        "script:sdda_scripts/promote_baseline.py"
+      ]
     },
     "RetrievalRecallAtK": {
       "type": "number",
@@ -344,7 +363,10 @@
       "minimum": 0,
       "maximum": 1,
       "default": 0.6,
-      "description": "Seuil G4 : proportion minimale de contexte non bruité."
+      "description": "Seuil G4 : proportion minimale de contexte non bruité.",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "GroundednessMin": {
       "type": "number",
@@ -355,13 +377,6 @@
       "x-readBy": [
         "script:sdda_scripts/run_retrieval_eval.py"
       ]
-    },
-    "AnswerRelevanceMin": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1,
-      "default": 0.8,
-      "description": "Seuil G4 : answer_relevance minimale (juge LLM calibré)."
     },
     "CitationResolveRateMin": {
       "type": "number",
@@ -377,7 +392,10 @@
       "type": "integer",
       "minimum": 1,
       "default": 50,
-      "description": "Nombre minimal de requêtes dans le golden set de retrieval (G4)."
+      "description": "Nombre minimal de requêtes dans le golden set de retrieval (G4).",
+      "x-readBy": [
+        "script:sdda_scripts/run_retrieval_eval.py"
+      ]
     },
     "SpecComplianceMode": {
       "enum": [
@@ -398,9 +416,10 @@
         "full"
       ],
       "default": "full",
-      "description": "Mode du reviewer agent-safety. `off` REFUSÉ si SDDA_RUN_PROFILE=production -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION]. Protégée security-down.",
+      "description": "Mode du reviewer agent-safety. `off` REFUSÉ sur un run de production (SDDA_ENV=production|ci ou CI=true) tant que AgentSafetyRequiredInProduction est vrai -> [SAFETY_REVIEW_DISABLED_IN_PRODUCTION], émis par validate_safety_gate.py. Protégée security-down.",
       "x-readBy": [
-        "agent:review-safety"
+        "agent:review-safety",
+        "script:sdda_scripts/validate_safety_gate.py"
       ]
     },
     "CostLatencyMode": {
@@ -454,15 +473,10 @@
     "AgentSafetyRequiredInProduction": {
       "type": "boolean",
       "default": true,
-      "description": "Interdit AgentSafetyMode: off quand SDDA_RUN_PROFILE=production. Protégée security-down."
-    },
-    "AuditorBatchMode": {
-      "enum": [
-        "three-stage",
-        "parallel"
-      ],
-      "default": "three-stage",
-      "description": "Étagement de la revue : A spec-compliance seul ; B safety, cost, orchestration, rag en parallèle ; C adversarial sur système vivant."
+      "description": "Interdit AgentSafetyMode: off sur un run de production (SDDA_ENV=production|ci ou CI=true) : validate_safety_gate.py émet alors [SAFETY_REVIEW_DISABLED_IN_PRODUCTION] et exige le rapport de review-safety. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/validate_safety_gate.py"
+      ]
     },
     "SpecComplianceFailOn": {
       "enum": [
@@ -492,17 +506,6 @@
         "script:sdda_scripts/validate_safety_gate.py"
       ]
     },
-    "CostLatencyFailOn": {
-      "enum": [
-        "info",
-        "minor",
-        "moderate",
-        "serious",
-        "critical"
-      ],
-      "default": "serious",
-      "description": "Sévérité minimale d'un finding cost-latency qui bloque."
-    },
     "OrchestrationFailOn": {
       "enum": [
         "info",
@@ -517,17 +520,6 @@
         "script:sdda_scripts/validate_safety_gate.py"
       ]
     },
-    "RagQualityFailOn": {
-      "enum": [
-        "info",
-        "minor",
-        "moderate",
-        "serious",
-        "critical"
-      ],
-      "default": "serious",
-      "description": "Sévérité minimale d'un finding rag-quality qui bloque."
-    },
     "AdversarialFailOn": {
       "enum": [
         "info",
@@ -537,95 +529,20 @@
         "critical"
       ],
       "default": "critical",
-      "description": "Sévérité minimale d'un finding adversarial qui bloque. Protégée security-down."
-    },
-    "MissionGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G0 MISSION. `off` est inscrit dans .sys/.audit/bypasses.jsonl et compte dans MaxBypassesPerRun."
-    },
-    "CapGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G1 CAP."
-    },
-    "TopologyGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G2 TOPOLOGY (s'exécute sur l'IR)."
-    },
-    "ToolGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G3 TOOL."
-    },
-    "RetrievalGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G4 RETRIEVAL. Auto-skip si RAG = none."
-    },
-    "AgentGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G5 AGENT."
-    },
-    "OrchGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G6 ORCH."
-    },
-    "SafetyGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G7 SAFETY. Protégée security-down."
-    },
-    "AcceptanceGate": {
-      "enum": [
-        "strict",
-        "warn",
-        "off"
-      ],
-      "default": "strict",
-      "description": "Mode de G8 ACCEPTANCE."
+      "description": "Sévérité minimale d'un finding adversarial qui bloque. Protégée security-down.",
+      "x-readBy": [
+        "agent:review-adversarial"
+      ]
     },
     "MaxBypassesPerRun": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9,
       "default": 1,
-      "description": "Nombre max de bypasses (gate off, env SDDA_BYPASS_*) sur un même run ; au-delà, bloquant. Protégée security-down."
+      "description": "Nombre max de contournements (env SDDA_BYPASS_*, `--force`) cumulés sur un même run ; au-delà, preflight_force_cumul refuse -> [FORCE_CUMUL_REJECTED], sauf SDDA_ALLOW_FORCE=1 (tracé). Il n'existe AUCUN mode par gate (`MissionGate: off`…) : les contournements sont des env vars nominatives, journalisées dans .sys/.audit/bypasses.jsonl. Protégée security-down.",
+      "x-readBy": [
+        "script:sdda_scripts/preflight_force_cumul.py"
+      ]
     },
     "CapGranularityTarget": {
       "type": "integer",
@@ -663,33 +580,14 @@
         "script:sdda_scripts/validate_topology.py"
       ]
     },
-    "MaxNestingDepth": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 2,
-      "default": 2,
-      "description": "Profondeur max d'imbrication de patterns d'orchestration. Dur : 2 (ORCHESTRATION-PATTERNS.md §3) — le maximum du schéma l'interdit au-delà."
-    },
-    "TopologyJustificationRequired": {
-      "type": "boolean",
-      "default": true,
-      "description": "La section « Alternative plus simple écartée » de la TOPOLOGY est obligatoire (P7). Protégée security-down."
-    },
     "PromptMaxTokens": {
       "type": "integer",
       "minimum": 100,
       "default": 4000,
-      "description": "Taille de prompt système au-delà de laquelle un WARN est émis : un prompt long dilue."
-    },
-    "PromptInlineForbidden": {
-      "type": "boolean",
-      "default": true,
-      "description": "Aucun prompt inline dans le code généré (P1, invariant prompts-are-files). Protégée security-down."
-    },
-    "PromptHashPinning": {
-      "type": "boolean",
-      "default": true,
-      "description": "Le hash du prompt fait partie du tuple d'épinglage des baselines (P10, invariant eval-baseline-hash-pinned)."
+      "description": "Taille de prompt système au-delà de laquelle dev-prompt refuse ([PROMPT_TOO_LONG]) : un prompt long dilue.",
+      "x-readBy": [
+        "agent:dev-prompt"
+      ]
     },
     "TraceLevel": {
       "enum": [
@@ -741,33 +639,28 @@
     "TraceRequiredPerRun": {
       "type": "boolean",
       "default": true,
-      "description": "Un run sans trace est un échec (invariant trace-emitted-per-run)."
+      "description": "Un run sans trace est un échec (invariant trace-emitted-per-run) : `TraceLevel: off` sans `TraceRequiredPerRun: false` assumé est [CONFIG_VALUE_INVALID].",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py"
+      ]
     },
-    "BuildModelMode": {
-      "enum": [
-        "static",
-        "dynamic"
-      ],
-      "default": "static",
-      "description": "static : chaque Developer Agent prend son tier_default. dynamic : scorer déterministe par work-item, clampé par tier_floor / tier_ceiling d'agent-bounds.yaml (non surchargeables)."
+    "LocalComputeCostPerHourUsd": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0.0,
+      "description": "Inférence locale (RuntimeProvider: local-ollama) : coût horaire amorti de la machine qui sert les modèles, USD. Le prix par token y est nul, le coût ne l'est pas : estimate_budget.py chiffre chaque appel en tokens / LocalComputeThroughputTokensPerSec x ce tarif, au lieu d'un budget « gratuit » qui laisserait passer n'importe quelle topologie. 0 = non modélisé, et le rapport de budget le dit.",
+      "x-readBy": [
+        "script:sdda_scripts/estimate_budget.py"
+      ]
     },
-    "CheckpointMode": {
-      "enum": [
-        "on",
-        "off"
-      ],
-      "default": "on",
-      "description": "Reprise après interruption du pipeline de construction. Toujours écrire la valeur entre guillemets en YAML (\"on\") pour éviter la conversion booléenne."
-    },
-    "ResumeReusesIdentifiers": {
-      "type": "boolean",
-      "default": true,
-      "description": "Une reprise réutilise les identifiants déjà attribués : pas d'orphelins, pas de doublons."
-    },
-    "PreserveHumanEdits": {
-      "type": "boolean",
-      "default": true,
-      "description": "Un fichier généré puis édité à la main (empreinte de contenu) n'est jamais écrasé."
+    "LocalComputeThroughputTokensPerSec": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0,
+      "description": "Inférence locale : débit de la machine, tokens par seconde (entrée + sortie confondues, hypothèse de planification). Sert au coût (avec LocalComputeCostPerHourUsd) et à la latence estimée. 0 = inconnu -> [BUDGET_LOCAL_COMPUTE_UNMODELLED] (WARN), coût local à zéro assumé.",
+      "x-readBy": [
+        "script:sdda_scripts/estimate_budget.py"
+      ]
     },
     "StackComboCheck": {
       "enum": [
@@ -785,28 +678,28 @@
       "type": "array",
       "uniqueItems": true,
       "default": [
+        "ApiAuthMode",
+        "ApiContractFirst",
         "AgentSafetyFailOn",
         "AgentSafetyMode",
         "AgentSafetyRequiredInProduction",
         "AdversarialFailOn",
-        "SafetyGate",
         "EvalRuns",
         "HoldoutDisjointCheck",
         "GroundednessMin",
         "RetrievalRecallAtK",
         "CitationResolveRateMin",
         "JudgeCalibrationMinKappa",
-        "MaxBypassesPerRun",
-        "PromptInlineForbidden",
-        "TopologyJustificationRequired"
+        "MaxBypassesPerRun"
       ],
       "items": {
         "enum": [
+          "ApiAuthMode",
+          "ApiContractFirst",
           "AgentSafetyFailOn",
           "AgentSafetyMode",
           "AgentSafetyRequiredInProduction",
           "AdversarialFailOn",
-          "SafetyGate",
           "EvalRuns",
           "EvalRunsCritical",
           "HoldoutDisjointCheck",
@@ -814,15 +707,11 @@
           "RetrievalRecallAtK",
           "RetrievalNdcgMin",
           "RetrievalContextPrecisionMin",
-          "AnswerRelevanceMin",
           "CitationResolveRateMin",
           "JudgeCalibrationMinKappa",
           "JudgeCalibrationMinItems",
           "JudgeMustDifferFromEvaluated",
           "MaxBypassesPerRun",
-          "PromptInlineForbidden",
-          "PromptHashPinning",
-          "TopologyJustificationRequired",
           "TracePIIPolicy",
           "TraceRequiredPerRun",
           "StackComboCheck",
@@ -830,7 +719,10 @@
           "RegressionTolerancePct"
         ]
       },
-      "description": "Clés que la couche projet ne peut pas relâcher si la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. La liste ne peut contenir que des clés dont la direction « plus dur » est définie (l'enum ci-dessus). Seule la couche base ou team peut modifier cette liste."
+      "description": "Clés que la couche projet ne peut pas relâcher si la couche team les a durcies -> [CONFIG_SECURITY_DOWNGRADE]. La liste ne peut contenir que des clés dont la direction « plus dur » est définie dans layered_config.is_downgrade (l'enum ci-dessus) : sévérité, mode, plancher/plafond numérique, booléen durci, et pour ApiAuthMode l'échelle none < api-key < oauth2 = azure-ad = mtls. Seule la couche base ou team peut modifier cette liste.",
+      "x-readBy": [
+        "script:sdda_lib/layered_config.py"
+      ]
     },
     "Profile": {
       "enum": [
@@ -926,7 +818,7 @@
     }
   ],
   "x-stackSections": {
-    "description": "Clés des sections `## Active *` de STACK.md (lues par `read_stack_section_kv`), validées EN VALEUR par `layered_config.validate_stack` au smoke-check et au preflight -> [CONFIG_VALUE_INVALID], bloquant. Une clé absente d'ici -> WARN [CONFIG_UNKNOWN_KEY]. Les clés de Project Config qui portent `x-section` peuvent AUSSI s'écrire dans la section nommée : elles y sont lues comme couche projet (une valeur dans les deux endroits qui diffère -> [CONFIG_KEY_CONFLICT]). `x-readBy` nomme le LECTEUR de chaque clé : `script:` (chemin sous .sdda/python/), `agent:` / `command:` (la prose d'un agent ou d'une commande, qui la lit à l'exécution), `runtime:` (le squelette généré). tests/test_stack_governance.py exige un lecteur pour chaque clé du gabarit et vérifie que le lecteur nomme la clé.",
+    "description": "Clés des sections `## Active *` de STACK.md (lues par `read_stack_section_kv`), validées EN VALEUR par `layered_config.validate_stack` au smoke-check et au preflight -> [CONFIG_VALUE_INVALID], bloquant. Une clé absente d'ici -> WARN [CONFIG_UNKNOWN_KEY]. Les clés de Project Config qui portent `x-section` peuvent AUSSI s'écrire dans la section nommée : elles y sont lues comme couche projet (une valeur dans les deux endroits qui diffère -> [CONFIG_KEY_CONFLICT]). `x-readBy` nomme le LECTEUR de chaque clé : `script:` (chemin sous .sdda/python/), `agent:` / `command:` (la prose d'un agent ou d'une commande, qui la lit à l'exécution), `runtime:` (le squelette généré). tests/test_stack_governance.py exige un lecteur pour chaque clé du schéma (Project Config, sections et objets imbriqués) et vérifie que le lecteur nomme la clé.",
     "Active Harness": {
       "type": "object",
       "properties": {
@@ -966,15 +858,27 @@
           "properties": {
             "deep": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "x-readBy": [
+                "script:sdda_scripts/estimate_budget.py",
+                "script:sdda_lib/pricing.py"
+              ]
             },
             "balanced": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "x-readBy": [
+                "script:sdda_scripts/estimate_budget.py",
+                "script:sdda_lib/pricing.py"
+              ]
             },
             "fast": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "x-readBy": [
+                "script:sdda_scripts/estimate_budget.py",
+                "script:sdda_lib/pricing.py"
+              ]
             }
           },
           "description": "Tier -> identifiant de modèle du PRODUIT (jamais un nom de fournisseur).",
@@ -1126,12 +1030,18 @@
             "vector": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1
+              "maximum": 1,
+              "x-readBy": [
+                "script:sdda_scripts/ir_compiler.py"
+              ]
             },
             "lexical": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1
+              "maximum": 1,
+              "x-readBy": [
+                "script:sdda_scripts/ir_compiler.py"
+              ]
             }
           },
           "x-readBy": [

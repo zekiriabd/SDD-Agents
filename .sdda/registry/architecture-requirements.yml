@@ -168,7 +168,7 @@ orchestration:
         model_per_agent: true
 
     network:
-      label: "réseau libre agent-à-agent"
+      label: "réseau libre agent-à-agent — REFUSÉ"
       requires:
         orchestrator: true
         subagents_min: 2
@@ -177,11 +177,14 @@ orchestration:
         loop_bound: true
         tools_per_agent: true
         model_per_agent: true
-      adr_required: true
       why: >
-        `refused-by-default` dans le registre de patterns. Un réseau libre rend
-        les trajectoires et le coût non bornables par construction. Il exige un
-        ADR nominatif en plus de la déclaration complète.
+        `refused-by-default` dans le registre de patterns : un réseau libre rend
+        les trajectoires et le coût non bornables par construction. Il n'a ni
+        fiche `orchestration/network.md` ni valeur dans l'enum de ir.schema.json,
+        et validate_topology le refuse ([TOPOLOGY_PATTERN_REFUSED]) — aucun ADR
+        ne le débloque. Les exigences ci-dessus disent ce qu'une déclaration
+        devrait porter le jour où il entrerait au catalogue ; elles ne l'y font
+        pas entrer.
 
 # ============================================================================
 # AXE 2 — RAG : `## Active RAG Pattern` + `## Active Retrieval Stack`
