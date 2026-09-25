@@ -92,3 +92,26 @@ def test_the_phase_table_names_the_writers_of_each_parallel_wave() -> None:
     for agents in ao.PHASE_AGENTS.values():
         for agent in agents:
             assert isinstance(loader.get(agent), dict), agent
+
+
+def test_a_snapshot_that_cannot_replace_the_previous_one_fails_with_a_class(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sous Windows, un fichier tenu ouvert survit à `rmtree(ignore_errors=True)` et `os.replace` levait nu :
+    la phase s'ouvrait sans instantané, et `--since-snapshot` n'avait plus rien pour juger."""
+    import shutil
+
+    code, _ = audit(project, "snapshot", "--phase", "4")
+    assert code == 0
+    target = ao.snapshot_dir(project, "1", "4")
+    real_rmtree = shutil.rmtree
+
+    def stubborn_rmtree(path, *args, **kwargs):
+        if Path(path) == target:
+            return None              # le répertoire « tenu ouvert » ne part pas
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", stubborn_rmtree)
+    code, out = audit(project, "snapshot", "--phase", "4")
+    assert code != 0
+    assert "[OWNERSHIP_SNAPSHOT_FAILED]" in out
+    assert not target.with_name(target.name + ".tmp").exists()     # rien d'à moitié posé
+    assert (target / "manifest.json").is_file()                    # l'ancien instantané est intact

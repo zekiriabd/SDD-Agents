@@ -52,9 +52,10 @@ PREFIXED = {
 
 #: Affectation d'une variable au nom sensible. Plus bruyant, donc restreint aux
 #: valeurs qui ne ressemblent pas à un placeholder ou à un nom de variable.
+#: Le guillemet ouvrant est capturé : il dit si la valeur est un LITTÉRAL.
 ASSIGNMENT = re.compile(
-    r"""(?i)\b(api[_-]?key|secret|password|passwd|token|credential|private[_-]?key)\b"""
-    r"""\s*[:=]\s*["']?([^\s"',;)]{12,})["']?""")
+    r"""(?i)\b(?P<name>api[_-]?key|secret|password|passwd|token|credential|private[_-]?key)\b"""
+    r"""\s*[:=]\s*(?P<quote>["']?)(?P<value>[^\s"',;)]{12,})["']?""")
 
 _PLACEHOLDER = re.compile(
     r"^(\$\{?\w+\}?|<[^>]*>|x{3,}|\*{3,}|\.{3,}|change[_-]?me|todo|tbd|none|null|"
@@ -64,6 +65,13 @@ _PLACEHOLDER = re.compile(
 #: est exactement la forme que le framework EXIGE (cf. dataaccess/declared-sources).
 _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 
+#: Une EXPRESSION de code n'est pas une valeur : `api_key=settings.secret("llmApiKey")
+#: .get_secret_value()` est la ligne que le squelette généré écrit pour NE PAS
+#: porter le secret en clair — et le scan la comptait comme une fuite, quatre
+#: fois par projet. Un identifiant suivi d'un appel, d'un indiçage ou d'un
+#: attribut est du code ; la valeur qu'il produit n'est pas dans le fichier.
+_CODE_EXPR = re.compile(r"^(?:[A-Za-z_][\w.]*\s*[\(\[]|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$)")
+
 #: Extensions binaires ou dérivées : les scanner produit du bruit, pas des faits.
 SKIP_SUFFIXES = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".gz", ".whl", ".so", ".dll",
@@ -71,12 +79,48 @@ SKIP_SUFFIXES = frozenset({
 })
 SKIP_PARTS = frozenset({"__pycache__", ".git", "node_modules", ".venv", "venv"})
 
+#: Les fichiers d'exemple LIVRÉS avec l'application : ils partent dans le
+#: dépôt, donc ils sont scannés — c'est le seul `.env*` qui doive l'être.
+ENV_SHIPPED = frozenset({".env.example", ".env.sample", ".env.template", ".env.dist"})
+
 COMPILED = [(label, re.compile(pattern)) for label, pattern in PREFIXED.items()]
+
+
+def is_env_file(path: Path) -> bool:
+    """`.env`, `.env.local`, `.env.production`… — le fichier de secrets, PAS un exemple.
+
+    `workspace/src/{App}/.env` est l'emplacement DÉSIGNÉ des valeurs de
+    secrets (ARCHITECTURE §2.ter) : gitignoré, copié depuis `assets/.env`,
+    interdit en lecture à tout agent. Le scanner le trouvait sous `src/` et
+    rendait `[SECRET_LEAK]` sur tout projet correctement configuré — un scan
+    qui rougit sur la configuration qu'il exige apprend à être ignoré.
+    """
+    name = path.name.lower()
+    if name in ENV_SHIPPED:
+        return False
+    return name == ".env" or name.startswith(".env.")
 
 
 def is_placeholder(value: str) -> bool:
     v = value.strip().strip("\"'")
     return bool(_PLACEHOLDER.match(v)) or bool(_ENV_NAME.match(v))
+
+
+def is_code_expression(value: str) -> bool:
+    """La valeur est une expression de code, pas un littéral (cf. `_CODE_EXPR`)."""
+    return bool(_CODE_EXPR.match(value.strip()))
+
+
+def is_literal_assignment(m: re.Match[str]) -> bool:
+    """Une correspondance d'`ASSIGNMENT` porte-t-elle une VALEUR — ni placeholder, ni code ?
+
+    Partagée avec `tracing.redact_text` : ce que la gate compte comme fuite et
+    ce que la trace rédige doivent être la même chose. Une valeur entre
+    guillemets est un littéral quoi qu'elle contienne ; sans guillemets, une
+    expression de code ne porte pas le secret, elle le CHERCHE.
+    """
+    value = m.group("value")
+    return not is_placeholder(value) and (bool(m.group("quote")) or not is_code_expression(value))
 
 
 def scan_file(root: Path, path: Path, report: Report) -> int:
@@ -101,11 +145,11 @@ def scan_file(root: Path, path: Path, report: Report) -> int:
                     location=loc,
                 )
         m = ASSIGNMENT.search(line)
-        if m and not is_placeholder(m.group(2)):
+        if m and is_literal_assignment(m):
             found += 1
             report.warn(
                 "SECRET_LEAK",
-                f"{loc}:{number} — affectation `{m.group(1)}` avec une valeur littérale",
+                f"{loc}:{number} — affectation `{m.group('name')}` avec une valeur littérale",
                 fix="référencer un NOM de variable (`key_env: CRM_API_KEY`) plutôt qu'une valeur. "
                     "Si c'est un exemple, le rendre reconnaissable (`<à compléter>`, `${VAR}`)",
                 location=loc,
@@ -125,7 +169,7 @@ def run(root: Path, targets: list[str] | None = None) -> Report:
             continue
         candidates = [base] if base.is_file() else sorted(p for p in base.rglob("*") if p.is_file())
         for path in candidates:
-            if SKIP_PARTS & set(path.parts) or path.suffix.lower() in SKIP_SUFFIXES:
+            if SKIP_PARTS & set(path.parts) or path.suffix.lower() in SKIP_SUFFIXES or is_env_file(path):
                 continue
             scan_file(root, path, report)
             scanned += 1

@@ -320,15 +320,27 @@ def strip_code(value: str) -> str:
     return v.strip("`").strip()
 
 
+def code_spans(value: str) -> list[str]:
+    """Tous les spans de code d'une cellule ou d'une puce, dans l'ordre, vides exclus.
+
+    Une cellule `Fichier` peut lister DEUX contrats (« `a.tool.md`, `b.tool.md` ») :
+    n'en lire que le premier vérifiait l'un et déclarait l'autre présent sans
+    l'avoir ouvert. La note entre les spans (« *(généré par …)* ») reste hors
+    des valeurs, comme pour `first_code_span`.
+    """
+    return [s.strip() for s in re.findall(r"`([^`]+)`", value or "") if s.strip()]
+
+
 def first_code_span(value: str) -> str:
     """La valeur d'un champ à valeur UNIQUE : son premier span de code s'il y en a un.
 
     « `chemin` *(obligatoire — …)* », souvent continué sur la ligne suivante
     d'une puce : la suite est un commentaire, pas une partie du chemin. À ne
-    pas appliquer aux champs qui portent une expression (`a` -> `b`).
+    pas appliquer aux champs qui portent une expression (`a` -> `b`), ni à une
+    cellule qui peut en porter plusieurs (`code_spans`).
     """
-    m = re.search(r"`([^`]+)`", value or "")
-    return m.group(1).strip() if m else strip_code(value or "")
+    spans = code_spans(value)
+    return spans[0] if spans else strip_code(value or "")
 
 
 def split_code_list(value: str) -> list[str]:

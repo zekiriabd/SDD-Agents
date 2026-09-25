@@ -56,6 +56,7 @@ def freshness(root: Path, number: int) -> dict[str, Any]:
     compiled = dict(ir.get("compiledFrom") or {})
     compiled.pop("compiledAt", None)
     current = ir_compiler.source_hashes(root, number)
+    compiled = ir_compiler.legacy_contract_hashes(root, compiled, current)
 
     moved: dict[str, list[str]] = {}
     for key, value in sorted(current.items()):

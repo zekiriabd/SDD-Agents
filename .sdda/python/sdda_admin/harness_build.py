@@ -131,17 +131,45 @@ def strip_sync_markers(text: str) -> str:
     return SYNC_MARKER_RE.sub(lambda m: m.group(2), text)
 
 
+#: Ce qu'un scalaire YAML peut porter NU sans qu'aucun parseur ne le retype ni
+#: ne le coupe : un identifiant (`sonnet`, `balanced`, `dev-app`). Tout le reste
+#: — une phrase, un chemin, un nombre, une date, `yes`/`no`/`null` — est cité.
+YAML_PLAIN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_\-]*$")
+YAML_RETYPED = frozenset({"true", "false", "yes", "no", "on", "off", "null", "y", "n"})
+_FRONTMATTER_RE = re.compile(r"^---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n?(.*)\Z", re.S)
+
+
+def yaml_scalar(value: Any) -> str:
+    """Une valeur de frontmatter que Claude Code relit en YAML strict.
+
+    `yaml_mini` relit la source avec tolérance ; Claude Code, non. Une
+    description qui porte `Profile: poc` ou ` # ` écrite sans guillemets est un
+    en-tête invalide, et le harnais ÉCARTE l'agent sans rien dire :
+    `Agent type 'dev-app' not found`, redémarrage ou pas. Une liste noire de
+    caractères aurait toujours un retard sur le parseur ; la règle est donc
+    inverse : seul un identifiant nu reste nu, tout le reste est émis entre
+    guillemets doubles (JSON est du YAML valide, et `json.loads` suffit à le
+    vérifier sans PyYAML — c'est ce que le test de parité relit).
+    """
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    text = value if isinstance(value, str) else str(value)
+    if YAML_PLAIN_RE.match(text) and text.lower() not in YAML_RETYPED:
+        return text
+    return json.dumps(text, ensure_ascii=False)
+
+
 def frontmatter_and_body(text: str) -> tuple[dict[str, Any], str]:
-    if not text.startswith("---"):
-        return {}, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    # Délimiteurs sur leur PROPRE ligne : un `---` dans une valeur ne coupe
+    # plus l'en-tête à mi-chemin.
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
         return {}, text
     try:
-        meta = yaml_mini.parse_mapping(parts[1])
+        meta = yaml_mini.parse_mapping(m.group(1))
     except Exception:
         meta = {}
-    return meta, parts[2].lstrip("\n")
+    return meta, m.group(2).lstrip("\n")
 
 
 # ---------------------------------------------------------------------------
@@ -372,14 +400,14 @@ class ClaudeAdapter(Adapter):
             selector = self.harness.model_for(meta.get("model_tier", meta.get("tier_default", "")))
             if selector:
                 meta["model"] = selector
-        front = "---\n" + "\n".join(
-            f"{k}: {json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v}"
-            for k, v in meta.items()
-        ) + "\n---\n"
+        front = "---\n" + "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in meta.items()) + "\n---\n"
         return front + GENERATED_BANNER.format(source=f".sdda/agents/{src.name}") + "\n" + body
 
     def render_command(self, plan, out, src, meta, body) -> None:
-        front = f"---\nname: {meta.get('name', src.stem)}\ndescription: {meta.get('description', '')}\n---\n"
+        front = (
+            f"---\nname: {yaml_scalar(meta.get('name', src.stem))}\n"
+            f"description: {yaml_scalar(meta.get('description', ''))}\n---\n"
+        )
         plan.add(
             out / "commands" / src.name,
             front + GENERATED_BANNER.format(source=f".sdda/commands/{src.name}") + "\n" + body,
@@ -529,13 +557,19 @@ def invariants_by_enforcer_kind() -> dict[str, list[str]]:
     le cœur du rapport d'impact : dire « niveau B » sans dire lesquels ne
     renseigne personne.
     """
-    text = (SDDA / "INVARIANTS.yml").read_text(encoding="utf-8")
+    # Lu par `yaml_mini`, comme `framework_smoke` et le test du manifeste : une
+    # regex sur l'indentation cassait dès qu'un invariant ou un enforcer
+    # changeait de forme, et le rapport d'impact disait alors « aucun
+    # invariant déplacé » sur un manifeste qu'il n'avait pas lu.
+    data = yaml_mini.parse((SDDA / "INVARIANTS.yml").read_text(encoding="utf-8"))
     hook_only: list[str] = []
     mixed: list[str] = []
-    for block in re.split(r"\n  - id: ", text)[1:]:
-        iid = block.split("\n")[0].strip()
-        enforcers = re.findall(r"^\s+- (\.sdda/python/[\w\-./]+\.py)", block, re.M)
-        if not enforcers:
+    for inv in (data.get("invariants") or []) if isinstance(data, dict) else []:
+        if not isinstance(inv, dict):
+            continue
+        iid = str(inv.get("id") or "").strip()
+        enforcers = [str(e) for e in (inv.get("enforcers") or []) if str(e).startswith(".sdda/python/")]
+        if not iid or not enforcers:
             continue
         hooks = [e for e in enforcers if "sdda_hooks/" in e]
         if hooks and len(hooks) == len(enforcers):

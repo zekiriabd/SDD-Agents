@@ -11,6 +11,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import paths  # noqa: E402
 from sdda_lib.errors import Report, SddaError, emit  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig, read_layered_config  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402 — ré-exporté : tous les scripts l'importent d'ici
+
+# À l'IMPORT, et pas seulement dans `resolve_root` : `--help` sort d'argparse
+# AVANT que le script n'atteigne `resolve_root`. Sur une console cp1252,
+# `validate-datasets --help` plantait en `UnicodeEncodeError` sur un `∩` de sa
+# description, et les autres rendaient leurs accents en mojibake — un usage
+# qu'on ne peut pas lire est un usage qu'on devine. Idempotent, sans effet sur
+# un flux redirigé (tests).
+ensure_utf8_stdout()
 
 
 def add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -41,6 +50,3 @@ def load_config(root: Path, report: Report) -> LayeredConfig:
 
 def finish(report: Report, args: argparse.Namespace) -> int:
     return emit(report, args.json)
-
-
-from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402,F401 — ré-exporté : tous les scripts l'importent d'ici

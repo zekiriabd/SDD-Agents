@@ -255,6 +255,7 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
         current = ir_compiler.source_hashes(root, n)
         compiled = dict(ir.get("compiledFrom") or {})
         compiled.pop("compiledAt", None)
+        compiled = ir_compiler.legacy_contract_hashes(root, compiled, current)
         if compiled and compiled != current:
             moved = sorted(k for k in current if compiled.get(k) != current[k])
             report.error("IR_STALE", f"l'IR ne reflète plus les sources ({', '.join(moved)} ont bougé)",

@@ -139,8 +139,12 @@ def _append_journal(root: Path, entry: dict[str, Any]) -> None:
     """
     path = journal_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    # Sous verrou exclusif, comme les spans : `EvalMaxParallel` et les instances
+    # de `dev-agent` font écrire plusieurs processus dans la même seconde, et
+    # `open("a")` n'est pas atomique entre processus sous Windows. Une ligne
+    # entrelacée est un run que `all_runs` ne voit plus — donc que `--resume`
+    # ne reprend plus.
+    tracing.append_line(path, json.dumps(entry, ensure_ascii=False, sort_keys=True))
 
 
 def load_run(root: Path, run_id: str) -> dict[str, Any] | None:

@@ -27,7 +27,10 @@ Trois règles non négociables (AGENTIC-IR.md §1, §5) :
    - `onBoundExceeded` d'un agent : le comportement majoritaire de sa table de
      bornes (les cinq bornes du contrat portent chacune le leur) ;
    - une arête Mermaid pointillée (`-.->`) est une arête « gratuite »
-     (`countsAsHop: false`) ; une arête pleine compte comme hop.
+     (`countsAsHop: false`) ; une arête pleine compte comme hop ;
+   - `dataAccess[]` : une entrée par contrat `{n}-data-*.tool.md`, depuis sa
+     section `## Data Access` (stratégie + enveloppe) et son `## 7. Exposé à` ;
+     aucune entrée quand `dataaccess/none` (cf. `compile_data_access`).
 3. **Neutre framework.** Le compilateur ne connaît ni LangGraph ni Semantic
    Kernel : il décrit *quoi*. La fuite d'un identifiant de framework est
    détectée par validate_ir.py (`[FRAMEWORK_LEAK_IN_CONTRACT]`).
@@ -223,6 +226,63 @@ def _json_value(raw: str) -> Any:
     return json.loads(markdown_io.strip_code(raw))
 
 
+_SCHEMA_ITEM_RE = re.compile(r"^-\s+\*{0,2}([^*:\n]+?)\*{0,2}\s*:[ \t]*(.*)$", re.MULTILINE)
+
+#: Puce du `## 6. Schémas` -> clé canonique. Comparée par PRÉFIXE de la clé
+#: normalisée (casse, accents, espaces, backticks retirés) : `Entrée`,
+#: `Entrée (JSON Schema)`, `entree`, `**Sortie** attendue` désignent le même
+#: schéma. Une comparaison exacte laissait passer un agent SANS `inputSchema`
+#: et sans un mot — au deuxième run réel, sur le premier contrat relu.
+_SCHEMA_KEYS: tuple[tuple[str, str], ...] = (("entree", "Entrée"), ("sortie", "Sortie"))
+
+#: Ce qui distingue un JSON Schema d'un EXEMPLE de valeur écrit sous la même
+#: puce : un schéma porte l'une de ces clés, un exemple (`{"intent": "billing"}`)
+#: n'en porte aucune. Prendre le premier bloc de la puce compilait l'exemple.
+_SCHEMA_HINT_KEYS = ("type", "$ref", "properties", "oneOf", "anyOf", "allOf", "$schema", "enum", "items")
+
+
+def _schema_key(label: str) -> str | None:
+    n = _norm_key(label)
+    return next((canon for prefix, canon in _SCHEMA_KEYS if n.startswith(prefix)), None)
+
+
+def _schema_block(chunk: str) -> str | None:
+    """Le bloc ```json qui EST un schéma ; à défaut le premier ; None sans bloc."""
+    blocks = markdown_io.fenced_blocks(chunk, "json")
+    for block in blocks:
+        try:
+            value = json.loads(block)
+        except ValueError:
+            continue
+        if isinstance(value, dict) and any(k in value for k in _SCHEMA_HINT_KEYS):
+            return block
+    return blocks[0] if blocks else None
+
+
+def _schema_items(body: str) -> dict[str, str]:
+    """`- **Entrée** : …` -> sa valeur, ou le bloc ```json qui suit la puce.
+
+    Un schéma de trente lignes s'écrit en bloc sous la puce, souvent après une
+    phrase. Lue par `parse_kv_list`, la puce ne gardait que sa ligne : l'entrée
+    (ligne vide) était sautée en silence, et la sortie (une phrase) refusée
+    comme JSON illisible. Le bloc gagne ; sans bloc, la valeur inline reste.
+
+    Clés rendues : `Entrée` et `Sortie` seulement (cf. `_SCHEMA_KEYS`). Toute
+    autre puce de la section délimite un morceau sans y entrer — un
+    `- **Exemple** :` suivi de son bloc n'est donc jamais lu comme la sortie.
+    """
+    marks = list(_SCHEMA_ITEM_RE.finditer(body))
+    out: dict[str, str] = {}
+    for i, m in enumerate(marks):
+        key = _schema_key(m.group(1))
+        if key is None or key in out:
+            continue
+        chunk = body[m.end(): marks[i + 1].start() if i + 1 < len(marks) else len(body)]
+        block = _schema_block(chunk)
+        out[key] = block if block is not None else m.group(2).strip()
+    return out
+
+
 def _contract_id(text: str, path: Path, suffix: str) -> str:
     m = _H1_ID_RE.search(text)
     if m:
@@ -354,10 +414,23 @@ def compile_agent(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
         agent["retrievers"] = sorted(set(retrievers))
 
     # §6 Schémas -------------------------------------------------------------
-    schemas = markdown_io.parse_kv_list(sec("Schémas") or "")
+    schemas_body = sec("Schémas")
+    schemas = _schema_items(schemas_body or "")
     for key, ir_key in (("Entrée", "inputSchema"), ("Sortie", "outputSchema")):
         raw = schemas.get(key)
         if raw is None or markdown_io.is_placeholder(markdown_io.strip_code(raw)):
+            # La section existe et ne rend pas ce schéma : on le DIT. Continuer
+            # en silence produisait un agent sans `inputSchema`, que `dev-agent`
+            # implémentait sans contrat d'entrée et que la part `api` de G6 ne
+            # pouvait confronter à rien. Avertissement et non erreur : le
+            # schéma n'est pas obligatoire dans l'IR, mais son absence l'est.
+            if schemas_body is not None and schemas_body.strip():
+                ctx.report.warn(
+                    "AGENT_SCHEMA_MISSING",
+                    f"agent `{aid}` : `## 6. Schémas` ne déclare aucun schéma `{key}` lisible"
+                    + (" (valeur placeholder)" if raw is not None else " (puce absente ou mal nommée)"),
+                    f"écrire `- **{key}** :` suivi d'un bloc ```json portant un JSON Schema (`type`, `properties`, `$ref`…)",
+                    f"{loc}:6")
             continue
         try:
             value = _json_value(raw)
@@ -593,6 +666,140 @@ def compile_tool(ctx: CompileContext, path: Path) -> dict[str, Any]:
     else:
         tool["contractTestsRef"] = m.group(1).strip()
     return tool
+
+
+# --------------------------------------------------------------------------
+# Contrats d'accès aux données (`{n}-data-*.tool.md`) -> `dataAccess[]`
+# --------------------------------------------------------------------------
+#: Un contrat `{n}-data-*` est un contrat d'OUTIL (compilé comme tel, dans
+#: `tools[]`) qui porte EN PLUS une section `## Data Access` : la stratégie et
+#: l'enveloppe de sûreté que `architect-data` décide. C'est elle qui devient
+#: une entrée `dataAccess[]` — la seule branche de l'IR que `validate_tool_contract`
+#: (`[DB_ENVELOPE_MISSING]`), `validate_data_access` (cohérence avec STACK.md),
+#: `validate_envelope` (matérialisation dans le code) et `sdda_state`
+#: (`build_socle/data`) lisent. Rien ne l'écrivait : trois validateurs
+#: attendaient une branche que le compilateur ne produisait jamais, et
+#: `dev-data` codait sans enveloppe compilée.
+DATA_CONTRACT_PREFIX = "data-"
+DATA_STRATEGIES = ("view-per-agent", "repository-tools", "semantic-layer", "text-to-sql", "graphql", "declared-sources")
+DATA_ROLES = ("readonly", "scoped-write", "full")
+DATA_CONNECTORS = ("file", "http-api", "mcp")
+DATA_SECTION_TITLES = ("Data Access", "Accès aux données", "Acces aux donnees")
+
+#: Clé de l'enveloppe IR -> alias acceptés dans le contrat (comparés après
+#: `_norm_key` : casse, accents, espaces, `_` et `-` indifférents). Le contrat
+#: est écrit à la main, en français ou avec les noms de l'IR ; les deux se lisent.
+DATA_ENVELOPE_ALIASES: dict[str, tuple[str, ...]] = {
+    "role": ("role", "Rôle", "DbAgentRole", "SourceAgentRole"),
+    "statementTimeoutMs": ("statementTimeoutMs", "statement_timeout_ms", "timeout", "Timeout (ms)", "DbStatementTimeoutMs", "SourceReadTimeoutMs"),
+    "maxRows": ("maxRows", "max_rows", "Lignes max", "DbMaxRowsReturned", "SourceMaxRecordsReturned"),
+    "schemas": ("schemas", "Schémas", "Schémas autorisés", "allowlist", "DbAllowedSchemas", "SourceAllowedSources"),
+    "forbidden": ("forbidden", "Interdits", "Instructions interdites", "DbForbiddenStatements", "SourceForbiddenOps"),
+    "stores": ("stores", "Stores", "SourceAllowedStores"),
+    "egressAllowlist": ("egressAllowlist", "egress", "Egress", "SourceEgressAllowlist"),
+    "secretsByName": ("secretsByName", "Secrets par nom", "secrets_by_name"),
+    "astValidated": ("astValidated", "AST", "Validation AST", "ast_validated"),
+    "identityFilter": ("identityFilter", "Filtre d'identité", "identity_filter", "Identité"),
+}
+
+
+def _list_value(raw: str | None) -> list[str]:
+    """`[a, b]`, `` `a`, `b` `` ou `a ; b` -> `["a", "b"]` ; `aucun`/`none` -> `[]`."""
+    if raw is None:
+        return []
+    v = markdown_io.strip_code(raw).strip().strip("[]")
+    if not v or v.lower() in ("aucun", "aucune", "none", "-", "—"):
+        return []
+    return [s for s in (markdown_io.strip_code(p) for p in re.split(r"[;,]", v)) if s and not markdown_io.is_placeholder(s)]
+
+
+def is_data_contract(path: Path, number: int) -> bool:
+    """`{n}-data-{slug}.tool.md` — l'espace de noms que `architect-data` s'est réservé."""
+    return path.name.startswith(f"{number}-{DATA_CONTRACT_PREFIX}") and path.name.endswith(".tool.md")
+
+
+def compile_data_access(ctx: CompileContext, path: Path) -> dict[str, Any] | None:
+    """Une entrée `dataAccess[]` depuis la section `## Data Access` d'un contrat `{n}-data-*`.
+
+    Rien n'est inventé (règle 2 du module) : la stratégie et les cinq clés
+    obligatoires de l'enveloppe (`role`, `statementTimeoutMs`, `maxRows`,
+    `schemas`, `forbidden`) viennent du contrat, ou la compilation échoue en
+    nommant la clé. `architect-data` STEP 4 le dit : « un défaut manquant n'est
+    pas hérité implicitement » — STACK.md dit ce qui est POSSIBLE, le contrat
+    dit ce qui est DÉCIDÉ, et `validate_data_access` confronte les deux.
+
+    `exposedTo` vient du `## 7. Exposé à` du même contrat, comme pour tout
+    outil : l'accès n'existe que pour les agents qui l'exigent.
+    """
+    text = markdown_io.read_text(path)
+    loc = paths.rel(ctx.root, path)
+    did = _contract_id(text, path, ".tool.md")
+    body = next((b for b in (markdown_io.section_body(text, t) for t in DATA_SECTION_TITLES) if b is not None), None)
+    if body is None or not body.strip():
+        ctx.fail(f"accès `{did}` : section `## Data Access` absente ou vide",
+                 "architect-data écrit la stratégie et l'enveloppe (role, statementTimeoutMs, maxRows, schemas, forbidden) "
+                 "dans `## Data Access` — un contrat `{n}-data-*` sans enveloppe n'est pas un accès, c'est une porte",
+                 f"{loc}:Data Access")
+        return None
+    kv = _collect_kv(body)
+
+    strategy = (_lookup(kv, "Stratégie", "Strategy", "binding.strategy") or "").lower()
+    if strategy not in DATA_STRATEGIES:
+        ctx.fail(f"accès `{did}` : `Stratégie: {strategy or '<absent>'}` hors de {list(DATA_STRATEGIES)}",
+                 "déclarer la stratégie retenue (DATA-ACCESS.md §2), la même que `## Active Data Access`", f"{loc}:Data Access")
+    entry: dict[str, Any] = {"id": did, "binding": {"strategy": strategy}}
+
+    envelope: dict[str, Any] = {}
+    role = (_lookup(kv, *DATA_ENVELOPE_ALIASES["role"]) or "").lower()
+    if role not in DATA_ROLES:
+        ctx.fail(f"accès `{did}` : `role: {role or '<absent>'}` hors de {list(DATA_ROLES)}", "readonly par défaut ; scoped-write et full exigent un ADR", f"{loc}:Data Access")
+    else:
+        envelope["role"] = role
+    for key in ("statementTimeoutMs", "maxRows"):
+        n = _to_int(_lookup(kv, *DATA_ENVELOPE_ALIASES[key]))
+        if n is None or n < 1:
+            ctx.fail(f"accès `{did}` : `{key}` absent ou non borné", "une borne absente est une borne infinie : écrire un entier > 0", f"{loc}:Data Access")
+        else:
+            envelope[key] = n
+    schemas = _list_value(_lookup(kv, *DATA_ENVELOPE_ALIASES["schemas"]))
+    if not schemas:
+        ctx.fail(f"accès `{did}` : `schemas` (allowlist) absent ou vide", "lister les schémas — ou les ids de sources — autorisés ; jamais une denylist", f"{loc}:Data Access")
+    else:
+        envelope["schemas"] = schemas
+    forbidden_raw = _lookup(kv, *DATA_ENVELOPE_ALIASES["forbidden"])
+    if forbidden_raw is None:
+        ctx.fail(f"accès `{did}` : `forbidden` absent", "lister les opérations interdites (DDL + DML en lecture seule ; `aucun` se déclare, il ne se devine pas)", f"{loc}:Data Access")
+    else:
+        envelope["forbidden"] = [f.upper() for f in _list_value(forbidden_raw)]
+    for key in ("stores", "egressAllowlist"):
+        raw = _lookup(kv, *DATA_ENVELOPE_ALIASES[key])
+        if raw is not None:
+            envelope[key] = _list_value(raw)
+    for key in ("secretsByName", "astValidated"):
+        b = _to_bool(_lookup(kv, *DATA_ENVELOPE_ALIASES[key]))
+        if b is not None:
+            envelope[key] = b
+    idf = _lookup(kv, *DATA_ENVELOPE_ALIASES["identityFilter"])
+    if idf is not None:
+        envelope["identityFilter"] = None if idf.lower() in ("none", "aucun", "aucune") else idf
+    entry["envelope"] = envelope
+
+    connectors = [c.lower() for c in _list_value(_lookup(kv, "connectors", "Connecteurs", "connector", "Connecteur"))]
+    unknown = [c for c in connectors if c not in DATA_CONNECTORS]
+    if unknown:
+        ctx.fail(f"accès `{did}` : connecteur(s) inconnu(s) {unknown}", f"connecteurs admis : {', '.join(DATA_CONNECTORS)}", f"{loc}:Data Access")
+    elif connectors:
+        entry["connectors"] = sorted(set(connectors))
+
+    exposed = sorted({ctx.qualified(r.get("Agent", "")) for r in markdown_io.parse_table(markdown_io.section_body(text, "Exposé à") or "")
+                      if not markdown_io.is_placeholder(markdown_io.strip_code(r.get("Agent", "")))})
+    if not exposed:
+        ctx.fail(f"accès `{did}` : `## 7. Exposé à` ne nomme aucun agent", "un accès données n'existe que pour les agents dont une CAP l'exige", f"{loc}:7")
+    for a in exposed:
+        if a not in ctx.agent_ids:
+            ctx.fail(f"accès `{did}` : exposé à l'agent `{a}` sans contrat", "corriger `## 7. Exposé à` ou écrire le contrat d'agent", f"{loc}:7")
+    entry["exposedTo"] = exposed
+    return entry
 
 
 # --------------------------------------------------------------------------
@@ -1112,6 +1319,11 @@ def contract_source_hashes(root: Path, number: int) -> dict[str, str]:
     eux dans `compiledFrom`, éditer un contrat d'outil laisse l'IR se déclarer
     frais alors qu'il ne reflète plus sa source — et c'est exactement le cas que
     `/sdda-topology --recompile-only` existe pour traiter.
+
+    Hash de SPÉCIFICATION (`Status:` exclu), comme la MISSION, les CAPs et la
+    topologie : `compute-status` réécrit la ligne `Status:` des contrats à chaque
+    changement d'état dérivé, et un hash brut rendait l'IR `[IR_STALE]` après
+    tout passage de gate — sans qu'une ligne de contrat ait changé.
     """
     out: dict[str, str] = {}
     for kind in ("agents", "tools", "retrieval", "memory"):
@@ -1119,8 +1331,30 @@ def contract_source_hashes(root: Path, number: int) -> dict[str, str]:
         if not directory.is_dir():
             continue
         for p in sorted(directory.glob(f"{number}-*.md")):
-            out[paths.rel(root, p)] = hashing.sha256_file(p)
+            out[paths.rel(root, p)] = hashing.sha256_spec_file(p)
     return out
+
+
+def legacy_contract_hashes(root: Path, compiled: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    """`compiled` où chaque empreinte de contrat BRUTE encore exacte est remplacée par l'empreinte courante.
+
+    Jusqu'au 2026-09-25, `contractHashes` était un hash brut du fichier, `Status:`
+    compris. Passé au hash de spécification, il aurait déclaré `[IR_STALE]` toute
+    IR compilée avant, sans qu'une ligne de contrat ait changé — et arrêté la
+    reprise de chaque projet en cours. Une empreinte brute qui correspond encore
+    au fichier sur disque dit exactement ce que dit le hash de spec : la source
+    n'a pas bougé. Elle est donc acceptée ; la prochaine compilation la remplace.
+    """
+    before = compiled.get("contractHashes")
+    now = current.get("contractHashes")
+    if not isinstance(before, dict) or not isinstance(now, dict):
+        return compiled
+    upgraded = dict(before)
+    for rel, stored in before.items():
+        path = root / rel
+        if rel in now and stored != now[rel] and path.is_file() and stored == hashing.sha256_file(path):
+            upgraded[rel] = now[rel]
+    return {**compiled, "contractHashes": upgraded}
 
 
 def source_hashes(root: Path, number: int) -> dict[str, Any]:
@@ -1229,6 +1463,13 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
                 if i not in known:
                     ctx.fail(f"agent `{a['id']}` : {kind} `{i}` câblé sans contrat", f"écrire le contrat de `{i}` ou retirer la ligne", f"workspace/pipeline/contracts/agents/{a['id']}.agent.md")
 
+    # Les contrats `{n}-data-*` sont DEUX choses : un outil (déjà dans `tools`)
+    # et un accès données — compilé après `ctx.agent_ids`, parce que `exposedTo`
+    # se vérifie contre les agents.
+    data_access = [d for d in (compile_data_access(ctx, p)
+                               for p in sorted(paths.contracts_dir(root, "tools").glob(f"{number}-*.tool.md"))
+                               if is_data_contract(p, number)) if d]
+
     topo_path = paths.topology_dir(root) / f"{number}-topology.md"
     if not topo_path.is_file():
         ctx.fail(f"topologie `{paths.rel(root, topo_path)}` absente", "produire la TOPOLOGY (architect-topology)", paths.rel(root, topo_path))
@@ -1270,6 +1511,10 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
     }
     if retrievers:
         ir["retrievers"] = sorted(retrievers, key=lambda r: r["id"])
+    if data_access:
+        # `dataaccess/none` ne produit AUCUNE entrée : l'absence de la clé est
+        # la représentation de `none` (ir.schema.json, `$defs/dataAccess`).
+        ir["dataAccess"] = sorted(data_access, key=lambda d: d["id"])
     memory = compile_memory(root)
     if memory:
         ir["memory"] = memory
@@ -1291,7 +1536,8 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
     else:
         ir["compiledFrom"]["compiledAt"] = default_compiled_at()
     report.data = {"missionId": mission.id, "nodes": len(orchestration.get("nodes", [])), "edges": len(orchestration.get("edges", [])),
-                   "agents": len(agents), "tools": len(tools), "retrievers": len(retrievers), "suites": len(evaluation["suites"]), "identityHash": ir_identity_hash(ir)}
+                   "agents": len(agents), "tools": len(tools), "retrievers": len(retrievers), "dataAccess": len(data_access),
+                   "suites": len(evaluation["suites"]), "identityHash": ir_identity_hash(ir)}
     return ir, report
 
 

@@ -16,6 +16,8 @@ Contrôles :
       CalibrationSetMinItems, AdversarialSetMinItems            [EVAL_DATASET_TOO_SMALL]
     - tout dataset nommé par un AC ou une suite d'injection existe   [EVAL_DATASET_MISSING]
     - aucun AC n'itère sur le holdout                            [AC_DATASET_IS_HOLDOUT]
+    - aucun secret, aucune PII non déclarée dans les items       [SECRET_LEAK] [PII_IN_DATASET]
+      (motifs de scan_secrets / scan_pii ; `pii_status: present-authorized` déclare)
 
 Le rapport épingle le hash de chaque fichier (`dataset:{chemin}`) : c'est le
 `dataset_hash` du tuple P10. `--freeze` est accepté (compatibilité /sdda-eval)
@@ -44,9 +46,15 @@ from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import append_bypass_audit, write_gate_report  # noqa: E402
 from sdda_lib.jsonschema_mini import SchemaValidator  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig  # noqa: E402
+from sdda_scripts import scan_pii, scan_secrets  # noqa: E402
 from sdda_scripts._common import add_common_args, finish, load_config, resolve_root  # noqa: E402
 from sdda_scripts.ir_compiler import mission_numbers  # noqa: E402
 from sdda_scripts.validate_cap import load_caps_for_mission  # noqa: E402
+
+#: `metadata.pii_status` d'un item (golden-set.schema.json) qui DÉCLARE la PII :
+#: elle est autorisée par un ADR, et le scan ne la compte pas. Toute autre
+#: valeur — `none`, `redacted`, absente — promet qu'il n'y en a pas.
+PII_AUTHORIZED = "present-authorized"
 
 KINDS = ("golden", "holdout", "calibration", "adversarial")
 #: rôle -> (clé de config, défaut config.base.yml)
@@ -113,6 +121,50 @@ def structural_problems(item: dict[str, Any]) -> list[str]:
     return out
 
 
+def scan_item_content(root: Path, ds: Dataset, report: Report, *, pii_blocking: bool) -> dict[str, int]:
+    """Secrets et PII dans les ITEMS — le contrôle 4 de `/sdda-eval`, promis et joué par personne.
+
+    Un golden set est COMMITÉ : une clé d'API collée dans un `input` d'exemple,
+    un e-mail réel dans une vérité terrain construite depuis un export, y
+    deviennent publics au premier push. Les motifs sont ceux de `scan_secrets`
+    et `scan_pii` — un seul jeu de motifs, deux enforcers, pas deux vérités.
+
+    Secrets : `scan_secrets.scan_file` tel quel (`[SECRET_LEAK]`, la valeur
+    jamais recopiée). PII : par ligne, donc par item — un item qui déclare
+    `metadata.pii_status: present-authorized` est exclu, c'est la seule forme
+    de « PII déclarée » que le schéma des items connaît. `TracePIIPolicy: raw`
+    rend le finding non bloquant, comme pour `scan_pii` : une politique qui
+    accepte la PII brute en trace ne peut pas la refuser dans le jeu qui
+    produit la trace.
+    """
+    counts = {"secrets": scan_secrets.scan_file(root, ds.path, report), "pii": 0, "piiAuthorized": 0}
+    emit = report.error if pii_blocking else report.warn
+    for number, line in enumerate(markdown_io.read_text(ds.path).split("\n"), start=1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        status = str(((item.get("metadata") or {}) if isinstance(item, dict) else {}).get("pii_status") or "")
+        if status == PII_AUTHORIZED:
+            counts["piiAuthorized"] += 1
+            continue
+        if scan_pii.EXAMPLE_RE.search(line):
+            continue
+        for label, pattern in scan_pii.COMPILED:
+            m = pattern.search(line)
+            if not m or (label == "carte bancaire" and not scan_pii._luhn(m.group(0))):
+                continue
+            counts["pii"] += 1
+            iid = item.get("id", f"ligne {number}") if isinstance(item, dict) else f"ligne {number}"
+            emit("PII_IN_DATASET", f"{ds.rel}:{number} — {label} dans l'item `{iid}` sans `pii_status: {PII_AUTHORIZED}`",
+                 "rediger avant écriture, ou déclarer `metadata.pii_status: present-authorized` sous couvert d'un ADR : "
+                 "un jeu construit depuis des données réelles est COMMITÉ, la PII y devient publique", ds.rel)
+            break
+    return counts
+
+
 def validate_datasets(root: Path, *, mission: int | None = None, config: LayeredConfig | None = None,
                       write_report: bool = True, require: tuple[str, ...] = (),
                       min_items: int | None = None) -> Report:
@@ -150,6 +202,13 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
                          f"produire le jeu `{kind}` via qa-evals (`/sdda-eval {{n}} --datasets-only`) : "
                          "il est exigé par la phase en cours, pas par principe",
                          str(paths.datasets_dir(root, kind)))
+
+    # Secrets et PII dans les items -----------------------------------------------------
+    pii_blocking = scan_pii.policy_of(root)[0] != "raw"
+    content: dict[str, int] = {"secrets": 0, "pii": 0, "piiAuthorized": 0}
+    for rel, ds in sorted(datasets.items()):
+        for key, n in scan_item_content(root, ds, report, pii_blocking=pii_blocking).items():
+            content[key] += n
 
     # Items -------------------------------------------------------------------------
     for rel, ds in sorted(datasets.items()):
@@ -266,6 +325,7 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
         "itemCounts": {rel: len(d.items) for rel, d in sorted(datasets.items())},
         "holdoutOverlaps": overlaps,
         "disjointCheck": mode,
+        "content": content,
     }
     if write_report:
         for n, pins in per_mission.items():
@@ -276,7 +336,7 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Datasets : golden ∩ holdout = ∅ par hash, tailles minimales, schéma des items")
+    p = argparse.ArgumentParser(description="Datasets : golden et holdout disjoints par hash, tailles minimales, schéma des items, secrets et PII")
     p.add_argument("--mission", type=int, default=None, help="numéro de mission ; défaut : toutes")
     p.add_argument("--freeze", action="store_true", help="compatibilité /sdda-eval : les hashes sont toujours épinglés")
     p.add_argument("--require", default=None,

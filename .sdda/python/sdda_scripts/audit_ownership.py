@@ -1047,9 +1047,46 @@ def _sha(path: Path) -> str:
     return h.hexdigest()
 
 
+#: Un instantané qui n'a pas pu être posé. Littéral ici pour le registre.
+CLS_SNAPSHOT_FAILED = "OWNERSHIP_SNAPSHOT_FAILED"
+
+
+class SnapshotError(OSError):
+    """L'instantané précédent n'a pas pu être remplacé : la phase ne doit PAS s'ouvrir."""
+
+
+def _replace_snapshot(tmp: Path, target: Path) -> None:
+    """`tmp` devient `target`, ou lève `SnapshotError` — jamais un instantané à moitié.
+
+    Sous Windows, un fichier de l'ancien instantané tenu ouvert (un éditeur,
+    un antivirus, un `Read` d'agent) survit à `rmtree(ignore_errors=True)`, et
+    `os.replace` échoue alors sur un répertoire non vide. L'exception remontait
+    nue : la commande s'arrêtait sans classe, ou pire, la phase s'ouvrait
+    sans instantané — et `--since-snapshot` n'avait plus rien pour juger les
+    écritures réelles. On réessaie une fois (le verrou d'un scanner dure
+    rarement plus d'un instant), puis on refuse, en le disant.
+    """
+    import shutil
+    import time
+
+    shutil.rmtree(target, ignore_errors=True)
+    if target.exists():
+        time.sleep(0.25)
+        shutil.rmtree(target, ignore_errors=True)
+    if target.exists():
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise SnapshotError(f"l'instantané précédent `{target}` ne peut pas être supprimé (fichier tenu ouvert ?)")
+    try:
+        os.replace(tmp, target)
+    except OSError as exc:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise SnapshotError(f"impossible de poser l'instantané `{target}` : {exc.__class__.__name__}: {exc}") from exc
+
+
 def take_snapshot(root: Path, mission: str | None, phase: str) -> dict[str, Any]:
     """Empreinte de chaque fichier du workspace (hors `.sys/`), et copie des
-    fichiers restaurables. Écrit atomiquement ; rend le manifeste."""
+    fichiers restaurables. Écrit atomiquement ; rend le manifeste, ou lève
+    `SnapshotError` si l'instantané précédent ne peut pas être remplacé."""
     import json
     import shutil
 
@@ -1075,8 +1112,7 @@ def take_snapshot(root: Path, mission: str | None, phase: str) -> dict[str, Any]
         files[rel] = entry
     manifest = {"mission": mission, "phase": phase, "files": files}
     (tmp / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True), encoding="utf-8")
-    shutil.rmtree(target, ignore_errors=True)
-    os.replace(tmp, target)
+    _replace_snapshot(tmp, target)
     return manifest
 
 
@@ -1268,7 +1304,14 @@ def main(argv: list[str] | None = None) -> int:
         if not args.phase:
             report.error("INVALID_ARG", "`snapshot` exige `--phase`", fix="nommer la phase qui va s'ouvrir")
             return finish(report, args)
-        manifest = take_snapshot(root, args.mission, str(args.phase))
+        try:
+            manifest = take_snapshot(root, args.mission, str(args.phase))
+        except SnapshotError as exc:
+            report.error(CLS_SNAPSHOT_FAILED, str(exc),
+                         fix="fermer ce qui tient l'ancien instantané ouvert (éditeur, scanner), ou le supprimer à la main, "
+                             "puis relancer `snapshot` AVANT la vague : une phase ouverte sans instantané n'est pas auditable",
+                         location=paths.rel(root, snapshot_dir(root, args.mission, str(args.phase))))
+            return finish(report, args)
         report.data.update({"files": len(manifest["files"]),
                             "path": paths.rel(root, snapshot_dir(root, args.mission, str(args.phase)))})
         return finish(report, args)

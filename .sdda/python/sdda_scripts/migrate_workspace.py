@@ -976,15 +976,51 @@ def check_registry(report: Report) -> bool:
 # ---------------------------------------------------------------------------
 # Moteur
 # ---------------------------------------------------------------------------
+#: Ce qui n'existe QUE dans l'arbre courant (v6) et ce qui n'y existe PLUS.
+#: Un workspace sans `workspace.json` n'est pas forcément antérieur à la v1 :
+#: un utilisateur qui « nettoie » `.sys/` le supprime, et rejouer v0 -> v6 sur
+#: un arbre déjà en v6 recréait `missions/`, `caps/`, `prompts/`, `topology/`
+#: vides à côté de `pipeline/` — les migrations ne déplacent que du contenu,
+#: elles ne retirent pas le répertoire vide qu'elles viennent d'inventer.
+CURRENT_TREE_MARKERS: tuple[str, ...] = ("pipeline", "stack/STACK.md", "feats", "assets")
+LEGACY_TREE_MARKERS: tuple[str, ...] = ("missions", "caps", "feats/missions", "feats/caps", "proof", "evals")
+
+
+def infer_version_from_tree(root: Path) -> int | None:
+    """La version d'un workspace SANS `workspace.json`, lue dans son arbre — ou `None`.
+
+    Seul le cas « déjà à jour » est reconnu : les marqueurs de l'arbre courant
+    présents, aucun marqueur d'un arbre antérieur. Tout autre arbre part de v0,
+    comme avant — une inférence plus fine se tromperait sur les cas mixtes.
+    """
+    workspace = root / "workspace"
+    if not all((workspace / rel).exists() for rel in CURRENT_TREE_MARKERS):
+        return None
+    if any((workspace / rel).exists() for rel in LEGACY_TREE_MARKERS):
+        return None
+    return WORKSPACE_VERSION
+
+
 def run(root: Path, *, dry_run: bool = False) -> Report:
     report = Report(name="MIGRATE", target=str(root))
-    current = read_workspace_version(root) or 0
+    declared = read_workspace_version(root)
+    current = declared or 0
+    if declared is None:
+        inferred = infer_version_from_tree(root)
+        if inferred is not None:
+            current = inferred
+            report.warn("WORKSPACE_VERSION_INFERRED",
+                        f"`workspace/.sys/workspace.json` absent, arbre reconnu en v{inferred} : "
+                        "rien à migrer, le fichier de version est réécrit",
+                        "ne pas supprimer ce fichier — c'est lui qui date le workspace", WORKSPACE_JSON_REL)
     report.data.update({"from": current, "to": WORKSPACE_VERSION, "dryRun": dry_run,
-                        "applied": [], "actions": []})
+                        "applied": [], "actions": [], "inferred": declared is None and current > 0})
     if not check_registry(report):
         return report
 
     ctx = Context(root=root, report=report, dry_run=dry_run, actions=report.data["actions"])
+    if report.data["inferred"] and current >= WORKSPACE_VERSION:
+        ctx.write_version(current)
     for migration in MIGRATIONS:
         if migration.target <= current:
             continue

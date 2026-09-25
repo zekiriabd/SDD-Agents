@@ -144,3 +144,39 @@ def test_suites_are_read_without_pyyaml(g2_project: Path, monkeypatch: pytest.Mo
     assert suite["level"] == "L2"
     assert [c["id"] for c in suite["cases"]] == ["happy-1", "not-found", "timeout"]
     assert "import yaml" not in Path(run_tool_suites.__file__).read_text(encoding="utf-8")
+
+
+NETWORK_TESTS = f'''import pytest
+
+SUITE = "{SUITE_ID}"
+
+@pytest.mark.parametrize("case", ["happy-1", "not-found", "timeout"])
+def test_generic(case):
+    assert case
+
+@pytest.mark.network
+def test_live_connectivity():
+    raise ConnectionError("service injoignable")
+'''
+
+
+def test_a_red_network_test_is_live_unreachable_not_a_broken_contract(g2_project: Path) -> None:
+    """Contrôle 8 de G3 : la connectivité live a sa classe, distincte du contrat non tenu."""
+    (_tests_dir(g2_project) / "test_invoice_lookup.py").write_text(NETWORK_TESTS, encoding="utf-8")
+    code, out = run_main(run_tool_suites.main, ["--root", str(g2_project), "--mission", "1", "--tool", TOOL])
+    assert code != 0
+    report = _report(g2_project, TOOL)
+    classes = [e["class"] for e in report["errors"]]
+    assert classes == ["TOOL_LIVE_UNREACHABLE"], classes      # le contrat, lui, est tenu : aucun TOOL_CONTRACT_FAILED
+    assert "test_live_connectivity" in report["errors"][0]["message"]
+
+
+def test_network_marks_are_read_from_the_source(tmp_path: Path) -> None:
+    decorated = tmp_path / "test_a.py"
+    decorated.write_text("import pytest\n\n@pytest.mark.network\ndef test_ping():\n    pass\n\ndef test_local():\n    pass\n", encoding="utf-8")
+    module_wide = tmp_path / "test_b.py"
+    module_wide.write_text("import pytest\npytestmark = [pytest.mark.network, pytest.mark.slow]\n\ndef test_all():\n    pass\n", encoding="utf-8")
+    marked = run_tool_suites.network_tests([decorated, module_wide])
+    assert marked == {("test_a", "test_ping"), ("test_b", "test_all")}
+    assert run_tool_suites.is_network_case({"file": "test_a", "name": "test_ping[x-1]", "outcome": "failed"}, marked)
+    assert not run_tool_suites.is_network_case({"file": "test_a", "name": "test_local", "outcome": "failed"}, marked)

@@ -354,7 +354,25 @@ def test_every_adr_required_rule_of_the_other_registries_is_in_the_adr_registry(
                 expected.add((axis, name))
     for component in _matrix()["refusedByDefault"]["components"]:
         expected.add(tuple(component.split("/", 1)))
-    assert expected and expected <= declared, expected - declared
+    # `expected` peut être vide : le pattern `network`, seul composant refusé
+    # par défaut, n'a ni fiche ni valeur d'IR — une règle d'ADR à son sujet
+    # était inatteignable, et elle est sortie du registre.
+    assert declared, "le registre des ADR est vide — validate_adr n'a plus rien à appliquer"
+    assert expected <= declared, expected - declared
+
+
+def test_the_unreachable_network_adr_rule_is_gone() -> None:
+    """`network` n'est ni sur disque ni dans l'enum de l'IR : aucun ADR ne le débloque."""
+    from sdda_lib import yaml_mini
+    from sdda_scripts import validate_adr
+
+    assert not (SDDA / "stacks" / "orchestration" / "network.md").exists()
+    ir_schema = json.loads((SDDA / "registry" / "ir.schema.json").read_text(encoding="utf-8-sig"))
+    assert "network" not in ir_schema["$defs"]["orchestrationPattern"]["enum"] if "$defs" in ir_schema else True
+    assert all("network" not in r.values for r in validate_adr.load_requirements())
+    assert "orchestration/network" not in _matrix()["refusedByDefault"]["components"]
+    arch = yaml_mini.parse_mapping((SDDA / "registry" / "architecture-requirements.yml").read_text(encoding="utf-8"))
+    assert not arch["orchestration"]["choices"]["network"].get("adr_required")
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +518,92 @@ def test_every_template_key_has_a_declared_reader_that_names_it() -> None:
             elif not any(re.search(rf"\b{re.escape(n)}\b", path.read_text(encoding="utf-8")) for n in names):
                 problems.append(f"{section} > {key} : `{reader}` ne nomme pas la clé")
     assert not problems, "\n".join(problems)
+
+
+def schema_properties(schema: dict) -> list[tuple[str, dict]]:
+    """`[(chemin, entrée)]` de TOUTES les propriétés du schéma — objets imbriqués et sections compris.
+
+    Le contrôle précédent ne regardait que les clés écrites dans le gabarit :
+    une clé du schéma absente du gabarit (les 9 `*Gate`, `BuildModelMode`,
+    `CheckpointMode`, `AnswerRelevanceMin`…) pouvait rester déclarée, décrite,
+    et lue par personne — pendant qu'ARCHITECTURE §4 affirmait que « les clés
+    que personne ne lisait ont été retirées ».
+    """
+    out: list[tuple[str, dict]] = []
+
+    def walk(props: dict, prefix: str) -> None:
+        for name, entry in props.items():
+            if not isinstance(entry, dict):
+                continue
+            path = f"{prefix}{name}"
+            out.append((path, entry))
+            if isinstance(entry.get("properties"), dict):
+                walk(entry["properties"], path + ".")
+
+    walk(schema["properties"], "")
+    for section, node in schema["x-stackSections"].items():
+        if isinstance(node, dict) and isinstance(node.get("properties"), dict):
+            walk(node["properties"], f"{section} > ")
+    return out
+
+
+def _reader_problems(path: str, entry: dict) -> list[str]:
+    readers = entry.get("x-readBy") or []
+    if not readers:
+        return [f"{path} : aucun lecteur déclaré (x-readBy)"]
+    dotted = path.rpartition(" > ")[2]
+    names = {dotted.rpartition(".")[2], dotted.partition(".")[0]}
+    problems = []
+    for reader in readers:
+        file = reader_file(reader)
+        if not file.is_file():
+            problems.append(f"{path} : lecteur `{reader}` introuvable")
+        elif not any(re.search(rf"\b{re.escape(n)}\b", file.read_text(encoding="utf-8")) for n in names):
+            problems.append(f"{path} : `{reader}` ne nomme pas la clé")
+    return problems
+
+
+def test_every_schema_property_has_a_declared_reader_that_names_it() -> None:
+    """Récursif : Project Config, objets imbriqués (RuntimeTierMap.*, HybridWeights.*,
+    VectorStoreConnection.*) et sections `## Active *`. Une clé sans lecteur est
+    retirée, pas documentée."""
+    schema = json.loads((SDDA / "templates" / "project-config.schema.json").read_text(encoding="utf-8"))
+    entries = schema_properties(schema)
+    assert len(entries) > 100, "le parcours récursif a raté des propriétés"
+    problems = [p for path, entry in entries for p in _reader_problems(path, entry)]
+    assert not problems, "\n".join(problems)
+
+
+#: Les clés que rien ne lisait — retirées du schéma, de config.base.yml et du gabarit.
+DEAD_KEYS = (
+    "SystemName", "AnswerRelevanceMin", "AuditorBatchMode", "CostLatencyFailOn", "RagQualityFailOn",
+    "MissionGate", "CapGate", "TopologyGate", "ToolGate", "RetrievalGate", "AgentGate", "OrchGate",
+    "SafetyGate", "AcceptanceGate", "MaxNestingDepth", "TopologyJustificationRequired",
+    "PromptInlineForbidden", "PromptHashPinning", "BuildModelMode", "CheckpointMode",
+    "ResumeReusesIdentifiers", "PreserveHumanEdits",
+)
+
+
+def test_dead_keys_are_gone_from_schema_base_and_template() -> None:
+    schema = json.loads((SDDA / "templates" / "project-config.schema.json").read_text(encoding="utf-8"))
+    base = (SDDA / "config.base.yml").read_text(encoding="utf-8")
+    base_keys = set(re.findall(r"^([A-Za-z][A-Za-z0-9_]*)\s*:", base, re.M))
+    template = {k for _, k in template_keys()}
+    leaked = [k for k in DEAD_KEYS if k in schema["properties"] or k in base_keys or k in template]
+    assert not leaked, f"clé(s) mortes encore déclarées : {leaked}"
+    protected = schema["properties"]["security_down_protected"]
+    assert not set(DEAD_KEYS) & set(protected["default"])
+    assert not set(DEAD_KEYS) & set(protected["items"]["enum"])
+
+
+def test_wired_keys_are_read_by_the_script_that_now_applies_them() -> None:
+    """`MaxBypassesPerRun` était codé en dur à 2 ; `LocalCompute*` n'existaient que dans la base."""
+    schema = json.loads((SDDA / "templates" / "project-config.schema.json").read_text(encoding="utf-8"))
+    props = schema["properties"]
+    assert props["MaxBypassesPerRun"]["x-readBy"] == ["script:sdda_scripts/preflight_force_cumul.py"]
+    assert "script:sdda_scripts/estimate_budget.py" in props["LocalComputeCostPerHourUsd"]["x-readBy"]
+    assert "script:sdda_scripts/estimate_budget.py" in props["LocalComputeThroughputTokensPerSec"]["x-readBy"]
+    assert "script:sdda_scripts/validate_safety_gate.py" in props["AgentSafetyRequiredInProduction"]["x-readBy"]
 
 
 def test_retired_keys_are_gone_from_the_template() -> None:

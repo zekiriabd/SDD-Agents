@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -50,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import hashing, markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.layered_config import active_stacks, harness_memory_file  # noqa: E402
-from sdda_lib.runtime_io import now_iso as _now_iso  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_text, now_iso as _now_iso  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 #: Clés de `loader.yml` qui ne sont pas des agents.
@@ -699,10 +698,7 @@ def build_pack(root: Path, loader: dict[str, Any], agent: str, *, report: Report
             lines.append(text.rstrip("\n"))
 
     out = pack_path(root, agent)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(out.name + ".tmp")
-    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.replace(tmp, out)
+    atomic_write_text(out, "\n".join(lines) + "\n")   # temporaire `{nom}.tmp` + os.replace, cf. PACK_TMP_SUFFIX
 
     budget = int(spec.get("budget_bytes") or 0)
     size = out.stat().st_size

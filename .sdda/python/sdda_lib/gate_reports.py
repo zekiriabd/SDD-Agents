@@ -23,7 +23,7 @@ from typing import Any
 
 from sdda_lib import paths
 from sdda_lib.errors import Report
-from sdda_lib.runtime_io import now_iso  # noqa: F401 — ré-exporté : `from sdda_lib.gate_reports import now_iso` reste valide
+from sdda_lib.runtime_io import append_line, atomic_write_json, now_iso  # noqa: F401 — `now_iso` ré-exporté : `from sdda_lib.gate_reports import now_iso` reste valide
 
 _NAME_RE = re.compile(r"^(?P<gate>G[0-8]|PLAN)-(?P<artifact>[A-Za-z0-9-]+?)(?:\.(?P<part>[a-z]+))?\.json$")
 
@@ -95,10 +95,11 @@ def write_gate_report(root: Path, gate: str, artifact: str, report: Report, pinn
     }
     if part:
         payload["part"] = part
-    path = report_path(root, gate, artifact, part)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    return path
+    # Atomique : les hooks (`_hook.gate_status`) lisent ces rapports pendant
+    # que les validateurs les écrivent. Un `write_text` tronque puis remplit ;
+    # entre les deux, un hook lisait un JSON vide — donc « rapport illisible »,
+    # donc gate `absent`, donc un spawn refusé sur une gate en fait verte.
+    return atomic_write_json(report_path(root, gate, artifact, part), payload)
 
 
 def load_gate_reports(root: Path) -> list[dict[str, Any]]:
@@ -141,6 +142,9 @@ def append_bypass_audit(root: Path, gate: str, reason: str, operator: str | None
         "operator": operator or os.environ.get("USERNAME") or os.environ.get("USER") or "unknown",
         "reason": reason,
     }
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    # Sous verrou exclusif (`runtime_io.append_line`) : deux validateurs parallèles
+    # qui journalisent un bypass dans la même seconde entrelaçaient leurs
+    # lignes, et `bypasses_of` ignorait les deux comme illisibles — un bypass
+    # audité qui n'apparaît pas dans l'audit.
+    append_line(path, json.dumps(entry, ensure_ascii=False, sort_keys=True))
     return path

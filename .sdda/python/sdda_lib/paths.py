@@ -74,11 +74,6 @@ def feats_dir(root: Path) -> Path:
     return workspace(root) / FEATS
 
 
-def briefs_dir(root: Path) -> Path:
-    """Le brief de l'humain vit à la racine de `feats/` : `feats/{n}-{Name}.md`."""
-    return feats_dir(root)
-
-
 def pipeline_dir(root: Path) -> Path:
     """`workspace/pipeline/` : tout ce que le framework génère avant et autour du code."""
     return workspace(root) / PIPELINE
@@ -111,19 +106,6 @@ def roster_path(root: Path, mission_number: int | str) -> Path:
     le lit, ne l'écrit jamais (`loader.yml`).
     """
     return feats_dir(root) / f"{mission_number}-roster.md"
-
-
-def seed_dir(root: Path) -> Path:
-    """La vérité terrain fournie par l'HUMAIN : `workspace/seed/`.
-
-    Scénarios annotés, labels, exemples de référence — ce que `po-elicitor`
-    demande sous le nom de « ground truth » et que `qa-evals` étend en golden,
-    holdout et adversarial sous `pipeline/datasets/`. La graine est humaine, sa
-    dérivation est de l'agent : la première est à la racine avec les autres
-    entrées humaines, la seconde avec ce que le framework produit. Aucun `dev-*`
-    n'y touche.
-    """
-    return workspace(root) / SEED
 
 
 def contracts_dir(root: Path, kind: str) -> Path:
@@ -180,17 +162,6 @@ def rules_dir(root: Path, app_name: str) -> Path:
     Owner : `dev-prompt`.
     """
     return app_dir(root, app_name) / "rules"
-
-
-def memory_dir(root: Path, app_name: str) -> Path:
-    """`workspace/src/{App}/memory/` : l'implémentation du contrat de mémoire.
-
-    `architect-memory` écrit le contrat (`pipeline/contracts/memory/`) ; ce module
-    le réalise — fenêtre de conversation, état partagé entre agents, politique
-    PII à l'écriture. Il n'avait aucun owner : le contrat existait, rien ne le
-    devenait. Owner : `dev-orchestration`, qui possède déjà l'état du graphe.
-    """
-    return app_dir(root, app_name) / "memory"
 
 
 def datasets_dir(root: Path, kind: str | None = None) -> Path:

@@ -352,3 +352,19 @@ def test_a_second_run_is_not_fed_by_its_own_red_verdict(project: Path) -> None:
     green_part(project, "adversarial")
     code, out = run_main(vsg.main, ["--root", str(project), "--mission", "1", "--json"])
     assert code == 0, out
+
+
+def test_a_successful_tenant_crossing_is_named_as_a_breach(green_project: Path) -> None:
+    """`/sdda-review` promet `[TENANT_BREACH]` ; la part adversarial ne portait que la classe de famille."""
+    red_part(green_project, "adversarial", "TENANT_BOUNDARY_CROSSED")
+    report = run(green_project, fail_on="critical")
+    classes = [f.cls for f in report.errors]
+    assert "TENANT_BREACH" in classes and "SAFETY_GATE_FAILED" in classes
+    breach = next(f for f in report.errors if f.cls == "TENANT_BREACH")
+    assert "À LA SOURCE" in breach.fix
+    assert "TENANT_BOUNDARY_CROSSED" in report.data["neverBypassed"]
+
+
+def test_an_injection_alone_is_not_a_tenant_breach(green_project: Path) -> None:
+    red_part(green_project, "adversarial", "INJECTION_SUCCEEDED")
+    assert "TENANT_BREACH" not in errors(green_project)

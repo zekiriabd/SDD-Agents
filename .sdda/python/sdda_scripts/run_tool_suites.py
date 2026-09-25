@@ -28,6 +28,7 @@ Ce script ferme la boucle sans dupliquer les tests :
 from __future__ import annotations
 
 import argparse
+import ast
 import os
 import re
 import shutil
@@ -60,6 +61,7 @@ class ToolOutcome:
     tests: list[Path] = field(default_factory=list)
     passed: int = 0
     failed: list[str] = field(default_factory=list)
+    unreachable: list[str] = field(default_factory=list)   # tests `network` rouges
     xfailed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     uncovered: list[str] = field(default_factory=list)
@@ -165,6 +167,46 @@ def coverage_gaps(ids: list[str], tests: list[Path], results: list[dict[str, str
     return gaps
 
 
+#: Le marqueur pytest de la connectivité live (`pytest -m network`, contrat §8 :
+#: « connectivité live, marqué `network` »). Le rapport JUnit ne porte pas les
+#: marqueurs : on les lit dans la SOURCE des tests, comme la couverture des cas.
+NETWORK_MARK = "network"
+
+
+def _marks(expr: ast.AST) -> set[str]:
+    """Les noms `pytest.mark.X` d'une expression (décorateur, ou `pytestmark = …`)."""
+    out: set[str] = set()
+    for node in ast.walk(expr):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Attribute) and node.value.attr == "mark":
+            out.add(node.attr)
+    return out
+
+
+def network_tests(tests: list[Path]) -> set[tuple[str, str]]:
+    """`{(module, fonction)}` des tests marqués `network` — par décorateur, ou par `pytestmark` du module."""
+    out: set[tuple[str, str]] = set()
+    for path in tests:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        module_marked = any(
+            isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets)
+            and NETWORK_MARK in _marks(node.value)
+            for node in tree.body)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+                if module_marked or any(NETWORK_MARK in _marks(d) for d in node.decorator_list):
+                    out.add((path.stem, node.name))
+    return out
+
+
+def is_network_case(result: dict[str, str], marked: set[tuple[str, str]]) -> bool:
+    """Le résultat JUnit `test_live[case-1]` désigne-t-il un test marqué `network` ?"""
+    name = result["name"].split("[", 1)[0]
+    return (result["file"], name) in marked or any(func == name for _, func in marked)
+
+
 def tool_code(app_dir: Path, tool: dict[str, Any]) -> list[Path]:
     name = str(tool.get("name") or "")
     out = []
@@ -223,12 +265,17 @@ def run(root: Path, ir_file: Path, report: Report, *, only: set[str], write: boo
                     sub.error("TOOL_CONTRACT_FAILED", f"`{tid}` : pytest n'a rendu aucun résultat (exit {code})",
                               "lancer les tests à la main depuis l'application pour lire l'erreur",
                               tail.strip().splitlines()[-1] if tail.strip() else tid)
+                marked = network_tests(outcome.tests)
                 for r in results:
                     label = f"{r['file']}::{r['name']}"
                     if r["outcome"] == "passed":
                         outcome.passed += 1
                     elif r["outcome"] == "failed":
-                        outcome.failed.append(label)
+                        # La connectivité live est la SECONDE moitié de la TOOL GATE
+                        # (contrat §8) : un service injoignable n'est pas un contrat
+                        # non tenu, c'est une infrastructure absente — la correction
+                        # n'est pas chez `dev-tools`, et le tableau de bord doit le voir.
+                        (outcome.unreachable if is_network_case(r, marked) else outcome.failed).append(label)
                     elif r["outcome"] == "xfailed":
                         outcome.xfailed.append(label)
                     else:
@@ -236,6 +283,10 @@ def run(root: Path, ir_file: Path, report: Report, *, only: set[str], write: boo
                 for label in outcome.failed:
                     sub.error("TOOL_CONTRACT_FAILED", f"`{tid}` : test de contrat rouge — {label}",
                               "corriger l'outil (dev-tools) ou le runtime ; jamais le test pour qu'il passe", label)
+                for label in outcome.unreachable:
+                    sub.error("TOOL_LIVE_UNREACHABLE", f"`{tid}` : connectivité live en échec — {label}",
+                              "vérifier l'URL, la clé (`workspace/src/{App}/.env`) et l'allowlist d'egress ; "
+                              "un service injoignable au moment de la gate ne se prouve pas par un mock", label)
                 for label in outcome.xfailed:
                     sub.error("TOOL_CONTRACT_FAILED", f"`{tid}` : défaut connu (xfail) — {label}",
                               "un xfail documente un contrat NON tenu : corriger, puis retirer le marqueur", label)
@@ -253,7 +304,7 @@ def run(root: Path, ir_file: Path, report: Report, *, only: set[str], write: boo
         mark = "🟢" if sub.ok else "🔴"
         report.data.setdefault("lines", []).append(
             f"{mark} {tid} — {outcome.passed} vert(s), {len(outcome.failed)} rouge(s), "
-            f"{len(outcome.xfailed)} xfail, {len(outcome.uncovered)} cas non exercé(s)")
+            f"{len(outcome.unreachable)} injoignable(s), {len(outcome.xfailed)} xfail, {len(outcome.uncovered)} cas non exercé(s)")
     return outcomes
 
 
@@ -280,8 +331,8 @@ def main(argv: list[str] | None = None) -> int:
         return finish(report, args)
     only = {t for raw in args.tool for t in raw.split(",") if t}
     outcomes = run(root, ir_file, report, only=only, write=not args.no_report)
-    report.data["tools"] = [{"tool": o.tool_id, "passed": o.passed, "failed": o.failed, "xfailed": o.xfailed,
-                             "skipped": o.skipped, "uncovered": o.uncovered} for o in outcomes]
+    report.data["tools"] = [{"tool": o.tool_id, "passed": o.passed, "failed": o.failed, "unreachable": o.unreachable,
+                             "xfailed": o.xfailed, "skipped": o.skipped, "uncovered": o.uncovered} for o in outcomes]
     if not args.json:
         for line in report.data.get("lines", []):
             print(line)

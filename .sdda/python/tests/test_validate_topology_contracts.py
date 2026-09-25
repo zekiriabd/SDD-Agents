@@ -36,7 +36,32 @@ def test_a_none_marker_is_a_declaration_not_a_missing_contract(project: Path) ->
     assert "TOPOLOGY_CONTRACT_MISSING" not in out
 
 
+def test_a_note_after_the_path_is_not_part_of_the_path(project: Path) -> None:
+    # Vu au deuxième run réel : « `chemin` *(généré par `gen-source-tools`)* »
+    # était lu comme un seul chemin, et un contrat présent déclaré introuvable.
+    rel = "workspace/pipeline/contracts/tools/1-orders-lookup.tool.md"
+    (project / rel).parent.mkdir(parents=True, exist_ok=True)
+    (project / rel).write_text("# tool\n", encoding="utf-8")
+    _append_row(project, f"| tool | `{rel}` *(généré par `gen-source-tools --scope contracts`)* |")
+    code, out = run_main(validate_topology.main, ["--root", str(project), "--mission", "1"])
+    assert code == 0, out
+    assert "TOPOLOGY_CONTRACT_MISSING" not in out
+
+
 def test_prose_in_the_file_column_is_refused(project: Path) -> None:
     _append_row(project, "| tool | générés depuis `## Active Data Sources` — périmètre : `orders_lookup` |")
     code, out = run_main(validate_topology.main, ["--root", str(project), "--mission", "1"])
     assert code == 1 and "TOPOLOGY_CONTRACT_MISSING" in out
+
+
+def test_every_contract_of_a_multi_span_cell_is_checked(project: Path) -> None:
+    # Une cellule `Fichier` qui liste DEUX contrats : n'en lire que le premier
+    # déclarait le second présent sans l'avoir ouvert.
+    present = "workspace/pipeline/contracts/tools/1-orders-lookup.tool.md"
+    (project / present).parent.mkdir(parents=True, exist_ok=True)
+    (project / present).write_text("# tool\n", encoding="utf-8")
+    absent = "workspace/pipeline/contracts/tools/1-orders-count.tool.md"
+    _append_row(project, f"| tool | `{present}`, `{absent}` *(générés)* |")
+    code, out = run_main(validate_topology.main, ["--root", str(project), "--mission", "1"])
+    assert code != 0
+    assert "TOPOLOGY_CONTRACT_MISSING" in out and "1-orders-count" in out and "1-orders-lookup" not in out.split("TOPOLOGY_CONTRACT_MISSING", 1)[1].split("\n")[0]

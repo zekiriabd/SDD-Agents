@@ -295,17 +295,28 @@ def validate_topology_text(text: str, *, path: Path | None, root: Path | None, c
     # (`/sdda-topology` STEP 6) — c'est elle seule qui écrit la part de G2.
     if root is not None and not pre:
         for r in spec.contracts:
-            f = markdown_io.strip_code(_col(r, "Fichier"))
-            if markdown_io.is_placeholder(f) or "{" in f:
-                continue
-            if _norm(f).split(" ")[0] in ("aucun", "aucune", "none", "n/a", "-", "—"):
-                # « aucun » est une déclaration, pas un oubli : une MISSION sans
-                # retriever dit qu'elle n'en a pas, ligne par type, et le lecteur
-                # voit que l'architecte y a pensé. Tout autre texte sans fichier
-                # reste une faute : la colonne s'appelle `Fichier`.
-                continue
-            if not paths.resolve_rel(root, f).is_file():
-                report.error("TOPOLOGY_CONTRACT_MISSING", f"contrat annoncé introuvable : `{f}`", "produire le contrat ou retirer la ligne", loc)
+            # Chaque span de code de la cellule qui RESSEMBLE à un chemin est un
+            # contrat à vérifier : « `a`, `b` » en porte deux, et ne lire que le
+            # premier déclarait le second présent sans l'avoir ouvert. Une note
+            # peut elle-même citer une commande entre backticks (« *(généré par
+            # `gen-source-tools --scope contracts`)* ») : un span avec une
+            # espace, ou sans `/` ni suffixe de fichier, n'est pas un chemin.
+            # Sans aucun span de chemin, la cellule est lue comme avant — son
+            # premier span, sinon son texte — pour que la prose reste refusée.
+            cell = _col(r, "Fichier")
+            spans = markdown_io.code_spans(cell)
+            pathlike = [s for s in spans if not re.search(r"\s", s) and ("/" in s or s.endswith((".md", ".yaml", ".yml", ".json")))]
+            for f in pathlike or ([spans[0]] if spans else [markdown_io.strip_code(cell)]):
+                if markdown_io.is_placeholder(f) or "{" in f:
+                    continue
+                if _norm(f).split(" ")[0] in ("aucun", "aucune", "none", "n/a", "-", "—"):
+                    # « aucun » est une déclaration, pas un oubli : une MISSION sans
+                    # retriever dit qu'elle n'en a pas, ligne par type, et le lecteur
+                    # voit que l'architecte y a pensé. Tout autre texte sans fichier
+                    # reste une faute : la colonne s'appelle `Fichier`.
+                    continue
+                if not paths.resolve_rel(root, f).is_file():
+                    report.error("TOPOLOGY_CONTRACT_MISSING", f"contrat annoncé introuvable : `{f}`", "produire le contrat ou retirer la ligne", loc)
         for slug in spec.agents:
             p = paths.contracts_dir(root, "agents") / f"{spec.qualified(slug)}.agent.md"
             if not p.is_file():

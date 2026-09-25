@@ -21,7 +21,8 @@ GoldenSetMinItems…) se lisent aussi dans leur section, comme couche projet.
 PROTECTION SECURITY-DOWN : le projet ne peut pas relâcher ce que la couche team a
 durci sur les clés de `security_down_protected` (config.base.yml). Le sens de
 « plus strict » dépend de la clé : sévérité (`critical` < `serious` < …), mode
-(`full` > `manual` > `off`, `strict` > `warn` > `off`), numérique (plancher ou
+(`full` > `manual` > `off`, `strict` > `warn` > `off`), identité d'appelant
+(`none` < `api-key` < `oauth2` = `azure-ad` = `mtls`), numérique (plancher ou
 plafond), booléen (`true` = durci). Violation -> `SddaError`
 `[CONFIG_SECURITY_DOWNGRADE]`, bloquant.
 """
@@ -55,12 +56,18 @@ FLOOR_KEYS = frozenset({
     "GoldenSetMinItems", "HoldoutSetMinItems", "AdversarialSetMinItems", "CalibrationSetMinItems",
 })
 #: Clés numériques où « plus petit = plus strict » (plafond imposé par la team).
-CEILING_KEYS = frozenset({"MaxBypassesPerRun", "RegressionTolerancePct", "MaxNestingDepth", "MaxAgentsWarnAt"})
+CEILING_KEYS = frozenset({"MaxBypassesPerRun", "RegressionTolerancePct", "MaxAgentsWarnAt"})
 #: Clés booléennes où `true` = durci.
 TRUE_IS_STRICT_KEYS = frozenset({
-    "PromptInlineForbidden", "TopologyJustificationRequired", "AgentSafetyRequiredInProduction",
-    "TraceRequiredPerRun", "PromptHashPinning", "JudgeMustDifferFromEvaluated",
+    "AgentSafetyRequiredInProduction", "TraceRequiredPerRun", "JudgeMustDifferFromEvaluated",
+    "ApiContractFirst",
 })
+#: `ApiAuthMode` : par où entre l'identité de l'appelant. Ce n'est pas un mode
+#: `full > manual > off` — le suffixe `Mode` le faisait ranger là, où aucune de
+#: ses valeurs n'existe, donc aucun relâchement n'était jamais vu et la
+#: protection déclarée dans config.base.yml était inerte. Rang croissant =
+#: plus dur ; les trois mécanismes forts sont équivalents entre eux.
+AUTH_RANK: dict[str, int] = {"none": 0, "api-key": 1, "oauth2": 2, "azure-ad": 2, "mtls": 2}
 
 
 @dataclass
@@ -150,6 +157,9 @@ def is_downgrade(key: str, team_val: Any, project_val: Any) -> bool:
     if team_val is None or project_val is None:
         return False
     k = key
+    if k == "ApiAuthMode":
+        t, p = AUTH_RANK.get(str(team_val).strip().lower()), AUTH_RANK.get(str(project_val).strip().lower())
+        return t is not None and p is not None and p < t
     if k.endswith("FailOn"):
         t, p = _rank(team_val, SEVERITY_ORDER), _rank(project_val, SEVERITY_ORDER)
         return t is not None and p is not None and p > t

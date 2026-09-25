@@ -331,6 +331,37 @@ def test_measured_cost_over_hard_cap_is_red(compiled) -> None:
     assert payload["verdict"] == "red" and _suite(payload, sid_citations)["verdict"] == "green"   # le score passe, le budget non
 
 
+def test_measured_latency_p95_over_the_mission_target_is_red(compiled) -> None:
+    """Contrôle 6 de G6 : le coût était confronté à son plafond, la latence à rien."""
+    root, ir, cfg = compiled
+    ir["budget"]["latencyP95TargetMs"] = 5          # PerfectExecutor mesure 12 ms
+    for s in ir["evaluation"]["suites"]:
+        if s["id"] == sid_citations:
+            s["level"] = "L7"
+    report, payload = run_evals(root, ir, PerfectExecutor(), config=cfg, filters=Filters(suites={sid_citations}), write_report=False, write_gates=False)
+    assert "LATENCY_EXCEEDED_MEASURED" in {f.cls for f in report.errors}
+    assert payload["verdict"] == "red" and _suite(payload, sid_citations)["verdict"] == "green"   # le score passe, la latence non
+    assert any("p95" in n for n in _suite(payload, sid_citations)["notes"])
+
+
+def test_latency_target_falls_back_to_the_project_config_and_ignores_unmeasured_runs(compiled) -> None:
+    root, ir, cfg = compiled
+    ir["budget"].pop("latencyP95TargetMs", None)
+    for s in ir["evaluation"]["suites"]:
+        if s["id"] == sid_citations:
+            s["level"] = "L5"
+    project_cfg = LayeredConfig(config={**cfg.config, "LatencyP95TargetMs": 5}, sources=dict(cfg.sources))
+    report, _ = run_evals(root, ir, PerfectExecutor(), config=project_cfg, filters=Filters(suites={sid_citations}), write_report=False, write_gates=False)
+    assert "LATENCY_EXCEEDED_MEASURED" in {f.cls for f in report.errors}
+    # Une cible respectée, ou une latence jamais mesurée (0 ms), ne rend rien.
+    generous = LayeredConfig(config={**cfg.config, "LatencyP95TargetMs": 1000}, sources=dict(cfg.sources))
+    report, _ = run_evals(root, ir, PerfectExecutor(), config=generous, filters=Filters(suites={sid_citations}), write_report=False, write_gates=False)
+    assert "LATENCY_EXCEEDED_MEASURED" not in {f.cls for f in report.errors}
+    report, _ = run_evals(root, ir, ScoredExecutor([1.0, 1.0, 1.0]), config=project_cfg, filters=Filters(suites={sid_citations}),
+                          graders={"exact": score_grader}, write_report=False, write_gates=False)
+    assert "LATENCY_EXCEEDED_MEASURED" not in {f.cls for f in report.errors}
+
+
 # ---------------------------------------------------------------------------
 # Rapports, épinglage, filtres, CLI
 # ---------------------------------------------------------------------------

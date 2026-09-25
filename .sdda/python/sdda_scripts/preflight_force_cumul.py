@@ -12,8 +12,11 @@ Trois contrôles, dans cet ordre de gravité :
 1. **Raison obligatoire.** Toute env var `SDDA_BYPASS_*` posée sans
    `SDDA_BYPASS_REASON` est refusée. Un bypass anonyme est indistinguable d'un
    accident de shell six mois plus tard.
-2. **Cumul refusé.** `--force` + au moins un bypass, ou deux bypasses,
-   sur le même run → refus, sauf `SDDA_ALLOW_FORCE=1`, lui-même tracé.
+2. **Cumul refusé.** Plus de `MaxBypassesPerRun` contournements (`--force`
+   compris ; 1 par défaut, `## Project Config`, protégé security-down) sur le
+   même run → refus, sauf `SDDA_ALLOW_FORCE=1`, lui-même tracé. La clé était
+   déclarée dans config.base.yml et le seuil codé en dur ici : une équipe qui
+   l'abaissait à 0 ne changeait rien.
 3. **Journalisation.** Tout ce qui passe est écrit dans
    `workspace/.sys/.audit/bypasses.jsonl` — horodatage, opérateur, commande,
    classes court-circuitées, raison.
@@ -32,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import io
 import json
 import os
 import re
@@ -41,7 +45,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import paths  # noqa: E402
-from sdda_lib.runtime_io import ensure_utf8_stdout, now_iso, slash_command  # noqa: E402
+from sdda_lib.errors import SddaError  # noqa: E402
+from sdda_lib.layered_config import read_layered_config  # noqa: E402
+from sdda_lib.runtime_io import append_line, ensure_utf8_stdout, now_iso, slash_command  # noqa: E402
 
 ensure_utf8_stdout()
 
@@ -88,6 +94,22 @@ def parse_env_bypasses(raw: str | None) -> list[str]:
     return sorted(found)
 
 
+#: Repli si la configuration est illisible : le défaut de config.base.yml.
+DEFAULT_MAX_BYPASSES = 1
+
+
+def max_bypasses(root: Path) -> int:
+    """`MaxBypassesPerRun` de la config en couches — le seuil du cumul.
+
+    Une config refusée (security-down) ou illisible ne desserre rien : on
+    retombe sur le défaut du framework, jamais sur « pas de limite ».
+    """
+    try:
+        return max(0, read_layered_config(root, warn_stream=io.StringIO()).get_int("MaxBypassesPerRun", DEFAULT_MAX_BYPASSES))
+    except (SddaError, OSError):
+        return DEFAULT_MAX_BYPASSES
+
+
 def audit_line(root: Path, record: dict) -> None:
     """Une ligne JSONL dans `.sys/.audit/bypasses.jsonl`, en append atomique.
 
@@ -104,8 +126,9 @@ def audit_line(root: Path, record: dict) -> None:
     try:
         audit_dir = paths.audit_dir(root)
         audit_dir.mkdir(parents=True, exist_ok=True)
-        with (audit_dir / "bypasses.jsonl").open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        # Sous verrou : deux commandes du même run peuvent journaliser au même
+        # instant, et une ligne entrelacée est une ligne que `bypasses_of` ignore.
+        append_line(audit_dir / "bypasses.jsonl", json.dumps(record, ensure_ascii=False))
     except OSError as exc:
         sys.stderr.write(f"[audit] journal non écrit ({exc}) — le verdict reste valide\n")
 
@@ -189,13 +212,15 @@ def main() -> int:
     # local par la commande, et le cumuler ici le rendrait impossible à utiliser
     # là où il est légitime.
     cumul = list(env_bypasses) + (["--force"] if args.force else [])
-    if len(cumul) >= 2 and not allow_force:
+    limit = max_bypasses(root)
+    record["maxBypassesPerRun"] = limit
+    if len(cumul) > limit and not allow_force:
         record["verdict"] = "refused"
         audit_line(root, record)
         return error(
             CLS_CUMUL,
-            f"{len(cumul)} contournements sur le même run : {', '.join(cumul)}",
-            "n'en garder qu'un, corriger ce que l'autre masque, ou assumer explicitement "
+            f"{len(cumul)} contournements sur le même run : {', '.join(cumul)} — MaxBypassesPerRun = {limit}",
+            f"n'en garder que {limit}, corriger ce que les autres masquent, ou assumer explicitement "
             "avec `SDDA_ALLOW_FORCE=1` — lui-même tracé. Un pipeline qu'on force deux fois "
             "n'est plus un pipeline",
         )
@@ -206,8 +231,8 @@ def main() -> int:
     print(f"ok — {len(levers)} contournement(s) assumé(s) : {', '.join(levers)}")
     print(f"     raison : {reason or '(non requise — aucune env var posée)'}")
     print(f"     opérateur : {operator} · tracé dans {paths.rel(root, paths.audit_dir(root))}/bypasses.jsonl")
-    if allow_force and len(cumul) >= 2:
-        print(f"     ⚠  cumul autorisé par SDDA_ALLOW_FORCE — {', '.join(cumul)}")
+    if allow_force and len(cumul) > limit:
+        print(f"     ⚠  cumul autorisé par SDDA_ALLOW_FORCE — {', '.join(cumul)} (MaxBypassesPerRun = {limit})")
     print(f"     hors de portée de tout contournement : {', '.join(NO_BYPASS_GATES)}")
     return 0
 

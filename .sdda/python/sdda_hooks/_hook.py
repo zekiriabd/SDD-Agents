@@ -63,19 +63,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import paths  # noqa: E402
 from sdda_lib.gate_reports import load_gate_reports  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
 
 # `stderr` est le canal par lequel un refus atteint le modèle. Sous Windows il
 # est en `cp1252` par défaut : « borne dépassée » y devient « borne d�pass�e »,
 # et le `FIX:` que le modèle doit lire arrive abîmé — au moment précis où il
 # doit comprendre quoi corriger. Même piège que `serving/cli.md §7.5`.
-for _stream in (sys.stderr, sys.stdout):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
-        # Ignorable : un flux remplacé (tests, tube) n'a pas `reconfigure`. Le
-        # signaler sur stderr — le flux même qui vient d'échouer — ajouterait
-        # du bruit au refus que le modèle doit lire, sans rien corriger.
-        pass
+ensure_utf8_stdout()
 
 #: Codes de sortie. `2` est la valeur que Claude Code interprète comme un refus.
 ALLOW = 0
@@ -118,34 +112,75 @@ ARGV_KEYS = {
 }
 
 
-def argv_data(argv: list[str] | None = None) -> dict[str, Any]:
-    """Les options de la ligne de commande, en clés de payload.
+#: Les drapeaux d'aide. Un hook lancé par le lanceur (`sdda preflight-cost-cap
+#: --help`) EXÉCUTAIT le hook et rendait son verdict — un usage qui juge n'est
+#: pas un usage.
+HELP_FLAGS = ("-h", "--help")
 
-    Tolérant à dessein : une option inconnue est ignorée plutôt que fatale. Un
-    hook reste exécutable à la main même si l'appelant se trompe de drapeau.
+#: Une option inconnue. `--misson 1` était ignoré sans un mot : le hook se
+#: prononçait sur TOUTES les missions au lieu de celle qu'on croyait lui
+#: nommer — un faux vert qui ne ressemble à rien.
+CLS_ARG_UNKNOWN = "HOOK_ARG_UNKNOWN"
+
+
+def parse_argv(argv: list[str]) -> tuple[dict[str, Any], list[str]]:
+    """(clés de payload, options inconnues) depuis la ligne de commande.
+
+    Une option connue consomme sa valeur (`--mission 1` ou `--mission=1`) ;
+    une option inconnue est rendue à l'appelant, qui décide (cf. `run`) ;
+    un positionnel isolé est ignoré — il n'a pas de sens pour un hook.
     """
-    args = list(argv if argv is not None else sys.argv[1:])
     out: dict[str, Any] = {}
+    unknown: list[str] = []
     i = 0
-    while i < len(args):
-        token = args[i]
+    while i < len(argv):
+        token = argv[i]
         key, _, inline = token.partition("=")
         target = ARGV_KEYS.get(key)
         if target is None:
+            if token.startswith("-"):
+                unknown.append(key)
             i += 1
             continue
         if inline:
             out[target] = inline
             i += 1
-        elif i + 1 < len(args) and not args[i + 1].startswith("--"):
-            out[target] = args[i + 1]
+        elif i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            out[target] = argv[i + 1]
             i += 2
         else:
             i += 1
-    return out
+    return out, unknown
 
 
-def payload() -> dict[str, Any]:
+def argv_data(argv: list[str] | None = None) -> dict[str, Any]:
+    """Les options de la ligne de commande, en clés de payload (options inconnues écartées)."""
+    return parse_argv(list(argv if argv is not None else sys.argv[1:]))[0]
+
+
+def invoked_argv() -> list[str] | None:
+    """Les arguments de la ligne de commande QUAND le processus est le hook lui-même.
+
+    Lancé par le harnais (`python …/sdda_hooks/preflight_x.py`) ou par le
+    lanceur (`sys.argv[0] == "sdda preflight-x"`), `sys.argv` est au hook. Importé
+    dans un autre processus — la suite de tests, un validateur — il est à ce
+    processus, et `-q` ou `--tb=short` n'y sont pas des options inconnues du
+    hook : on ne juge alors ni l'aide ni les options, seulement le payload.
+    """
+    prog = str(sys.argv[0] if sys.argv else "")
+    if prog.startswith("sdda ") or Path(prog).name.startswith(("preflight_", "postflight_")):
+        return list(sys.argv[1:])
+    return None
+
+
+def usage(hook: str) -> str:
+    options = "\n".join(f"  {flag:<12} -> payload `{key}`" for flag, key in ARGV_KEYS.items())
+    return (f"usage: {hook} [--mission N] [--agent NOM] [--run-id ID] [--root DIR]  < payload.json\n\n"
+            f"Hook PreToolUse/SubagentStop : lit le payload JSON du harnais sur stdin, complété par les options.\n"
+            f"Exit 0 = autorise, 2 = refuse (bloc ERROR/CAUSE/FIX sur stderr).\n\n{options}\n")
+
+
+def payload(argv: list[str] | None = None) -> dict[str, Any]:
     """Le JSON du harnais sur stdin, enrichi des options de la ligne de commande.
 
     Jamais bloquant : un hook doit rester lançable à la main pour être debogable,
@@ -166,7 +201,7 @@ def payload() -> dict[str, Any]:
                 parsed = None
             if isinstance(parsed, dict):
                 data = parsed
-    data.update(argv_data())
+    data.update(argv_data(argv))
     return data
 
 
@@ -351,9 +386,28 @@ def out_of_scope(data: dict[str, Any], applies_to: tuple[str, ...]) -> bool:
 
 
 def run(hook: str, fn, applies_to: tuple[str, ...] = ()) -> int:
-    """Enveloppe standard : payload, périmètre, racine, verdict, dégradation sûre."""
+    """Enveloppe standard : usage, options, payload, périmètre, racine, verdict, dégradation sûre.
+
+    `-h`/`--help` écrit l'usage et rend 0 sans rien juger. Une option inconnue
+    REFUSE en mode strict (`[HOOK_ARG_UNKNOWN]`, code 2) : l'appelant croit
+    restreindre le périmètre, et le hook jugerait tout — c'est le faux vert de
+    la CI. En session interactive elle est signalée sur stderr et le hook
+    juge quand même : un opérateur qui se trompe de drapeau voit l'erreur,
+    sans que le pipeline s'arrête sur une faute de frappe.
+    """
+    argv = invoked_argv()
+    if argv is not None and any(a in HELP_FLAGS for a in argv):
+        sys.stdout.write(usage(hook))
+        return ALLOW
     try:
-        data = payload()
+        _, unknown = parse_argv(argv or [])
+        if unknown:
+            known = ", ".join(ARGV_KEYS)
+            if strict():
+                return deny(hook, CLS_ARG_UNKNOWN, f"option(s) inconnue(s) {unknown} — options : {known}",
+                            "corriger l'appel : une option ignorée élargit le périmètre du hook au lieu de le restreindre")
+            sys.stderr.write(f"[hook] {hook} : option(s) inconnue(s) {unknown} ignorée(s) — options : {known}\n")
+        data = payload(argv)
         if out_of_scope(data, applies_to):
             return ALLOW
         return fn(root_of(data), data)

@@ -58,7 +58,6 @@ import argparse
 import datetime as _dt
 import importlib
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,7 +70,7 @@ from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.eval_stats import GLYPH, SEVERITY  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig, app_name  # noqa: E402
-from sdda_lib.runtime_io import atomic_write_json as _atomic_write_json, now_iso as _now_iso, run_id_now  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_json as _atomic_write_json, atomic_write_text, now_iso as _now_iso, run_id_now  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
 
@@ -546,11 +545,7 @@ def run(
         # Remplacé à chaque passage live, jamais complété : un rejeu qui
         # mélangerait deux versions du système jugerait un système qui n'existe pas.
         runs_file = replay_path(root, mid)
-        runs_file.parent.mkdir(parents=True, exist_ok=True)
-        tmp = runs_file.with_suffix(".jsonl.tmp")
-        tmp.write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True, default=str) + "\n" for r in recorded),
-                       encoding="utf-8", newline="\n")
-        os.replace(tmp, runs_file)
+        atomic_write_text(runs_file, "".join(json.dumps(r, ensure_ascii=False, sort_keys=True, default=str) + "\n" for r in recorded))
         written["runs"] = paths.rel(root, runs_file)
     if write_report and coverages:
         out = paths.reports_dir(root) / f"adversarial-{mid or 'system'}-{rid}.json"

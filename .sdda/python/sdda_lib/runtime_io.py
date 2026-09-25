@@ -14,6 +14,10 @@ ne se trie plus avec les autres.
   un état de run ne sont jamais lus à moitié écrits.
 - **Sortie UTF-8** : `ensure_utf8_stdout()` reconfigure stdout ET stderr — un
   `FIX:` qui arrive abîmé en cp1252 arrive au moment précis où il doit être lu.
+- **Append verrouillé** : `append_line()` ajoute une ligne à un journal
+  (`traces`, `runs.jsonl`, `bypasses.jsonl`) sous verrou exclusif entre
+  processus. Ici plutôt que dans `tracing`, parce que ce module n'importe rien
+  du framework — tout le monde peut l'importer sans boucle.
 """
 from __future__ import annotations
 
@@ -21,8 +25,10 @@ import datetime as _dt
 import json
 import os
 import sys
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
 
@@ -67,6 +73,92 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path
 def atomic_write_json(path: Path, payload: Any, *, indent: int = 2, sort_keys: bool = True) -> Path:
     """JSON indenté, clés triées, fin de ligne finale — la forme diffable des rapports."""
     return atomic_write_text(path, json.dumps(payload, indent=indent, ensure_ascii=False, sort_keys=sort_keys) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Append atomique entre PROCESSUS
+# ---------------------------------------------------------------------------
+#: Octet verrouillé sous Windows : loin après toute fin de fichier plausible
+#: (2 Gio - 1), pour que le verrou — obligatoire sous Windows, pas consultatif —
+#: ne bloque jamais un LECTEUR du fichier. `msvcrt.locking` verrouille à partir
+#: de la position courante ; `O_APPEND` repositionne en fin avant chaque
+#: écriture, donc la position choisie pour le verrou ne déplace aucune ligne.
+_WIN_LOCK_OFFSET = 0x7FFFFFFF
+#: Attente maximale du verrou. Au-delà, on écrit quand même : perdre un span de
+#: trace parce qu'un autre processus est mort en tenant le verrou serait pire
+#: qu'un risque d'entrelacement, et le lecteur ignore une ligne illisible.
+LOCK_TIMEOUT_S = 10.0
+
+if sys.platform == "win32":  # pragma: no cover - dépend de la plateforme
+    import msvcrt
+
+    def _lock(fd: int) -> bool:
+        deadline = time.monotonic() + LOCK_TIMEOUT_S
+        delay = 0.001
+        while True:
+            os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                return True
+            except OSError:
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(delay)
+                delay = min(delay * 2, 0.05)
+
+    def _unlock(fd: int) -> None:
+        os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+else:  # pragma: no cover - dépend de la plateforme
+    import fcntl
+
+    def _lock(fd: int) -> bool:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return True
+
+    def _unlock(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextmanager
+def _exclusive(fd: int) -> Iterator[None]:
+    held = _lock(fd)
+    try:
+        yield
+    finally:
+        if held:
+            _unlock(fd)
+
+
+def append_line(path: Path, line: str) -> None:
+    """Ajoute UNE ligne à `path`, sans qu'elle puisse s'entrelacer avec celle d'un autre processus.
+
+    `open("a")` puis `write` ne suffisait pas : le tampon d'`io` découpe une
+    ligne longue en plusieurs appels système, et sous Windows le mode append du
+    CRT n'est pas atomique entre processus (positionnement en fin, PUIS
+    écriture). Quatre évaluations parallèles (`EvalMaxParallel: 4`) sur le même
+    fichier produisaient donc, de temps à autre, deux spans collés sur une ligne
+    — que `read_spans` ignore comme illisibles. Un span perdu ne se voit pas ;
+    c'est un appel d'outil absent de l'audit de scope, ou un coût qui manque.
+    Même mécanique pour `runs.jsonl` et `bypasses.jsonl` : un run entrelacé ne
+    se reprend plus, un bypass entrelacé n'est plus audité.
+
+    Ici : les octets de la ligne sont construits d'abord, puis écrits sous un
+    verrou exclusif (`msvcrt.locking` / `fcntl.flock`), sur un descripteur brut
+    ouvert en `O_APPEND`, en boucle jusqu'au dernier octet. Le verrou est ce qui
+    rend l'ensemble atomique ; `O_APPEND` est ce qui garantit la fin de fichier.
+    """
+    data = (line.rstrip("\n") + "\n").encode("utf-8")
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
+    fd = os.open(str(path), flags, 0o644)
+    try:
+        with _exclusive(fd):
+            view = memoryview(data)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+    finally:
+        os.close(fd)
 
 
 def ensure_utf8_stdout() -> None:

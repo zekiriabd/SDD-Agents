@@ -34,6 +34,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
+
+# À l'import : `--help` sort d'argparse avant `main()`, et rendait ses accents
+# en mojibake sur une console cp1252.
+ensure_utf8_stdout()
 
 ROOT = Path(__file__).resolve().parents[3]
 TIMEOUT_S = 30
@@ -148,11 +153,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--settings", default=None, help="settings.json à vérifier (défaut : <root>/.claude/settings.json)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-        except Exception:
-            pass
     root = Path(args.root).resolve()
     settings = Path(args.settings) if args.settings else root / ".claude" / "settings.json"
     report = run(root, settings)

@@ -265,3 +265,169 @@ def test_cli_exit_codes_and_json(project: Path) -> None:
     assert code == 0
     data = json.loads(out)
     assert data["ok"] is True and data["data"]["1"]["nodes"] == 4
+
+
+def test_an_agent_schema_written_as_a_block_under_its_bullet_is_read() -> None:
+    # Vu au deuxième run réel : l'entrée (bloc sous une puce vide) était sautée
+    # en silence, la sortie (une phrase puis le bloc) refusée comme illisible.
+    body = (
+        "- **Entrée** :\n```json\n{\"type\": \"object\"}\n```\n"
+        "- **Sortie** : l'une des deux sorties, sans ajout.\n```json\n{\"oneOf\": []}\n```\n"
+        "\n> une note\n"
+    )
+    items = ir_compiler._schema_items(body)
+    assert json.loads(items["Entrée"]) == {"type": "object"}
+    assert json.loads(items["Sortie"]) == {"oneOf": []}
+
+
+def test_an_inline_agent_schema_still_reads_inline() -> None:
+    items = ir_compiler._schema_items('- **Entrée** : `{"type": "string"}`\n- **Sortie** : <à préciser>\n')
+    assert json.loads(items["Entrée"].strip("`")) == {"type": "string"}
+    assert items["Sortie"] == "<à préciser>"
+
+
+def test_a_schema_key_is_matched_by_prefix_and_an_example_block_is_not_the_schema() -> None:
+    # Vu au deuxième run réel : `- **Entrée (JSON Schema)** :` n'était pas trouvé,
+    # l'agent compilait SANS inputSchema et sans un mot ; et sous `Sortie`,
+    # un bloc d'exemple précédait le schéma — c'est l'exemple qui était compilé.
+    body = (
+        "- **Entrée (JSON Schema)** :\n```json\n{\"type\": \"object\", \"properties\": {\"q\": {\"type\": \"string\"}}}\n```\n"
+        "- **Sortie** : un exemple, puis le schéma.\n```json\n{\"intent\": \"billing\", \"confidence\": 0.9}\n```\n"
+        "```json\n{\"type\": \"object\", \"properties\": {\"intent\": {\"type\": \"string\"}}}\n```\n"
+        "- **Exemple de sortie** :\n```json\n{\"intent\": \"technical\"}\n```\n"
+    )
+    items = ir_compiler._schema_items(body)
+    assert set(items) == {"Entrée", "Sortie"}
+    assert json.loads(items["Entrée"])["properties"] == {"q": {"type": "string"}}
+    assert "properties" in json.loads(items["Sortie"])
+
+
+def test_a_schemas_section_without_readable_schema_is_a_finding_not_a_silence(project: Path) -> None:
+    contract = project / "workspace/pipeline/contracts/agents/1-billing-specialist.agent.md"
+    text = contract.read_text(encoding="utf-8").replace(
+        '- **Entrée** : {"$ref": "#/schemas/BillingRequest"}', "- **Input** : voir plus bas")
+    contract.write_text(text, encoding="utf-8")
+    ir, report = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    billing = next(a for a in ir["agents"] if a["id"] == "1-billing-specialist")
+    assert "inputSchema" not in billing and "outputSchema" in billing
+    warned = [w for w in report.warnings if w.cls == "AGENT_SCHEMA_MISSING"]
+    assert len(warned) == 1 and "Entrée" in warned[0].message and "1-billing-specialist" in warned[0].message
+
+
+DATA_CONTRACT = """# TOOL CONTRACT: 1-data-invoices
+
+MISSION: 1-SupportAssistant
+Status: Draft
+Side Effect Class: read-only
+Trust: trusted
+
+---
+
+## 1. Nom et description
+
+- **name** : `invoices_view`
+- **description** :
+
+```
+Lit les lignes de facture du client courant depuis la vue agent_views.invoices, filtrée par tenant.
+```
+
+## 2. Schémas
+
+- **Entrée** :
+```json
+{ "type": "object", "properties": { "invoice_id": { "type": "string" } }, "required": ["invoice_id"] }
+```
+- **Sortie** :
+```json
+{ "type": "object", "properties": { "lines": { "type": "array" } }, "required": ["lines"] }
+```
+
+## 3. Stratégie de sûreté
+
+Sans objet : `read-only`.
+
+## 4. Erreurs déclarées
+
+| Code | Signification | Comportement attendu de l'agent |
+|---|---|---|
+| `NOT_FOUND` | facture inconnue pour ce client | informer l'utilisateur, ne pas réessayer |
+
+## 5. Bornes techniques
+
+| | |
+|---|---|
+| `timeout_s` | 5 |
+| `retry_policy` | none |
+
+## 6. Authentification
+
+- **Variable d'environnement** : `BILLING_DB_URL`
+
+## 7. Exposé à
+
+| Agent | CAP qui l'exige |
+|---|---|
+| `1-billing-specialist` | `1-2-ExplainInvoiceLine` |
+
+## 8. Tests de contrat (L2)
+
+Fichier : `workspace/pipeline/suites/tool-1-data-invoices.yaml`
+
+## 9. Data Access
+
+- **Stratégie** : `view-per-agent`
+- **role** : `readonly`
+- **statementTimeoutMs** : 5000
+- **maxRows** : 500
+- **schemas** : `agent_views`
+- **forbidden** : `insert`, `update`, `delete`, `drop`
+- **identityFilter** : `tenant_id`
+- **astValidated** : oui
+"""
+
+
+def _write_data_contract(project: Path, text: str = DATA_CONTRACT) -> Path:
+    path = paths.contracts_dir(project, "tools") / "1-data-invoices.tool.md"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_a_data_contract_compiles_to_a_schema_valid_data_access_entry(project: Path) -> None:
+    """Trois validateurs lisaient `dataAccess[]` ; rien ne l'écrivait."""
+    _write_data_contract(project)
+    ir, report = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    assert report.ok, report.render_text()
+    assert [d["id"] for d in ir["dataAccess"]] == ["1-data-invoices"]
+    entry = ir["dataAccess"][0]
+    assert entry["binding"] == {"strategy": "view-per-agent"}
+    assert entry["exposedTo"] == ["1-billing-specialist"]
+    assert entry["envelope"] == {
+        "role": "readonly", "statementTimeoutMs": 5000, "maxRows": 500, "schemas": ["agent_views"],
+        "forbidden": ["INSERT", "UPDATE", "DELETE", "DROP"], "identityFilter": "tenant_id", "astValidated": True,
+    }
+    schema = json.loads(paths.ir_schema_path(None).read_text(encoding="utf-8-sig"))
+    assert SchemaValidator(schema).validate(ir) == []
+    assert report.data["dataAccess"] == 1
+
+
+def test_a_data_contract_without_envelope_is_a_compile_error_not_a_default(project: Path) -> None:
+    """« Un défaut manquant n'est pas hérité implicitement » (architect-data STEP 4)."""
+    _write_data_contract(project, DATA_CONTRACT.replace("- **maxRows** : 500\n", "").replace("- **schemas** : `agent_views`\n", ""))
+    with pytest.raises(ir_compiler.CompileError) as exc:
+        ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    messages = " ".join(f.message for f in exc.value.report.errors)
+    assert "`maxRows`" in messages and "`schemas`" in messages
+    assert "1-data-invoices" in messages
+
+
+def test_a_data_contract_without_data_access_section_is_refused(project: Path) -> None:
+    _write_data_contract(project, DATA_CONTRACT.split("## 9. Data Access")[0])
+    with pytest.raises(ir_compiler.CompileError) as exc:
+        ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    assert any("## Data Access" in f.message for f in exc.value.report.errors)
+
+
+def test_no_data_contract_means_no_data_access_key(project: Path) -> None:
+    ir, _ = ir_compiler.compile_mission(project, 1, compiled_at=FIXED_AT)
+    assert "dataAccess" not in ir      # `dataaccess/none` : l'absence est la représentation

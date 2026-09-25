@@ -27,6 +27,13 @@ comparables : tokens d'entrée et de sortie par tier (`TIER_INPUT_TOKENS`,
 (fichier lu, ~4 caractères par token). Le modèle est résolu depuis
 `STACK.md ## Runtime Models` (`RuntimeTierMap`), jamais nommé dans l'IR (P11).
 
+INFÉRENCE LOCALE (`RuntimeProvider: local-ollama`) : le tarif par token est nul,
+le temps machine ne l'est pas. Chaque appel d'agent est chiffré en
+`tokens / LocalComputeThroughputTokensPerSec × LocalComputeCostPerHourUsd / 3600`,
+et sa latence est ce temps. Un débit inconnu (0) laisse le coût local à zéro
+ASSUMÉ et le dit : WARN `[BUDGET_LOCAL_COMPUTE_UNMODELLED]` — un budget gratuit
+en silence laisserait passer n'importe quelle topologie (P6).
+
 Un modèle que `sdda_lib/pricing.py` ne connaît pas n'est PAS tarifé au repli :
 la gate passe au rouge (`[BUDGET_PRICING_UNKNOWN]`) et `budget.estimated`
 n'est pas écrit dans l'IR — un chiffre deviné qui ressemble à un fait est pire
@@ -72,6 +79,22 @@ RETRIEVER_LATENCY_MS: tuple[int, int] = (300, 1500)
 #: Tokens d'embedding d'une requête.
 QUERY_EMBED_TOKENS = 50
 CHARS_PER_TOKEN = 4
+#: Fournisseurs dont le coût est celui de la machine, pas du token.
+LOCAL_PROVIDERS = frozenset({"local-ollama"})
+#: Inférence locale sans tarif horaire ou sans débit : coût à zéro assumé, dit.
+CLS_LOCAL_COMPUTE_UNMODELLED = "BUDGET_LOCAL_COMPUTE_UNMODELLED"
+
+
+def local_compute(root: Path | None, config: LayeredConfig | None) -> tuple[float, float] | None:
+    """`(USD par heure, tokens par seconde)` si le provider d'exécution est local ; `None` sinon."""
+    if root is None:
+        return None
+    provider = str(read_stack_section_kv(root, "Runtime Models").get("RuntimeProvider") or "").strip().lower()
+    if provider not in LOCAL_PROVIDERS:
+        return None
+    rate = config.get_float("LocalComputeCostPerHourUsd", 0.0) if config else 0.0
+    throughput = config.get_float("LocalComputeThroughputTokensPerSec", 0.0) if config else 0.0
+    return max(0.0, rate), max(0.0, throughput)
 
 
 @dataclass(frozen=True)
@@ -113,7 +136,8 @@ def _unknown_pricing(model: str, origin: str, subject: str) -> dict[str, str]:
     return {"model": model, "origin": origin, "subject": subject}
 
 
-def node_visits(ir: dict[str, Any], *, root: Path | None, tier_map: dict[str, str]) -> tuple[dict[str, Visit], dict[str, Visit], list[dict[str, str]]]:
+def node_visits(ir: dict[str, Any], *, root: Path | None, tier_map: dict[str, str],
+                local: tuple[float, float] | None = None) -> tuple[dict[str, Visit], dict[str, Visit], list[dict[str, str]]]:
     """(visite nominale, visite pire cas) par nœud, + modèles SANS tarif connu.
 
     Le troisième élément n'est pas un avertissement : chaque entrée devient un
@@ -136,14 +160,22 @@ def node_visits(ir: dict[str, Any], *, root: Path | None, tier_map: dict[str, st
             model = pricing.resolve_model(tier, tier_map)
             in_tok = TIER_INPUT_TOKENS.get(tier, TIER_INPUT_TOKENS["balanced"]) + _prompt_tokens(root, a)
             out_tok = TIER_OUTPUT_TOKENS.get(tier, TIER_OUTPUT_TOKENS["balanced"])
-            try:
-                cost = pricing.estimate_cost_usd(model, in_tok, out_tok)
-            except pricing.UnknownModelPricing:
-                origin = (f"STACK.md `## Runtime Models` -> RuntimeTierMap.{tier}" if tier in tier_map
-                          else f"DEFAULT_TIER_MAP.{tier} de pricing.py (RuntimeTierMap sans entrée `{tier}`)")
-                unknown.append(_unknown_pricing(model, origin, f"agent `{ref}` (tier {tier})"))
-                cost = pricing.estimate_cost_usd(model, in_tok, out_tok, strict=False)
-            call = Visit(cost, pricing.estimate_latency_ms(tier, out_tok), in_tok + out_tok)
+            latency = pricing.estimate_latency_ms(tier, out_tok)
+            if local is not None:
+                # Local : le temps machine EST le coût, et il est aussi la latence.
+                rate, throughput = local
+                seconds = (in_tok + out_tok) / throughput if throughput > 0 else 0.0
+                cost = round(seconds / 3600 * rate, 6)
+                latency = seconds * 1000 if throughput > 0 else latency
+            else:
+                try:
+                    cost = pricing.estimate_cost_usd(model, in_tok, out_tok)
+                except pricing.UnknownModelPricing:
+                    origin = (f"STACK.md `## Runtime Models` -> RuntimeTierMap.{tier}" if tier in tier_map
+                              else f"DEFAULT_TIER_MAP.{tier} de pricing.py (RuntimeTierMap sans entrée `{tier}`)")
+                    unknown.append(_unknown_pricing(model, origin, f"agent `{ref}` (tier {tier})"))
+                    cost = pricing.estimate_cost_usd(model, in_tok, out_tok, strict=False)
+            call = Visit(cost, latency, in_tok + out_tok)
             bounds = a.get("bounds", {})
             iters = max(1, int(bounds.get("maxIterations", 1)))
             budget = float(bounds.get("budgetUsd", call.cost_usd * iters))
@@ -261,7 +293,13 @@ def estimate(ir: dict[str, Any], *, root: Path | None = None, config: LayeredCon
     if stale:
         report.warn("BUDGET_PRICING_STALE", stale.split("] ", 1)[1], "", loc)
 
-    nominal_v, worst_v, unknown = node_visits(ir, root=root, tier_map=tier_map)
+    local = local_compute(root, config)
+    if local is not None and (local[0] <= 0 or local[1] <= 0):
+        report.warn(CLS_LOCAL_COMPUTE_UNMODELLED,
+                    f"RuntimeProvider local : LocalComputeCostPerHourUsd={local[0]}, LocalComputeThroughputTokensPerSec={local[1]} — "
+                    "le coût des appels LLM est compté à ZÉRO, et ce zéro est assumé, pas mesuré",
+                    "déclarer le tarif horaire amorti et le débit de la machine dans `## Project Config` pour que G2 chiffre le temps machine", loc)
+    nominal_v, worst_v, unknown = node_visits(ir, root=root, tier_map=tier_map, local=local)
     for u in unknown:
         # Pas de bypass ici : on peut assumer un dépassement, pas un chiffre inventé.
         report.error("BUDGET_PRICING_UNKNOWN",
@@ -280,6 +318,8 @@ def estimate(ir: dict[str, Any], *, root: Path | None = None, config: LayeredCon
     }
     report.data = {"missionId": mid, "estimated": estimated, "nominalPath": npath, "nominalTokens": nominal.tokens, "worstCaseTokens": worst.tokens,
                    "tierMap": tier_map, "pricingUnknown": unknown,
+                   "localCompute": ({"costPerHourUsd": local[0], "throughputTokensPerSec": local[1],
+                                     "modelled": local[0] > 0 and local[1] > 0} if local is not None else None),
                    "assumptions": {"tierInputTokens": TIER_INPUT_TOKENS, "tierOutputTokens": TIER_OUTPUT_TOKENS}}
 
     budget = ir.get("budget", {})

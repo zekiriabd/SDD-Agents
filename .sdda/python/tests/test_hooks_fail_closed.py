@@ -81,3 +81,45 @@ def test_selfcheck_names_a_missing_interpreter(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("SDDA_PYTHON", "python-introuvable-xyz")
     report = hooks_selfcheck.run(ROOT, settings)
     assert "HOOK_INTERPRETER_MISSING" in report.classes
+
+
+def test_help_prints_usage_without_judging(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """`sdda preflight-cost-cap --help` EXÉCUTAIT le hook et rendait son verdict."""
+    calls: list[int] = []
+
+    def judge(_root, _data):
+        calls.append(1)
+        return _hook.DENY
+
+    monkeypatch.setattr(_hook.sys, "argv", ["sdda preflight-x", "--help"])
+    assert _hook.run("preflight-x", judge) == _hook.ALLOW
+    assert calls == [] and "usage: preflight-x" in capsys.readouterr().out and "--mission" in _hook.usage("h")
+
+
+def test_an_unknown_option_is_refused_when_strict_and_loud_otherwise(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--misson 1` était ignoré sans un mot : le hook jugeait TOUTES les missions."""
+    seen: list[dict] = []
+
+    def judge(_root, data):
+        seen.append(data)
+        return _hook.ALLOW
+
+    monkeypatch.setattr(_hook.sys, "argv", ["sdda preflight-x", "--misson", "1"])
+    monkeypatch.setattr(_hook.sys, "stdin", io.StringIO(""))
+    monkeypatch.setenv(_hook.STRICT_ENV, "1")
+    buf = io.StringIO()
+    with redirect_stderr(buf):
+        assert _hook.run("preflight-x", judge) == _hook.DENY
+    assert "HOOK_ARG_UNKNOWN" in buf.getvalue() and "--misson" in buf.getvalue() and seen == []
+
+    monkeypatch.delenv(_hook.STRICT_ENV, raising=False)
+    monkeypatch.setattr(_hook.sys, "stdin", io.StringIO(""))
+    buf = io.StringIO()
+    with redirect_stderr(buf):
+        assert _hook.run("preflight-x", judge) == _hook.ALLOW
+    assert "--misson" in buf.getvalue() and len(seen) == 1 and "mission" not in seen[0]
+
+
+def test_known_options_still_reach_the_payload() -> None:
+    data, unknown = _hook.parse_argv(["--mission", "1", "--agent=dev-agent", "--bogus", "x"])
+    assert data == {"mission": "1", "subagent_type": "dev-agent"} and unknown == ["--bogus"]

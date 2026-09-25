@@ -110,3 +110,34 @@ def test_recompiling_makes_it_fresh_again(compiled: Path) -> None:
     ir_compiler.main(["--root", str(compiled), "--mission", "1", "--no-report"])
     assert _check(compiled, "--mission", "1")[0] == 0
     assert paths.ir_path(compiled, 1).is_file()
+
+
+
+def test_a_status_rewrite_does_not_stale_the_ir(compiled: Path) -> None:
+    """`compute-status` réécrit `Status:` dans les contrats : ce n'est pas une
+    modification de la spécification, l'IR reste frais."""
+    from sdda_lib import markdown_io
+
+    contract = next((compiled / "workspace/pipeline/contracts/tools").glob("1-*.tool.md"))
+    text = contract.read_text(encoding="utf-8")
+    contract.write_text(markdown_io.replace_header_field(text, "Status", "Blocked"), encoding="utf-8", newline="\n")
+    code, payload = _check(compiled, "--mission", "1")
+    assert code == 0 and payload["data"]["fresh"] is True, payload
+
+
+def test_an_ir_compiled_with_raw_contract_hashes_is_still_fresh(compiled: Path) -> None:
+    """Une IR d'avant le hash de spec (empreinte brute, fichier inchangé) n'est pas
+    périmée ; un contrat réellement modifié depuis, si."""
+    from sdda_lib import hashing
+
+    ir_path = paths.ir_path(compiled, 1)
+    ir = json.loads(ir_path.read_text(encoding="utf-8"))
+    rels = list(ir["compiledFrom"]["contractHashes"])
+    ir["compiledFrom"]["contractHashes"] = {rel: hashing.sha256_file(compiled / rel) for rel in rels}
+    ir_path.write_text(json.dumps(ir), encoding="utf-8")
+    code, payload = _check(compiled, "--mission", "1")
+    assert code == 0 and payload["data"]["fresh"] is True, payload
+
+    _touch(compiled / rels[0])
+    code, payload = _check(compiled, "--mission", "1")
+    assert code == 1 and payload["data"]["missions"][0]["moved"]["contractHashes"] == [rels[0]]

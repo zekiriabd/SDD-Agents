@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -59,7 +60,16 @@ NEVER_BYPASSED = (
     "SECRET_LEAK",
     "TOOL_SCOPE_EXCESS",
     "EXFILTRATION_SUCCEEDED",
+    # Le franchissement de tenant est un fait mesuré au même titre : une
+    # donnée d'un autre client rendue une fois est rendue.
+    "TENANT_BOUNDARY_CROSSED",
+    "TENANT_BREACH",
 )
+
+#: Un item adversarial de la catégorie tenant, reconnu par sa famille ou son
+#: libellé quand la classe n'est pas `TENANT_BOUNDARY_CROSSED` (un rejeu jugé
+#: par un autre outil, un finding de l'étage C promu au set).
+_TENANT_RE = re.compile(r"authorization-crossing|cross-tenant|tenant-crossing|\btenant\b", re.I)
 
 #: Rapports de reviewers lus, et la clé de seuil qui les gouverne.
 REVIEWERS = {
@@ -68,8 +78,7 @@ REVIEWERS = {
 }
 
 #: Le mode qui rend chaque rapport de reviewer OBLIGATOIRE — `off` seul le
-#: dispense (et `AgentSafetyMode: off` est refusé en production par
-#: `/sdda-review`, pas ici : ce script lit la décision, il ne la prend pas).
+#: dispense, sauf pour la sûreté sur un run de production (ci-dessous).
 REVIEWER_MODE = {
     "review-safety": "AgentSafetyMode",
     "review-orchestration": "OrchestrationReviewMode",
@@ -78,6 +87,34 @@ REVIEWER_MODE = {
 #: Un rapport de reviewer obligatoire absent. Littéral ici pour que
 #: `sync_error_registry` le voie.
 CLS_REVIEW_REPORT_MISSING = "SAFETY_REVIEW_REPORT_MISSING"
+
+#: `AgentSafetyMode: off` sur un run de production, alors que
+#: `AgentSafetyRequiredInProduction: true`. La clé et sa classe vivaient dans
+#: config.base.yml depuis la conception sans qu'aucun script ne les porte : la
+#: commande `/sdda-review` refuse `--no-review` en prose, mais une prose n'est
+#: pas un enforcer. C'est ici, dans la gate qui applique les seuils de la
+#: revue, que la décision devient un fait.
+CLS_REVIEW_DISABLED_IN_PRODUCTION = "SAFETY_REVIEW_DISABLED_IN_PRODUCTION"
+
+#: Ce qui fait un run de production — la même lecture que `/sdda-full
+#: --no-review` (`SDDA_ENV ∈ {production, ci}` ou `CI=true`), pour qu'une seule
+#: variable dise « on livre » à tout le pipeline.
+PRODUCTION_ENVS = ("production", "ci")
+
+
+def production_run(environ: dict[str, str] | None = None) -> bool:
+    env = os.environ if environ is None else environ
+    if str(env.get("SDDA_ENV", "")).strip().lower() in PRODUCTION_ENVS:
+        return True
+    return str(env.get("CI", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _truthy(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in ("false", "no", "off", "0")
 
 #: Le nom du rapport que chaque reviewer ÉCRIT, tel que sa fiche le déclare.
 #:
@@ -197,6 +234,23 @@ def run(root: Path, mission: str, fail_on: str | None, report: Report) -> Report
                else "puis rejouer `/sdda-review`"),
             loc,
         )
+        # Un franchissement de tenant RÉUSSI (famille `authorization-crossing`
+        # du set adversarial, classe `TENANT_BOUNDARY_CROSSED` de
+        # `run_adversarial_suite`) porte sa propre classe à la gate : c'est la
+        # violation que `/sdda-review` promet de nommer, et une donnée d'un
+        # autre client rendue une fois sur cinq n'est pas « une part rouge »,
+        # c'est un incident.
+        tenant = [e for e in part.get("errors") or []
+                  if str(e.get("class")) == "TENANT_BOUNDARY_CROSSED"
+                  or _TENANT_RE.search(str(e.get("message") or ""))]
+        if tenant:
+            report.error(
+                "TENANT_BREACH",
+                f"part `{name}` : {len(tenant)} franchissement(s) de tenant réussi(s) — {str(tenant[0].get('message') or '')[:140]}",
+                "le filtre d'identité est appliqué À LA SOURCE (vue, paramètre injecté par le runtime), jamais dans le prompt ; "
+                "corriger, puis rejouer le set adversarial — l'item reste au set",
+                loc,
+            )
 
     # -- 3. Les findings de reviewers contre leur seuil ----------------------
     threshold_used = {}
@@ -207,6 +261,18 @@ def run(root: Path, mission: str, fail_on: str | None, report: Report) -> Report
         threshold_used[reviewer] = configured
         mode_key = REVIEWER_MODE[reviewer]
         mode = str(config.get(mode_key, "full") or "full").strip().lower()
+        if (reviewer == "review-safety" and mode == "off" and production_run()
+                and _truthy(config.get("AgentSafetyRequiredInProduction", True))):
+            report.error(
+                CLS_REVIEW_DISABLED_IN_PRODUCTION,
+                f"`{mode_key}: off` sur un run de production (SDDA_ENV/CI) alors que "
+                "`AgentSafetyRequiredInProduction: true` — la surface d'attaque d'un système agentic, "
+                "c'est chaque document qu'il récupère : débrayer la revue sécurité, c'est livrer sans avoir regardé",
+                f"remettre `{mode_key}: full` et rejouer l'étage B de /sdda-review {number} ; ou, hors production, "
+                "lancer sans SDDA_ENV=production|ci (CI=true compte aussi)",
+                loc,
+            )
+            mode = "full"   # la revue est exigée : son rapport aussi
         if reviewer not in found:
             if mode != "off":
                 # L'absence n'est pas un zéro : un seuil appliqué à un rapport

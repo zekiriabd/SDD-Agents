@@ -19,7 +19,6 @@ JudgeModel: claude-sonnet-5
 
 ## Project Config
 AppName: SupportAssistant
-SystemName: support-assistant
 GoldenSetMinItems: 5
 HoldoutSetMinItems: 3
 AdversarialSetMinItems: 2

@@ -622,6 +622,138 @@ def check_documented_classes() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 4.ter-bis Classes promises par les tables de gate des commandes
+# ---------------------------------------------------------------------------
+PY_PACKAGES = ("sdda_scripts", "sdda_lib", "sdda_hooks", "sdda_admin")
+_CLASS_LITERAL_RE = re.compile(r"""["']([A-Z][A-Z0-9_]{2,})["']""")
+_CLASS_CELL_RE = re.compile(r"\[([A-Z][A-Z0-9_*]{2,})\]")
+_TABLE_ROW_RE = re.compile(r"^\s*\|")
+
+
+def python_emitted_classes() -> set[str]:
+    """Toute chaîne littérale de forme `CLASSE` dans le code Python du framework.
+
+    Plus large que `sync_error_registry.PY_EMIT_RE` (qui reconnaît l'appel
+    d'émission) : une classe peut être choisie dans une table
+    (`FAMILY_CLASS[...]`) puis émise par variable. Ce qui compte ici est
+    qu'un fichier Python la PORTE — la prose et le Markdown ne comptent pas,
+    c'est précisément la différence avec `errors.documented`.
+    """
+    out: set[str] = set()
+    for package in PY_PACKAGES:
+        for path in sorted((SDDA / "python" / package).rglob("*.py")):
+            if "tests" in path.parts or "__pycache__" in path.parts:
+                continue
+            out.update(_CLASS_LITERAL_RE.findall(read(path)))
+    return out
+
+
+def gate_table_classes(commands_dir: Path) -> dict[str, set[str]]:
+    """{classe: {fichiers}} depuis la colonne « Classe si KO » des tables des commandes."""
+    cited: dict[str, set[str]] = {}
+    for path in sorted(commands_dir.glob("*.md")):
+        column: int | None = None
+        for line in read(path).splitlines():
+            if not _TABLE_ROW_RE.match(line):
+                column = None
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if column is None:
+                if any("Classe si KO" in c for c in cells):
+                    column = next(i for i, c in enumerate(cells) if "Classe si KO" in c)
+                continue
+            if all(set(c) <= set(":- ") for c in cells):
+                continue          # la ligne de séparation `|---|---|`
+            if column < len(cells):
+                for cls in _CLASS_CELL_RE.findall(cells[column]):
+                    if "*" in cls:
+                        continue  # `[ARCH_*]` : une famille, pas une classe
+                    cited.setdefault(cls, set()).add(path.name)
+    return cited
+
+
+def check_gate_classes_emitted() -> None:
+    """Chaque classe qu'une table de gate d'une commande promet a-t-elle un émetteur PYTHON ?
+
+    Les commandes portent des tables « # | Contrôle | Classe si KO » : c'est le
+    contrat lisible de chaque gate, celui que l'opérateur relit pour savoir ce
+    qui bloque. Une classe qui n'y vit qu'en Markdown est une gate racontée :
+    `[LATENCY_EXCEEDED_MEASURED]` et `[TOOL_LIVE_UNREACHABLE]` ont été
+    promises ainsi, sans qu'aucun script ne les émette. `errors.documented`
+    accepte un émetteur Markdown ; ici, seul un littéral Python compte.
+    """
+    try:
+        from sdda_admin import sync_error_registry as registry
+        skip = set(registry.NOT_A_CLASS)
+    except Exception:
+        skip = set()
+    cited = gate_table_classes(SDDA / "commands")
+    if not cited:
+        warn("gates.classes_emitted", "aucune table « Classe si KO » dans .sdda/commands/ — rien à vérifier")
+        return
+    emitted = python_emitted_classes()
+    orphans = sorted(cls for cls in cited if cls not in emitted and cls not in skip)
+    for cls in orphans:
+        fail("gates.classes_emitted", f"[{cls}] promise par {', '.join(sorted(cited[cls]))} — aucun littéral Python ne l'émet")
+    if not orphans:
+        ok("gates.classes_emitted", f"{len(cited)} classes promises par les tables de gate, toutes portées par le code")
+
+
+# ---------------------------------------------------------------------------
+# 4.ter-ter Frontmatter des façades Claude : YAML STRICT
+# ---------------------------------------------------------------------------
+def check_facades_frontmatter_strict() -> None:
+    """Chaque `clé: valeur` du frontmatter des façades `.claude/` se relit en YAML strict.
+
+    `yaml_mini` relit la source avec tolérance ; Claude Code, non. Une
+    description sans guillemets qui portait `Profile: poc` rendait l'en-tête
+    invalide, et le harnais ÉCARTAIT l'agent sans rien dire — `dev-app`
+    n'existait plus pour lui, redémarrage ou pas. `harness_build.yaml_scalar`
+    émet désormais soit un identifiant nu, soit du JSON (qui est du YAML) ;
+    ce contrôle vérifie la façade sur le disque, pas la fonction qui l'écrit.
+    Le test `test_harness_frontmatter_yaml.py` le couvre en CI ; ici, le
+    smoke le voit aussi.
+    """
+    try:
+        from sdda_admin.harness_build import YAML_PLAIN_RE, YAML_RETYPED, frontmatter_and_body
+    except Exception as exc:
+        warn("facades.frontmatter_strict", f"harness_build non chargeable ({exc!r})")
+        return
+    facades = sorted((ROOT / ".claude" / "agents").glob("*.md")) + sorted((ROOT / ".claude" / "commands").glob("*.md"))
+    if not facades:
+        warn("facades.frontmatter_strict", "aucune façade sous .claude/agents ni .claude/commands — harness-build non joué ?")
+        return
+    problems: list[str] = []
+    checked = 0
+    for path in facades:
+        text = read(path)
+        if not text.startswith("---"):
+            problems.append(f"{path.relative_to(ROOT).as_posix()} : aucun frontmatter")
+            continue
+        head = text.split("\n---", 1)[0].split("\n", 1)[1] if "\n---" in text else ""
+        for line in head.splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            key, sep, value = line.partition(":")
+            value = value.strip()
+            if not sep or not key.strip():
+                problems.append(f"{path.relative_to(ROOT).as_posix()} : ligne sans `clé: valeur` — `{line.strip()[:60]}`")
+                continue
+            checked += 1
+            if YAML_PLAIN_RE.match(value) and value.lower() not in YAML_RETYPED:
+                continue
+            try:
+                json.loads(value)
+            except ValueError:
+                problems.append(f"{path.relative_to(ROOT).as_posix()} : `{key.strip()}` n'est ni un identifiant nu ni du JSON — `{value[:60]}`")
+        frontmatter_and_body(text)   # la lecture tolérante doit au moins aboutir
+    for item in problems:
+        fail("facades.frontmatter_strict", item)
+    if not problems:
+        ok("facades.frontmatter_strict", f"{checked} scalaires de frontmatter sur {len(facades)} façades, tous en YAML strict")
+
+
+# ---------------------------------------------------------------------------
 # 4.quater Parité des jumeaux de documentation (`X.md` anglais / `X.fr.md`)
 # ---------------------------------------------------------------------------
 #: Un jumeau manquant est un ÉCHEC : toutes les docs ont leur référence anglaise
@@ -1203,6 +1335,8 @@ def main() -> int:
         check_template_numbering,
         check_section_refs,
         check_documented_classes,
+        check_gate_classes_emitted,
+        check_facades_frontmatter_strict,
         check_docs_parity,
         check_json,
         check_honesty,

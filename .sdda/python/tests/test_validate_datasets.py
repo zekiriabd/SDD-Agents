@@ -81,3 +81,48 @@ def test_ac_iterating_on_holdout_is_rejected(project: Path) -> None:
     cap.write_text(cap.read_text(encoding="utf-8").replace("workspace/pipeline/datasets/golden/routing-v1.jsonl", "workspace/pipeline/datasets/holdout/mission-1-v1.jsonl"), encoding="utf-8")
     code, out = _run(project, "--no-report")
     assert code == 1 and "[AC_DATASET_IS_HOLDOUT]" in out
+
+
+def _golden_item(iid: str, question: str, **metadata) -> str:
+    item = {"id": iid, "input": {"question": question}, "expected": {"intent": "billing"},
+            "metadata": {"source": "synthetic", "difficulty": "easy", "class": "billing", **metadata}}
+    return json.dumps(item, ensure_ascii=False) + "\n"
+
+
+def test_a_secret_in_an_item_is_a_leak(project: Path) -> None:
+    """Contrôle 4 de `/sdda-eval` : un golden set est COMMITÉ."""
+    ds = project / "workspace/pipeline/datasets/golden/routing-v1.jsonl"
+    with ds.open("a", encoding="utf-8") as fh:
+        fh.write(_golden_item("routing-leak-001", "ma clé est sk-" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4"))
+    code, out = _run(project, "--no-report")
+    assert code == 1 and "[SECRET_LEAK]" in out and "routing-v1.jsonl" in out
+    assert "a1b2c3d4" not in out          # la valeur n'est jamais recopiée dans le rapport
+
+
+def test_undeclared_pii_in_an_item_is_refused_and_declared_pii_is_not(project: Path) -> None:
+    ds = project / "workspace/pipeline/datasets/golden/routing-v1.jsonl"
+    with ds.open("a", encoding="utf-8") as fh:
+        fh.write(_golden_item("routing-pii-001", "écrire à jean.dupont@entreprise-reelle.fr"))
+        fh.write(_golden_item("routing-pii-002", "écrire à marie.durand@entreprise-reelle.fr", pii_status="present-authorized"))
+    code, out = _run(project, "--no-report", "--json")
+    assert code == 1
+    data = json.loads(out)
+    pii = [e for e in data["errors"] if e["class"] == "PII_IN_DATASET"]
+    assert len(pii) == 1 and "routing-pii-001" in pii[0]["message"] and "routing-pii-002" not in pii[0]["message"]
+    assert data["data"]["content"] == {"secrets": 0, "pii": 1, "piiAuthorized": 1}
+
+
+def test_raw_trace_policy_makes_pii_a_warning_not_a_block(project: Path) -> None:
+    """Même lecture que `scan_pii` : `TracePIIPolicy: raw` (ADR exigé) informe, ne bloque pas."""
+    stack = project / "workspace/stack/STACK.md"
+    text = stack.read_text(encoding="utf-8")
+    heading = "## Active Observability\n"
+    text = (text.replace(heading, heading + "TracePIIPolicy: raw\n", 1) if heading in text
+            else text + "\n" + heading + "TracePIIPolicy: raw\n")
+    stack.write_text(text, encoding="utf-8")
+    ds = project / "workspace/pipeline/datasets/golden/routing-v1.jsonl"
+    with ds.open("a", encoding="utf-8") as fh:
+        fh.write(_golden_item("routing-pii-003", "écrire à jean.dupont@entreprise-reelle.fr"))
+    report = validate_datasets.validate_datasets(project, config=read_layered_config(project), write_report=False)
+    assert "PII_IN_DATASET" in {w.cls for w in report.warnings}
+    assert "PII_IN_DATASET" not in {e.cls for e in report.errors}

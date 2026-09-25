@@ -514,3 +514,28 @@ def test_v3_migration_is_idempotent(v2_with_content: Path) -> None:
     before = _snapshot(root)
     report = _migrate(root)
     assert report["data"]["actions"] == [] and _snapshot(root) == before
+
+
+# ---------------------------------------------------------------------------
+# workspace.json supprimé sur un arbre déjà courant
+# ---------------------------------------------------------------------------
+def test_a_current_tree_without_version_file_is_dated_not_replayed(tmp_path: Path) -> None:
+    """Un `.sys/` « nettoyé » à la main perd `workspace.json` ; rejouer v0 -> v6
+    dessus recréait `missions/`, `caps/`, `prompts/`, `topology/` vides à côté
+    de `pipeline/`. L'arbre est reconnu, daté, et rien d'autre ne bouge."""
+    root = tmp_path / "cur"
+    for rel in smoke_check.WORKSPACE_TREE:
+        (root / "workspace" / rel).mkdir(parents=True, exist_ok=True)
+    (root / "workspace/stack/STACK.md").write_text(
+        bs.build_stack_md("Cur", bs.COMBOS["c1"], {}), encoding="utf-8")
+    (root / "workspace/pipeline/missions/1-Demo.md").write_text("# 1-Demo\n", encoding="utf-8")
+    before = _snapshot(root)
+
+    code, out = run_main(migrate_workspace.main, ["--root", str(root)])
+    assert code == 0, out
+    assert "WORKSPACE_VERSION_INFERRED" in out
+    assert ws.read_workspace_version(root) == ws.WORKSPACE_VERSION
+    for legacy in ("missions", "caps", "prompts", "topology", "proof", "evals"):
+        assert not (root / "workspace" / legacy).exists(), legacy
+    added = _snapshot(root) - before
+    assert added == {"workspace/.sys/workspace.json"}, added

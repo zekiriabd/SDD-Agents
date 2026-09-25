@@ -67,6 +67,7 @@ from sdda_lib.layered_config import LayeredConfig  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_json as _atomic_write_json, now_iso as _now_iso, run_id_now  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
+from sdda_scripts._run_traces import percentile  # noqa: E402 — le même p95 que cost_report : rang le plus proche
 
 LEVELS = tuple(f"L{i}" for i in range(10))
 
@@ -672,6 +673,13 @@ def run_evals(
         report.warn("EVAL_SINGLE_RUN_FORBIDDEN", "EvalSeedPolicy: fixed — un seed fixe masque la variance ; ce rapport ne vaut pas un verdict", "", mid)
 
     hard_cap = (ir.get("budget") or {}).get("costPerRunHardCapUsd")
+    # La cible de latence : celle de la MISSION (IR, `## Execution Budget`),
+    # sinon celle du Project Config (`LatencyP95TargetMs`, null par défaut).
+    # Même ordre que le coût : la MISSION dit ce qu'elle exige, le projet dit
+    # ce qu'il tolère faute de mieux.
+    latency_target: Any = (ir.get("budget") or {}).get("latencyP95TargetMs")
+    if latency_target is None and config is not None:
+        latency_target = config.get("LatencyP95TargetMs")
     executed: list[ExecutedSuite] = []
     rid = run_id or run_id_now()
     # Écrit seulement si un juge RÉEL est appelé : ni les faux des tests, ni
@@ -705,6 +713,26 @@ def run_evals(
                 result.notes.append(f"coût max {worst:.4f} USD > costPerRunHardCapUsd {hard_cap}")
                 report.error("BUDGET_EXCEEDED_MEASURED", f"suite `{sid}` : un item a coûté {worst:.4f} USD > plafond {hard_cap} USD",
                              "un budget dépassé est rouge, pas jaune (P6) : réduire la trajectoire ou revoir le plafond de la MISSION", sid)
+        # Contrôle 6 de l'ORCH GATE : la latence MESURÉE, en p95, contre la
+        # cible de la MISSION. Le coût était confronté à son plafond ; la
+        # latence, déclarée au même endroit (`## Execution Budget`) et portée
+        # par l'IR, n'était confrontée à rien — G6 promettait un contrôle que
+        # personne ne jouait. Le p95 et non la moyenne : c'est la queue qui
+        # fait attendre l'utilisateur, et une moyenne la cache (cost_report).
+        # Seuls les runs qui ont MESURÉ une latence comptent : un exécuteur
+        # qui rend 0 ms (oracle, replay) n'a rien mesuré, et 0 < cible ne
+        # prouverait rien.
+        if rows and str(suite.get("level")) in ("L5", "L6", "L7"):
+            latencies = [r["latencyMs"] for r in rows if r["error"] is None and r["latencyMs"] > 0]
+            if latencies and isinstance(latency_target, (int, float)) and latency_target > 0:
+                p95 = percentile(latencies, 0.95)
+                if p95 > float(latency_target) + 1e-9:
+                    result.notes.append(f"latence p95 {p95:.0f} ms > LatencyP95TargetMs {latency_target:.0f}")
+                    report.error("LATENCY_EXCEEDED_MEASURED",
+                                 f"suite `{sid}` : latence p95 mesurée {p95:.0f} ms > cible {latency_target:.0f} ms "
+                                 f"(sur {len(latencies)} item-run(s))",
+                                 "une cible de latence dépassée est rouge, pas jaune (P6) : raccourcir la trajectoire "
+                                 "(hops, appels d'outils, retrieval) ou revoir `LatencyP95TargetMs` de la MISSION", sid)
         executed.append(ex)
         _emit_verdict_findings(report, ex)
 
