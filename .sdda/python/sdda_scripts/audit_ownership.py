@@ -54,7 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
+from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
 
 NON_AGENT_KEYS = frozenset({"version", "updated", "cross_agent_reads", "shared_writes"})
 
@@ -1006,6 +1006,26 @@ PHASE_AGENTS: dict[str, tuple[str, ...]] = {
           "review-adversarial"),
 }
 
+#: Sous `Profile: poc`, `/sdda-build` STEP P remplace les phases 3 à 5 par UN
+#: agent, `dev-app`. Juger ses écritures contre les zones de `dev-tools`,
+#: `dev-retrieval` et `dev-data` rendait `[OWNERSHIP_VIOLATION]` sur le premier
+#: test de surface qu'il écrivait — un faux rouge qui obligeait à deviner
+#: `--agents dev-app`. La table suit donc le profil, comme la commande.
+PHASE_AGENTS_POC: dict[str, tuple[str, ...]] = {
+    "3": ("dev-app",),
+    "4": ("dev-app",),
+    "5": ("dev-app",),
+}
+
+
+def phase_agents(root: Path, phase: str, report: Report) -> tuple[str, ...]:
+    """Les agents d'une phase, selon le profil actif (`Profile` de `## Project Config`)."""
+    profile = str(load_config(root, report).get("Profile", "standard")).strip()
+    if profile == "poc" and phase in PHASE_AGENTS_POC:
+        return PHASE_AGENTS_POC[phase]
+    return PHASE_AGENTS.get(phase, ())
+
+
 #: Hors instantané : l'état interne (écrit par les scripts que les agents
 #: lancent — gates, traces, packs), et les caches d'outillage régénérables. Les
 #: zones protégées de `.sys/` sont tenues par les hooks ; ce qu'un script y
@@ -1248,7 +1268,7 @@ def run(root: Path, *, agent: str | None = None, wrote: list[str] | None = None,
             report.error("INVALID_ARG", "`--since-snapshot` exige `--phase`",
                          fix="la phase nomme l'instantané ET les agents dont les zones sont jugées")
             return report
-        chosen = tuple(agents or ([agent] if agent else PHASE_AGENTS.get(str(phase), ())))
+        chosen = tuple(agents or ([agent] if agent else phase_agents(root, str(phase), report)))
         if not chosen:
             report.error("INVALID_ARG", f"phase `{phase}` : aucun agent connu",
                          fix=f"passer `--agents` ; phases connues : {sorted(PHASE_AGENTS)}")

@@ -1335,15 +1335,41 @@ def contract_source_hashes(root: Path, number: int) -> dict[str, str]:
     return out
 
 
+#: Les valeurs que `compute-status` écrit dans `Status:` — la liste fermée de
+#: LIFECYCLE.md (`compute_status.LADDER`, `HUMAN_STATES`, `Blocked` ; un test
+#: vérifie l'égalité, `compute_status` important ce module et non l'inverse).
+STATUS_VALUES: tuple[str, ...] = (
+    "Draft", "Specified", "Architected", "Planned", "Implemented", "Tested", "Evaluated", "Approved",
+    "Deferred", "Cancelled", "Blocked",
+)
+
+
+def _raw_hash_under_any_status(path: Path, stored: str) -> bool:
+    """`stored` est-il le hash BRUT de ce fichier pour l'une des valeurs possibles de `Status:` ?"""
+    text = path.read_text(encoding="utf-8")
+    if hashing.sha256_file(path) == stored:
+        return True
+    if markdown_io.parse_header_fields(text).get("Status") is None:
+        return False
+    for value in STATUS_VALUES:
+        variant = markdown_io.replace_header_field(text, "Status", value)
+        if hashing.sha256_text(variant) == stored:
+            return True
+    return False
+
+
 def legacy_contract_hashes(root: Path, compiled: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
-    """`compiled` où chaque empreinte de contrat BRUTE encore exacte est remplacée par l'empreinte courante.
+    """`compiled` où chaque empreinte de contrat BRUTE d'une spec inchangée est remplacée par l'empreinte courante.
 
     Jusqu'au 2026-09-25, `contractHashes` était un hash brut du fichier, `Status:`
     compris. Passé au hash de spécification, il aurait déclaré `[IR_STALE]` toute
     IR compilée avant, sans qu'une ligne de contrat ait changé — et arrêté la
-    reprise de chaque projet en cours. Une empreinte brute qui correspond encore
-    au fichier sur disque dit exactement ce que dit le hash de spec : la source
-    n'a pas bougé. Elle est donc acceptée ; la prochaine compilation la remplace.
+    reprise de chaque projet en cours. Comparer au fichier tel quel ne suffisait
+    pas : le premier `compute-status` réécrit `Status:`, et l'empreinte brute ne
+    correspond plus. L'état étant une liste FERMÉE, le fichier est rehashé sous
+    chacune de ses valeurs possibles ; si l'une redonne l'empreinte stockée, seul
+    `Status:` a bougé, la spécification non. La prochaine compilation remplace
+    l'empreinte par le hash de spec.
     """
     before = compiled.get("contractHashes")
     now = current.get("contractHashes")
@@ -1352,7 +1378,7 @@ def legacy_contract_hashes(root: Path, compiled: dict[str, Any], current: dict[s
     upgraded = dict(before)
     for rel, stored in before.items():
         path = root / rel
-        if rel in now and stored != now[rel] and path.is_file() and stored == hashing.sha256_file(path):
+        if rel in now and stored != now[rel] and path.is_file() and _raw_hash_under_any_status(path, stored):
             upgraded[rel] = now[rel]
     return {**compiled, "contractHashes": upgraded}
 

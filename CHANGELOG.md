@@ -256,6 +256,14 @@ A release is cut by pushing a `v*` tag whose version equals
     property; `MaxBypassesPerRun`, `LocalCompute*`,
     `AgentSafetyRequiredInProduction` are enforced; `ApiAuthMode` and
     `ApiContractFirst` are security-down protected.
+  - Second real `poc` run: the raw-hash fallback held only until the first
+    `Status:` rewrite — the file is now rehashed under every lifecycle value;
+    `audit-ownership` judged `dev-app` against the layer `dev-*` zones (phase
+    table now follows `Profile`); the three runners could not import the
+    generated app (shared `sdda_lib.executors` puts `workspace/src/` on the
+    path, names a missing dependency, and the commands run them with
+    `uv run --project workspace/src/{App}`); `dev-app` hand-wrote the agent
+    loop against the provider SDK — it must use the declared framework.
   - Stale prompt references fixed: reviewer report paths, gate report names,
     `/sdda-build` redirections to unread files, `RESUME_TARGET` undefined
     without `--resume`, the prepass that stopped before loading its inputs,

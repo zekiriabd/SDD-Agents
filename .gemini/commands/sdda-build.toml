@@ -149,10 +149,25 @@ Budget build_loop : BuildLoopMaxCostUsd={…}, BuildLoopMaxIter={…}.
 
 Exit ≠ 0 → STOP : sans application, il n'y a rien à mesurer.
 
+Encadré comme toute vague d'écriture — `dev-app` est le seul auteur des
+phases 3 à 5, et l'audit le sait par le profil (`audit-ownership` lit
+`Profile`) :
+
+```bash
+python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 3        # avant dev-app
+python .sdda/sdda.py audit-ownership --mission {n} --phase 3 --since-snapshot # après, avant les gates
+```
+
 **P.4 — Gates jouées, rapportées, jamais bloquantes.** Les mêmes scripts, dans
 cet ordre : 3.2 (G3), 3.3 (G4, si `retrievers[]`), 4.3 (G5), 5.3 et 5.3 bis
 (G6, parts `api` et `framework`), 5.4 (G6). Ils écrivent leurs rapports comme
-d'habitude — c'est la mesure. Un **rouge** ne déclenche **ni STOP ni boucle
+d'habitude — c'est la mesure. Les runners qui chargent un exécuteur
+(`eval-runner`, `run-retrieval-eval`) importent l'application : ils se lancent
+avec l'interpréteur de l'application, où `project-init` a installé ses
+dépendances — `uv run --project workspace/src/{App} python .sdda/sdda.py
+eval-runner … --executor {App}.evals.executor:InProcessExecutor`. Lancés avec
+l'interpréteur système, stdlib seul, ils sortent `[EVAL_EXECUTOR_MISSING]` en
+nommant la dépendance absente. Un **rouge** ne déclenche **ni STOP ni boucle
 de correction** : il est rapporté dans le récap (`🔴 G5 … — poc : rapporté,
 pas corrigé`). Seule une erreur d'EXÉCUTION d'un script (IR absent, rapport
 illisible) arrête la commande. Les hooks `preflight_tool_gate` et
@@ -418,7 +433,7 @@ FIX: produire le golden set via qa-evals (/sdda-eval {n} --datasets-only) puis r
 > `/sdda-build` (cf. `/sdda-full` STEP 4.5).
 
 ```bash
-python .sdda/sdda.py run-retrieval-eval --mission {n} --json \
+uv run --project workspace/src/{App} python .sdda/sdda.py run-retrieval-eval --mission {n} --json \
   --executor {module}:{Retriever}     # ou --replay workspace/.sys/reports/runs/{n}-retrieval.jsonl
 ```
 
@@ -673,7 +688,7 @@ CAP sont advisory → la CAP ne peut pas être verte → 🟡 au mieux, WARN
 `[JUDGE_UNCALIBRATED]`.
 
 ```bash
-python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
+uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
   --executor {module}:{InProcessExecutor} --json
 ```
 
@@ -826,7 +841,7 @@ architecture que la fiche relue en revue ne décrit pas.
 ### 5.4 — ORCH GATE (G6)
 
 ```bash
-python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
+uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
   --executor {module}:{CliExecutor} --json
 ```
 

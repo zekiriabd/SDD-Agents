@@ -18,6 +18,7 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[BUILD_CORRECTIBLE]`
+- `[FRAMEWORK_DRIFT]`
 - `[IR_NOT_FOUND]`
 - `[PROJECT_NOT_INIT]`
 

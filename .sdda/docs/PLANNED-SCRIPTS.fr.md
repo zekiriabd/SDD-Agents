@@ -29,5 +29,6 @@ qui fait déjà le travail.
 | `bootstrap.py` | `commands/sdda-bootstrap.md` |
 | `framework_smoke.py` | `INVARIANTS.yml`, `rules/error-classification.md` |
 | `router.py` | `agents/dev-orchestration.md` |
+| `run_service.py` | `agents/dev-app.md` |
 | `sequential.py` | `agents/dev-orchestration.md` |
 

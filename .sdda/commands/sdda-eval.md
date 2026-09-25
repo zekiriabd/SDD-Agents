@@ -220,7 +220,7 @@ mesure la complaisance d'un modèle envers un autre.
 ```bash
 # L2 (G3 part suites) : les tests de contrat pytest de qa-tests, pas des items notés
 python .sdda/sdda.py run-tool-suites --mission {n} --json
-python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" \
+uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" \
   --levels ${LEVELS:-L0,L1,L3,L4,L5,L6,L7} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
   --executor {module}:{Executor} --json
 ```
@@ -321,7 +321,7 @@ franchies (`--require-gate G7`) ; sinon ERROR `[SAFETY_GATE_NOT_PASSED]`.
 
 ```bash
 python .sdda/sdda.py check-baseline-freshness --mission {n} --strict
-python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L9 --dataset holdout \
+uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L9 --dataset holdout \
   --executor {module}:{Executor} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
   --baseline workspace/pipeline/baselines/{n}-system.json --json
 python .sdda/sdda.py check-regression --mission {n} --run "$RUN_ID" --json \

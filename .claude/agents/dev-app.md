@@ -86,6 +86,18 @@ d'agents il faut :
 3. **Orchestration et mémoire.** `orchestration/` depuis `ir.orchestration`
    (pattern, `maxHops`, repli) ; `memory/` depuis le contrat de mémoire s'il
    existe, sinon `ir.memory` (fenêtre glissante).
+
+**Le framework déclaré n'est pas facultatif**, même pour un agent seul :
+`## Active Agent Framework` (§6 du contexte) nomme la fiche, et c'est elle qui
+dit OÙ l'importer — la boucle d'agent sous `agents/`, le graphe sous
+`orchestration/` (un graphe à un nœud pour un `single-agent`, si la fiche
+d'orchestration du framework en porte un). Le squelette généré appelle le SDK du fournisseur sans
+framework : c'est la plomberie de repli, pas l'implémentation attendue — le
+remplacer par le framework derrière le même point d'extension (`agent_factory`
+de `run_service.py`). `validate-framework` (G6, part `framework`) refuse un
+`agents/` ou un `orchestration/` qui n'importe pas le framework déclaré
+(`[FRAMEWORK_DRIFT]`) : au premier run poc, la boucle écrite à la main contre le
+SDK a rendu G6 rouge alors que tout le reste marchait.
 4. **Surface.** `serving/` depuis `### Active Serving Surface` (console par défaut).
 5. **Coquille.** `app/composition` : le seul endroit qui instancie et câble tout ;
    configuration par NOMS de variables ; règles métier calculables (`BR-x`) en
@@ -103,6 +115,7 @@ et échoue proprement, il ne couvre pas chaque branche.
 python .sdda/sdda.py gen-app-skeleton --check                 # Python : le squelette n'a pas dérivé
 python .sdda/sdda.py gen-source-tools --check --scope code     # si declared-sources
 python .sdda/sdda.py gen-app-context --mission {n} --check     # le contexte n'a pas dérivé
+python .sdda/sdda.py validate-framework --no-report            # le framework déclaré est importé là où sa fiche le place
 <depuis workspace/src/{App}/ : les commandes du §3 du contexte (tests, lint)>
 ```
 

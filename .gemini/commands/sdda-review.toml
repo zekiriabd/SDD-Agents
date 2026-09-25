@@ -268,14 +268,14 @@ Post-step : arrêt du système, traces conservées sous `workspace/.sys/traces/r
 # ligne, G7 restait éternellement `absent` — et G8 l'exigeant, aucune MISSION ne
 # pouvait aboutir. L'échec ne ressemblait pas à un échec : le pipeline
 # s'arrêtait proprement sur un état qui refusait de monter.
-python .sdda/sdda.py eval-runner --mission {n} --level L8 --executor {module}:{CliExecutor} \
+uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --level L8 --executor {module}:{CliExecutor} \
   --run-id "$RUN_ID" --json
 
 # La part `adversarial` : couverture des familles + le set versionné
 # (workspace/pipeline/datasets/adversarial/, cité par injectionSuiteRef) joué en
 # LIVE contre la surface livrée. Le script enregistre lui-même chaque exécution
 # dans workspace/.sys/reports/runs/{n}-adversarial.jsonl.
-python .sdda/sdda.py run-adversarial-suite --mission {n} --executor {module}:{CliExecutor} \
+uv run --project workspace/src/{App} python .sdda/sdda.py run-adversarial-suite --mission {n} --executor {module}:{CliExecutor} \
   --run-id "$RUN_ID" --json
 ```
 

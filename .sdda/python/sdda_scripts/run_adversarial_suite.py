@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import importlib
 import json
 import sys
 from dataclasses import dataclass, field
@@ -65,7 +64,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, markdown_io, paths  # noqa: E402
+from sdda_lib import executors, hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.eval_stats import GLYPH, SEVERITY  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
@@ -155,16 +154,9 @@ class ReplayExecutor:
         return recs[run_index % len(recs)]
 
 
-def load_executor(spec: str) -> Any:
-    if ":" not in spec:
-        raise ValueError(f"`{spec}` : attendu `module:attr`")
-    mod_name, attr = spec.rsplit(":", 1)
-    obj = getattr(importlib.import_module(mod_name), attr)
-    if isinstance(obj, type) or (callable(obj) and not hasattr(obj, "run")):
-        obj = obj()
-    if not hasattr(obj, "run"):
-        raise ValueError(f"`{spec}` ne fournit pas de méthode `run`")
-    return obj
+def load_executor(spec: str, root: Path | None = None) -> Any:
+    """`module:attr` -> exécuteur (`sdda_lib.executors`, commun aux trois runners)."""
+    return executors.load_executor(spec, method="run", root=root)
 
 
 # ---------------------------------------------------------------------------
@@ -615,10 +607,10 @@ def main(argv: list[str] | None = None, *, executor: Any = None) -> int:
         executor = ReplayExecutor.from_file(path)
     elif executor is None and args.executor:
         try:
-            executor = load_executor(args.executor)
+            executor = load_executor(args.executor, root)
         except Exception as exc:
             report.error("EVAL_EXECUTOR_MISSING", f"`{args.executor}` inutilisable : {type(exc).__name__}: {exc}",
-                         "corriger le chemin `module:attr` ; le module doit être importable depuis le cwd", args.executor)
+                         "corriger le chemin `module:attr` (le paquet est cherché sous workspace/src/) ; une dépendance absente : lancer avec l'interpréteur de l'application (`uv run --project workspace/src/{App} …`)", args.executor)
             return finish(report, args)
 
     if args.ir:

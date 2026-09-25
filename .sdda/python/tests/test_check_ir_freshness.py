@@ -141,3 +141,29 @@ def test_an_ir_compiled_with_raw_contract_hashes_is_still_fresh(compiled: Path) 
     _touch(compiled / rels[0])
     code, payload = _check(compiled, "--mission", "1")
     assert code == 1 and payload["data"]["missions"][0]["moved"]["contractHashes"] == [rels[0]]
+
+
+def test_a_raw_hash_ir_survives_a_later_status_rewrite(compiled: Path) -> None:
+    """Le cas réel du 2026-09-25 : IR compilée en hash brut, PUIS `compute-status`
+    réécrit `Status: Blocked`. Seul l'état a bougé : l'IR reste fraîche."""
+    from sdda_lib import hashing, markdown_io
+
+    ir_path = paths.ir_path(compiled, 1)
+    ir = json.loads(ir_path.read_text(encoding="utf-8"))
+    rels = list(ir["compiledFrom"]["contractHashes"])
+    ir["compiledFrom"]["contractHashes"] = {rel: hashing.sha256_file(compiled / rel) for rel in rels}
+    ir_path.write_text(json.dumps(ir), encoding="utf-8")
+    for rel in rels:
+        p = compiled / rel
+        text = p.read_text(encoding="utf-8")
+        if markdown_io.parse_header_fields(text).get("Status") is not None:
+            p.write_text(markdown_io.replace_header_field(text, "Status", "Blocked"), encoding="utf-8", newline="\n")
+    code, payload = _check(compiled, "--mission", "1")
+    assert code == 0 and payload["data"]["fresh"] is True, payload
+
+
+def test_status_values_match_the_lifecycle() -> None:
+    from sdda_scripts import compute_status
+
+    expected = set(compute_status.LADDER) | set(compute_status.HUMAN_STATES) | {"Blocked"}
+    assert set(ir_compiler.STATUS_VALUES) == expected

@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import importlib
 import json
 import os
 import re
@@ -48,7 +47,7 @@ from typing import Any, Callable, Protocol
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import graders as graders_registry  # noqa: E402 — LE registre, plus de repli interne
-from sdda_lib import hashing, markdown_io, paths  # noqa: E402
+from sdda_lib import executors, hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report, SddaError  # noqa: E402
 from sdda_lib.eval_pinning import Baseline, PinTuple, current_pins, load_baselines  # noqa: E402
 from sdda_lib.eval_stats import (  # noqa: E402
@@ -129,18 +128,9 @@ class OracleExecutor:
         return {"output": expected, "cost_usd": 0.0, "latency_ms": 0.0, "trace": trace}
 
 
-def load_executor(spec: str) -> Any:
-    """`module:attr` -> exécuteur. L'attribut peut être une fabrique sans argument."""
-    if ":" not in spec:
-        raise ValueError(f"`{spec}` : attendu `module:attr`")
-    mod_name, attr = spec.rsplit(":", 1)
-    module = importlib.import_module(mod_name)
-    obj = getattr(module, attr)
-    if isinstance(obj, type) or (callable(obj) and not hasattr(obj, "run")):
-        obj = obj()
-    if not hasattr(obj, "run"):
-        raise ValueError(f"`{spec}` ne fournit pas de méthode `run`")
-    return obj
+def load_executor(spec: str, root: Path | None = None) -> Any:
+    """`module:attr` -> exécuteur (`sdda_lib.executors`, commun aux trois runners)."""
+    return executors.load_executor(spec, method="run", root=root)
 
 
 # ---------------------------------------------------------------------------
@@ -905,9 +895,9 @@ def main(argv: list[str] | None = None, *, executor: Any = None, graders: dict[s
                          "--executor module:attr (le code généré expose l'exécuteur ; sdda_scripts.eval_runner:OracleExecutor vérifie la plomberie)", str(root))
             return finish(report, args)
         try:
-            executor = load_executor(args.executor)
+            executor = load_executor(args.executor, root)
         except Exception as exc:
-            report.error("EVAL_EXECUTOR_MISSING", f"`{args.executor}` inutilisable : {type(exc).__name__}: {exc}", "corriger le chemin `module:attr` ; le module doit être importable depuis le cwd", args.executor)
+            report.error("EVAL_EXECUTOR_MISSING", f"`{args.executor}` inutilisable : {type(exc).__name__}: {exc}", "corriger le chemin `module:attr` (le paquet est cherché sous workspace/src/) ; une dépendance absente : lancer avec l'interpréteur de l'application (`uv run --project workspace/src/{App} …`)", args.executor)
             return finish(report, args)
 
     if args.ir:
