@@ -36,6 +36,9 @@ comme « le superviseur route mal ». Sans gate par couche, on débogue le mauva
   amont doivent être vertes)
 - `/sdda-build {n} --agent {agent}` — re-matérialise un seul agent du produit
   (PHASE 4 partielle) puis rejoue G5 sur lui
+- `/sdda-build {n} --with-datasets` — la PHASE 6a (`qa-evals`, jeux d'éval)
+  part **en même temps** que la coquille (3.0b) et se referme avant 3.1. C'est
+  la forme qu'emploie `/sdda-full` (STEP 4.5)
 
 ---
 
@@ -170,6 +173,35 @@ Fin : `python .sdda/sdda.py gen-app-skeleton --check` et `validate-packaging` ve
 ```
 
 Exit ≠ 0 → STOP : sans coquille, le socle n'a pas de points d'attache.
+
+### 3.0c — `--with-datasets` : la PHASE 6a en parallèle de la coquille
+
+Les jeux d'éval ne dépendent que des CAPs, de l'IR et de la vérité terrain ; la
+coquille, que de l'IR et des fiches. Aucun des deux ne peut lire l'autre —
+`qa-evals` s'interdit `src/**`, `dev-backend` s'interdit `pipeline/datasets/**`
+(`forbidden_reads`) — et leurs zones d'écriture sont disjointes. Les enchaîner
+faisait attendre l'un pour rien : au premier run réel, la PHASE 6a a pris
+17 minutes avant que la coquille ne démarre.
+
+Avec `--with-datasets`, et si la garde `should-skip-step eval_datasets` ne la
+saute pas, **un seul message multi-`Agent`** envoie :
+
+- `dev-backend`, prompt de 3.0b ci-dessus ;
+- `qa-evals`, prompt de `/sdda-eval` STEP 3 (`--datasets-only`).
+
+Attendre les deux, puis **joindre** — avant 3.1, donc avant l'instantané
+d'ownership de la phase 3 :
+
+1. `qa-evals` en ERROR `[AC_NOT_EVALUABLE]` → STOP, FIX `/sdda-caps {n}` (le
+   veto remonte d'un étage). La coquille reste : elle ne dépend pas des AC.
+2. `/sdda-eval` STEP 4 et 4.bis : `validate-datasets --freeze`, puis
+   `calibrate-judge` pour chaque grader `llm-judge`. Rouge → STOP avec la classe.
+3. `set-phase --phase eval_datasets --status pass` **puis** seulement le
+   `set-item` de la coquille (`build_socle`, item `skeleton`) : l'ordre des
+   phases de `sdda_state` reste celui que `--resume` parcourt.
+
+Sans `--with-datasets` (usage manuel, ou reprise après une PHASE 6a déjà
+verte), 3.0b part seul et `/sdda-build` suppose les jeux déjà figés.
 
 ### 3.1 — Dispatch
 

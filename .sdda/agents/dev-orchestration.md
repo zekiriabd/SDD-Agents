@@ -71,6 +71,10 @@ Read **uniquement** :
   que l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.
 - `workspace/pipeline/contracts/agents/{n}-*.agent.md` §13 — schémas d'état des handoffs.
 - `workspace/pipeline/contracts/memory/{n}-memory.md` — matrice d'état partagé (owner par section).
+  **Absent quand la mémoire est courte seule** (`/sdda-topology` STEP 5 ne lance
+  pas `architect-memory`) : `ir.memory` fait alors foi — fenêtre
+  `shortTermPolicy` / `shortTermMaxTurns`, aucune mémoire longue, aucun état
+  partagé à arbitrer. Ce n'est pas une erreur.
 - `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
   `### Active Agent Framework`, `### Active Orchestration Pattern`,
   `### Project Config` (`MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`,

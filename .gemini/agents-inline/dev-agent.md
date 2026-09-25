@@ -48,6 +48,8 @@ Read **uniquement** :
 - `workspace/pipeline/contracts/agents/{n}-{agent-slug}.agent.md` — §14 dégradation, §13 handoffs.
 - `workspace/src/{App}/prompts/{agent-slug}.system.md` — **en lecture**, pour vérifier le hash.
 - `workspace/pipeline/contracts/memory/{n}-memory.md` — les scopes de cet agent.
+  Absent quand la mémoire est courte seule : les scopes sont ceux de
+  `agents[].memoryScopes` dans l'IR, et `ir.memory` décrit la fenêtre.
 - `workspace/src/{App}/shared/**` et `workspace/src/{App}/memory/interface.{ext}` —
   **en lecture** : les types partagés et l'interface mémoire que la pré-passe
   de `dev-orchestration` (`/sdda-build` STEP 4.0) a posés et GELÉS. Tu les

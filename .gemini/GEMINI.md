@@ -390,10 +390,9 @@ compilée, régénérable, jamais éditée à la main. Détail et schéma :
    | PHASE 2.9 COMPILATION IR  validate-topology (passe complète), puis
    |                          ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
    |                                                         [TOPOLOGY GATE]  (s'exécute sur l'IR)
- PHASE 6a  DATASETS           qa-evals --datasets-only : golden, calibration — AVANT le code
-   |
  PHASE 3   SOCLE              project-init (script, 0 token) : squelette, uv sync, contexte projet
-   |                          dev-backend (coquille : composition, config, Domaine — seul, d'abord)
+   |                          dev-backend (coquille : composition, config, Domaine)
+   |                            || PHASE 6a qa-evals --datasets-only : golden, calibration — AVANT le socle
    |                          puis dev-tools || dev-retrieval || dev-data     (parallèle)
    |                          gen-source-tools --scope code juste avant dev-data
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
@@ -440,7 +439,10 @@ coûtait :
   qu'aucun contrat ait été vérifié.
 - **Les jeux avant le code (PHASE 6a).** G4 exige le golden de retrieval, G5 les
   goldens de CAP et les sets de calibration ; les produire avant le code est
-  aussi ce qui empêche le code d'influencer le jeu qui le jugera.
+  aussi ce qui empêche le code d'influencer le jeu qui le jugera. Ils partent
+  **en même temps** que la coquille (`/sdda-build --with-datasets`) et se
+  referment avant le socle : ni `qa-evals` ni `dev-backend` ne peut lire
+  l'autre, et les enchaîner faisait attendre la coquille pour rien.
 - **L'init projet est un script, pas un agent.** `project-init` ouvre la
   PHASE 3 : squelette, `uv sync`, puis `gen-app-context`, qui écrit
   `workspace/src/{App}/CLAUDE.md` (le `memory_file` du harnais actif) — le

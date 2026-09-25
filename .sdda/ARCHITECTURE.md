@@ -385,10 +385,9 @@ projection, regenerable, never edited by hand. Details and schema:
    | PHASE 2.9 IR COMPILATION validate-topology (full pass), then
    |                          ir-compiler (script, 0 token) -> .sys/.ir/{n}-system.ir.json
    |                                                         [TOPOLOGY GATE]  (runs on the IR)
- PHASE 6a  DATASETS           qa-evals --datasets-only: golden, calibration — BEFORE the code
-   |
  PHASE 3   FOUNDATION         project-init (script, 0 tokens): skeleton, uv sync, project context
-   |                          dev-backend (shell: composition, config, Domain — alone, first)
+   |                          dev-backend (shell: composition, config, Domain)
+   |                            || PHASE 6a qa-evals --datasets-only: golden, calibration — BEFORE the foundation
    |                          then dev-tools || dev-retrieval || dev-data     (parallel)
    |                          gen-source-tools --scope code right before dev-data
    |                                                         [TOOL GATE] [RETRIEVAL GATE]
@@ -435,7 +434,10 @@ cost something:
   contract having been checked.
 - **Sets before code (PHASE 6a).** G4 requires the retrieval golden, G5 the CAP
   goldens and the calibration sets; producing them before the code is also what
-  keeps the code from influencing the set that will judge it.
+  keeps the code from influencing the set that will judge it. They start **at
+  the same time** as the shell (`/sdda-build --with-datasets`) and close before
+  the foundation: neither `qa-evals` nor `dev-backend` can read the other, and
+  chaining them made the shell wait for nothing.
 - **Project init is a script, not an agent.** `project-init` opens PHASE 3:
   skeleton, `uv sync`, then `gen-app-context`, which writes
   `workspace/src/{App}/CLAUDE.md` (the active harness's `memory_file`) — the

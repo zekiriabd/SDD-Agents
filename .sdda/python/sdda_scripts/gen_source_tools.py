@@ -857,9 +857,39 @@ def _untrusted_note(src: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Modes
 # ---------------------------------------------------------------------------
+def roster_tools(ctx: Context) -> set[str] | None:
+    """Les outils que le roster de la MISSION donne à ses agents, None sans roster lisible.
+
+    Le roster est la décision de l'architecte (P7) : un outil qu'aucun agent n'a
+    le droit d'appeler n'a pas à exister. Au premier run réel, `orders_count` —
+    absent du roster — recevait un contrat complété par `architect-tools`, du
+    code, des tests de contrat et une place dans G3, pour un agent qui ne
+    pouvait pas l'appeler.
+    """
+    if not ctx.mission:
+        return None
+    path = paths.roster_path(ctx.root, ctx.mission)
+    if not path.is_file():
+        return None
+    from sdda_scripts.validate_architecture import read_roster_yaml  # noqa: PLC0415
+
+    try:
+        roster = read_roster_yaml(path)
+    except Exception:  # un roster illisible est jugé par `roster validate`, pas ici
+        return None
+    members = [roster.get("orchestrator") or {}] + list(roster.get("subagents") or [])
+    return {str(t) for m in members if isinstance(m, dict) for t in (m.get("tools") or [])}
+
+
 def planned(ctx: Context, report: Report, only: str | None = None) -> list[tuple[str, dict[str, Any], str]]:
-    """Les (source, déclaration, kind) que la déclaration commande de générer."""
+    """Les (source, déclaration, kind) que la déclaration commande de générer.
+
+    Quand le roster nomme au moins un outil d'une source, seuls les outils qu'il
+    nomme sont générés. Sans roster, ou si le roster ne cite aucun outil de la
+    source, la déclaration seule décide — comme avant.
+    """
     out: list[tuple[str, dict[str, Any], str]] = []
+    wired = roster_tools(ctx)
     for source_id in sorted(ctx.registry.sources):
         if only and source_id != only:
             continue
@@ -876,6 +906,8 @@ def planned(ctx: Context, report: Report, only: str | None = None) -> list[tuple
                 fix="déclarer au moins une clé ou un filtre : une source qu'on ne peut pas interroger "
                     "n'est pas une surface, c'est un fichier",
             )
+        if wired and any(f"{source_id}_{k}" in wired for k in kinds):
+            kinds = [k for k in kinds if f"{source_id}_{k}" in wired]
         out.extend((source_id, src, kind) for kind in kinds)
     return out
 

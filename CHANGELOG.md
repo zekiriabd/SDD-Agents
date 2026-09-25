@@ -16,6 +16,16 @@ A release is cut by pushing a `v*` tag whose version equals
 
 ### Added
 
+- `/sdda-build --with-datasets` (used by `/sdda-full`): PHASE 6a (`qa-evals`)
+  starts in the same message as the shell (`dev-backend`, 3.0b) and closes
+  before the foundation — neither agent can read the other. On the first real
+  run the shell waited 17 minutes for the sets.
+- `gen-source-tools` generates only the source tools the roster grants when it
+  names at least one of them (`orders_count`, absent from the OrderLookup
+  roster, received a contract, code and contract tests).
+- `/sdda-topology` runs `architect-memory` only when the memory strategy holds
+  a decision (long-term memory, summarisation, shared state across ≥ 2 agents);
+  a sliding window alone is carried by `ir.memory`.
 - G1 settles, at 0 token, the three `[AC_NOT_EVALUABLE]` returns that
   `qa-evals` made mechanically after 17 minutes on the first real run:
   `exact` without `fields:` on an output with a required free-text field (AC

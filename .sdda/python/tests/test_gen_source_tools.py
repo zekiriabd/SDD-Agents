@@ -196,6 +196,25 @@ def test_count_tool_exists_so_the_model_never_counts(sources_project: Path) -> N
     assert "count: int" in text
 
 
+def test_only_the_tools_the_roster_grants_are_generated(sources_project: Path) -> None:
+    """Premier run réel : `orders_count`, absent du roster, recevait contrat, code et tests.
+
+    Le roster nomme `order_tracking_lookup` seul : `search` et `count` de cette
+    source ne sont plus générés. Une source dont le roster ne cite aucun outil
+    garde tout ce que sa déclaration commande.
+    """
+    roster = sources_project / "workspace/feats/1-roster.md"
+    roster.parent.mkdir(parents=True, exist_ok=True)
+    roster.write_text("# ROSTER: 1\n\n```yaml\nmission: 1\npattern: single-agent\norchestrator:\n"
+                      "  id: support\n  tools: [order_tracking_lookup]\nsubagents: []\n```\n", encoding="utf-8")
+    assert gst.run(sources_project, mode="write").ok
+    contracts = {p.name for p in (sources_project / CONTRACTS).glob("*.tool.md")}
+    assert "1-order-tracking-lookup.tool.md" in contracts
+    assert not {"1-order-tracking-search.tool.md", "1-order-tracking-count.tool.md"} & contracts
+    assert any(n.startswith("1-crm-customer-") for n in contracts)
+    assert gst.run(sources_project, mode="check").ok
+
+
 def test_search_declares_truncation(sources_project: Path) -> None:
     gst.run(sources_project, mode="write")
     text = (sources_project / TOOLS / "order_tracking_search.py").read_text(encoding="utf-8")

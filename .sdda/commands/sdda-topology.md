@@ -236,9 +236,17 @@ Construire le `BATCH` depuis la topologie et `STACK.md` :
 | ≥ 1 outil alloué | `architect-tools` | `workspace/pipeline/contracts/tools/{n}-{tool}.tool.md` | balanced |
 | `## Active RAG` ≠ `none` ET ≥ 1 retriever alloué | `architect-rag` | `workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md` | **deep** |
 | `## Active Data Access` ≠ `none` | `architect-data` | `workspace/pipeline/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
-| `## Active Memory` ≠ `none` | `architect-memory` | `workspace/pipeline/contracts/memory/{n}-memory.md` | balanced |
+| `## Active Memory Strategy` porte une **décision** : `LongTermEnabled: true`, OU `ShortTermPolicy` ∈ {`summarize-over`, `hybrid`}, OU `CrossAgentSharedState` ≠ `none` avec ≥ 2 agents au roster | `architect-memory` | `workspace/pipeline/contracts/memory/{n}-memory.md` | balanced |
 
 Agents absents du `BATCH` → ligne `⊘ {agent}: skipped ({raison})`.
+
+**Une fenêtre glissante n'est pas un contrat.** Mémoire courte seule
+(`ShortTermPolicy: none | sliding-window`, sans mémoire longue, un seul agent
+ou aucun état partagé) : rien n'y est à décider que STACK.md n'ait déjà dit, et
+`ir.memory` (compilé depuis `## Active Memory Strategy`) le porte tel quel.
+`architect-memory` est alors `⊘ skipped (mémoire courte seule : ir.memory suffit)`.
+Au premier run réel, il écrivait 10 Ko de contrat pour un historique de chat
+de 12 tours, que `dev-orchestration` devait ensuite relire et implémenter.
 
 **Dispatch** : un seul message multi-`Agent`, **au plus `MaxParallel` agents
 simultanés**. Si `|BATCH| > MaxParallel`, découper en vagues séquentielles

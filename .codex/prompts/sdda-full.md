@@ -345,7 +345,13 @@ Pour continuer (au choix) :
 
 ## STEP 4.5 — PHASE 6a : datasets d'abord (`/sdda-eval {n} --datasets-only`)
 
-Garde `should-skip-step eval_datasets`. Exécuter `/sdda-eval {n} --datasets-only`.
+Garde `should-skip-step eval_datasets`. **Ne pas l'exécuter seule** : la PHASE
+6a part avec la coquille, dans `/sdda-build {n} --with-datasets` (STEP 5,
+`/sdda-build` STEP 3.0c), qui envoie `qa-evals` et `dev-backend` dans le même
+message et referme les jeux avant le socle. Les deux ne peuvent pas se lire
+(`forbidden_reads`) ; les enchaîner faisait attendre la coquille 17 minutes au
+premier run réel. Garde « skip » (jeux déjà verts, reprise) → STEP 5 sans le
+flag. Hors `/sdda-full`, `/sdda-eval {n} --datasets-only` reste la forme seule.
 
 Pourquoi ici et non en PHASE 6 : la RETRIEVAL GATE (G4) exige le golden de
 retrieval et l'AGENT GATE (G5) exige les goldens de CAP et les sets de
@@ -370,7 +376,9 @@ humaine asynchrone ; elle la rend visible.
 Gardes `should-skip-step build_socle | build_agents | build_orch` (la
 sous-commande accepte `--layer` pour reprendre à la bonne couche).
 
-Exécuter `/sdda-build {n}` (ou `--layer {couche}` en reprise).
+Exécuter `/sdda-build {n} --with-datasets` si la PHASE 6a n'est pas encore
+verte (STEP 4.5), `/sdda-build {n}` sinon, ou `--layer {couche}` en reprise.
+Les sorties de la PHASE 6a (table du STEP 4.5) s'appliquent à la jonction.
 
 À l'intérieur de la couche reprise, `/sdda-build` applique ses propres gardes
 **par item** (`should-skip-item`, STEP 3.1 et 4.2) : trois `dev-agent` verts
