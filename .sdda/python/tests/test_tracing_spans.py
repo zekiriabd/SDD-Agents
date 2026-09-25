@@ -107,6 +107,21 @@ def test_the_legacy_event_format_is_refused_not_half_read(tmp_path: Path) -> Non
     assert summary.tokens_in == 0 and summary.cost_usd == 0.0 and summary.agents == []
 
 
+def test_a_parent_comes_before_its_child_when_both_start_at_the_same_instant(tmp_path: Path) -> None:
+    """L'horloge de Windows donne souvent le même horodatage à un agent et à son outil.
+
+    L'exportateur écrit dans l'ordre des FINS — l'outil avant l'agent. À début
+    égal, le tri stable gardait cet ordre et la trajectoire mettait l'outil
+    avant l'agent qui l'avait appelé : un faux `[TRAJECTORY_VIOLATION]` en G6.
+    """
+    same = "2026-09-21T10:00:01Z"
+    w = writer(tmp_path)
+    tool_span(w, "t1", "lookup", parent="a1", start=same)     # écrit en premier : il finit en premier
+    agent_span(w, "a1", "billing", start=same)
+    root_span(w)
+    assert tracing.summarize(w.path).trajectory == ["billing", "tool:lookup"]
+
+
 # ---------------------------------------------------------------------------
 # Le coût est recalculé, jamais relu
 # ---------------------------------------------------------------------------

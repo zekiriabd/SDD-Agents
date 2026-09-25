@@ -640,8 +640,22 @@ def summarize(path: Path) -> TraceSummary:
             "responsable d'un appel d'outil. Régénérer le run avec la stack `observability/`")
 
     # L'ordre d'écriture d'un exportateur de spans est celui des FINS ; la
-    # trajectoire, elle, est celle des débuts.
-    ordered.sort(key=lambda s: str(s.get("start") or ""))
+    # trajectoire, elle, est celle des débuts. À début ÉGAL, le parent passe
+    # avant ses descendants : l'horloge de Windows est assez grossière pour
+    # qu'un agent et l'appel d'outil qu'il lance portent le même horodatage, et
+    # le tri stable rendait alors l'ordre des fins — l'outil avant l'agent qui
+    # l'a appelé, une fois sur deux.
+    def lineage(span: dict[str, Any]) -> int:
+        """Nombre d'ancêtres présents dans la trace (tous genres de spans)."""
+        count, seen, cursor = 0, {str(span["span_id"])}, span
+        while True:
+            parent = by_id.get(str(cursor.get("parent_span_id") or ""))
+            if parent is None or str(parent["span_id"]) in seen:
+                return count
+            seen.add(str(parent["span_id"]))
+            count, cursor = count + 1, parent
+
+    ordered.sort(key=lambda s: (str(s.get("start") or ""), lineage(s)))
 
     def depth_of(span: dict[str, Any]) -> int:
         """Profondeur en nombre de spans d'AGENT jusqu'à la racine — la délégation."""
