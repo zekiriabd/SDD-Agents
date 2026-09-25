@@ -27,12 +27,13 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass, field
+from importlib import import_module
 from typing import Any, Callable
 
 from .bounds import Bounds
 from .config import ConfigError, Settings
 from .guardrails import Guardrails, GuardrailTripped
-from .models import LLMClient, RecordingClient, StubClient, provider_client, resolve
+from .models import LLMClient, RecordingClient, StubClient, provider_client, provider_error_class, resolve
 from .orchestration.base import AgentResult, BoundedLoop, DictToolset
 from .tracing import Tracer, new_run_id
 from .trust import untrusted
@@ -253,9 +254,13 @@ class RunService:
                 emit("error", **{"class": exc.cls, "message": str(exc)})
             except Exception as exc:  # noqa: BLE001 - la surface doit rendre un code, pas une pile
                 root.error(type(exc).__name__)
-                result.status, result.error_class = "failed", "INTERNAL_ERROR"
+                # Une clé refusée ou un fournisseur injoignable n'est pas une
+                # panne de l'agent : l'eval doit le dire « non mesuré », pas
+                # noter 0 un agent qui n'a jamais reçu de réponse du modèle.
+                cls = provider_error_class(exc) or "INTERNAL_ERROR"
+                result.status, result.error_class = "failed", cls
                 result.message = f"{type(exc).__name__}: {exc}"
-                emit("error", **{"class": "INTERNAL_ERROR", "message": result.message})
+                emit("error", **{"class": cls, "message": result.message})
 
         # Après le span racine : sa durée est la latence du run, et elle n'est
         # connue qu'une fois le span fermé.
@@ -361,6 +366,39 @@ def _summarize(tracer: Tracer) -> dict[str, Any]:
         if str(span.get("name") or "").startswith("sdda.run"):
             latency = int(span.get("duration_ms") or 0)
     return {"hops": hops, "tool_calls": tool_calls, "latency_ms": latency}
+
+
+def app_build_system() -> Callable[..., RunService] | None:
+    """`build_system` de la composition de l'application, si elle existe.
+
+    La composition est écrite par `dev-backend` (`app/composition.py`), après le
+    squelette : on la cherche au moment de construire, pas à l'import.
+    """
+    if not __package__:
+        return None
+    try:
+        module = import_module(f"{__package__}.app.composition")
+    except ImportError:
+        return None
+    fn = getattr(module, "build_system", None)
+    return fn if callable(fn) else None
+
+
+def composed_service(settings: Settings | None = None, **kwargs: Any) -> RunService:
+    """Le système que l'APPLICATION compose — ce que toute surface doit servir.
+
+    `build_system` câble l'agent de l'IR, son prompt épinglé et ses outils. Un
+    `RunService` nu fait tourner la boucle de démarrage, au prompt vide et sans
+    outil : la CLI rendait ainsi la réponse d'un modèle nu, que le schéma de
+    sortie refusait (code 9), alors que l'exécuteur d'eval mesurait le vrai
+    agent. Repli sur `RunService` seulement tant que la composition n'existe pas.
+    """
+    resolved = settings or Settings.load()
+    build_system = app_build_system()
+    if build_system is not None:
+        accepted = inspect.signature(build_system).parameters
+        return build_system(resolved, **{k: v for k, v in kwargs.items() if k in accepted})
+    return RunService(resolved, **kwargs)
 
 
 def default_service(**kwargs: Any) -> RunService:

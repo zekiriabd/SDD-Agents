@@ -126,6 +126,26 @@ def test_the_identity_field_is_never_a_parameter_the_model_fills(sources_project
     assert "customer_id" not in inputs["properties"] and inputs["required"] == []
 
 
+def test_an_input_key_carries_the_pattern_of_the_frozen_schema(sources_project: Path) -> None:
+    """`lookup(CMD-10O3)` était lu comme une clé inconnue au lieu d'être refusé à l'entrée."""
+    schema_path = sources_project / SCHEMAS / "order_tracking.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["properties"]["order_id"] = {"type": "string", "pattern": "^CMD-\\d{4}$", "maxLength": 8}
+    schema_path.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
+    assert gst.run(sources_project, mode="write").ok
+    block = _input_block((sources_project / TOOLS / "order_tracking_lookup.py").read_text(encoding="utf-8"))
+    assert 'pattern="^CMD-\\\\d{4}$"' in block and "max_length=8" in block
+    namespace: dict = {}
+    exec("from pydantic import BaseModel, ConfigDict, Field\n" + "class Input(BaseModel):" + block, namespace)
+    namespace["Input"](order_id="CMD-1003")
+    with pytest.raises(Exception):
+        namespace["Input"](order_id="CMD-10O3")
+    # En SORTIE, le motif ne refuse rien : la donnée peut dériver, schema_guard le dit.
+    record = (sources_project / TOOLS / "order_tracking_lookup.py").read_text(encoding="utf-8") \
+        .split("class Record(BaseModel):", 1)[1].split("class Output(BaseModel):", 1)[0]
+    assert "pattern=" not in record
+
+
 def test_a_closed_filter_is_typed_with_its_admitted_values(sources_project: Path) -> None:
     """Le modèle voit `DPD | UPS` dans le schéma, au lieu de deviner `FedEx`."""
     assert gst.run(sources_project, mode="write").ok

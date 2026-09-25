@@ -70,6 +70,11 @@ from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, lo
 
 LEVELS = tuple(f"L{i}" for i in range(10))
 
+#: `error_class` qu'un exécuteur rend quand le FOURNISSEUR du modèle n'a pas
+#: répondu (`models.provider_error_class` du runtime généré). Un tel run n'a rien
+#: mesuré de l'agent : erreur d'exécution, et `[INFRA_BLOCKED]` au rapport.
+PROVIDER_ERROR_CLASSES = frozenset({"LLM_PROVIDER_AUTH_FAILED", "LLM_PROVIDER_UNAVAILABLE"})
+
 #: Niveau -> (gate rejouée, part). Les gates composites (`GATE_PARTS`) reçoivent
 #: une part : G3 part `suites` (l'autre, `contracts`, vient de
 #: `validate_tool_contract.py`), G7 part `suites` (l'autre, `adversarial`, vient
@@ -522,6 +527,11 @@ def execute_suite(
         # Pas de mémo : l'exécuteur est rappelé à chaque run, seed distinct.
         try:
             produced = executor.run(item, suite=suite, run_index=run_index, seed=seed) or {}
+            provider_down = str(produced.get("error_class") or "")
+            if provider_down in PROVIDER_ERROR_CLASSES:
+                # Le modèle n'a jamais répondu : c'est une erreur d'EXÉCUTION,
+                # comptée comme telle — pas une mauvaise réponse de l'agent.
+                return ItemResult(item_id, run_index, 0.0, False, {}, f"{provider_down}: le fournisseur du modèle n'a pas répondu")
             measures = {"cost_usd": float(produced.get("cost_usd", 0.0) or 0.0), "latency_ms": float(produced.get("latency_ms", 0.0) or 0.0)}
             grade = normalize_grade(grader(item, produced.get("output"), produced.get("trace"), measures))
             passed = grade.passed if grade.passed is not None else plan.threshold.holds(grade.score)
@@ -570,6 +580,14 @@ def execute_suite(
     result.per_class = {cls: per_class_all[cls] for cls in sorted(critical_classes) if cls in per_class_all}
     if exec_errors and report is not None:
         report.warn("AGENT_EVAL_FAILED", f"suite `{sid}` : {exec_errors} item-run(s) en erreur d'exécution (comptés comme échecs, jamais ignorés)", "", sid)
+    provider_rows = [r for r in detail_rows if str(r.get("error") or "").split(":", 1)[0] in PROVIDER_ERROR_CLASSES]
+    if provider_rows and report is not None:
+        first = str(provider_rows[0]["error"]).split(":", 1)[0]
+        report.error("INFRA_BLOCKED",
+                     f"suite `{sid}` : {len(provider_rows)}/{len(detail_rows)} item-run(s) sans réponse du fournisseur ({first}) — "
+                     "ce qui est rouge ici n'a pas été mesuré",
+                     "vérifier la clé du fournisseur actif dans workspace/assets/.env (`install-env --require`) et le "
+                     "`RuntimeProvider` de STACK.md, puis rejouer : aucun score n'est à interpréter", sid)
     return result, per_class_all, detail_rows, exec_errors
 
 

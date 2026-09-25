@@ -58,6 +58,8 @@ CLASS_TO_EXIT: dict[str, ExitCode] = {
     "TOOL_MCP_DISCONNECTED": ExitCode.TOOL,
     "TOOL_NOT_REGISTERED": ExitCode.TOOL,
     "TOOL_FIXTURE_MISSING": ExitCode.TOOL,   # L4 : un appel qu'aucune fixture ne couvre
+    "LLM_PROVIDER_AUTH_FAILED": ExitCode.CONFIG,   # clé refusée par le fournisseur : configuration
+    "LLM_PROVIDER_UNAVAILABLE": ExitCode.TOOL,     # fournisseur injoignable : une dépendance externe
     "CONFIG_INVALID": ExitCode.CONFIG,
     "PROMPT_MISSING": ExitCode.CONFIG,
     "TOOL_SCHEMA_DRIFT": ExitCode.CONFIG,

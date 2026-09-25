@@ -171,10 +171,18 @@ def payload() -> dict[str, Any]:
 
 
 def root_of(data: dict[str, Any]) -> Path:
-    """La racine du projet : `cwd` du harnais, variable d'env, ou détection."""
+    """La racine du projet, REMONTÉE depuis le `cwd` du harnais, ou la variable d'env.
+
+    Le `cwd` n'est pas la racine : c'est le répertoire courant de la session, et
+    il suffit d'un `cd workspace/src/{App}` pour lancer les tests du projet
+    généré. Pris tel quel, il décalait toute la matrice d'ownership — un Edit de
+    `workspace/src/App/agents/x/agent.py` devenait `agents/x/agent.py`, hors de
+    la zone `workspace/src/**/agents/{agent}/**`, et le hook refusait à
+    `dev-agent` d'écrire dans son propre répertoire.
+    """
     for candidate in (data.get("cwd"), os.environ.get("SDDA_ROOT")):
         if candidate and Path(str(candidate)).is_dir():
-            return Path(str(candidate)).resolve()
+            return paths.find_root(Path(str(candidate))).resolve()
     try:
         return paths.find_root().resolve()
     except Exception:

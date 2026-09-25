@@ -397,6 +397,38 @@ def test_the_in_process_executor_returns_what_the_runner_expects(rt: Runtime) ->
     assert "spans" in outcome["trace"], "la trace doit être au format canonique"
 
 
+def test_the_cli_and_the_executor_serve_the_composed_system(rt: Runtime) -> None:
+    """La CLI servait un `RunService` nu — prompt vide, aucun outil — quand
+    l'exécuteur d'eval mesurait l'agent de `build_system` : ce qu'on livrait
+    n'était pas ce qu'on mesurait, et le schéma de sortie le refusait (code 9)."""
+    app_dir = rt.package / "app"
+    app_dir.mkdir(exist_ok=True)
+    (app_dir / "__init__.py").touch()
+    (app_dir / "composition.py").write_text(
+        "from ..run_service import RunService\n"
+        "CALLS = []\n\n"
+        "def build_system(settings=None, *, client=None, toolset=None):\n"
+        "    CALLS.append(client)\n"
+        "    service = RunService(settings, client=client, toolset=toolset)\n"
+        "    service.composed = True\n"
+        "    return service\n",
+        encoding="utf-8")
+    importlib.invalidate_caches()
+
+    assert getattr(rt.cli._service(rt.settings()), "composed", False) is True
+    client = rt.models.StubClient(answer="réponse")
+    executor = rt.executor.InProcessExecutor(settings=rt.settings(), client=client)
+    assert getattr(executor._build(isolated=False), "composed", False) is True
+    composition = importlib.import_module(f"{APP}.app.composition")
+    assert composition.CALLS[-1] is client, "le client de l'exécuteur doit atteindre build_system"
+
+    # Sans composition, repli sur le service nu : le squelette tourne avant elle.
+    (app_dir / "composition.py").unlink()
+    del sys.modules[f"{APP}.app.composition"]
+    importlib.invalidate_caches()
+    assert not hasattr(rt.cli._service(rt.settings()), "composed")
+
+
 def test_the_executor_tolerates_an_isolated_keyword(rt: Runtime) -> None:
     """`eval-runner --isolated` doit pouvoir passer l'option sans casser."""
     executor = rt.executor.InProcessExecutor(
@@ -416,6 +448,43 @@ def test_mocked_tools_answer_from_fixtures_and_a_missing_one_is_loud(rt: Runtime
     assert "42" in outcome.content
     absent = asyncio.run(toolset.call("absent", {}))
     assert absent.ok is False and absent.error_code == "TOOL_NOT_REGISTERED"
+
+
+def test_the_anthropic_adapter_speaks_the_messages_api_grammar(rt: Runtime) -> None:
+    """Rôle `tool` et spec OpenAI envoyés tels quels : refus de l'API dès le 2e tour à outils."""
+    models = rt.models
+    call = models.ToolCall(id="tu_1", name="orders_lookup", arguments={"order_id": "CMD-1003"})
+    history = [
+        models.Message(role="system", content="sys"),
+        models.Message(role="user", content="statut de CMD-1003 ?"),
+        models.Message(role="assistant", content="", tool_calls=(call,)),
+        models.Message(role="tool", content='{"record": null}', name="orders_lookup", tool_call_id="tu_1"),
+    ]
+    turns = models._AnthropicClient.turns(history)
+    assert [t["role"] for t in turns] == ["user", "assistant", "user"]
+    assert turns[1]["content"] == [{"type": "tool_use", "id": "tu_1", "name": "orders_lookup",
+                                    "input": {"order_id": "CMD-1003"}}]
+    assert turns[2]["content"][0] == {"type": "tool_result", "tool_use_id": "tu_1", "content": '{"record": null}'}
+    spec = {"type": "function", "function": {"name": "orders_lookup", "description": "d",
+                                             "parameters": {"type": "object"}}}
+    assert models._AnthropicClient.tool_specs([spec]) == [
+        {"name": "orders_lookup", "description": "d", "input_schema": {"type": "object"}}]
+
+    class Raw:
+        def __init__(self) -> None:
+            self.kwargs: dict = {}
+            self.messages = self
+
+        def create(self, **kwargs):  # noqa: ANN003
+            self.kwargs = kwargs
+            return type("R", (), {"content": [], "usage": None, "model": "m", "stop_reason": "end_turn"})()
+
+    raw = Raw()
+    models._AnthropicClient(raw).complete(history, model="m", tools=[spec])
+    assert raw.kwargs["system"] == "sys" and raw.kwargs["tools"][0]["input_schema"] == {"type": "object"}
+    assert all(t["role"] != "tool" for t in raw.kwargs["messages"])
+    # La forme chat-completions rejoue la demande d'outil avant son résultat.
+    assert history[2].to_dict()["tool_calls"][0]["function"]["name"] == "orders_lookup"
 
 
 def test_mocked_tools_answer_by_arguments_and_replay_declared_errors(rt: Runtime, tmp_path: Path) -> None:

@@ -425,12 +425,24 @@ def _field_line(name: str, spec: dict[str, Any], *, optional: bool, default: str
     modèle voit les valeurs admises au lieu d'en deviner une. Un champ de
     SORTIE reste typé large — la donnée peut dériver, et c'est `schema_guard`
     qui le signale, pas la validation qui le refuserait.
+
+    Pour la même raison, une entrée porte aussi le `pattern` et les bornes de
+    longueur du schéma figé. Sans eux, `lookup(CMD-10O3)` n'était pas refusé à
+    l'entrée : la clé mal formée était lue comme une clé inconnue, et l'outil
+    rendait « introuvable » là où le contrat déclare une entrée invalide.
     """
     annotation = (_enum_type(spec, optional=optional) if closed else None) or _py_type(spec, optional=optional)
     description = str(spec.get("description") or f"Champ {name} de la source.")
     args = [f"description={_literal(description)}"]
     if default is not None:
         args.insert(0, default)
+    if closed and "Literal[" not in annotation:
+        pattern = spec.get("pattern")
+        if isinstance(pattern, str) and pattern:
+            args.append(f"pattern={_literal(pattern)}")
+        for key, arg in (("minLength", "min_length"), ("maxLength", "max_length")):
+            if isinstance(spec.get(key), int) and not isinstance(spec.get(key), bool):
+                args.append(f"{arg}={spec[key]}")
     return f"    {name}: {annotation} = Field({', '.join(args)})"
 
 
@@ -463,7 +475,7 @@ def render_wrapper(ctx: Context, source_id: str, src: dict[str, Any], schema: di
 
     if kind == "lookup":
         spec = props.get(key) or {"type": "string", "description": f"Clé d'identification `{key}`."}
-        lines.append(_field_line(key, spec, optional=False))
+        lines.append(_field_line(key, spec, optional=False, closed=True))
     else:
         lines.extend(_search_input_fields(src, props))
 

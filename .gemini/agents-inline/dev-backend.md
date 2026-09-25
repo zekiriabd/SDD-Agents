@@ -157,6 +157,26 @@ bornes), avec des points d'attache que `dev-agent`, `dev-tools` et
 absent doit le dire par une erreur nommée au démarrage, pas par une
 `ImportError` trois phases plus loin.
 
+**Le contrat que les autres couches attendent** (Python — l'équivalent dans
+les autres langages) :
+
+- `build_system(settings=None, *, client=None, toolset=None) -> RunService`.
+  `client` et `toolset` sont des SURCHARGES : l'exécuteur d'eval L4
+  (`evals/executor.py`) passe des outils mockés, un test passe un double de
+  modèle. Une composition qui les ignore fait évaluer à G5 un autre système
+  que celui qu'elle livre.
+- l'`agent_factory` rendu à `RunService` construit l'agent **depuis son
+  package** quand il existe — `agents/{agent_slug}/` exposant
+  `build_agent(deps, bounds)` / `AgentDeps.from_ir(…)` (fiche de langage) —
+  et ne retombe sur la boucle générique qu'en son absence (PHASE 3.0). Il
+  honore le `bounds` qu'il reçoit (un plafond abaissé par la surface ne se
+  perd pas) et le `toolset` surchargé s'il y en a un.
+
+Le point d'attache est résolu **paresseusement**, dans l'`agent_factory` : en
+PHASE 3.0 le package n'existe pas, en PHASE 5.2bis (`--phase packaging`) tu
+vérifies qu'il est bien celui qui répond — un `run` sur un double de modèle
+dont la trace nomme l'agent du produit, pas la boucle générique.
+
 ### 3.4 La configuration
 
 Le mécanisme natif de l'écosystème (`pydantic-settings`, Zod sur `process.env`

@@ -72,4 +72,7 @@ pricing:                              # USD par million de tokens — tarif publ
   gemini-3.1-pro-preview: {input: 2.00, output: 12.00, cache_read: 0.200, cache_creation: 2.00}
   gemini-3.8-flash:       {input: 0.75, output:  3.75, cache_read: 0.075, cache_creation: 0.75}
   gemini-3.5-flash-lite:  {input: 0.30, output:  2.50, cache_read: 0.030, cache_creation: 0.30}
-pricing_last_reviewed: 2026-09-20
+  # gemini-2.5-flash : toujours listé (hors tier_map), relevé 2026-09-25 sur
+  # ai.google.dev/gemini-api/docs/pricing — output thinking compris.
+  gemini-2.5-flash:       {input: 0.30, output:  2.50, cache_read: 0.030, cache_creation: 0.30}
+pricing_last_reviewed: 2026-09-25

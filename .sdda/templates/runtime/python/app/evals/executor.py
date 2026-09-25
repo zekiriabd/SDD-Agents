@@ -41,9 +41,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from ..config import Settings
-from ..models import StubClient
+from ..models import StubClient  # noqa: F401 - réexporté : les tests des projets s'en servent
 from ..orchestration.base import DictToolset, ToolOutcome
-from ..run_service import RunRequest, RunService
+from ..run_service import RunRequest, RunService, composed_service
 
 #: Le mode d'isolement d'une suite, tel que `pytest-eval.md §3.1` l'écrit.
 #: `mocked`/`frozen` sont les valeurs de la L4 ; `live` est ce qu'on mesure en
@@ -210,6 +210,7 @@ class InProcessExecutor:
             "latency_ms": result.latency_ms or int((time.monotonic() - started) * 1000),
             "trace": result.trace,
             "status": result.status,
+            "error_class": result.error_class,
             "exit_code": _exit_code(result),
             "run_id": result.run_id,
         }
@@ -229,19 +230,23 @@ class InProcessExecutor:
     def _build(self, isolated: bool) -> RunService:
         if self.service_factory is not None:
             return self.service_factory(isolated=isolated)
-        kwargs: dict[str, Any] = {"settings": self.settings}
+        kwargs: dict[str, Any] = {}
         if isolated:
             # Outils mockés et retrieval figé : la seule variation qui reste est
-            # celle du modèle, donc celle qu'on voulait mesurer.
+            # celle du MODÈLE, donc celle qu'on voulait mesurer. Le client est
+            # celui du fournisseur actif (`stub` si `## Runtime Models` le dit) :
+            # un `StubClient` par défaut faisait mesurer à L4 un double qui
+            # répond « stub », et G5 notait la plomberie au lieu de l'agent.
             kwargs["toolset"] = mocked_toolset(self.tool_fixtures)
-            kwargs["client"] = self.client or StubClient()
-            return RunService(**kwargs)
         if self.client is not None:
             kwargs["client"] = self.client
-        # Hors isolement, le client est celui du fournisseur ACTIF : un run
-        # « bout en bout » qui appellerait un double mesurerait la plomberie et
-        # rapporterait le résultat comme s'il venait du modèle.
-        return RunService(**kwargs)
+        # Le système est celui que l'APPLICATION compose (`app/composition.py`,
+        # `build_system`) : son agent, son prompt épinglé, ses outils câblés. Un
+        # `RunService` nu faisait tourner un agent générique au prompt vide — on
+        # évaluait ce que personne n'a livré. Repli sur `RunService` seulement
+        # si l'application n'a pas (encore) de composition — `composed_service`,
+        # le même chemin que la CLI.
+        return composed_service(self.settings, **kwargs)
 
 
 def _exit_code(result: Any) -> int:

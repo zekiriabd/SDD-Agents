@@ -47,7 +47,18 @@ def check(root: Path, data: dict) -> int:
                         "câbler la stack d'observabilité (`observability/*.md`) : un run sans trace "
                         "n'est pas débogable, et son coût n'est pas mesurable (P6)")
     else:
-        summaries = tracing.summarize_all(root)
+        # Un run de CONSTRUCTION encore ouvert n'a pas de span racine : c'est
+        # `end-run` qui l'écrit, à la fin de la commande. Le juger au
+        # SubagentStop d'un agent lancé en cours de route refusait l'arrêt de
+        # chaque `dev-orchestration` / `qa-tests` du run — en boucle, pour une
+        # trace que la commande n'avait pas encore le droit de fermer.
+        from sdda_scripts import sdda_state  # noqa: E402
+
+        def still_open(run_id: str) -> bool:
+            state = sdda_state.load_run(root, run_id)
+            return bool(state) and state.get("status") == "running"
+
+        summaries = [s for s in tracing.summarize_all(root) if not still_open(s.run_id)]
         if not summaries:
             # Aucun run enregistré : normal avant la première exécution. Le
             # contrôle bloquant est joué en G6, sur un run qui a réellement eu lieu.

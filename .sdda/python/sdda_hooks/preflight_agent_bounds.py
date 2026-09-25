@@ -9,12 +9,24 @@ agentic d'un `while(true)` — sauf qu'elle facture.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import AGENT_BUILDERS, ALLOW, allow, deny, run  # noqa: E402
+from _hook import AGENT_BUILDERS, ALLOW, agent_of, allow, deny, run  # noqa: E402
+
+#: La pré-passe de `dev-orchestration` (`/sdda-build` 4.0) : `shared/` et
+#: l'INTERFACE mémoire, avant `dev-prompt` (4.1). Elle n'implémente aucun
+#: prompt ; exiger d'elle un `promptHash` rendait la phase 4 inatteignable —
+#: le prompt ne peut pas être épinglé avant d'être écrit.
+_PREPASS_RE = re.compile(r"^\s*SDDA-PREPASS\s*$", re.M)
+
+
+def _is_prepass(data: dict) -> bool:
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    return agent_of(data) == "dev-orchestration" and bool(_PREPASS_RE.search(str((tool_input or {}).get("prompt") or "")))
 
 HOOK = "preflight_agent_bounds"
 
@@ -68,7 +80,7 @@ def check(root: Path, data: dict) -> int:
 
     # Les bornes d'abord : une borne absente est une borne infinie, et c'est le
     # nom de ce hook. Le prompt non épinglé vient ensuite.
-    if not unbounded and unpinned:
+    if not unbounded and unpinned and not _is_prepass(data):
         return deny(HOOK, "PROMPT_NOT_PINNED",
                     f"{len(unpinned)} agent(s) sans `promptHash` dans l'IR — {unpinned[0]}",
                     "dev-prompt écrit `workspace/src/{App}/prompts/{slug}.system.md`, puis recompiler l'IR "

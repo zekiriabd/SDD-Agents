@@ -363,6 +363,19 @@ def _is_docstring(text: str, start: int) -> bool:
     return bool(_PREAMBLE_RE.match(before)) or bool(_DEF_HEADER_RE.search(before.rstrip(" \t")))
 
 
+#: Répertoires TIERS sous `src/` : environnement virtuel, dépendances installées,
+#: caches et sorties de build. Ce code n'est écrit par aucun agent ; le scanner
+#: y trouvait 226 « prompts en dur » (docstrings et messages de langchain,
+#: pydantic…) dès que `dev-backend` installait le projet dans `src/{App}/.venv`,
+#: et le hook de fin refusait en boucle l'arrêt d'un agent qui n'y était pour rien.
+VENDORED_DIRS = frozenset({".venv", "venv", ".tox", "site-packages", "node_modules",
+                           "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", "bin", "obj"})
+
+
+def _vendored(path: Path, src: Path) -> bool:
+    return any(part in VENDORED_DIRS for part in path.relative_to(src).parts[:-1])
+
+
 def scan_inline_prompts(root: Path, report: Report) -> int:
     """Un littéral long et impératif hors du module de chargement est un prompt."""
     src = paths.workspace(root) / "src"
@@ -374,6 +387,8 @@ def scan_inline_prompts(root: Path, report: Report) -> int:
     scanned = 0
     for path in sorted(src.rglob("*")):
         if not path.is_file() or path.suffix not in (".py", ".cs", ".ts", ".java"):
+            continue
+        if _vendored(path, src):
             continue
         if path.name in PROMPT_MODULE_NAMES or "/tests/" in path.as_posix():
             continue

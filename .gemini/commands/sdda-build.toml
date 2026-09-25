@@ -210,6 +210,18 @@ python .sdda/sdda.py state set-item --phase build_socle --item {couche} \
 reste celui de `set-phase` en 3.4 — les items disent ce qui a été payé, la
 phase dit si la couche tient.
 
+### 3.1 bis — `qa-tests` sur les couches du socle (avant G3)
+
+La part `suites` de G3 joue les tests L2 **que `qa-tests` a écrits** : sans eux
+elle est rouge par construction (« aucun test ne joue la suite
+`tool-{n}-{outil}` »). `qa-tests` part donc ici, une fois par couche du socle
+qui porte un outil câblé — `tools`, et `data` en `declared-sources` (les
+outils de source vivent sous `data/tools/`) — avec `SDDA-LAYER: {couche}` en
+première ligne. Il écrit sous `src/**/tests/` seulement, ne corrige jamais le
+code : un test rouge sur du code généré est un défaut à rapporter, qui se
+corrige dans le générateur. Sans ce passage, G3 ne pouvait être verte qu'après
+la PHASE 6 — c'est-à-dire jamais au moment où `/sdda-build` la joue.
+
 ### 3.2 — TOOL GATE (G3)
 
 **G3 est composite** — deux écrivains, deux parts, et un outil n'est câblable

@@ -75,6 +75,21 @@ def test_dev_agent_is_refused_on_an_agent_whose_prompt_is_not_pinned(project: Pa
     assert code == _hook.DENY and "PROMPT_NOT_PINNED" in buf.getvalue()
 
 
+def test_the_orchestration_prepass_runs_before_any_prompt_is_pinned(project: Path) -> None:
+    """La pré-passe (4.0) précède `dev-prompt` (4.1) : lui demander un prompt épinglé bloquait la phase 4."""
+    _phase_2_workspace(project)
+    ir_compiler.compile_to_file(project, 1)
+    prepass = {"tool_input": {"subagent_type": "dev-orchestration", "prompt": "SDDA-PREPASS\nMISSION 1 — pré-passe."}, "mission": 1}
+    with redirect_stderr(io.StringIO()):
+        assert preflight_agent_bounds.check(project, prepass) == _hook.ALLOW
+    # Hors pré-passe, `dev-orchestration` (5.1) implémente le graphe des agents : l'exigence tient.
+    phase5 = {"tool_input": {"subagent_type": "dev-orchestration", "prompt": "MISSION 1 — graphe."}, "mission": 1}
+    buf = io.StringIO()
+    with redirect_stderr(buf):
+        assert preflight_agent_bounds.check(project, phase5) == _hook.DENY
+    assert "PROMPT_NOT_PINNED" in buf.getvalue()
+
+
 def test_dev_agent_is_allowed_once_every_prompt_is_pinned(project: Path) -> None:
     ir_compiler.compile_to_file(project, 1)   # la fixture complète : tous les prompts existent
     with redirect_stderr(io.StringIO()):

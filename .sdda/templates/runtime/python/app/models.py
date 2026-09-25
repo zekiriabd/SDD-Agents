@@ -47,34 +47,65 @@ ROLES: tuple[str, ...] = ("system", "user", "assistant", "tool")
 
 
 @dataclass(frozen=True)
-class Message:
-    """Un message de la conversation. `name` porte l'outil pour un rôle `tool`."""
-
-    role: str
-    content: str
-    name: str = ""
-    tool_call_id: str = ""
-
-    def __post_init__(self) -> None:
-        if self.role not in ROLES:
-            raise ValueError(f"rôle `{self.role}` hors liste close {list(ROLES)}")
-
-    def to_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"role": self.role, "content": self.content}
-        if self.name:
-            out["name"] = self.name
-        if self.tool_call_id:
-            out["tool_call_id"] = self.tool_call_id
-        return out
-
-
-@dataclass(frozen=True)
 class ToolCall:
     """Un appel d'outil demandé par le modèle. `id` corrèle demande et résultat."""
 
     id: str
     name: str
     arguments: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Message:
+    """Un message de la conversation. `name` porte l'outil pour un rôle `tool`.
+
+    `tool_calls` porte les appels qu'un tour `assistant` a demandés. Sans lui,
+    l'historique renvoyé au modèle perdait ses demandes d'outil : les résultats
+    arrivaient au tour suivant sans la demande qu'ils honorent, ce qu'Anthropic
+    refuse (un `tool_result` doit suivre son `tool_use`) et qu'OpenAI refuse
+    aussi (un message `tool` doit suivre un `tool_calls`). Tout run à outils
+    échouait au deuxième tour.
+    """
+
+    role: str
+    content: str
+    name: str = ""
+    tool_call_id: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.role not in ROLES:
+            raise ValueError(f"rôle `{self.role}` hors liste close {list(ROLES)}")
+
+    def to_dict(self) -> dict[str, Any]:
+        """La forme « chat completions » (OpenAI et compatibles)."""
+        import json  # noqa: PLC0415
+
+        out: dict[str, Any] = {"role": self.role, "content": self.content}
+        if self.name:
+            out["name"] = self.name
+        if self.tool_call_id:
+            out["tool_call_id"] = self.tool_call_id
+        if self.tool_calls:
+            out["tool_calls"] = [
+                {"id": c.id, "type": "function",
+                 "function": {"name": c.name, "arguments": json.dumps(dict(c.arguments), ensure_ascii=False)}}
+                for c in self.tool_calls]
+        return out
+
+
+def _tool_spec_parts(spec: Mapping[str, Any]) -> tuple[str, str, Mapping[str, Any]]:
+    """(nom, description, schéma d'entrée) d'une spec d'outil, quelle que soit sa graphie.
+
+    La composition émet la forme `{"type": "function", "function": {…, "parameters"}}` ;
+    un appelant peut aussi passer `{name, description, input_schema | parameters}`.
+    Chaque adaptateur rend ensuite la forme de SON fournisseur : envoyer la forme
+    OpenAI à Anthropic faisait refuser la requête dès qu'un outil était exposé.
+    """
+    function = spec.get("function")
+    inner: Mapping[str, Any] = function if isinstance(function, Mapping) else spec
+    schema = inner.get("parameters") or inner.get("input_schema") or {"type": "object"}
+    return str(inner.get("name") or ""), str(inner.get("description") or ""), schema
 
 
 @dataclass(frozen=True)
@@ -161,6 +192,29 @@ def cost_usd(model: str, usage: Usage, pricing: Mapping[str, Mapping[str, float]
 GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
+#: Exceptions des SDK fournisseurs (anthropic, openai — Gemini passe par ce
+#: dernier) qui disent « le modèle n'a pas pu répondre », par nom de classe :
+#: le squelette ne doit pas importer un SDK pour le reconnaître.
+PROVIDER_AUTH_ERRORS = frozenset({"AuthenticationError", "PermissionDeniedError"})
+PROVIDER_DOWN_ERRORS = frozenset({"APIConnectionError", "APITimeoutError", "InternalServerError",
+                                  "ServiceUnavailableError", "OverloadedError", "RateLimitError"})
+
+
+def provider_error_class(exc: BaseException) -> str | None:
+    """`[CLASS]` d'une panne du FOURNISSEUR, ou None si l'exception vient d'ailleurs.
+
+    Distinguée d'`INTERNAL_ERROR` parce qu'elle ne dit rien de l'agent : une clé
+    refusée faisait noter 0.000 chaque item d'une suite, et le rapport concluait
+    « l'agent répond faux » là où aucun appel n'avait abouti.
+    """
+    name = type(exc).__name__
+    if name in PROVIDER_AUTH_ERRORS:
+        return "LLM_PROVIDER_AUTH_FAILED"
+    if name in PROVIDER_DOWN_ERRORS:
+        return "LLM_PROVIDER_UNAVAILABLE"
+    return None
+
+
 def resolve(tier: str | None, settings: Settings) -> str:
     """Tier -> identifiant de modèle, déclaré dans `## Runtime Models`."""
     return settings.model_for(tier)
@@ -208,14 +262,51 @@ class _AnthropicClient:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
+    @staticmethod
+    def turns(messages: Sequence[Message]) -> list[dict[str, Any]]:
+        """L'historique dans la grammaire de l'API Messages.
+
+        - un tour `assistant` qui a demandé des outils porte ses blocs `tool_use` ;
+        - les messages `tool` consécutifs deviennent UN tour `user` de blocs
+          `tool_result` (l'API n'a pas de rôle `tool`, et exige tous les
+          résultats d'un tour dans le message qui le suit).
+        """
+        out: list[dict[str, Any]] = []
+        for m in messages:
+            if m.role == "system":
+                continue
+            if m.role == "tool":
+                block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
+                if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list) \
+                        and all(b.get("type") == "tool_result" for b in out[-1]["content"]):
+                    out[-1]["content"].append(block)
+                else:
+                    out.append({"role": "user", "content": [block]})
+                continue
+            if m.role == "assistant" and m.tool_calls:
+                blocks: list[dict[str, Any]] = [{"type": "text", "text": m.content}] if m.content else []
+                blocks += [{"type": "tool_use", "id": c.id, "name": c.name, "input": dict(c.arguments)}
+                           for c in m.tool_calls]
+                out.append({"role": "assistant", "content": blocks})
+                continue
+            out.append({"role": m.role, "content": m.content})
+        return out
+
+    @staticmethod
+    def tool_specs(tools: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        specs = []
+        for spec in tools:
+            name, description, schema = _tool_spec_parts(spec)
+            specs.append({"name": name, "description": description, "input_schema": dict(schema)})
+        return specs
+
     def complete(self, messages: Sequence[Message], *, model: str,
                  tools: Sequence[Mapping[str, Any]] = (), **options: Any) -> Completion:
         system = "\n\n".join(m.content for m in messages if m.role == "system")
-        turns = [m.to_dict() for m in messages if m.role != "system"]
         response = self._raw.messages.create(
-            model=model, system=system, messages=turns,
+            model=model, system=system, messages=self.turns(messages),
             max_tokens=int(options.get("max_tokens", 4096)),
-            **({"tools": list(tools)} if tools else {}))
+            **({"tools": self.tool_specs(tools)} if tools else {}))
         usage = getattr(response, "usage", None)
         blocks = [b for b in getattr(response, "content", []) if getattr(b, "type", "") == "text"]
         return Completion(
@@ -241,9 +332,14 @@ class _OpenAIClient:
 
     def complete(self, messages: Sequence[Message], *, model: str,
                  tools: Sequence[Mapping[str, Any]] = (), **options: Any) -> Completion:
+        specs = []
+        for spec in tools:
+            name, description, schema = _tool_spec_parts(spec)
+            specs.append({"type": "function", "function": {"name": name, "description": description,
+                                                           "parameters": dict(schema)}})
         response = self._raw.chat.completions.create(
             model=model, messages=[m.to_dict() for m in messages],
-            **({"tools": list(tools)} if tools else {}))
+            **({"tools": specs} if specs else {}))
         choice = response.choices[0]
         usage = getattr(response, "usage", None)
         details = getattr(usage, "prompt_tokens_details", None)

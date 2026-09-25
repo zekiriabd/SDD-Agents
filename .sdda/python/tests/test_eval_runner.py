@@ -266,6 +266,27 @@ def test_executor_exceptions_are_failures_not_skips(compiled) -> None:
     assert all(row["error"] and row["error"].startswith("RuntimeError") for row in s["items"])
 
 
+class RejectedKeyExecutor:
+    """Ce que rend le runtime généré quand le fournisseur refuse la clé : un run `failed`, sans exception."""
+
+    name = "rejected-key"
+
+    def run(self, item: dict[str, Any], *, suite: dict[str, Any], run_index: int, seed: int | None) -> dict[str, Any]:
+        return {"output": None, "status": "failed", "error_class": "LLM_PROVIDER_AUTH_FAILED", "cost_usd": 0.0}
+
+
+def test_a_rejected_provider_key_is_named_not_scored_as_a_wrong_answer(compiled) -> None:
+    """Une clé refusée notait 0.000 chaque item : « l'agent répond faux » là où rien n'avait été mesuré."""
+    root, ir, cfg = compiled
+    report, payload = run_evals(root, ir, RejectedKeyExecutor(), config=cfg, filters=Filters(suites={sid_routing}),
+                                runs_override=2, write_report=False, write_gates=False)
+    s = _suite(payload, sid_routing)
+    assert s["executorErrors"] == len(s["items"]) > 0
+    assert all(row["error"].startswith("LLM_PROVIDER_AUTH_FAILED") for row in s["items"])
+    infra = [f for f in report.errors if f.cls == "INFRA_BLOCKED"]
+    assert infra and "n'a pas été mesuré" in infra[0].message
+
+
 def test_unknown_grader_is_an_error_not_a_silent_green(compiled) -> None:
     root, ir, cfg = compiled
     for s in ir["evaluation"]["suites"]:

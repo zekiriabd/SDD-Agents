@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from ..config import ConfigError, Settings
-from ..run_service import RunRequest, RunService
+from ..run_service import RunRequest, RunService, composed_service
 from .exit_codes import ExitCode, resolve_exit_code
 
 
@@ -81,7 +81,8 @@ def _read_input(args: argparse.Namespace) -> str:
 
 
 def _service(settings: Settings | None = None) -> RunService:
-    return RunService(settings or Settings.load())
+    """Le système composé par l'application, le même que mesure l'exécuteur d'eval."""
+    return composed_service(settings)
 
 
 # ---------------------------------------------------------------------------

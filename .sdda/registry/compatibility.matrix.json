@@ -170,7 +170,7 @@
       "eval": "pytest-eval",
       "observability": "otel-genai",
       "serving": "cli",
-      "provider": "anthropic",
+      "provider": ["anthropic", "google"],
       "archi": "mvc",
       "backend": "none",
       "deliverable": "cli-exe",

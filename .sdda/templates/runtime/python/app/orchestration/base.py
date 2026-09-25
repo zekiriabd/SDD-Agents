@@ -369,7 +369,8 @@ class BoundedLoop:
                     agent_span.set("sdda.agent.iteration", guard.iterations)
 
                     completion = await self._complete(messages, guard)
-                    messages.append(Message(role="assistant", content=completion.text))
+                    messages.append(Message(role="assistant", content=completion.text,
+                                            tool_calls=tuple(completion.tool_calls)))
 
                     if not completion.tool_calls:
                         return AgentResult(
