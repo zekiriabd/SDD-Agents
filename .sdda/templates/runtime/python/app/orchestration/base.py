@@ -30,8 +30,13 @@ jour où le code ne fait plus ce que le dessin annonce.
 """
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import inspect
 import json
+import threading
+import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -64,6 +69,88 @@ ALWAYS = "always"
 #: `agent_factory` lui est fournie ; un orchestrateur peut aussi le déclarer
 #: lui-même.
 _FRAMEWORK_GRAPH: dict[str, str | None] = {"origin": None}
+
+
+#: Le garde de l'agent EN COURS. Un agent appelé depuis un outil d'un autre
+#: agent (délégation) le trouve ici : il démarre à la profondeur de son
+#: appelant + 1, et c'est la borne `max_delegation_depth` de l'APPELANT qui
+#: tombe s'il n'avait pas le droit de déléguer. Un `ContextVar` : deux agents
+#: en parallèle ne se prennent pas pour le parent l'un de l'autre.
+_CURRENT_GUARD: contextvars.ContextVar[BoundGuard | None] = contextvars.ContextVar(
+    "sdda_current_guard", default=None)
+
+
+def _settle(future: asyncio.Future[Any], *, result: Any = None, error: BaseException | None = None) -> None:
+    if future.done():   # le délai est déjà tombé : le résultat tardif est jeté
+        return
+    if error is not None:
+        future.set_exception(error)
+    else:
+        future.set_result(result)
+
+
+def _in_daemon_thread(work: Callable[[], Any]) -> asyncio.Future[Any]:
+    """Exécute `work` dans un thread DÉMON, rend un futur de la boucle courante.
+
+    Pourquoi pas `asyncio.to_thread` : à l'expiration du délai, le thread d'un
+    appel bloqué continue, et `asyncio.run` puis l'interpréteur attendent la fin
+    de chaque thread de l'exécuteur par défaut — la CLI restait suspendue
+    jusqu'à ce que l'appel qu'on venait d'abandonner se termine. Un thread
+    démon n'empêche pas le processus de rendre la main.
+    """
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[Any] = loop.create_future()
+    context = contextvars.copy_context()
+
+    def target() -> None:
+        try:
+            value = context.run(work)
+        except BaseException as exc:  # noqa: BLE001 - transmise telle quelle à l'appelant
+            outcome: dict[str, Any] = {"error": exc}
+        else:
+            outcome = {"result": value}
+        try:
+            loop.call_soon_threadsafe(lambda: _settle(future, **outcome))
+        except RuntimeError:   # boucle déjà fermée : personne n'attend plus ce résultat
+            pass
+
+    threading.Thread(target=target, name="sdda-bounded-call", daemon=True).start()
+    return future
+
+
+class CallTimedOut(Exception):
+    """Le délai PROPRE d'un appel (celui d'un outil) est tombé avant celui du run."""
+
+
+async def within_deadline(guard: BoundGuard, work: Callable[[], Any], *,
+                          cap_s: float | None = None) -> Any:
+    """Exécute `work` (sync ou async) sous le temps qui RESTE au garde.
+
+    `timeout_s` n'était vérifié qu'entre deux tours : un appel au modèle ou à
+    un outil qui pendait trois minutes passait entre deux vérifications, et la
+    borne n'existait pas. Ici le reste du budget de temps devient le délai de
+    l'appel en cours. `cap_s` (délai propre d'un outil) le resserre : s'il tombe
+    le premier, c'est `CallTimedOut` — une erreur de l'outil, pas du run.
+    """
+    remaining = guard.remaining_time()
+    if remaining <= 0:
+        guard.fail("timeout_s", guard.bounds.timeout_s, round(guard.elapsed, 3))
+    own_cap = cap_s is not None and cap_s < remaining
+    delay = float(cap_s) if own_cap and cap_s is not None else remaining
+
+    async def attempt() -> Any:
+        value = await _in_daemon_thread(work)
+        if inspect.isawaitable(value):
+            value = await value
+        return value
+
+    try:
+        return await asyncio.wait_for(attempt(), timeout=delay)
+    except asyncio.TimeoutError:
+        if own_cap:
+            raise CallTimedOut(f"délai propre de {cap_s} s dépassé") from None
+        guard.fail("timeout_s", guard.bounds.timeout_s, round(guard.elapsed, 3))
+        raise  # pragma: no cover - `fail` lève toujours
 
 
 def declare_framework_graph(origin: str | None) -> None:
@@ -234,7 +321,12 @@ class DictToolset:
 
     tools: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
     schemas: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
-    metadata: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    #: Par outil : `side_effect_class`, `trust`, et les bornes du CONTRAT
+    #: (`timeout_s`, `rate_limit_rpm`, `max_response_bytes`) — appliquées ici et
+    #: dans la boucle, pas seulement écrites dans `tool_specs.json`.
+    metadata: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    clock: Callable[[], float] = time.monotonic
+    _calls: dict[str, deque[float]] = field(default_factory=dict, repr=False)
 
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self.tools))
@@ -242,8 +334,25 @@ class DictToolset:
     def specs(self) -> list[Mapping[str, Any]]:
         return [self.schemas[n] for n in self.names() if n in self.schemas]
 
-    def meta(self, name: str) -> Mapping[str, str]:
+    def meta(self, name: str) -> Mapping[str, Any]:
         return self.metadata.get(name, {})
+
+    def _rate_limited(self, name: str) -> bool:
+        """`rate_limit_rpm` du contrat, en fenêtre glissante de 60 s."""
+        try:
+            rpm = int(self.meta(name).get("rate_limit_rpm") or 0)
+        except (TypeError, ValueError):
+            rpm = 0
+        if rpm <= 0:
+            return False
+        now = self.clock()
+        window = self._calls.setdefault(name, deque())
+        while window and now - window[0] >= 60.0:
+            window.popleft()
+        if len(window) >= rpm:
+            return True
+        window.append(now)
+        return False
 
     async def call(self, name: str, arguments: Mapping[str, Any]) -> ToolOutcome:
         fn = self.tools.get(name)
@@ -253,16 +362,30 @@ class DictToolset:
             # suivant plutôt que faire tomber le run.
             return ToolOutcome(content=f"outil `{name}` inconnu", ok=False,
                                error_code="TOOL_NOT_REGISTERED")
-        result = fn(**dict(arguments))
+        if self._rate_limited(name):
+            return ToolOutcome(content=f"outil `{name}` : plafond d'appels par minute atteint",
+                               ok=False, error_code="TOOL_RATE_LIMITED")
+        meta = self.meta(name)
+        kwargs = dict(arguments)
+        # Un outil SYNCHRONE hors de la boucle d'événements : exécuté dedans, il
+        # la bloquait, et aucun délai (`within_deadline`) ne pouvait tomber.
+        result = (fn(**kwargs) if inspect.iscoroutinefunction(fn)
+                  else await _in_daemon_thread(lambda: fn(**kwargs)))
         if inspect.isawaitable(result):
             result = await result
-        if isinstance(result, ToolOutcome):
-            return result
-        meta = self.meta(name)
-        return ToolOutcome(content=result if isinstance(result, str) else json.dumps(
-            result, ensure_ascii=False, sort_keys=True, default=str),
-            side_effect_class=meta.get("side_effect_class", "read-only"),
-            trust=meta.get("trust", "trusted"))
+        outcome = result if isinstance(result, ToolOutcome) else ToolOutcome(
+            content=result if isinstance(result, str) else json.dumps(
+                result, ensure_ascii=False, sort_keys=True, default=str),
+            side_effect_class=str(meta.get("side_effect_class", "read-only")),
+            trust=str(meta.get("trust", "trusted")))
+        limit = meta.get("max_response_bytes")
+        if isinstance(limit, int) and limit > 0 and len(outcome.content.encode("utf-8")) > limit:
+            # Refusée, pas tronquée : une réponse coupée en silence est prise
+            # pour complète, et l'agent conclut sur la moitié des données.
+            return ToolOutcome(content=f"réponse de `{name}` au-delà de {limit} octets", ok=False,
+                               error_code="TOOL_RESPONSE_TOO_LARGE",
+                               side_effect_class=outcome.side_effect_class, trust=outcome.trust)
+        return outcome
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +405,11 @@ class AgentResult:
     status: str = "ok"
     bound_exceeded: str = ""
     bound_policy: str = ""
+    #: Valeur OBSERVÉE de la borne tombée (tours, appels, secondes, dollars…).
+    #: L'événement `bound_exceeded` publiait toujours le coût, quelle que soit
+    #: la borne : un dépassement d'itérations affichait « observed: 0.002 ».
+    bound_observed: float | None = None
+    bound_limit: float | None = None
     error_class: str = ""
     message: str = ""
     iterations: int = 0
@@ -302,7 +430,7 @@ class AgentResult:
                 "costUsd": round(self.cost_usd, 6)}
 
 
-def apply_bound_policy(exc: BoundExceeded, *, guard: BoundGuard,
+def apply_bound_policy(exc: BoundExceeded, *, guard: BoundGuard | None = None,
                        degraded_output: Any = None) -> AgentResult:
     """Traduit une borne tombée en RÉSULTAT, selon la politique déclarée.
 
@@ -316,9 +444,14 @@ def apply_bound_policy(exc: BoundExceeded, *, guard: BoundGuard,
     """
     base: dict[str, Any] = {
         "bound_exceeded": exc.bound, "bound_policy": exc.policy,
-        "message": str(exc), "partial_state": dict(exc.partial_state or guard.state()),
-        "iterations": guard.iterations, "tool_calls": guard.tool_calls,
-        "cost_usd": guard.cost_usd,
+        "bound_observed": exc.observed, "bound_limit": exc.limit,
+        # `guard` absent : une borne du RUN (hops, tokens) tombée hors de tout
+        # agent — l'état partiel est alors celui que porte l'exception.
+        "message": str(exc),
+        "partial_state": dict(exc.partial_state or (guard.state() if guard is not None else {})),
+        "iterations": guard.iterations if guard is not None else 0,
+        "tool_calls": guard.tool_calls if guard is not None else 0,
+        "cost_usd": guard.cost_usd if guard is not None else 0.0,
     }
     if exc.policy == "degrade":
         return AgentResult(output=degraded_output, status="degraded", **base)
@@ -343,8 +476,12 @@ class BoundedLoop:
     def __init__(self, *, agent_id: str, bounds: Bounds, client: LLMClient, model: str,
                  system_prompt: str = "", agent_name: str = "", tier: str = "",
                  toolset: DictToolset | None = None, tracer: Tracer | None = None,
-                 guardrails: Guardrails | None = None) -> None:
+                 guardrails: Guardrails | None = None,
+                 max_output_tokens: int | None = None) -> None:
         self.agent_id = agent_id
+        #: Plafond de tokens de SORTIE par appel, transmis au fournisseur.
+        #: `None` : le défaut de l'adaptateur (4096 chez Anthropic, qui l'exige).
+        self.max_output_tokens = max_output_tokens
         # Les guardrails s'appliquent au texte d'un TIERS qui entre dans la
         # boucle (sorties d'outils `untrusted`). Absents : rien n'est filtré,
         # ce qui est le comportement déclaré quand STACK.md n'en active aucun.
@@ -391,7 +528,23 @@ class BoundedLoop:
 
     # -- La boucle ----------------------------------------------------------
     async def run(self, user_input: Untrusted, *, thread_id: str = "") -> AgentResult:
-        guard = BoundGuard(self.bounds)
+        # Délégation : appelé depuis un outil d'un autre agent, cet agent
+        # compte comme un étage de plus POUR L'APPELANT. Le dépassement lève
+        # ici, remonte par l'outil jusqu'à la boucle de l'appelant, qui applique
+        # SA politique — c'est lui qui n'avait pas le droit de déléguer.
+        parent = _CURRENT_GUARD.get()
+        if parent is not None:
+            parent.enter_delegation()
+        guard = BoundGuard(self.bounds, depth=parent.depth if parent is not None else 0)
+        token = _CURRENT_GUARD.set(guard)
+        try:
+            return await self._run(guard, user_input, thread_id=thread_id)
+        finally:
+            _CURRENT_GUARD.reset(token)
+            if parent is not None:
+                parent.leave_delegation()
+
+    async def _run(self, guard: BoundGuard, user_input: Untrusted, *, thread_id: str) -> AgentResult:
         messages = self.build_messages(user_input)
 
         with self.tracer.agent_turn(agent_id=self.agent_id, agent_name=self.agent_name,
@@ -418,7 +571,7 @@ class BoundedLoop:
                     # que ce soit. Après, l'effet de bord a déjà eu lieu.
                     guard.check_tool_calls(len(completion.tool_calls))
                     for call in completion.tool_calls:
-                        messages.append(await self._execute(call))
+                        messages.append(await self._execute(call, guard))
                         guard.record_tool_calls(1)
 
                 # Sortie de boucle sans conclusion : c'est `max_iterations`, et
@@ -435,12 +588,15 @@ class BoundedLoop:
 
     async def _complete(self, messages: Sequence[Message], guard: BoundGuard) -> Completion:
         """Un appel au modèle, tracé, avec son coût recalculé et imputé au budget."""
+        options: dict[str, Any] = {}
+        if self.max_output_tokens:
+            options["max_tokens"] = int(self.max_output_tokens)
+        history, specs = list(messages), self.toolset.specs()
         with self.tracer.llm_call(model=self.model, tier=self.tier) as span:
-            result = self.client.complete(list(messages), model=self.model,
-                                          tools=self.toolset.specs())
-            if inspect.isawaitable(result):
-                result = await result
-            completion: Completion = result
+            # Sous le temps qui reste : `timeout_s` borne l'appel EN COURS, pas
+            # seulement l'entrée du tour suivant (cf. `within_deadline`).
+            completion: Completion = await within_deadline(
+                guard, lambda: self.client.complete(history, model=self.model, tools=specs, **options))
             usd = self.tracer.record_usage(span, model=completion.model or self.model,
                                            usage=completion.usage,
                                            finish_reason=completion.finish_reason)
@@ -450,18 +606,30 @@ class BoundedLoop:
         guard.add_cost(usd)
         return completion
 
-    async def _execute(self, call: ToolCall) -> Message:
-        """Un appel d'outil, tracé — succès comme échec.
+    async def _execute(self, call: ToolCall, guard: BoundGuard) -> Message:
+        """Un appel d'outil, tracé — succès comme échec, sous le temps qui reste.
 
         Le retour est un message de rôle `tool`, et son contenu est traité comme
         non maîtrisé : la sortie d'un outil est du texte d'un tiers.
         """
         meta = self.toolset.meta(call.name)
+        try:
+            cap = float(meta["timeout_s"]) if meta.get("timeout_s") else None
+        except (TypeError, ValueError):
+            cap = None
         with self.tracer.tool_call(tool=call.name, call_id=call.id,
-                                   side_effect_class=meta.get("side_effect_class", "read-only"),
-                                   trust=meta.get("trust", "trusted"),
+                                   side_effect_class=str(meta.get("side_effect_class", "read-only")),
+                                   trust=str(meta.get("trust", "trusted")),
                                    args=call.arguments) as span:
-            outcome = await self.toolset.call(call.name, call.arguments)
+            try:
+                outcome: ToolOutcome = await within_deadline(
+                    guard, lambda: self.toolset.call(call.name, call.arguments), cap_s=cap)
+            except CallTimedOut as exc:
+                # Le délai du CONTRAT de l'outil : une erreur déclarée (`TIMEOUT`),
+                # que l'agent peut traiter — pas la fin du run.
+                outcome = ToolOutcome(content=str(exc), ok=False, error_code="TIMEOUT",
+                                      side_effect_class=str(meta.get("side_effect_class", "read-only")),
+                                      trust=str(meta.get("trust", "trusted")))
             span.set("sdda.tool.result.bytes", len(outcome.content.encode("utf-8")))
             if not outcome.ok:
                 span.set("sdda.tool.error_code", outcome.error_code)
@@ -474,4 +642,10 @@ class BoundedLoop:
             screened = self.guardrails.screen_untrusted(content, source=f"tool:{call.name}",
                                                         tracer=self.tracer)
             content = wrap(screened, source=f"tool:{call.name}", field="result")
-        return Message(role="tool", content=content, name=call.name, tool_call_id=call.id)
+        else:
+            # Une sortie de CONFIANCE porte quand même des PII (une ligne de
+            # base, un dossier client) : elles sont rédigées avant d'atteindre
+            # le modèle — donc le fournisseur et la trace —, comme l'entrée.
+            content = self.guardrails.redact(content, point=f"tool:{call.name}", tracer=self.tracer)
+        return Message(role="tool", content=content, name=call.name, tool_call_id=call.id,
+                       is_error=not outcome.ok)

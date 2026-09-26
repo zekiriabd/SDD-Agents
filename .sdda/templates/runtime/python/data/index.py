@@ -2,7 +2,7 @@
 
 Ce que l'index apporte, et pourquoi il est construit une fois :
 
-  by_key        `lookup` en O(1) sans relire le fichier entier
+  by_key        `lookup` sans balayer la source (O(1) en JSONL, relecture du fichier ailleurs)
   as_of         l'instantané de la source, JOINT À CHAQUE RÉPONSE
   content_hash  l'épinglage P10 : une eval rejouée sur des fichiers modifiés
                 n'est pas la même eval, et le pipeline doit le savoir plutôt que
@@ -15,10 +15,11 @@ entrer dans l'index, sinon chaque appel ultérieur le trouvera légitimement.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .errors import BoundaryViolation, SourceUnavailable
 from .formats import read_records
@@ -31,6 +32,9 @@ class Location:
 
     path: Path
     offset: int
+    #: Position en OCTETS de la ligne (JSONL seulement) : `record_at` y saute
+    #: au lieu de relire le fichier depuis le début à chaque `lookup`.
+    byte_offset: int | None = None
 
 
 @dataclass
@@ -117,7 +121,9 @@ def build_index(registry: Registry, source: Source, base: Path) -> SourceIndex:
     index.content_hash = "sha256:" + signature.hexdigest()
 
     for path in files:
-        for offset, record in enumerate(read_records(path, source)):
+        rows = _jsonl_rows(path, source) if source.format == "jsonl" else (
+            (offset, None, record) for offset, record in enumerate(read_records(path, source)))
+        for offset, byte_offset, record in rows:
             index.count += 1
             raw = record.get(source.key)
             if raw is None:
@@ -132,8 +138,28 @@ def build_index(registry: Registry, source: Source, base: Path) -> SourceIndex:
                 raise SourceUnavailable(
                     f"clé `{key}` en double", source=source.id,
                     detail=f"{first.path.name}#{first.offset} et {path.name}#{offset}")
-            index.by_key[key] = Location(path=path, offset=offset)
+            index.by_key[key] = Location(path=path, offset=offset, byte_offset=byte_offset)
     return index
+
+
+def _jsonl_rows(path: Path, source: Source) -> Iterator[tuple[int, int, dict[str, Any]]]:
+    """(rang, position en octets, enregistrement) de chaque ligne-objet d'un JSONL."""
+    encoding = source.encoding or "utf-8"
+    offset = 0
+    try:
+        with path.open("rb") as handle:
+            position = handle.tell()
+            for line in iter(handle.readline, b""):
+                text = line.decode(encoding).lstrip("﻿")   # BOM d'un export Windows
+                if text.strip():
+                    value = json.loads(text)
+                    if isinstance(value, dict):
+                        yield offset, position, value
+                        offset += 1
+                position = handle.tell()
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise SourceUnavailable(f"`{path.name}` illisible", source=source.id,
+                                detail=f"{exc.__class__.__name__}: {exc}") from exc
 
 
 def record_at(location: Location, source: Source) -> dict[str, Any] | None:
@@ -141,7 +167,19 @@ def record_at(location: Location, source: Source) -> dict[str, Any] | None:
 
     Conserver les enregistrements en mémoire ferait tenir la source entière dans
     le processus — et `as_of` mentirait dès la première réécriture du fichier.
+    Un JSONL est relu À SA POSITION (une ligne) ; les autres formats n'ont pas
+    de position stable (un CSV peut porter un champ multiligne) et sont relus
+    jusqu'au rang — c'est la limite assumée, pas un « O(1) » annoncé à tort.
     """
+    if location.byte_offset is not None:
+        try:
+            with location.path.open("rb") as handle:
+                handle.seek(location.byte_offset)
+                value = json.loads(handle.readline().decode(source.encoding or "utf-8").lstrip("﻿"))
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            raise SourceUnavailable(f"`{location.path.name}` illisible", source=source.id,
+                                    detail=f"{exc.__class__.__name__}: {exc}") from exc
+        return value if isinstance(value, dict) else None
     for offset, record in enumerate(read_records(location.path, source)):
         if offset == location.offset:
             return record

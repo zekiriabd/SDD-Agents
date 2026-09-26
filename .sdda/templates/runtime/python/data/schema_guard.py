@@ -20,15 +20,59 @@ des champs du schéma est une allowlist de contexte, pas une documentation.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .errors import SourceUnavailable
+from .errors import DataAccessError, SourceUnavailable
 from .index import SourceIndex
 from .registry import Registry, Source
 
 SCHEMA_DIR = "schemas"
+
+#: Formats dont les cellules sont du TEXTE : le schéma figé y porte les types
+#: que l'INFÉRENCE a déduits (`sdda_lib/schema_infer.coerce_scalar`), et la
+#: donnée lue reste une chaîne. Comparer `"12"` à `integer` sans le retyper
+#: déclarait « drift » chaque colonne numérique — l'application n'aurait jamais
+#: démarré sur un CSV.
+TEXT_CELL_FORMATS = frozenset({"csv", "tsv", "xlsx"})
+
+# Mêmes règles que `schema_infer` (miroir délibéré : l'application générée ne
+# dépend pas du framework). Une divergence rendrait « drift » ce que
+# l'inférence a elle-même typé.
+_INT_RE = re.compile(r"^-?\d+$")
+_FLOAT_RE = re.compile(r"^-?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$")
+_BOOL = {"true": True, "vrai": True, "yes": True, "oui": True,
+         "false": False, "faux": False, "no": False, "non": False}
+
+
+class SchemaDrift(DataAccessError):
+    """Le schéma figé et la donnée ont divergé : la source n'est pas servie.
+
+    Une ERREUR d'accès, et non plus un `SystemExit` : levé depuis un outil, un
+    `SystemExit` traversait `RunService` (qui n'attrape que `Exception`) et
+    tuait le processus sans `run_finished` ni trace fermée.
+    """
+
+    code = "DATA_SOURCE_SCHEMA_DRIFT"
+
+
+def coerce_cell(value: Any, declared: Any) -> Any:
+    """Une cellule texte retypée selon le type DÉCLARÉ ; inchangée si elle ne s'y prête pas."""
+    if not isinstance(value, str):
+        return value
+    names = [declared] if isinstance(declared, str) else list(declared or [])
+    text = value.strip()
+    if text == "":
+        return None
+    if "boolean" in names and text.lower() in _BOOL:
+        return _BOOL[text.lower()]
+    if "integer" in names and _INT_RE.match(text):
+        return int(text)
+    if "number" in names and _FLOAT_RE.match(text):
+        return float(text)
+    return value
 
 #: Types JSON Schema -> types Python acceptés. `integer` est accepté là où
 #: `number` est attendu : un entier EST un nombre, et refuser l'inverse ferait
@@ -97,10 +141,13 @@ def check_source(base: Path, source: Source, index: SourceIndex, sample: int,
     report = GuardReport(source_id=source.id, declared_fields=frozenset(properties))
 
     seen_extra: set[str] = set()
-    for record in records:
+    text_cells = str(source.format or "") in TEXT_CELL_FORMATS
+    for raw in records:
         if report.checked >= sample:
             break
         report.checked += 1
+        record = ({k: coerce_cell(v, (properties.get(k) or {}).get("type")) for k, v in raw.items()}
+                  if text_cells else raw)
 
         for name in required:
             if record.get(name) is None:
@@ -130,16 +177,37 @@ def check_source(base: Path, source: Source, index: SourceIndex, sample: int,
 
 
 def enforce(base: Path, registry: Registry, reports: list[GuardReport]) -> None:
-    """Fail-fast : l'application ne démarre pas sur un schéma qui a dérivé."""
+    """Fail-fast : aucune source dont le schéma a dérivé n'est servie (`SchemaDrift`)."""
     broken = [r for r in reports if not r.ok]
     if not broken:
         return
     lines = [f"  - {r.source_id} : {'; '.join(r.drift[:3])}" for r in broken]
-    raise SystemExit(
+    raise SchemaDrift(
         "ERROR: démarrage refusé — schéma figé et données ont divergé\n"
         f"CAUSE: [DATA_SOURCE_SCHEMA_DRIFT] {len(broken)} source(s)\n"
         + "\n".join(lines)
         + "\nFIX: corriger la source, ou ré-inférer le schéma SI la donnée a légitimement changé\n"
           "     (`gen_source_tools.py --infer --force --source <id>`), puis RELIRE le fichier.\n"
-          "     Démarrer sur un schéma périmé produit des réponses fausses et confiantes."
+          "     Démarrer sur un schéma périmé produit des réponses fausses et confiantes.",
+        source=",".join(r.source_id for r in broken),
     )
+
+
+def guard_index(base: Path, registry: Registry, source: Source, index: SourceIndex,
+                read: Any) -> GuardReport:
+    """Le garde CÂBLÉ : appelé par l'enveloppe à la construction de l'index d'une source.
+
+    Il n'était appelé par rien — le docstring promettait un refus de démarrer
+    que personne ne déclenchait, et une source dont l'export avait changé de
+    forme était servie telle quelle. Ici, chaque source est vérifiée une fois
+    par processus, avant sa première réponse ; `SchemaDrift` si elle a dérivé.
+    """
+    sample = registry.envelope.schema_check_sample
+
+    def records() -> Any:
+        for path in index.files:
+            yield from read(path, source)
+
+    report = check_source(base, source, index, sample, records())
+    enforce(base, registry, [report])
+    return report

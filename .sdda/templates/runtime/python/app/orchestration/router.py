@@ -69,7 +69,8 @@ class RouterGraph(Graph):
     def __init__(self, *, classifier_id: str = "classifier", classifier_ref: str = "",
                  routes: tuple[Route, ...] = (), fallback: Route | None = None,
                  confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
-                 handlers: Mapping[str, Callable[..., Any]] | None = None) -> None:
+                 handlers: Mapping[str, Callable[..., Any]] | None = None,
+                 fallback_condition: str | None = None) -> None:
         if fallback is None:
             raise ValueError(
                 "[ROUTER_NO_FALLBACK] un routeur sans chemin de repli envoie les entrées "
@@ -97,8 +98,13 @@ class RouterGraph(Graph):
         for route in routes:
             self.add_edge(classifier_id, route.node_id,
                           condition=f"intent=='{route.intent}' && confidence>={threshold}")
+        # L'arête de repli est la branche PAR DÉFAUT (`isFallback`) : elle reçoit
+        # tout ce qu'aucune route ne prend — confiance sous le seuil ET intention
+        # hors classes (`route`). Sa condition se prend TELLE QUE L'IR L'ÉCRIT
+        # (`fallback_condition`) ; le défaut suit `stacks/orchestration/router.md`.
+        # Écrire ici une autre graphie que l'IR ferait diverger le diff.
         self.add_edge(classifier_id, fallback.node_id,
-                      condition=f"confidence<{threshold}", is_fallback=True)
+                      condition=fallback_condition or f"confidence<{threshold}", is_fallback=True)
 
     def route(self, decision: Decision) -> str:
         """Nœud cible d'une décision. Sous le seuil ou hors classes -> repli.

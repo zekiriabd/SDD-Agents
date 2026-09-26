@@ -22,7 +22,13 @@ csv.field_size_limit(10 * 1024 * 1024)
 def read_csv(path: Path, source: Source) -> Iterator[dict[str, Any]]:
     delimiter = source.delimiter or ("\t" if source.format == "tsv" else ",")
     header_row = max(1, int(source.header_row or 1))
-    text = path.read_text(encoding=source.encoding or "utf-8", errors="strict")
+    # `utf-8-sig` et non `utf-8` : Excel (et la plupart des exports Windows)
+    # préfixe le CSV d'un BOM, qui se collait au premier en-tête (`﻿id`) —
+    # la clé déclarée `id` n'existait plus, et chaque `lookup` rendait « introuvable ».
+    encoding = source.encoding or "utf-8"
+    if encoding.lower().replace("_", "-") in ("utf-8", "utf8"):
+        encoding = "utf-8-sig"
+    text = path.read_text(encoding=encoding, errors="strict")
 
     # `header_row` compte les lignes du fichier, pas celles du CSV : un export
     # avec deux lignes de titre avant l'en-tête est banal, et deviner où

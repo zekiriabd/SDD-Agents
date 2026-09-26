@@ -60,7 +60,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
+
+if TYPE_CHECKING:
+    # Annotation seulement : ce module reste chargeable SEUL (par chemin de
+    # fichier, sans paquet parent) — le test de concurrence inter-processus du
+    # framework le charge ainsi, et un exportateur ne doit rien importer d'autre.
+    from .bounds import RunLimits
 
 # ---------------------------------------------------------------------------
 # Append atomique entre PROCESSUS — même mécanique que `sdda_lib.tracing`
@@ -281,6 +287,10 @@ def redact_text(text: str, *, secret_values: Sequence[str] = ()) -> str:
 # ---------------------------------------------------------------------------
 # Horloge et identifiants
 # ---------------------------------------------------------------------------
+#: Origine de l'horloge monotone, pour `SOURCE_DATE_EPOCH` (cf. `now_iso`).
+_MONOTONIC_ORIGIN = time.monotonic()
+
+
 def now_iso() -> str:
     """`2026-09-20T14:12:03.120456Z` — microsecondes, suffixe `Z`, jamais `+00:00`.
 
@@ -297,14 +307,33 @@ def now_iso() -> str:
     n'a pas eue. La largeur est fixe, donc le tri lexicographique reste juste.
     """
     epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
-    moment = (_dt.datetime.fromtimestamp(int(epoch), _dt.timezone.utc) if epoch.isdigit()
-              else _dt.datetime.now(_dt.timezone.utc))
+    if epoch.isdigit():
+        # Reproductible, mais jamais FIGÉ : une date constante donnait le même
+        # horodatage à tous les spans, et le tri qui rend la trajectoire
+        # retombait sur l'ordre d'écriture (les fins, pas les débuts). L'écart
+        # monotone depuis le chargement du module garde l'ordre réel.
+        moment = (_dt.datetime.fromtimestamp(int(epoch), _dt.timezone.utc)
+                  + _dt.timedelta(seconds=time.monotonic() - _MONOTONIC_ORIGIN))
+    else:
+        moment = _dt.datetime.now(_dt.timezone.utc)
     return moment.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def new_run_id() -> str:
     """Identifiant de run, triable dans le temps et sûr comme nom de fichier."""
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + _secrets.token_hex(4)
+
+
+#: Ce qu'un identifiant de run a le droit de contenir : il devient un NOM DE
+#: FICHIER. `../../x` sortait du répertoire des traces, et un `:` fait échouer
+#: l'ouverture sous Windows.
+_RUN_ID_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def safe_run_id(run_id: str) -> str:
+    """L'identifiant rendu sûr comme nom de fichier ; vide -> un identifiant neuf."""
+    cleaned = _RUN_ID_UNSAFE.sub("_", str(run_id or "")).lstrip(".")
+    return cleaned[:120] or new_run_id()
 
 
 def new_span_id() -> str:
@@ -379,6 +408,12 @@ class Tracer:
     pricing: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     spans: list[dict[str, Any]] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    #: `gen_ai.provider.name`, attribut OBLIGATOIRE d'un span `chat` en
+    #: semconv GenAI : posé par défaut sur chaque appel au modèle.
+    provider: str = ""
+    #: Les bornes du RUN (hops, tokens) : comptées là où elles se lisent, dans
+    #: l'arbre des spans. `None` : aucune borne de run déclarée.
+    limits: RunLimits | None = None
 
     def __post_init__(self) -> None:
         self.trace_id = self.trace_id or new_trace_id()
@@ -394,12 +429,23 @@ class Tracer:
         rapport d'eval et l'exécuteur en cours de processus continuent de voir
         les spans. Couper la collecte rendrait la L5 muette sans le dire.
         """
-        rid = run_id or new_run_id()
-        return cls(run_id=rid,
-                   path=(settings.traces_dir() / f"{rid}.jsonl") if settings.trace_enabled else None,
+        rid = safe_run_id(run_id or new_run_id())
+        path: Path | None = None
+        if settings.trace_enabled:
+            path = settings.traces_dir() / f"{rid}.jsonl"
+            if path.exists():
+                # Un run = un fichier. Rejouer une eval avec les mêmes
+                # identifiants d'item AJOUTAIT les spans au fichier précédent :
+                # deux racines dans une trace, que les lecteurs confondent.
+                rid = f"{rid}-{_secrets.token_hex(3)}"
+                path = settings.traces_dir() / f"{rid}.jsonl"
+        limits = getattr(settings, "run_limits", None)
+        return cls(run_id=rid, path=path,
                    redact_enabled=settings.trace_redact,
                    secret_values=tuple(settings.secret_values()),
-                   pricing=settings.pricing)
+                   pricing=settings.pricing,
+                   provider=str(getattr(settings, "provider", "") or ""),
+                   limits=limits() if callable(limits) else None)
 
     # -- Émission -----------------------------------------------------------
     def emit(self, name: str, *, span_id: str, parent_span_id: str = "",
@@ -428,7 +474,10 @@ class Tracer:
             span["duration_ms"] = round(duration_ms)
         self.spans.append(span)
         if self.path is not None:
-            append_line(self.path, json.dumps(span, ensure_ascii=False, sort_keys=True))
+            # `default=str` : un attribut non JSON (un Decimal, un Path) ne doit
+            # pas faire tomber l'écriture du span — dans un `finally`, l'erreur
+            # masquerait celle qui a interrompu le run.
+            append_line(self.path, json.dumps(span, ensure_ascii=False, sort_keys=True, default=str))
         return span
 
     @contextmanager
@@ -487,6 +536,10 @@ class Tracer:
                           A_BOUNDS_MAX_TOOL_CALLS: bounds.max_tool_calls,
                           A_BOUNDS_BUDGET_USD: bounds.budget_usd})
         with self.span(f"{AGENT_SPAN} {name}", attributes=attrs) as span:
+            # Un agent_turn EST un hop : la borne de run tombe ici, dans le span
+            # du hop refusé, qui sort en erreur et reste lisible.
+            if self.limits is not None:
+                self.limits.enter_hop()
             yield span
 
     @contextmanager
@@ -499,8 +552,8 @@ class Tracer:
         attrs: dict[str, Any] = {A_OPERATION: "chat", A_REQUEST_MODEL: model}
         if tier:
             attrs[A_MODEL_TIER] = tier
-        if provider:
-            attrs[A_PROVIDER] = provider
+        if provider or self.provider:
+            attrs[A_PROVIDER] = provider or self.provider
         with self.span(f"{LLM_SPAN} {model}", attributes=attrs) as span:
             yield span
 
@@ -531,6 +584,10 @@ class Tracer:
             self.problems.append(problem)
         else:
             span.set(A_COST_DECLARED, usd)
+        if self.limits is not None:
+            # Après avoir posé tokens et coût : le span qui prouve le
+            # dépassement doit porter ce qui l'a provoqué.
+            self.limits.add_tokens(int(span.attributes[A_TOKENS_IN]) + int(span.attributes[A_TOKENS_OUT]))
         return usd or 0.0
 
     @contextmanager
@@ -551,7 +608,12 @@ class Tracer:
         if args is not None:
             # Sérialisés puis rédigés : un argument est du texte d'utilisateur,
             # et c'est le premier endroit où une PII ou une clé atterrit.
-            attrs[A_TOOL_ARGS] = json.dumps(dict(args), ensure_ascii=False, sort_keys=True)
+            # RÉDIGÉS AVANT la sérialisation : une fois en chaîne, la rédaction
+            # par nom de clé (`password`, `apiKey`) ne voit plus rien, et le
+            # secret sortait en clair dans la trace.
+            safe_args = (redact(dict(args), secret_values=self.secret_values)
+                         if self.redact_enabled else dict(args))
+            attrs[A_TOOL_ARGS] = json.dumps(safe_args, ensure_ascii=False, sort_keys=True, default=str)
         with self.span(f"{TOOL_SPAN} {tool}", attributes=attrs) as span:
             yield span
 

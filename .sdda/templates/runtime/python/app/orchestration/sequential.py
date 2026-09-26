@@ -76,7 +76,9 @@ class SequentialGraph(Graph):
         self.on_step_failure = on_step_failure
         for step in self.steps:
             self.add_node(step.id, kind=step.kind, ref=step.ref, handler=step.handler)
-        for previous, following in zip(self.steps, self.steps[1:]):
+        # `strict=False` voulu : les deux séquences diffèrent d'un élément par
+        # construction (chaque étape et sa suivante).
+        for previous, following in zip(self.steps, self.steps[1:], strict=False):
             self.add_edge(previous.id, following.id)
 
     async def run(self, payload: Any) -> tuple[Any, bool]:

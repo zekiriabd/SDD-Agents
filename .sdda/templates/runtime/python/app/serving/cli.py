@@ -35,6 +35,7 @@ passent par `config.py`.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -72,12 +73,29 @@ def _read_input(args: argparse.Namespace) -> str:
     """
     if args.input is not None:
         return str(args.input)
+    if args.input_file == "-":
+        # `--input-file -` : l'entrée ENTIÈRE sur stdin (`serving/cli.md §3.5`).
+        # C'est la forme que lancent les runners du framework : ni la limite
+        # d'une ligne de commande, ni la visibilité de `ps`, et une entrée qui
+        # commence par `-` n'est pas lue comme une option.
+        return _stdin_text()
     if args.input_file is not None:
         return Path(args.input_file).read_text(encoding="utf-8")
     if sys.stdin is None or sys.stdin.isatty():
         raise ConfigError("aucune entrée : passer `--input`, `--input-file`, ou canaliser stdin",
-                          cls="CLI_USAGE", fix="`{AppName} run --input \"…\"`")
-    return sys.stdin.read()
+                          cls="CLI_USAGE", fix="`{AppName} run --input-file - < entree.txt`")
+    return _stdin_text()
+
+
+def _stdin_text() -> str:
+    """Stdin en UTF-8, quel que soit l'encodage de la console (cp1252 sous Windows)."""
+    if sys.stdin is None:
+        raise ConfigError("stdin fermé : aucune entrée à lire", cls="CLI_USAGE",
+                          fix="canaliser l'entrée : `… --input-file - < entree.txt`")
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is not None:
+        return bytes(buffer.read()).decode("utf-8-sig")
+    return str(sys.stdin.read())
 
 
 def _service(settings: Settings | None = None) -> RunService:
@@ -128,6 +146,32 @@ def cmd_run(args: argparse.Namespace, service: RunService | None = None) -> int:
     return int(code)
 
 
+def cmd_retrieve(args: argparse.Namespace, service: RunService | None = None) -> int:
+    """`retrieve --json --index ID --query-file -` : l'index seul, pour la RETRIEVAL GATE (G4).
+
+    Aucun appel au modèle : un événement `retrieval` (`index_id`,
+    `result_ids[]`, `scores[]`) puis `run_finished` (`serving/cli.md §3.5`).
+    """
+    try:
+        query = _stdin_text() if args.query_file in (None, "-") else \
+            Path(args.query_file).read_text(encoding="utf-8")
+        service = service or _service()
+    except ConfigError as exc:
+        _emit_failure(args, exc)
+        return int(resolve_exit_code(status="failed", error_class=exc.cls))
+    except OSError as exc:
+        _emit_failure(args, ConfigError(str(exc), cls="CLI_USAGE"))
+        return int(ExitCode.USAGE)
+    result = service.retrieve_sync(str(args.index), query.strip(), on_event=_out if args.json else None)
+    if not args.json:
+        output = result.output if isinstance(result.output, dict) else {}
+        for rid, score in zip(output.get("result_ids", []), output.get("scores", []), strict=False):
+            sys.stdout.write(f"{score:.4f}\t{rid}\n")
+        if result.status != "ok":
+            _log(f"ERROR: {result.message}")
+    return int(resolve_exit_code(status=result.status, error_class=result.error_class))
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     """Vérifications déterministes, 0 token, aucune connexion.
 
@@ -168,6 +212,13 @@ def cmd_health(args: argparse.Namespace) -> int:
             check(f"tier:{tier}", True, settings.model_for(tier))
         except ConfigError as exc:
             check(f"tier:{tier}", False, str(exc))
+    # La PRÉSENCE de chaque secret, jamais sa valeur ni sa validité (0 token,
+    # aucune connexion). `health` était vert sans clé, et le premier `run`
+    # rendait 8 : la sonde disait « prêt » sur une configuration incomplète.
+    if settings.provider.lower() not in ("stub", "none", ""):
+        for name, var in sorted(settings.secret_env.items()):
+            present = bool(settings.secret(name, required=False))
+            check(f"secret:{name}", present, f"variable `{var}` {'posée' if present else 'absente'}")
     check("pricing", bool(settings.pricing),
           f"{len(settings.pricing)} modèle(s) tarifés — sans tarif, un coût recalculé vaut zéro, "
           "et zéro passe sous tous les plafonds")
@@ -233,13 +284,21 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="une exécution de la MISSION")
     source = run.add_mutually_exclusive_group()
     source.add_argument("--input", default=None, help="l'entrée, en clair")
-    source.add_argument("--input-file", default=None, help="l'entrée, depuis un fichier UTF-8")
+    source.add_argument("--input-file", default=None,
+                        help="l'entrée, depuis un fichier UTF-8 ; `-` = stdin (le contrat d'évaluation)")
     run.add_argument("--thread-id", default="", help="conversation existante ; nouveau si absent")
     run.add_argument("--tenant", default="", help="identité de l'appelant (jamais vue du modèle)")
     run.add_argument("--max-budget-usd", type=float, default=None,
                      help="plafond du run ; ne peut que BAISSER celui du contrat")
     run.add_argument("--json", action="store_true", help="NDJSON sur stdout, un événement par ligne")
     run.set_defaults(handler=cmd_run)
+
+    retrieve = subparsers.add_parser("retrieve", help="interroger un index SANS agent ni modèle (G4)")
+    retrieve.add_argument("--index", required=True, help="identifiant de l'index (IR : retrievers[].indexId)")
+    retrieve.add_argument("--query-file", default="-",
+                          help="la requête, depuis un fichier UTF-8 ; `-` = stdin")
+    retrieve.add_argument("--json", action="store_true", help="NDJSON sur stdout")
+    retrieve.set_defaults(handler=cmd_retrieve)
 
     health = subparsers.add_parser("health", help="vérifications déterministes, 0 token")
     health.add_argument("--json", action="store_true")
@@ -256,10 +315,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Reconfigurer AVANT la première écriture, et ne pas échouer si le flux ne
     # sait pas se reconfigurer (tests, tubes).
     for stream in (sys.stdout, sys.stderr):
-        try:
+        # Un flux qui ne sait pas se reconfigurer (tube, capture de test) garde
+        # son encodage : ce n'est pas une raison de ne pas démarrer.
+        with contextlib.suppress(AttributeError, ValueError, OSError):
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-        except Exception:
-            pass
 
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)

@@ -30,23 +30,37 @@ ajoute le contrôle dynamique qui manque, parce qu'un projet généré sans
 """
 from __future__ import annotations
 
-from typing import NewType
+import importlib
+from typing import Callable, NewType, cast
 
-try:  # pragma: no cover - dépend de la génération de la couche données
-    # La couche données est la source des conventions quand elle existe :
-    # importer plutôt que recopier évite qu'une révision de l'échappement ne
-    # s'applique qu'à la moitié des textes non maîtrisés.
-    from .data.trust import WRAPPER, wrap_untrusted as _wrap_untrusted
-except Exception:  # ImportError, ou paquet `data/` non généré
-    WRAPPER = '<untrusted source="{source}" field="{field}">\n{value}\n</untrusted>'
+WRAPPER = '<untrusted source="{source}" field="{field}">\n{value}\n</untrusted>'
+_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
 
-    _ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
 
-    def _wrap_untrusted(value: object, *, source: str, field: str) -> str:
-        text = "" if value is None else str(value)
-        for needle, replacement in _ESCAPES:
-            text = text.replace(needle, replacement)
-        return WRAPPER.format(source=source, field=field, value=text)
+def _local_wrap(value: object, *, source: str, field: str) -> str:
+    text = "" if value is None else str(value)
+    for needle, replacement in _ESCAPES:
+        text = text.replace(needle, replacement)
+    return WRAPPER.format(source=source, field=field, value=text)
+
+
+def _data_layer_wrap() -> Callable[..., str]:
+    """`data.trust.wrap_untrusted` si la couche données est générée, sinon la copie locale.
+
+    La couche données est la source des conventions quand elle existe :
+    l'importer plutôt que la recopier évite qu'une révision de l'échappement ne
+    s'applique qu'à la moitié des textes non maîtrisés. Import DYNAMIQUE : un
+    `from .data.trust import …` statique rendait `mypy --strict` rouge sur tout
+    projet sans `declared-sources` (module absent), et typait l'enveloppe `Any`.
+    """
+    try:
+        module = importlib.import_module(".data.trust", __package__)
+    except Exception:   # `data/` non généré (projet sans sources), ou sa dépendance absente
+        return _local_wrap
+    return cast(Callable[..., str], getattr(module, "wrap_untrusted", _local_wrap))
+
+
+_wrap_untrusted = _data_layer_wrap()
 
 
 #: Tout texte dont l'origine n'est pas le code ni un prompt revu. Le type est

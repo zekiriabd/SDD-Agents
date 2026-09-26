@@ -36,9 +36,13 @@ build-backend = "hatchling.build"
 # Layout PLAT (convention SDD_Pro) : ce répertoire EST le paquet `{AppName}`.
 # Dans la roue, la racine du projet est réécrite en `{AppName}/` ; ce qui n'est
 # pas du code livrable (tests, secrets, méta du projet) n'y entre pas.
+# `include = ["/*"]` et non `only-include = ["."]` : ce dernier écrivait les
+# chemins de la roue sous la forme `{AppName}/./config.py`, que certains
+# installeurs normalisent et d'autres non (RECORD incohérent).
 [tool.hatch.build.targets.wheel]
-only-include = ["."]
-exclude = ["**/tests", ".env", ".env.example", "README.md", "pyproject.toml", "uv.lock", "__pycache__"]
+include = ["/*"]
+exclude = ["**/tests", ".env", ".env.example", "README.md", "pyproject.toml", "uv.lock", "__pycache__",
+           ".venv", "dist", "build"]
 
 [tool.hatch.build.targets.wheel.sources]
 "" = "{AppName}"
@@ -60,9 +64,18 @@ target-version = "py312"
 # le diagnostic par `stderr`. Un `print` égaré casse le contrat `--json`.
 select = ["E", "F", "I", "B", "ASYNC", "S", "T20"]
 
+# Layout plat : le paquet `{AppName}` n'est pas sous le répertoire du projet,
+# il EST ce répertoire — ruff ne le reconnaît donc pas seul comme « local ».
+[tool.ruff.lint.isort]
+known-first-party = ["{AppName}"]
+
 [tool.ruff.lint.per-file-ignores]
 # `assert` est l'outil de pytest ; S101 ne vaut que pour le code livré.
 "**/tests/**" = ["S101"]
+# Les wrappers de sources sont GÉNÉRÉS (`gen_source_tools`) : leurs longues
+# lignes sont les descriptions de champ que lit le modèle, recopiées de la
+# déclaration. Les couper changerait le texte, pas la qualité du code.
+"data/tools/*.py" = ["E501"]
 
 [tool.mypy]
 strict = true

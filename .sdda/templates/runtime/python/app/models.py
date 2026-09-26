@@ -72,6 +72,10 @@ class Message:
     name: str = ""
     tool_call_id: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
+    #: Résultat d'outil en ÉCHEC (erreur déclarée). Anthropic le lit
+    #: (`is_error`) : sans lui, un échec rendu comme contenu ordinaire est pris
+    #: pour une réponse, et le modèle raisonne sur un message d'erreur.
+    is_error: bool = False
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
@@ -229,18 +233,24 @@ def provider_client(settings: Settings) -> LLMClient:
     squelette qu'on n'inspecte pas.
     """
     provider = settings.provider.lower()
+    # Le délai du SDK est la borne de temps déclarée : sans lui, le client
+    # attend le défaut du fournisseur (dix minutes chez certains), bien au-delà
+    # de `timeout_s`, et la boucle ne reprend la main qu'après.
+    timeout = float(settings.bounds.get("timeout_s") or 60.0)
     if provider in ("stub", "none", ""):
         return StubClient()
     if provider == "anthropic":
         import anthropic  # noqa: PLC0415 - import paresseux volontaire
 
         return _AnthropicClient(anthropic.Anthropic(
-            api_key=settings.secret("llmApiKey").get_secret_value()))
-    if provider in ("openai", "azure"):
+            api_key=settings.secret("llmApiKey").get_secret_value(), timeout=timeout))
+    if provider == "openai":
         import openai  # noqa: PLC0415 - import paresseux volontaire
 
         return _OpenAIClient(openai.OpenAI(
-            api_key=settings.secret("llmApiKey").get_secret_value()))
+            api_key=settings.secret("llmApiKey").get_secret_value(), timeout=timeout))
+    if provider == "azure":
+        return _azure_client(settings, timeout)
     if provider in ("google", "gemini"):
         # Gemini expose une API compatible OpenAI : un seul client, une seule
         # traduction des appels d'outils, et le même comptage de tokens dans les
@@ -249,11 +259,42 @@ def provider_client(settings: Settings) -> LLMClient:
 
         return _OpenAIClient(openai.OpenAI(
             api_key=settings.secret("llmApiKey").get_secret_value(),
-            base_url=GEMINI_OPENAI_BASE_URL))
+            base_url=GEMINI_OPENAI_BASE_URL, timeout=timeout), max_tokens_param="max_tokens")
     raise ConfigError(
         f"fournisseur `{settings.provider}` inconnu",
         fix="déclarer un fournisseur servi par `.sdda/providers/` dans `## Runtime Models`, "
             "ou `stub` pour un run qui n'appelle aucun modèle")
+
+
+#: Les variables d'une ressource Azure OpenAI (`providers/azure-openai.yaml`).
+AZURE_ENDPOINT_ENV = "AZURE_OPENAI_ENDPOINT"
+AZURE_API_VERSION_ENV = "AZURE_OPENAI_API_VERSION"
+AZURE_DEPLOYMENT_ENV = "AZURE_OPENAI_DEPLOYMENT_{tier}"
+
+
+def _azure_client(settings: Settings, timeout: float) -> LLMClient:
+    """Le client Azure : une RESSOURCE (endpoint + version d'API) et un DÉPLOIEMENT par tier.
+
+    Le client `openai.OpenAI` nu envoyait la clé Azure à `api.openai.com`, et le
+    nom de modèle à la place du nom de déploiement : aucun appel ne pouvait
+    aboutir. Chaque valeur manquante est dite au démarrage, par son NOM.
+    """
+    endpoint = settings.provider_setting(AZURE_ENDPOINT_ENV)
+    version = settings.provider_setting(AZURE_API_VERSION_ENV)
+    missing = [n for n, v in ((AZURE_ENDPOINT_ENV, endpoint), (AZURE_API_VERSION_ENV, version)) if not v]
+    if missing:
+        raise ConfigError(f"Azure OpenAI : variable(s) {missing} non posée(s)",
+                          fix="les poser dans `.env` — une ressource Azure n'a ni URL ni version par défaut")
+    deployments: dict[str, str] = {}
+    for tier, model in settings.tier_map.items():
+        deployment = settings.provider_setting(AZURE_DEPLOYMENT_ENV.format(tier=tier.upper()))
+        if deployment:
+            deployments[model] = deployment
+    import openai  # noqa: PLC0415 - import paresseux volontaire
+
+    return _OpenAIClient(openai.AzureOpenAI(
+        api_key=settings.secret("llmApiKey").get_secret_value(), azure_endpoint=endpoint,
+        api_version=version, timeout=timeout), deployments=deployments)
 
 
 class _AnthropicClient:
@@ -276,7 +317,10 @@ class _AnthropicClient:
             if m.role == "system":
                 continue
             if m.role == "tool":
-                block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
+                block: dict[str, Any] = {"type": "tool_result", "tool_use_id": m.tool_call_id,
+                                         "content": m.content}
+                if m.is_error:
+                    block["is_error"] = True
                 if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list) \
                         and all(b.get("type") == "tool_result" for b in out[-1]["content"]):
                     out[-1]["content"].append(block)
@@ -327,19 +371,28 @@ class _AnthropicClient:
 class _OpenAIClient:
     """Adaptateur minimal, même frontière."""
 
-    def __init__(self, raw: Any) -> None:
+    def __init__(self, raw: Any, *, deployments: Mapping[str, str] | None = None,
+                 max_tokens_param: str = "max_completion_tokens") -> None:
         self._raw = raw
+        #: modèle -> déploiement (Azure) ; vide ailleurs, le modèle est envoyé tel quel.
+        self._deployments = dict(deployments or {})
+        #: `max_tokens` est déprécié chez OpenAI et refusé par les modèles de
+        #: raisonnement ; l'API compatible de Gemini, elle, ne lit que lui.
+        self._max_tokens_param = max_tokens_param
 
     def complete(self, messages: Sequence[Message], *, model: str,
                  tools: Sequence[Mapping[str, Any]] = (), **options: Any) -> Completion:
+        extra: dict[str, Any] = {}
+        if options.get("max_tokens"):
+            extra[self._max_tokens_param] = int(options["max_tokens"])
         specs = []
         for spec in tools:
             name, description, schema = _tool_spec_parts(spec)
             specs.append({"type": "function", "function": {"name": name, "description": description,
                                                            "parameters": dict(schema)}})
         response = self._raw.chat.completions.create(
-            model=model, messages=[m.to_dict() for m in messages],
-            **({"tools": specs} if specs else {}))
+            model=self._deployments.get(model, model), messages=[m.to_dict() for m in messages],
+            **({"tools": specs} if specs else {}), **extra)
         choice = response.choices[0]
         usage = getattr(response, "usage", None)
         details = getattr(usage, "prompt_tokens_details", None)

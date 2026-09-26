@@ -32,17 +32,20 @@ identité absente, une source illisible et un budget dépassé lèvent.
 from __future__ import annotations
 
 import functools
+import heapq
+import importlib
 import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
+from ..tools.spec import ToolContext
 from .errors import DataAccessError, InvalidFilter, Timeout
 from .formats import read_records
 from .index import SourceIndex, build_index, record_at
-from ..tools.spec import ToolContext
 from .registry import Registry, Source, load_registry
+from .schema_guard import guard_index
 from .trust import wrap_record
 
 #: Au-delà, un `IN` n'est plus un filtre : c'est une jointure que l'appelant
@@ -76,6 +79,20 @@ class Result:
 Context = ToolContext
 
 
+def current_tenant() -> str:
+    """L'identité posée par le transport pour le run (`identity.current_tenant`), ou `""`.
+
+    Import DYNAMIQUE : `identity.py` appartient au squelette applicatif, et
+    cette couche doit rester importable seule (tests L2, projet sans squelette).
+    """
+    try:
+        module = importlib.import_module("..identity", __package__)
+    except (ImportError, ValueError, TypeError):
+        return ""
+    reader = getattr(module, "current_tenant", None)
+    return str(reader()) if callable(reader) else ""
+
+
 def _registry_of(ctx: ToolContext) -> Registry:
     return load_registry(ctx.registry_path)
 
@@ -88,7 +105,13 @@ def _index_of(ctx: ToolContext, source: Source) -> SourceIndex:
     et le second lirait les fichiers du premier.
     """
     if source.id not in ctx._indexes:
-        ctx._indexes[source.id] = build_index(_registry_of(ctx), source, ctx.base)
+        registry = _registry_of(ctx)
+        built = build_index(registry, source, ctx.base)
+        # Le schéma figé fait foi AVANT la première réponse : une source dont
+        # l'export a changé de forme lève `SchemaDrift` ici, au lieu d'être
+        # servie en silence avec des champs vides ou des types glissés.
+        guard_index(Path(__file__).resolve().parent, registry, source, built, read_records)
+        ctx._indexes[source.id] = built
     index: SourceIndex = ctx._indexes[source.id]
     return index
 
@@ -159,17 +182,21 @@ def _identity_filters(ctx: ToolContext, source: Source) -> dict[str, str]:
     """
     out: dict[str, str] = {}
     for name in source.required_filter:
-        value = str((ctx.identity or {}).get(name, "")).strip()
+        # L'identité du contexte d'appel, sinon celle que le TRANSPORT a posée
+        # pour le run (`--tenant`, authentification — `identity.current_tenant`).
+        # Sans ce repli, `--tenant` n'atteignait jamais la source.
+        value = str((ctx.identity or {}).get(name, "") or current_tenant()).strip()
         if not value:
             raise InvalidFilter(f"identité `{name}` absente du contexte d'appel", source=source.id,
-                                detail="le cloisonnement est établi par le transport (--tenant, authentification), jamais par le modèle")
+                                detail="le cloisonnement est établi par le transport (--tenant, "
+                                       "authentification), jamais par le modèle")
         out[name] = value
     return out
 
 
 @functools.lru_cache(maxsize=None)
-def _enums_of(source_id: str) -> dict[str, tuple[Any, ...]]:
-    """Les `enum` du schéma FIGÉ de la source (`data/schemas/{id}.schema.json`).
+def _properties_of(source_id: str) -> dict[str, dict[str, Any]]:
+    """Les `properties` du schéma FIGÉ de la source (`data/schemas/{id}.schema.json`).
 
     Schéma absent : aucune contrainte ici — `schema_guard` refuse déjà de
     démarrer sans lui ; ce n'est pas à la lecture de le redire.
@@ -178,8 +205,38 @@ def _enums_of(source_id: str) -> dict[str, tuple[Any, ...]]:
     if not path.is_file():
         return {}
     properties = (json.loads(path.read_text(encoding="utf-8")).get("properties") or {})
-    return {name: tuple(spec["enum"]) for name, spec in properties.items()
-            if isinstance(spec, dict) and isinstance(spec.get("enum"), list) and spec["enum"]}
+    return {str(n): s for n, s in properties.items() if isinstance(s, dict)}
+
+
+def _enums_of(source_id: str) -> dict[str, tuple[Any, ...]]:
+    return {name: tuple(spec["enum"]) for name, spec in _properties_of(source_id).items()
+            if isinstance(spec.get("enum"), list) and spec["enum"]}
+
+
+def _numeric_fields(source_id: str) -> frozenset[str]:
+    """Les champs que le schéma figé type `integer` ou `number`."""
+    out = set()
+    for name, spec in _properties_of(source_id).items():
+        declared = spec.get("type")
+        names = [declared] if isinstance(declared, str) else list(declared or [])
+        if "integer" in names or "number" in names:
+            out.add(name)
+    return frozenset(out)
+
+
+def _ordered(value: Any, numeric: bool) -> tuple[int, Any]:
+    """Clé de comparaison d'une borne de plage : numérique si le champ l'est.
+
+    Comparer des chaînes rendait `"9" >= "10"` : `montant_min=10` laissait
+    passer 9. Une valeur non numérique d'un champ numérique se classe à part
+    (rang 1), elle ne se compare pas à un nombre.
+    """
+    if numeric:
+        try:
+            return (0, float(value))
+        except (TypeError, ValueError):
+            return (1, str(value))
+    return (0, str(value))
 
 
 def _check_enum(source: Source, name: str, values: list[Any]) -> None:
@@ -237,7 +294,8 @@ def _validate_filters(source: Source, filters: dict[str, Any]) -> dict[str, Any]
     return clean
 
 
-def _matches(record: dict[str, Any], filters: dict[str, Any]) -> bool:
+def _matches(record: dict[str, Any], filters: dict[str, Any],
+             numeric: frozenset[str] = frozenset()) -> bool:
     for name, expected in filters.items():
         base, suffix = name, ""
         for candidate in RANGE_SUFFIXES:
@@ -247,10 +305,15 @@ def _matches(record: dict[str, Any], filters: dict[str, Any]) -> bool:
         actual = record.get(base)
         if actual is None:
             return False
-        if suffix == "_min" and str(actual) < str(expected):
-            return False
-        if suffix == "_max" and str(actual) > str(expected):
-            return False
+        if suffix:
+            left, right = _ordered(actual, base in numeric), _ordered(expected, base in numeric)
+            if left[0] != right[0]:
+                return False   # un nombre et une valeur non numérique ne se comparent pas
+            if suffix == "_min" and left < right:
+                return False
+            if suffix == "_max" and left > right:
+                return False
+            continue
         if not suffix:
             if isinstance(expected, list):
                 if str(actual) not in {str(v) for v in expected}:
@@ -270,12 +333,13 @@ def _scan(ctx: ToolContext, source: Source, index: SourceIndex, filters: dict[st
     """
     deadline = _now(ctx) + budget_ms / 1000.0
     kept = 0
+    numeric = _numeric_fields(source.id)
     for path in index.files:
         for record in read_records(path, source):
             if _now(ctx) > deadline:
                 raise Timeout(f"budget de lecture dépassé ({budget_ms} ms)", source=source.id,
                               detail=f"{kept} enregistrement(s) retenus avant l'arrêt")
-            if not _matches(record, filters):
+            if not _matches(record, filters, numeric):
                 continue
             kept += 1
             yield record
@@ -310,7 +374,11 @@ def _redact(source: Source, payload: dict[str, Any]) -> dict[str, Any]:
     compter.
     """
     pii = frozenset(source.pii)
-    return {k: ("[PII]" if k in pii else v) for k, v in payload.items()}
+    # La clé de la source peut ÊTRE une PII (un e-mail, un numéro client) :
+    # le payload la porte sous `key`, pas sous le nom du champ, et la règle
+    # par nom ne la voyait jamais.
+    return {k: ("[PII]" if k in pii or (k == "key" and source.key in pii) else v)
+            for k, v in payload.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -352,12 +420,21 @@ async def search_records(*, source: str, filters: dict[str, Any] | None = None,
 
     max_rows = registry.envelope.max_records_returned
     budget = registry.envelope.read_timeout_ms
-    # maxRows + 1 : lire un de plus est la SEULE façon de savoir qu'il y en
-    # avait davantage. Sans lui, `truncated` serait une supposition.
-    found = list(_scan(ctx, spec, index, clean, budget, limit=max_rows + 1))
+    # Trier AVANT de plafonner, sur TOUTE la source (bornée par le temps) :
+    # couper le flux à maxRows+1 puis trier rendait « les 200 premiers DANS
+    # L'ORDRE DU FICHIER », donc un résultat qui dépendait du glob et du
+    # système de fichiers. `nsmallest` garde maxRows+1 éléments en mémoire, pas
+    # la source ; le +1 reste la seule façon de savoir qu'il y en avait plus.
+    matched = [0]
 
-    truncated = len(found) > max_rows
-    kept = sorted(found, key=_sort_key(spec))[:max_rows]
+    def counted() -> Iterator[dict[str, Any]]:
+        for record in _scan(ctx, spec, index, clean, budget, limit=None):
+            matched[0] += 1
+            yield record
+
+    found = heapq.nsmallest(max_rows + 1, counted(), key=_sort_key(spec))
+    truncated = matched[0] > max_rows
+    kept = found[:max_rows]
 
     ctx.emit("data.search", _redact(spec, {
         "source": spec.id, "filters": sorted(clean), "returned": len(kept),

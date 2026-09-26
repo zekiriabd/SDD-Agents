@@ -98,14 +98,28 @@ class BudgetExceeded(BoundExceeded):
     bound = "budget_usd"
 
 
+class HopsExceeded(BoundExceeded):
+    bound = "max_hops"
+
+
+class TokensExceeded(BoundExceeded):
+    bound = "max_tokens_per_run"
+
+
 #: Borne -> exception. Une table plutôt qu'une chaîne de `if` : le garde lève
 #: par NOM de borne, et une borne ajoutée sans son exception se voit ici.
+#: `max_hops` et `max_tokens_per_run` sont des bornes du RUN (IR :
+#: `orchestration.maxHops`, `budget.tokenCeilingPerRun`), portées par
+#: `RunLimits` et non par un agent : un graphe de dix agents sages peut quand
+#: même faire cinquante hops.
 EXCEPTIONS: dict[str, type[BoundExceeded]] = {
     "max_iterations": IterationsExceeded,
     "max_tool_calls": ToolCallsExceeded,
     "max_delegation_depth": DelegationDepthExceeded,
     "timeout_s": TimeoutExceeded,
     "budget_usd": BudgetExceeded,
+    "max_hops": HopsExceeded,
+    "max_tokens_per_run": TokensExceeded,
 }
 
 
@@ -182,9 +196,12 @@ class BoundGuard:
 
     bounds: Bounds
     clock: Callable[[], float] = time.monotonic
+    #: Profondeur de départ : un agent appelé PAR un autre agent démarre à la
+    #: profondeur de son appelant + 1, sinon chaque niveau repartirait de zéro
+    #: et `max_delegation_depth` ne bornerait qu'un seul étage.
+    depth: int = 0
     iterations: int = 0
     tool_calls: int = 0
-    depth: int = 0
     cost_usd: float = 0.0
     _started: float = 0.0
 
@@ -257,3 +274,42 @@ class BoundGuard:
 
     def remaining_budget(self) -> float:
         return max(0.0, self.bounds.budget_usd - self.cost_usd)
+
+    def remaining_time(self) -> float:
+        """Secondes restantes avant `timeout_s`. Sert de délai à l'appel EN COURS.
+
+        Vérifier le temps entre deux tours ne borne rien : un appel au modèle
+        qui pend trois minutes passe entre deux vérifications. Le reste du
+        budget de temps devient donc le délai de chaque appel distant.
+        """
+        return max(0.0, self.bounds.timeout_s - self.elapsed)
+
+
+@dataclass
+class RunLimits:
+    """Les bornes du RUN, au-dessus de celles de chaque agent.
+
+    `max_hops` vient de `orchestration.maxHops`, `max_tokens` de
+    `budget.tokenCeilingPerRun` (IR). Elles ne sont pas des bornes d'agent : un
+    graphe de dix agents qui respectent chacun les leurs peut quand même
+    enchaîner cinquante hops ou consommer dix fois le plafond de tokens. `None`
+    = non déclaré : aucun plafond n'est inventé ici.
+    """
+
+    max_hops: int | None = None
+    max_tokens: int | None = None
+    policy: OnBoundExceeded = "fail-explicit"
+    hops: int = 0
+    tokens: int = 0
+
+    def enter_hop(self) -> None:
+        self.hops += 1
+        if self.max_hops is not None and self.hops > self.max_hops:
+            raise HopsExceeded("max_hops", self.max_hops, self.hops, policy=self.policy,
+                               partial_state={"hops": self.hops, "tokens": self.tokens})
+
+    def add_tokens(self, count: int) -> None:
+        self.tokens += max(0, int(count))
+        if self.max_tokens is not None and self.tokens > self.max_tokens:
+            raise TokensExceeded("max_tokens_per_run", self.max_tokens, self.tokens, policy=self.policy,
+                                 partial_state={"hops": self.hops, "tokens": self.tokens})

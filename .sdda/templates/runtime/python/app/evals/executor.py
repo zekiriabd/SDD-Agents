@@ -34,6 +34,7 @@ exactement ce que la L5 et la L8 mesurent.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -41,9 +42,11 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from ..config import Settings
+from ..isolation import frozen_retrieval, mocked_toolset
 from ..models import StubClient  # noqa: F401 - réexporté : les tests des projets s'en servent
-from ..orchestration.base import DictToolset, ToolOutcome
 from ..run_service import RunRequest, RunService, composed_service
+
+__all__ = ["CliExecutor", "EXECUTOR", "InProcessExecutor", "frozen_retrieval", "mocked_toolset"]
 
 #: Le mode d'isolement d'une suite, tel que `pytest-eval.md §3.1` l'écrit.
 #: `mocked`/`frozen` sont les valeurs de la L4 ; `live` est ce qu'on mesure en
@@ -74,94 +77,10 @@ def _item_input(item: Mapping[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Doubles d'isolement — L4
 # ---------------------------------------------------------------------------
-def mocked_toolset(fixtures: Path | Mapping[str, Any] | None) -> DictToolset:
-    """Des outils qui répondent depuis des fixtures, sans réseau ni base.
-
-    Les fixtures viennent de `workspace/pipeline/fixtures/tools/**/*.jsonl`, une
-    ligne par réponse :
-
-    - `{"tool": "…", "args": {…}, "result": …}` — rendue quand l'appel porte ces
-      arguments (chaque argument nommé, égal ; les autres sont libres) ;
-    - `{"tool": "…", "args": {…}, "error": {"code": "…", "message": "…"}}` — une
-      erreur DÉCLARÉE du contrat, rejouée telle quelle (`ok=False`) ;
-    - sans `args` : la réponse par défaut de l'outil (la dernière l'emporte).
-
-    Avant, seule la dernière ligne de chaque outil survivait et les arguments
-    étaient ignorés : `lookup(CMD-9999)` rendait la commande de la dernière
-    ligne, donc la suite critique « commande introuvable » ne pouvait pas
-    échouer pour la bonne raison — ni réussir. Et aucune erreur ne se rejouait.
-
-    Un appel qu'aucune ligne ne couvre ne rend pas une réponse vide — il rend une
-    ERREUR (`TOOL_FIXTURE_MISSING`). Une réponse vide se confondrait avec
-    « l'outil n'a rien trouvé », et l'agent répondrait tranquillement à côté sans
-    que rien ne signale la fixture manquante.
-    """
-    matched: dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
-    defaults: dict[str, Mapping[str, Any]] = {}
-
-    def add(entry: Mapping[str, Any]) -> None:
-        name = str(entry["tool"])
-        args = entry.get("args")
-        if isinstance(args, Mapping) and args:
-            matched.setdefault(name, []).append((args, entry))
-        else:
-            defaults[name] = entry
-
-    if isinstance(fixtures, Mapping):
-        for name, result in fixtures.items():
-            add({"tool": name, "result": result})
-    elif fixtures is not None:
-        directory = Path(fixtures)
-        for path in sorted(directory.rglob("*.jsonl")) if directory.is_dir() else ():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    entry = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(entry, dict) and entry.get("tool"):
-                    add(entry)
-
-    def canon(value: Any) -> str:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
-
-    def outcome(entry: Mapping[str, Any]) -> ToolOutcome:
-        error = entry.get("error")
-        if isinstance(error, Mapping):
-            code = str(error.get("code") or "TOOL_ERROR")
-            return ToolOutcome(content=canon({"error": dict(error)}), ok=False, error_code=code)
-        payload = entry.get("result")
-        return ToolOutcome(content=payload if isinstance(payload, str) else canon(payload))
-
-    def handler(name: str) -> Callable[..., ToolOutcome]:
-        def _call(**kwargs: Any) -> ToolOutcome:
-            for args, entry in matched.get(name, ()):
-                if all(k in kwargs and canon(kwargs[k]) == canon(v) for k, v in args.items()):
-                    return outcome(entry)
-            if name in defaults:
-                return outcome(defaults[name])
-            return ToolOutcome(content=canon({"error": {"code": "TOOL_FIXTURE_MISSING", "tool": name, "args": kwargs}}),
-                               ok=False, error_code="TOOL_FIXTURE_MISSING")
-        return _call
-
-    return DictToolset(tools={name: handler(name) for name in sorted(set(matched) | set(defaults))})
-
-
-def frozen_retrieval(fixtures: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
-                     ) -> Callable[[str], list[Mapping[str, Any]]]:
-    """Un retriever figé, indexé par la requête. Déterministe par construction.
-
-    Figer le retrieval en L4 n'est pas tricher : c'est séparer « l'agent
-    raisonne mal » de « l'index a changé ». Les deux se corrigent ailleurs, et
-    les confondre fait retoucher un prompt pour un problème d'ingestion.
-    """
-    table = {str(k): list(v) for k, v in (fixtures or {}).items()}
-
-    def retrieve(query: str) -> list[Mapping[str, Any]]:
-        return list(table.get(query, ()))
-
-    return retrieve
+# `mocked_toolset` et `frozen_retrieval` vivent dans `..isolation` : l'isolement
+# est aussi celui de la CLI (`SDDA_EVAL_ISOLATION`, `serving/cli.md §3.5`), et
+# deux implémentations d'un même double rendraient deux mesures. Réexportés ici
+# pour les projets qui les importent depuis `evals.executor`.
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +104,7 @@ class InProcessExecutor:
     tool_fixtures: Path | Mapping[str, Any] | None = None
     retrieval_fixtures: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
     client: Any = None
-    _services: dict[bool, RunService] = field(default_factory=dict, repr=False)
+    _services: dict[tuple[bool, bool], RunService] = field(default_factory=dict, repr=False)
 
     def run(self, item: Mapping[str, Any], *, suite: Mapping[str, Any] | None = None,
             run_index: int = 0, seed: int | None = None, **options: Any) -> dict[str, Any]:
@@ -196,10 +115,17 @@ class InProcessExecutor:
         séparément, et un `TypeError` sur un mot-clé nouveau ferait échouer
         toutes les evals d'un projet le jour où le runner gagne une option.
         """
-        isolated = bool(options.get("isolated", self.isolated)) or self._suite_isolated(suite)
-        service = self._service(isolated)
+        isolation = _isolation(suite)
+        forced = bool(options.get("isolated", self.isolated))
+        mode = (forced or isolation["tools"] == ISOLATED_TOOLS,
+                forced or isolation["retrieval"] == ISOLATED_RETRIEVAL)
+        service = self._service(mode)
         started = time.monotonic()
-        result = service.run_sync(RunRequest(input=_item_input(item), surface="cli",
+        # L'identité d'item devient un nom de fichier de trace : le traceur
+        # l'assainit (`../` ou `:` n'y survivent pas) et le suffixe si un run
+        # précédent a déjà écrit ce fichier.
+        tenant = str(item.get("tenant") or (suite or {}).get("tenant") or "")
+        result = service.run_sync(RunRequest(input=_item_input(item), surface="cli", tenant_id=tenant,
                                              run_id=f"{item.get('id', 'item')}-{run_index}"))
         return {
             "output": result.output,
@@ -215,29 +141,31 @@ class InProcessExecutor:
             "run_id": result.run_id,
         }
 
-    @staticmethod
-    def _suite_isolated(suite: Mapping[str, Any] | None) -> bool:
-        isolation = _isolation(suite)
-        return isolation["tools"] == ISOLATED_TOOLS or isolation["retrieval"] == ISOLATED_RETRIEVAL
-
-    def _service(self, isolated: bool) -> RunService:
+    def _service(self, mode: tuple[bool, bool]) -> RunService:
         if self.service is not None:
             return self.service
-        if isolated not in self._services:
-            self._services[isolated] = self._build(isolated)
-        return self._services[isolated]
+        if mode not in self._services:
+            self._services[mode] = self._build(mode)
+        return self._services[mode]
 
-    def _build(self, isolated: bool) -> RunService:
+    def _build(self, mode: tuple[bool, bool]) -> RunService:
+        tools_mocked, retrieval_frozen = mode
         if self.service_factory is not None:
-            return self.service_factory(isolated=isolated)
+            return self.service_factory(isolated=tools_mocked or retrieval_frozen)
         kwargs: dict[str, Any] = {}
-        if isolated:
+        if tools_mocked:
             # Outils mockés et retrieval figé : la seule variation qui reste est
             # celle du MODÈLE, donc celle qu'on voulait mesurer. Le client est
             # celui du fournisseur actif (`stub` si `## Runtime Models` le dit) :
             # un `StubClient` par défaut faisait mesurer à L4 un double qui
             # répond « stub », et G5 notait la plomberie au lieu de l'agent.
             kwargs["toolset"] = mocked_toolset(self.tool_fixtures)
+        if retrieval_frozen:
+            # Le retrieval figé n'était déclaré que dans la fiche : l'exécuteur
+            # ne le passait à personne, et une L4 « isolée » interrogeait
+            # l'index réel. `composed_service` refuse désormais une composition
+            # qui ne sait pas le recevoir, au lieu de l'ignorer.
+            kwargs["retriever"] = frozen_retrieval(self.retrieval_fixtures)
         if self.client is not None:
             kwargs["client"] = self.client
         # Le système est celui que l'APPLICATION compose (`app/composition.py`,
@@ -278,21 +206,50 @@ class CliExecutor:
     command: Sequence[str] = ("uv", "run", "{AppName}", "run", "--json")
     cwd: Path | None = None
     timeout_s: float = 300.0
-    isolated: bool = False
+    #: Environnement EXPLICITE du sous-processus. Absent : l'environnement
+    #: courant FILTRÉ (`child_env`), jamais recopié en entier.
     env: Mapping[str, str] | None = None
+    #: Variables à transmettre en plus du socle, par NOM (une clé exportée dans
+    #: le shell plutôt que posée dans `.env`, par exemple).
+    pass_env: Sequence[str] = ()
+
+    def child_env(self) -> dict[str, str]:
+        """L'environnement du sous-processus : le socle d'exécution, et rien d'autre.
+
+        Le runner tourne dans le shell de CONSTRUCTION, qui porte les
+        identifiants du harnais et de l'opérateur : les recopier dans
+        l'application évaluée les exposait à tout ce qu'elle exécute — y compris
+        à une injection réussie. L'application lit ses propres secrets dans son
+        `.env` ; les noms qu'elle déclare (`secretEnv`) sont transmis s'ils sont
+        posés.
+        """
+        if self.env is not None:
+            return dict(self.env)
+        wanted = set(self.pass_env) | _declared_secret_names(self.cwd)
+        return {k: v for k, v in os.environ.items()
+                if k.upper() in _BASE_ENV or k.upper().startswith(_BASE_ENV_PREFIXES) or k in wanted}
 
     def run(self, item: Mapping[str, Any], *, suite: Mapping[str, Any] | None = None,
             run_index: int = 0, seed: int | None = None, **options: Any) -> dict[str, Any]:
-        argv = [*self.command, "--input", _item_input(item)]
-        tenant = str(item.get("tenant") or (suite or {}).get("tenant") or "")
+        # L'entrée passe par STDIN, pas par argv : une ligne de commande est
+        # bornée (32 767 caractères sous Windows) et visible de tout le poste
+        # (`ps`, gestionnaire de tâches) — un item de dataset porte souvent des
+        # données personnelles.
+        argv = [*self.command, "--input-file", "-"]   # le contrat d'évaluation (`serving/cli.md §3.5`)
+        tenant =str(item.get("tenant") or (suite or {}).get("tenant") or "")
         if tenant:
             argv += ["--tenant", tenant]
 
         started = time.monotonic()
-        completed = subprocess.run(  # noqa: S603 - argv en liste, jamais de shell
-            argv, capture_output=True, text=True, encoding="utf-8",
+        # En OCTETS : en mode texte, Windows traduisait les `\n` de l'entrée en
+        # `\r\n` — l'item évalué n'était plus octet pour octet celui du dataset.
+        raw = subprocess.run(  # noqa: S603 - argv en liste, jamais de shell
+            argv, input=_item_input(item).encode("utf-8"), capture_output=True,
             cwd=str(self.cwd) if self.cwd else None, timeout=self.timeout_s,
-            env=dict(self.env) if self.env else None, check=False)
+            env=self.child_env(), check=False)
+        completed = subprocess.CompletedProcess(
+            raw.args, raw.returncode, raw.stdout.decode("utf-8", errors="replace"),
+            raw.stderr.decode("utf-8", errors="replace"))
         elapsed_ms = int((time.monotonic() - started) * 1000)
 
         events = _parse_ndjson(completed.stdout)
@@ -315,6 +272,28 @@ class CliExecutor:
             # vide » là où le message expliquait pourquoi.
             "stderr": completed.stderr[-4000:],
         }
+
+
+#: Le socle qu'un sous-processus Python, `uv` ou Windows exige pour démarrer.
+_BASE_ENV = frozenset({
+    "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "HOME", "USERPROFILE",
+    "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "TEMP", "TMP", "TMPDIR",
+    "LANG", "LC_ALL", "LC_CTYPE", "TZ", "VIRTUAL_ENV", "SOURCE_DATE_EPOCH",
+})
+_BASE_ENV_PREFIXES = ("PYTHON", "UV_", "SDDA_WORKSPACE_ROOT", "SDDA_TENANT_ID")
+
+
+def _declared_secret_names(cwd: Path | None) -> set[str]:
+    """Les NOMS de variables que l'application déclare (`secretEnv` de son `app_config.json`)."""
+    for base in (cwd, Path(__file__).resolve().parents[1]):
+        config = (base / "app_config.json") if base else None
+        if config is not None and config.is_file():
+            try:
+                payload = json.loads(config.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return set()
+            return {str(v) for v in (payload.get("secretEnv") or {}).values()}
+    return set()
 
 
 def _parse_ndjson(payload: str) -> list[dict[str, Any]]:

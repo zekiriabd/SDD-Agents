@@ -20,6 +20,10 @@ def _walk(payload: Any, dotted: str, source_id: str) -> Any:
 
 def read_json(path: Path, source: Source) -> Iterator[dict[str, Any]]:
     encoding = source.encoding or "utf-8"
+    if encoding.lower().replace("_", "-") in ("utf-8", "utf8"):
+        # Un BOM en tête (export Windows) faisait lever `json.loads` sur la
+        # première ligne : la source entière passait pour illisible.
+        encoding = "utf-8-sig"
 
     if source.format == "jsonl":
         # Ligne à ligne : un fichier de 200 Mo ne doit jamais tenir en mémoire

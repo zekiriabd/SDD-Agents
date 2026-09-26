@@ -13,9 +13,12 @@ transforme une injection en action (P8).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from .spec import ToolError, ToolSpec
+
+if TYPE_CHECKING:   # le squelette applicatif n'est pas une dépendance de `tools/` à l'import
+    from ..orchestration.base import DictToolset
 
 #: Classes d'effet de bord qui ne doivent JAMAIS cohabiter, dans un même agent,
 #: avec un outil dont la sortie est `untrusted`.
@@ -61,6 +64,28 @@ class ToolRegistry:
                             "Un périmètre absent n'est pas « tous les outils », c'est un oubli",
                             tool=agent_id)
         return [self._tools[name] for name in granted]
+
+    def to_toolset(self, agent_id: str, *, schemas: dict[str, dict[str, Any]] | None = None) -> DictToolset:
+        """Le périmètre CLOS de l'agent, prêt pour la boucle — bornes du contrat comprises.
+
+        `timeout_s`, `rate_limit_rpm` et `max_response_bytes` étaient résolus
+        dans `tool_specs.json` et lus par personne : la boucle ne les
+        appliquait pas. Ils passent ici dans les métadonnées que `DictToolset`
+        et `BoundedLoop` appliquent. `fn` est un appelable `(**arguments)` —
+        l'adaptation d'un wrapper `(params, *, ctx)` appartient à la composition.
+        """
+        from ..orchestration.base import DictToolset  # noqa: PLC0415 - squelette optionnel à l'import
+
+        tools = self.get_for_agent(agent_id)
+        return DictToolset(
+            tools={t.spec.name: t.fn for t in tools},
+            schemas={name: spec for name, spec in (schemas or {}).items()
+                     if any(t.spec.name == name for t in tools)},
+            metadata={t.spec.name: {
+                "side_effect_class": t.spec.side_effect_class, "trust": t.spec.trust,
+                "timeout_s": t.spec.timeout_s, "rate_limit_rpm": t.spec.rate_limit_rpm,
+                "max_response_bytes": t.spec.max_response_bytes,
+            } for t in tools})
 
     def _check_cohabitation(self, agent_id: str, names: tuple[str, ...]) -> None:
         specs = [self._tools[n].spec for n in names]

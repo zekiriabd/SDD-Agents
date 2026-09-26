@@ -28,14 +28,22 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass, field
 from importlib import import_module
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
-from .bounds import Bounds
+from .bounds import BoundExceeded, Bounds
 from .config import ConfigError, Settings
 from .guardrails import Guardrails, GuardrailTripped
-from .models import LLMClient, RecordingClient, StubClient, provider_client, provider_error_class, resolve
-from .orchestration.base import AgentResult, BoundedLoop, DictToolset, declare_framework_graph
-from .tracing import Tracer, new_run_id
+from .identity import caller
+from .isolation import isolation_kwargs
+from .models import LLMClient, RecordingClient, provider_client, provider_error_class, resolve
+from .orchestration.base import (
+    AgentResult,
+    BoundedLoop,
+    DictToolset,
+    apply_bound_policy,
+    declare_framework_graph,
+)
+from .tracing import A_COST_DECLARED, A_OPERATION, A_RETRIEVAL_IDS, A_RETRIEVAL_SCORES, Tracer, new_run_id
 from .trust import untrusted
 
 #: Version du schéma d'événement. Un consommateur qui lit du NDJSON doit pouvoir
@@ -127,8 +135,13 @@ class RunService:
                  bounds: Bounds | None = None,
                  system_prompt: str = "",
                  tracer_factory: Callable[[str], Tracer] | None = None,
-                 guardrails: Guardrails | None = None) -> None:
+                 guardrails: Guardrails | None = None,
+                 retriever: Callable[[str], Any] | None = None) -> None:
         self.settings = settings or Settings.load()
+        #: Le retriever à utiliser À LA PLACE de l'index réel — le retrieval
+        #: figé de la L4 (`evals.executor.frozen_retrieval`). Transmis à la
+        #: fabrique d'agent qui le reçoit ; la boucle de démarrage n'en a pas.
+        self.retriever = retriever
         self._guardrails = guardrails
         self._client = client
         self._agent_factory = agent_factory
@@ -173,9 +186,19 @@ class RunService:
     # -- Exécution ----------------------------------------------------------
     async def run(self, request: RunRequest, *,
                   on_event: Callable[[dict[str, Any]], None] | None = None) -> RunResult:
-        run_id = request.run_id or new_run_id()
-        tracer = self.tracer(run_id)
+        tracer = self.tracer(request.run_id or new_run_id())
+        # L'identifiant RETENU est celui du traceur : il a pu être assaini (il
+        # devient un nom de fichier) ou suffixé (un fichier du même nom existait).
+        run_id = tracer.run_id
+        if tracer.limits is None:
+            tracer.limits = self.settings.run_limits()
         result = RunResult(run_id=run_id, trace_path=str(tracer.path or ""))
+        with caller(request.tenant_id or self.settings.tenant_id):
+            return await self._run(request, tracer, result, on_event=on_event)
+
+    async def _run(self, request: RunRequest, tracer: Tracer, result: RunResult, *,
+                   on_event: Callable[[dict[str, Any]], None] | None) -> RunResult:
+        run_id = result.run_id
 
         def emit(event: str, **payload: Any) -> dict[str, Any]:
             if event not in EVENTS:
@@ -198,25 +221,35 @@ class RunService:
                 # Le texte non maîtrisé ENTRE ici : injection directe, puis PII,
                 # AVANT que le modèle — donc la trace et le fournisseur — ne le
                 # voie. Un refus lève `GuardrailTripped`, traduit plus bas.
-                guards = self.guardrails()
+                # Une instance PAR RUN : la table de jetons PII est un état, et
+                # partagée entre runs elle mêlait les valeurs de deux appelants.
+                guards = self.guardrails().for_run()
                 text, verdict = guards.check_input(text, tracer=tracer)
                 if verdict is not None and verdict.hits:
                     emit("guardrail", guardrail="injection-detection", point="user_input",
                          **verdict.to_dict())
 
-                agent = self._build_agent(bounds, tracer)
+                agent = self._build_agent(bounds, tracer, guards)
                 emit("agent_started", agent_id=getattr(agent, "agent_id", "agent"))
-                outcome = agent.run(untrusted(text), thread_id=request.thread_id)
-                if inspect.isawaitable(outcome):
-                    outcome = await outcome
-                agent_result: AgentResult = outcome
+                try:
+                    outcome = agent.run(untrusted(text), thread_id=request.thread_id)
+                    if inspect.isawaitable(outcome):
+                        outcome = await outcome
+                    agent_result: AgentResult = outcome
+                except BoundExceeded as exc:
+                    # Une borne du RUN (hops, tokens) ou une délégation refusée
+                    # tombe hors de la boucle d'un agent : même traduction en
+                    # résultat, sinon elle finissait en `INTERNAL_ERROR` (code 1).
+                    agent_result = apply_bound_policy(exc)
                 emit("agent_finished", agent_id=getattr(agent, "agent_id", "agent"),
                      iterations=agent_result.iterations)
 
                 # La sortie SORT ici : validée contre l'`outputSchema` de l'IR
                 # avant d'être rendue. Une sortie non conforme n'est pas une
-                # réponse dégradée, c'est une réponse fausse dans sa forme.
-                if agent_result.status == "ok":
+                # réponse dégradée, c'est une réponse fausse dans sa forme — et
+                # une sortie DÉGRADÉE reste une sortie consommée par du code.
+                if agent_result.status == "ok" or (agent_result.status == "degraded"
+                                                   and agent_result.output is not None):
                     checked, violations = guards.check_output(
                         agent_result.output, agent_id=str(getattr(agent, "agent_id", "")), tracer=tracer)
                     if violations:
@@ -232,7 +265,7 @@ class RunService:
                 if agent_result.bound_exceeded:
                     emit("bound_exceeded", bound=agent_result.bound_exceeded,
                          policy=agent_result.bound_policy,
-                         observed=agent_result.partial_state.get("cost_usd"))
+                         observed=agent_result.bound_observed, limit=agent_result.bound_limit)
                 if agent_result.status == "interrupted":
                     emit("interrupted", thread_id=request.thread_id,
                          reason=agent_result.message)
@@ -272,6 +305,11 @@ class RunService:
         result.hops = summary["hops"]
         result.tool_calls = summary["tool_calls"]
         result.latency_ms = summary["latency_ms"]
+        # Le coût du run est celui de la TRACE, pas seulement celui de l'agent
+        # qui a conclu : un run interrompu par une exception après un premier
+        # appel facturé rendait `cost_usd: 0.0` — et G6 comparait ce zéro au
+        # plafond.
+        result.cost_usd = max(result.cost_usd, summary["cost_usd"])
         result.trace = tracer.as_trace()
         result.problems.extend(tracer.problems)
         # `run_finished` est TOUJOURS le dernier événement, y compris après une
@@ -280,6 +318,84 @@ class RunService:
         emit("run_finished", status=result.status, cost_usd=round(result.cost_usd, 6),
              duration_ms=result.latency_ms, hops=result.hops,
              tool_calls=result.tool_calls, trace_path=result.trace_path)
+        return result
+
+    # -- Retrieval seul (G4) -------------------------------------------------
+    def retriever_for(self) -> Callable[..., Any] | None:
+        """Le retriever du système : celui reçu (figé en L4), sinon `build_retriever` de la composition."""
+        if self.retriever is not None:
+            return self.retriever
+        if not __package__:
+            return None
+        try:
+            module = import_module(f"{__package__}.app.composition")
+        except ImportError:
+            return None
+        build = getattr(module, "build_retriever", None)
+        return build(self.settings) if callable(build) else None
+
+    def retrieve_sync(self, index_id: str, query: str, *,
+                      on_event: Callable[[dict[str, Any]], None] | None = None) -> RunResult:
+        """`retrieve --index ID` : l'index interrogé SANS agent ni modèle (`serving/cli.md §3.5`).
+
+        La RETRIEVAL GATE juge l'index, pas l'agent : faire passer la requête
+        par un tour de modèle mesurerait la reformulation du modèle en plus du
+        rappel, et coûterait des tokens pour une mesure déterministe.
+        """
+        import asyncio  # noqa: PLC0415 - un seul point d'entrée dans la boucle d'événements
+
+        tracer = self.tracer(new_run_id())
+        if tracer.limits is None:
+            tracer.limits = self.settings.run_limits()
+        result = RunResult(run_id=tracer.run_id, trace_path=str(tracer.path or ""))
+
+        def emit(event: str, **payload: Any) -> None:
+            record = {"event": event, "event_schema": EVENT_SCHEMA, "run_id": result.run_id, **payload}
+            result.events.append(record)
+            if on_event is not None:
+                on_event(record)
+
+        with tracer.run_span(mission_id=self.settings.mission_id, surface="cli") as root:
+            try:
+                retriever = self.retriever_for()
+                if retriever is None:
+                    raise ConfigError(
+                        "aucun retriever : ni retrieval figé, ni `build_retriever` dans `app/composition.py`",
+                        cls="CONFIG_INVALID",
+                        fix="exposer `build_retriever(settings)` dans la composition (dev-retrieval), "
+                            "ou poser SDDA_EVAL_ISOLATION=mocked avec des fixtures `retrieval/`")
+                with tracer.retrieval(index_id=index_id) as span:
+                    accepted = _accepts(retriever, "index_id")
+                    hits = retriever(query, index_id=index_id) if accepted else retriever(query)
+                    if inspect.isawaitable(hits):
+                        hits = asyncio.run(_awaited(hits))
+                    rows = [h for h in (hits or []) if isinstance(h, Mapping)]
+                    # `result_ids` = les DOCUMENTS (la RETRIEVAL GATE mesure
+                    # recall@k au niveau document, `retrieval_metrics`) ; les
+                    # chunks servis suivent à part. Rendre l'id du chunk
+                    # (`doc-7#2`) faisait un recall nul sur un index correct.
+                    chunks = [str(h.get("id") or h.get("chunk_id") or "") for h in rows]
+                    ids = [str(h.get("doc_id") or h.get("document_id") or c.split("#", 1)[0])
+                           for h, c in zip(rows, chunks, strict=True)]
+                    scores = [float(h.get("score") or 0.0) for h in rows]
+                    span.update({A_RETRIEVAL_IDS: chunks, A_RETRIEVAL_SCORES: scores})
+                emit("retrieval", index_id=index_id, result_ids=ids, chunk_ids=chunks, scores=scores)
+                result.output = {"index_id": index_id, "result_ids": ids, "chunk_ids": chunks,
+                                 "scores": scores}
+            except ConfigError as exc:
+                root.error(exc.cls)
+                result.status, result.error_class, result.message = "failed", exc.cls, str(exc)
+                emit("error", **{"class": exc.cls, "message": str(exc)})
+            except Exception as exc:  # noqa: BLE001 - la surface doit rendre un code, pas une pile
+                root.error(type(exc).__name__)
+                result.status, result.error_class = "failed", "INTERNAL_ERROR"
+                result.message = f"{type(exc).__name__}: {exc}"
+                emit("error", **{"class": "INTERNAL_ERROR", "message": result.message})
+        summary = _summarize(tracer)
+        result.latency_ms = summary["latency_ms"]
+        result.trace = tracer.as_trace()
+        emit("run_finished", status=result.status, cost_usd=0.0, duration_ms=result.latency_ms,
+             hops=0, tool_calls=0, trace_path=result.trace_path)
         return result
 
     def run_sync(self, request: RunRequest, *,
@@ -329,16 +445,38 @@ class RunService:
                       timeout_s=bounds.timeout_s, budget_usd=requested,
                       on_bound_exceeded=bounds.on_bound_exceeded)
 
-    def _build_agent(self, bounds: Bounds, tracer: Tracer) -> Any:
+    def _build_agent(self, bounds: Bounds, tracer: Tracer, guards: Guardrails) -> Any:
         client = self.client()
         if self._agent_factory is not None:
-            return self._agent_factory(bounds=bounds, tracer=tracer, client=client,
-                                       settings=self.settings, toolset=self._toolset)
+            kwargs: dict[str, Any] = {"bounds": bounds, "tracer": tracer, "client": client,
+                                      "settings": self.settings, "toolset": self._toolset}
+            # Les guardrails DU RUN, à une fabrique qui sait les recevoir ;
+            # une fabrique antérieure garde sa signature.
+            accepted: Mapping[str, inspect.Parameter]
+            try:
+                accepted = inspect.signature(self._agent_factory).parameters
+            except (TypeError, ValueError):
+                accepted = {}
+            open_kwargs = any(p.kind is p.VAR_KEYWORD for p in accepted.values())
+            if "guardrails" in accepted or open_kwargs:
+                kwargs["guardrails"] = guards
+            if self.retriever is not None:
+                if "retriever" not in accepted and not open_kwargs:
+                    # Même règle que `composed_service` : un retrieval figé
+                    # demandé et ignoré mesurerait l'index réel en silence.
+                    raise ConfigError(
+                        "la fabrique d'agent n'accepte pas `retriever` : le retrieval figé serait ignoré",
+                        cls="CONFIG_INVALID",
+                        fix="ajouter `retriever` à la fabrique et l'utiliser à la place de l'index")
+                kwargs["retriever"] = self.retriever
+            return self._agent_factory(**kwargs)
+        max_output = self.settings.bounds.get("max_output_tokens")
         return BoundedLoop(
             agent_id="agent", agent_name="agent", bounds=bounds, client=client,
             model=resolve(self.settings.default_tier, self.settings),
             tier=self.settings.default_tier, system_prompt=self._system_prompt,
-            toolset=self._toolset, tracer=tracer, guardrails=self.guardrails())
+            toolset=self._toolset, tracer=tracer, guardrails=guards,
+            max_output_tokens=int(max_output) if max_output else None)
 
     def _absorb(self, result: RunResult, agent: AgentResult, tracer: Tracer) -> None:
         result.output = agent.output
@@ -351,6 +489,18 @@ class RunService:
         result.cost_usd = agent.cost_usd
 
 
+def _accepts(fn: Callable[..., Any], name: str) -> bool:
+    try:
+        parameters = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return name in parameters or any(p.kind is p.VAR_KEYWORD for p in parameters.values())
+
+
+async def _awaited(value: Any) -> Any:
+    return await value
+
+
 def _summarize(tracer: Tracer) -> dict[str, Any]:
     """Hops, appels d'outils et latence, LUS DANS LA TRACE.
 
@@ -360,16 +510,22 @@ def _summarize(tracer: Tracer) -> dict[str, Any]:
     """
     hops = tool_calls = 0
     latency = 0
+    cost = 0.0
     for span in tracer.spans:
         attrs = span.get("attributes") or {}
-        operation = str(attrs.get("gen_ai.operation.name") or "")
+        operation = str(attrs.get(A_OPERATION) or "")
         if operation == "invoke_agent":
             hops += 1
         elif operation == "execute_tool":
             tool_calls += 1
+        elif operation == "chat":
+            try:
+                cost += float(attrs.get(A_COST_DECLARED) or 0.0)
+            except (TypeError, ValueError):
+                pass
         if str(span.get("name") or "").startswith("sdda.run"):
             latency = int(span.get("duration_ms") or 0)
-    return {"hops": hops, "tool_calls": tool_calls, "latency_ms": latency}
+    return {"hops": hops, "tool_calls": tool_calls, "latency_ms": latency, "cost_usd": round(cost, 6)}
 
 
 def app_build_system() -> Callable[..., RunService] | None:
@@ -398,19 +554,26 @@ def composed_service(settings: Settings | None = None, **kwargs: Any) -> RunServ
     agent. Repli sur `RunService` seulement tant que la composition n'existe pas.
     """
     resolved = settings or Settings.load()
+    # L'isolement L4 demandé par l'ENVIRONNEMENT (`SDDA_EVAL_ISOLATION=mocked`,
+    # `serving/cli.md §3.5`) : outils et retrieval remplacés par les fixtures
+    # AVANT la composition, pour la CLI comme pour l'exécuteur en processus.
+    # Un outil sans fixture lève ici (`CONFIG_INVALID`, code 8) : on ne démarre
+    # pas un agent « isolé » qui toucherait le vrai monde.
+    for key, value in isolation_kwargs(resolved).items():
+        kwargs.setdefault(key, value)
     build_system = app_build_system()
     if build_system is not None:
-        accepted = inspect.signature(build_system).parameters
-        return build_system(resolved, **{k: v for k, v in kwargs.items() if k in accepted})
+        parameters = inspect.signature(build_system).parameters
+        open_kwargs = any(p.kind is p.VAR_KEYWORD for p in parameters.values())
+        dropped = sorted(k for k in kwargs if k not in parameters and not open_kwargs)
+        if dropped:
+            # Refuser plutôt que filtrer : l'exécuteur d'eval passe `toolset`
+            # pour ISOLER l'agent (outils mockés). Un `build_system` qui ne le
+            # reçoit pas faisait tourner la L4 sur les vrais outils, en
+            # silence — une mesure qui n'est plus celle qu'on croit.
+            raise ConfigError(
+                f"`build_system` n'accepte pas {dropped} : l'isolement ou le client demandé serait ignoré",
+                cls="CONFIG_INVALID",
+                fix="ajouter ces paramètres à `app/composition.py:build_system` et les câbler")
+        return build_system(resolved, **kwargs)
     return RunService(resolved, **kwargs)
-
-
-def default_service(**kwargs: Any) -> RunService:
-    """Un service prêt à tourner sans clé d'API — pour le smoke et les tests.
-
-    Il existe parce qu'un squelette qu'on ne peut pas exécuter avant d'avoir un
-    compte chez un fournisseur est un squelette qu'on n'exécute jamais, et dont
-    on découvre les défauts au premier run facturé.
-    """
-    kwargs.setdefault("client", StubClient())
-    return RunService(**kwargs)

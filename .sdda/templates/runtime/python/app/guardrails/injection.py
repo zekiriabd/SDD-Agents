@@ -32,6 +32,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -39,11 +40,12 @@ from typing import Any, Iterable, Mapping, Sequence
 #: pas, assez bas pour qu'une redéfinition explicite (0.6) le franchisse.
 DEFAULT_THRESHOLD = 0.5
 
-#: Taille maximale scannée. Au-delà, le texte est scanné par tête et par queue :
-#: une injection se place au début (prise d'autorité) ou à la fin (dernier mot),
-#: et scanner 400 Ko de corpus à chaque requête est précisément ce que la fiche
-#: interdit (§3 : le corpus se filtre à l'ingestion).
-MAX_SCAN_CHARS = 200_000
+#: Le texte est scanné EN ENTIER. Il l'était par tête et par queue au-delà de
+#: 200 000 caractères : une consigne placée au milieu passait sans score, et les
+#: positions de la queue, relatives à l'échantillon, étaient appliquées au texte
+#: original par `neutralize` — qui remplaçait donc le mauvais passage et
+#: laissait l'attaque intacte. Les motifs sont linéaires ; la taille d'entrée
+#: est déjà bornée en amont (`maxInputBytes`, `wrap(max_chars)`).
 
 _FLAGS = re.IGNORECASE | re.UNICODE
 
@@ -70,6 +72,20 @@ RULES: tuple[Rule, ...] = (
     _rule("override.ignore",
           r"\b(ignore[rz]?|ignoring|disregard|forget|oublie[rz]?|n['’]?(?:en)?\s*tiens?\s+pas\s+compte\s+d?e?s?)\b"
           r"[^.\n]{0,40}\b(instructions?|consignes?|directives?|r[eè]gles?|rules|prompt|system\s+message)\b",
+          0.6, "override"),
+    # « Ignore tout ce qui précède » sans nommer d'objet : la forme la plus
+    # courante des injections réelles, que `override.ignore` ne voyait pas.
+    _rule("override.ignore_above",
+          r"\b(ignore[rz]?|ignoring|disregard|forget|oublie[rz]?)\b[^.\n]{0,20}\b(everything|all|anything|tout|"
+          r"ce\s+qui)\b[^.\n]{0,20}\b(above|before|previous(ly)?|prior|earlier|ci-dessus|pr[ée]c[èe]de|"
+          r"pr[ée]c[ée]dent|au-dessus)\b",
+          0.55, "override"),
+    # Les mêmes consignes dans les langues européennes courantes : un filtre
+    # anglais-français se contourne en changeant de langue.
+    _rule("override.ignore_multilingual",
+          r"\b(olvida|ignora|ignore|vergiss|ignoriere|dimentica|esquece|esque[çc]a|negeer|vergeet)\w*\b[^.\n]{0,40}"
+          r"\b(instrucci[oó]n(es)?|anweisung(en)?|istruzion[ei]|instru[çc][õo]es|instructies|regeln|reglas|regole|"
+          r"regras|vorgaben|indicaciones)\b",
           0.6, "override"),
     _rule("override.new_instructions",
           r"\b(new|updated|nouvelles?|real|vraies?)\s+(instructions?|consignes?|directives?)\b",
@@ -157,6 +173,45 @@ _HEX_ESCAPES = re.compile(r"(?:\\x[0-9a-fA-F]{2}){8,}")
 ENCODING_WEIGHT_INVISIBLE = 0.3
 ENCODING_WEIGHT_HEX = 0.2
 
+#: Homoglyphes (cyrillique, grec) et « leet » ramenés à l'ASCII, caractère pour
+#: caractère — la LONGUEUR est conservée, donc les positions d'un hit trouvé
+#: sur le texte normalisé désignent le même passage dans le texte original, et
+#: `neutralize` remplace le bon. `іgnore` (i cyrillique) ou `1gn0re` n'étaient
+#: pas une autre attaque : c'était la même, habillée pour passer le motif.
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j",
+    "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ո": "n", "ս": "u", "ɡ": "g", "ı": "i",
+    "А": "A", "Е": "E", "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X", "І": "I", "Ј": "J",
+    "Ѕ": "S", "М": "M", "Н": "H", "К": "K", "В": "B",
+    "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t", "υ": "u",
+    "Α": "A", "Ε": "E", "Ι": "I", "Κ": "K", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y",
+})
+_LEET = {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
+
+
+#: Un chiffre n'est du leet qu'au contact d'une lettre : « 2 000 € » reste un
+#: montant, « 1gn0re » redevient « ignore ».
+_LEET_RE = re.compile(r"(?<=[^\W\d_])[013457@$]|[013457@$](?=[^\W\d_])")
+
+
+def _normalize(text: str) -> str:
+    """NFKC, homoglyphes et leet, SANS changer la longueur (cf. `_CONFUSABLES`)."""
+    if not text.isascii():
+        chars = []
+        for char in text:
+            folded = unicodedata.normalize("NFKC", char)
+            chars.append(folded if len(folded) == 1 else char)
+        text = "".join(chars).translate(_CONFUSABLES)
+    return _LEET_RE.sub(lambda m: _LEET[m.group(0)], text)
+
+
+#: Voies dont les positions ne désignent PAS un passage du texte original : le
+#: texte débarrassé de ses invisibles (décalé), les caractères « tags » (qui ne
+#: sont pas lisibles en place). Un hit par l'une d'elles neutralise TOUT le
+#: texte — remplacer les seuls passages repérés en clair puis retirer les
+#: invisibles rendait l'attaque… en clair.
+_WHOLE_TEXT_VIAS = frozenset({"invisible-stripped", "tags"})
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -167,7 +222,7 @@ class Hit:
     weight: float
     start: int
     end: int
-    via: str = "plain"      # plain | base64 | tags | invisible-stripped | hex
+    via: str = "plain"      # plain | normalized | base64 | tags | invisible-stripped | hex
 
     def to_dict(self) -> dict[str, Any]:
         return {"rule": self.rule, "category": self.category, "weight": self.weight,
@@ -229,8 +284,13 @@ class InjectionDetector:
 
     # -- Scan ---------------------------------------------------------------
     def scan(self, text: str) -> Verdict:
-        sample = _sample(text or "")
+        sample = text or ""
         hits: list[Hit] = list(self._match(sample, via="plain"))
+        normalized = _normalize(sample)
+        if normalized != sample:
+            seen = {(h.rule, h.start, h.end) for h in hits}
+            hits.extend(h for h in self._match(normalized, via="normalized")
+                        if (h.rule, h.start, h.end) not in seen)
 
         first = _INVISIBLE.search(sample)
         if first is not None:
@@ -265,8 +325,10 @@ class InjectionDetector:
         remplacé en entier. Le marqueur nomme la règle, jamais le texte retiré.
         """
         verdict = verdict or self.scan(text)
+        if any(h.via in _WHOLE_TEXT_VIAS and h.category != "encoding" for h in verdict.hits):
+            return f"[neutralisé:{','.join(verdict.rules)}]"
         spans = sorted({(h.start, h.end, h.rule) for h in verdict.hits
-                        if h.end > h.start and h.via in ("plain", "base64", "hex")})
+                        if h.end > h.start and h.via in ("plain", "normalized", "base64", "hex")})
         out: list[str] = []
         cursor = 0
         for start, end, rule in spans:
@@ -282,13 +344,6 @@ class InjectionDetector:
         for rule in self.rules:
             for m in rule.pattern.finditer(text):
                 yield Hit(rule.id, rule.category, rule.weight, m.start(), m.end(), via)
-
-
-def _sample(text: str) -> str:
-    if len(text) <= MAX_SCAN_CHARS:
-        return text
-    half = MAX_SCAN_CHARS // 2
-    return text[:half] + "\n" + text[-half:]
 
 
 def _b64_text(blob: str) -> str:

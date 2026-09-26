@@ -22,7 +22,8 @@ Où ils sont appliqués (`RunService` et `BoundedLoop`) :
     neutralisée et poursuivie — bloquer la requête punirait l'utilisateur pour
     la faute d'un tiers (§4 de la fiche) ;
   - **PII** : rédigées avant que le texte n'atteigne le modèle — donc la trace
-    et le fournisseur —, entrée comme sorties d'outils ;
+    et le fournisseur —, entrée comme sorties d'outils, de confiance ou non
+    (une ligne de base est « de confiance » et porte quand même des PII) ;
   - **sortie finale** : validée contre son schéma ; non conforme ->
     `AGENT_OUTPUT_INVALID` (code 9).
 
@@ -32,7 +33,7 @@ ne doit être réinjecté dans aucun contexte de modèle.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
 from .injection import InjectionDetector, Verdict
@@ -62,7 +63,7 @@ class GuardrailTripped(Exception):
 
 @dataclass
 class Guardrails:
-    """La configuration résolue des guardrails d'un run. Sans état entre deux runs."""
+    """La configuration résolue des guardrails. `for_run()` en rend l'instance d'UN run (état PII neuf)."""
 
     active: tuple[str, ...] = ()
     input_guards: tuple[str, ...] = ()
@@ -105,6 +106,16 @@ class Guardrails:
     @classmethod
     def from_settings(cls, settings: Any) -> "Guardrails":
         return cls.from_config(getattr(settings, "guardrails", None))
+
+    def for_run(self) -> "Guardrails":
+        """Une copie pour UN run, avec une table de jetons PII neuve.
+
+        La configuration est partagée, l'état ne l'est pas : `PiiRedactor`
+        garde la correspondance jeton -> valeur, et une instance réutilisée d'un
+        run à l'autre (d'un appelant à l'autre) accumulait les valeurs de tous.
+        """
+        pii = PiiRedactor(self.pii.categories) if self.pii is not None else None
+        return replace(self, pii=pii)
 
     # -- Entrée ---------------------------------------------------------------
     def check_input(self, text: str, *, tracer: Any = None) -> tuple[str, Verdict | None]:

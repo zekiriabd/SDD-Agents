@@ -37,7 +37,9 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
+
+from .bounds import POLICIES, OnBoundExceeded, RunLimits
 
 #: Nom du fichier de configuration non secrète, écrit à côté du paquet par
 #: `gen_app_skeleton.py`. Le chercher relativement à `__file__` et non au
@@ -49,6 +51,28 @@ CONFIG_FILE = "app_config.json"
 #: Les trois tiers. Le code manipule un tier, jamais un nom de modèle
 #: (`[MODEL_NAME_HARDCODED]`) : la résolution appartient à `models.resolve`.
 TIERS = ("fast", "balanced", "deep")
+
+#: Variables NON secrètes qu'un fournisseur exige (`providers/azure-openai.yaml` :
+#: `base_url_env`, `api_version_env`, `deployment_env`). Liste close et
+#: explicite : un préfixe (`AZURE_OPENAI_*`) aurait aussi ramassé la clé.
+PROVIDER_ENV_NAMES: tuple[str, ...] = (
+    "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION",
+    "AZURE_OPENAI_DEPLOYMENT_DEEP", "AZURE_OPENAI_DEPLOYMENT_BALANCED", "AZURE_OPENAI_DEPLOYMENT_FAST",
+)
+
+
+def _optional_int(value: Any) -> int | None:
+    """Un entier > 0, ou None. Un plafond à 0 ou illisible n'est pas un plafond déclaré."""
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _installed(config_path: Path) -> bool:
+    """Le paquet tourne-t-il depuis un environnement Python (roue installée) ?"""
+    return any(part in ("site-packages", "dist-packages") for part in config_path.resolve().parts)
 
 
 class ConfigError(Exception):
@@ -120,7 +144,26 @@ class Settings:
     #: `gen_app_skeleton`) et leur configuration — lus par `guardrails.Guardrails`.
     guardrails: Mapping[str, Any] = field(default_factory=dict)
     tenant_id: str = ""
+    #: Bornes du RUN (IR : `orchestration.maxHops`, `budget.tokenCeilingPerRun`),
+    #: projetées par `gen_app_skeleton`. `None` = non déclarée, jamais inventée.
+    max_hops: int | None = None
+    max_tokens_per_run: int | None = None
+    #: Bornes PAR AGENT de l'IR (`agents[].bounds`), en snake_case, par id.
+    agent_bounds: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     workspace_root: Path = field(default_factory=Path)
+    #: Réglages NON secrets d'un fournisseur (endpoint, version d'API, nom de
+    #: déploiement), lus ici parce que `os.environ` ne s'ouvre qu'ici.
+    provider_env: Mapping[str, str] = field(default_factory=dict)
+    #: Contrat d'évaluation (`serving/cli.md §3.5`) : `SDDA_EVAL_ISOLATION=mocked`
+    #: et `SDDA_EVAL_FIXTURES` (répertoire `tools/` + `retrieval/`).
+    eval_isolation: str = ""
+    eval_fixtures: Path | None = None
+    #: Les outils que l'IR donne aux agents (`agents[].tools`) : ceux dont
+    #: l'isolement L4 exige une fixture.
+    tool_names: tuple[str, ...] = ()
+    #: Par outil (nom vu du modèle) : classe d'effet de bord, confiance et
+    #: bornes du contrat (`timeout_s`, `rate_limit_rpm`, `max_response_bytes`).
+    tool_meta: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     secret_env: Mapping[str, str] = field(default_factory=dict)
     _secrets: Mapping[str, Secret] = field(default_factory=dict, repr=False)
 
@@ -171,7 +214,19 @@ class Settings:
             # variable). Un défaut en dur ferait filtrer les vues SQL et le
             # retrieval sur un locataire que personne n'a établi.
             tenant_id=str(env.get("SDDA_TENANT_ID", "")).strip(),
+            max_hops=_optional_int((raw.get("runLimits") or {}).get("maxHops")),
+            max_tokens_per_run=_optional_int((raw.get("runLimits") or {}).get("maxTokensPerRun")),
+            agent_bounds={str(k): dict(v) for k, v in (raw.get("agentBounds") or {}).items()
+                          if isinstance(v, Mapping)},
             workspace_root=root,
+            provider_env={name: str(env.get(name, "")).strip() for name in PROVIDER_ENV_NAMES
+                          if str(env.get(name, "")).strip()},
+            eval_isolation=str(env.get("SDDA_EVAL_ISOLATION", "")).strip().lower(),
+            eval_fixtures=(Path(str(env["SDDA_EVAL_FIXTURES"]).strip()).resolve()
+                           if str(env.get("SDDA_EVAL_FIXTURES", "")).strip() else None),
+            tool_names=tuple(sorted({str(t) for t in raw.get("tools") or [] if str(t).strip()})),
+            tool_meta={str(k): dict(v) for k, v in (raw.get("toolMeta") or {}).items()
+                       if isinstance(v, Mapping)},
             secret_env=secret_env,
             _secrets=secrets,
         )
@@ -208,8 +263,14 @@ class Settings:
             name, value = stripped.split("=", 1)
             name = name.strip()
             value = value.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
+            if value[:1] in ("\"", "'") and value[0] in value[1:]:
+                # Valeur entre guillemets : le contenu tel quel, un `#` y compris.
+                value = value[1:value.index(value[0], 1)]
+            else:
+                # `KEY=valeur  # commentaire` : le commentaire n'est pas la clé.
+                # Sans ce retrait, la clé envoyée au fournisseur portait « # prod »
+                # et l'authentification échouait sur une valeur pourtant juste.
+                value = value.split(" #", 1)[0].split("\t#", 1)[0].strip()
             if name and name not in merged:
                 merged[name] = value
         return merged
@@ -241,6 +302,12 @@ class Settings:
         override = str(env.get("SDDA_WORKSPACE_ROOT", "")).strip()
         if override:
             return Path(override).resolve()
+        if _installed(path):
+            # Paquet INSTALLÉ (roue, image) : `workspaceRoot: ../..` désigne le
+            # parent de `site-packages`, et les traces atterrissaient dans
+            # l'interpréteur. Hors du dépôt, le workspace est le répertoire de
+            # lancement — ou `SDDA_WORKSPACE_ROOT`, que l'orchestrateur pose.
+            return Path.cwd().resolve()
         declared = str(raw.get("workspaceRoot") or "").strip()
         if declared:
             return (path.parent / declared).resolve()
@@ -285,6 +352,21 @@ class Settings:
                 fix="compléter `## Runtime Models` de STACK.md puis régénérer — un tier non "
                     "résolu ne peut pas être facturé, donc pas plafonné")
         return model
+
+    @property
+    def isolated(self) -> bool:
+        """L'isolement L4 est-il demandé (`SDDA_EVAL_ISOLATION=mocked`) ?"""
+        return self.eval_isolation == "mocked"
+
+    def provider_setting(self, name: str) -> str:
+        """Un réglage non secret du fournisseur (`PROVIDER_ENV_NAMES`), ou `""`."""
+        return str(self.provider_env.get(name, ""))
+
+    def run_limits(self) -> RunLimits:
+        """Les bornes du RUN, neuves pour chaque run (elles comptent)."""
+        policy = str(self.bounds.get("on_bound_exceeded") or "fail-explicit")
+        return RunLimits(max_hops=self.max_hops, max_tokens=self.max_tokens_per_run,
+                         policy=cast(OnBoundExceeded, policy if policy in POLICIES else "fail-explicit"))
 
     def traces_dir(self) -> Path:
         return self.workspace_root / ".sys" / "traces" / "runs"
