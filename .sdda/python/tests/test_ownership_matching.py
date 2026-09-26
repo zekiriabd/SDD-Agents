@@ -77,9 +77,12 @@ EXPECTED: dict[str, tuple[list[str], list[str]]] = {
          f"{APP}/orchestration/graph.py", "workspace/pipeline/datasets/golden/x.jsonl"],
     ),
     "dev-tools": (
-        [f"{APP}/tools/crm.py", "workspace/src/tools/crm.py", f"{APP}/tools/tests/test_crm.py"],
+        [f"{APP}/tools/crm.py", f"{APP}/tools/tests/test_crm.py", "workspace/src/Tools/tools/crm.py"],
+        # `workspace/src/tools/crm.py` n'a pas de segment d'application : les
+        # couches sont ancrées APRÈS lui, pour qu'une application nommée
+        # `Tools`, `Data` ou `App` ne soit pas lue comme la couche du même nom.
         [f"{APP}/agents/billing/agent.py", f"{APP}/prompts/a.system.md", "workspace/pipeline/datasets/g.jsonl",
-         f"{APP}/pyproject.toml"],
+         f"{APP}/pyproject.toml", "workspace/src/tools/crm.py"],
     ),
     "dev-retrieval": ([f"{APP}/retrieval/index.py"], [f"{APP}/tools/x.py", "workspace/pipeline/baselines/b.json"]),
     "dev-data": ([f"{APP}/data/views.py", f"{APP}/data/tools/query.py"], [f"{APP}/tools/x.py", f"{APP}/prompts/p.md"]),

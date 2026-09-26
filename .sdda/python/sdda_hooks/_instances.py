@@ -146,6 +146,12 @@ def instance_in_path(loader: dict[str, Any], agent: str, placeholder: str, rel: 
     return None
 
 
+def ao_case_insensitive() -> bool:
+    from sdda_scripts import audit_ownership as ao
+
+    return bool(ao.CASE_INSENSITIVE)
+
+
 def bindings_for_write(root: Path, loader: dict[str, Any], agent: str, rel: str, data: dict,
                        hook: str) -> tuple[dict[str, str] | None, int]:
     """`(bindings, verdict)` pour une écriture de `agent` sur `rel`."""
@@ -158,7 +164,11 @@ def bindings_for_write(root: Path, loader: dict[str, Any], agent: str, rel: str,
     bound = bound_instance(root, agent, agent_id)
     target = instance_in_path(loader, agent, placeholder, rel)
     if bound:
-        if target is not None and target != bound:
+        # Même casse que la capture : sous Windows, `agents/Billing` et
+        # `agents/billing` sont le même répertoire — refuser l'un pour l'autre
+        # accusait une instance d'écrire chez elle-même.
+        same = (target.casefold() == bound.casefold()) if (target and ao_case_insensitive()) else target == bound
+        if target is not None and not same:
             return None, deny(hook, CLS_INSTANCE_ESCAPE,
                               f"l'instance `{bound}` de `{agent}` écrit dans celle de `{target}` (`{rel}`)",
                               f"une instance n'écrit que sous SON répertoire (`{{{placeholder}}}` = `{bound}`) : "
@@ -169,7 +179,7 @@ def bindings_for_write(root: Path, loader: dict[str, Any], agent: str, rel: str,
     if not _SAFE.match(target) or not (state_dir(root, agent) / "declared" / target).is_file():
         return None, deny(hook, CLS_INSTANCE_UNDECLARED,
                           f"`{agent}` écrit `{rel}` pour l'instance `{target}`, qu'aucun spawn n'a déclarée",
-                          f"`/sdda-build` lance chaque instance avec la ligne `SDDA-INSTANCE: {{agent}}` dans son "
+                          "`/sdda-build` lance chaque instance avec la ligne `SDDA-INSTANCE: {agent}` dans son "
                           "prompt ; une instance non déclarée n'a pas de répertoire")
     holder = _claim(root, agent, target, agent_id)
     if holder is not None:

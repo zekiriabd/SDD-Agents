@@ -71,11 +71,23 @@ def _glob_targets_secret(glob: str) -> bool:
         head, _, rest = last.partition("{")
         inner, _, tail = rest.partition("}")
         alternatives = [head + alt + tail for alt in inner.split(",")]
-    # Seul un filtre qui nomme un fichier CACHÉ le vise : ripgrep saute les
-    # fichiers cachés tant qu'on ne les lui désigne pas, et `glob: "*"` ne le
-    # fait pas. Refuser `*` bloquerait toute recherche filtrée.
-    return any(alt.startswith(".") and fnmatch.fnmatch(probe, alt.casefold())
-               for alt in alternatives for probe in _SECRET_PROBES)
+    # Tout filtre qui PEUT rendre un fichier de secrets le vise : l'outil Grep
+    # de ce harnais fouille les fichiers cachés (vérifié : un `.env` est rendu
+    # sans aucun `glob`), donc `*` ou `[.]env` le rendent aussi. On ne présume
+    # plus que ripgrep saute ce qu'on ne lui nomme pas.
+    return any(fnmatch.fnmatch(probe, alt.casefold()) for alt in alternatives for probe in _SECRET_PROBES)
+
+
+def _contains_root(ao, root: Path, rel: str) -> bool:
+    """Un chemin absolu hors projet qui CONTIENT la racine (`G:/Developement`)."""
+    import posixpath
+
+    if not ao._is_absolute(rel):
+        return False
+    r = posixpath.normpath(ao._native(Path(root).as_posix()))
+    t = posixpath.normpath(ao._native(rel)).rstrip("/")
+    rf, tf = (r.casefold(), t.casefold()) if ao.CASE_INSENSITIVE else (r, t)
+    return rf == tf or rf.startswith(tf + "/")
 
 
 def _deny_secret(agent: str, rel: str) -> int:
@@ -104,6 +116,10 @@ def check(root: Path, data: dict) -> int:
     cwd = data.get("cwd")
     rel = "." if target == "." else ao.relative_to_root(root, str(target), cwd)
     real = None if target == "." else ao.real_relative_to_root(root, str(target), cwd)
+    if scope != "file" and _contains_root(ao, root, rel):
+        # `Grep path: G:/Developement` fouille tout le projet : rendu absolu,
+        # le chemin semblait hors projet et aucun interdit ne s'appliquait.
+        rel = "."
 
     tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
     if scope in ("file", "content"):
@@ -111,12 +127,18 @@ def check(root: Path, data: dict) -> int:
             if candidate and ao.is_secret_file(candidate):
                 return _deny_secret(agent, candidate)
     if scope == "content":
-        # Un `Grep` qui VISE un fichier de secrets par son filtre (`glob: .env*`)
-        # le lit, quelle que soit sa racine : ripgrep saute les fichiers cachés
-        # par défaut, pas ceux qu'on lui nomme.
+        # Un `Grep` rend les fichiers cachés : une racine qui CONTIENT un secret
+        # le rend, sauf filtre (`glob`, `type`) qui l'écarte. Ne refuser que le
+        # filtre qui nomme `.env` laissait `Grep {path: workspace/assets}` lire
+        # la clé en clair.
         glob = str(tool_input.get("glob") or "")
         if glob and _glob_targets_secret(glob):
             return _deny_secret(agent, f"{rel} (glob {glob})")
+        filtered = bool(glob) or bool(str(tool_input.get("type") or "").strip())
+        if not filtered:
+            found = [s for c in (rel, real) if c for s in ao.secrets_under(root, c)]
+            if found:
+                return _deny_secret(agent, f"{found[0]} (via un Grep de `{rel}` sans filtre)")
 
     loader = ao.load_loader(root)
     if not isinstance(loader.get(agent), dict):
@@ -128,7 +150,10 @@ def check(root: Path, data: dict) -> int:
         # autre chemin.
         proof = "workspace/pipeline/datasets"
         normalized = ao.normalize(rel)
-        ancestors = (".", "workspace", "workspace/pipeline")
+        # Un ANCÊTRE des jeux n'est une lecture des jeux que pour `Grep`, qui
+        # rend leur contenu. `Glob` d'un ancêtre rend des noms : refuser `Glob
+        # *.md` sans chemin interdisait toute exploration à un `Explore`.
+        ancestors = (".", "workspace", "workspace/pipeline") if scope == "content" else ()
         if normalized == proof or normalized.startswith(proof + "/") or normalized in ancestors:
             return unknown_subagent(HOOK, agent, normalized if normalized not in ancestors else proof)
         return ALLOW

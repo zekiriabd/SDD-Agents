@@ -100,7 +100,7 @@ def test_powershell_verbs_are_understood(project: Path) -> None:
 
 
 def test_a_write_in_the_agents_own_zone_passes(project: Path) -> None:
-    code, err = bash(project, "dev-tools", "echo x > workspace/src/tools/invoice_lookup.py")
+    code, err = bash(project, "dev-tools", "echo x > workspace/src/SupportAssistant/tools/invoice_lookup.py")
     assert code == ALLOW, err
 
 

@@ -46,18 +46,27 @@ def _spent(root: Path) -> float:
     # plafond qu'on croit actif est plus dangereux qu'un plafond absent.
     run_id = os.environ.get("SDDA_RUN_ID", "").strip()
     candidates = sorted(runs.glob("*.json")) if (runs := state_dir / "runs").is_dir() else []
-    if run_id:
-        # Le plafond porte sur LE run courant, pas sur l'historique du projet :
-        # sommer tous les runs ferait buter le énième run sur la facture des
-        # précédents, et on relèverait le cap pour de mauvaises raisons.
-        candidates = [p for p in candidates if p.stem == run_id] or candidates
-
-    total = 0.0
+    loaded: list[tuple[Path, dict]] = []
     for path in candidates:
         try:
             data = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             continue
+        if isinstance(data, dict):
+            loaded.append((path, data))
+    # Le plafond porte sur LE run courant, pas sur l'historique du projet :
+    # sommer tous les runs faisait buter le énième run sur la facture des
+    # précédents. `SDDA_RUN_ID` n'atteint presque jamais le processus des
+    # hooks (un `export` dans un appel Bash ne survit pas à l'appel) : à
+    # défaut, le run courant est le plus récent encore `running`.
+    if run_id:
+        current = [(p, d) for p, d in loaded if p.stem == run_id]
+    else:
+        running = [(p, d) for p, d in loaded if d.get("status") == "running" and not d.get("endedAt")]
+        current = sorted(running, key=lambda pd: str(pd[1].get("startedAt") or ""))[-1:]
+
+    total = 0.0
+    for _path, data in current:
         for key in ("costUsd", "cost_usd", "spentUsd"):
             if isinstance(data.get(key), (int, float)):
                 total += float(data[key])
@@ -77,10 +86,11 @@ def _spent(root: Path) -> float:
 def check(root: Path, data: dict) -> int:
     from sdda_lib.layered_config import read_layered_config  # noqa: E402
 
-    try:
-        config = read_layered_config(root)
-    except Exception:
-        return ALLOW  # config illisible : c'est le travail d'un validateur, pas d'un hook
+    # Une config illisible remonte à `run()`, qui dégrade : autorise en session
+    # interactive, REFUSE en mode strict. Le `except: return ALLOW` d'avant
+    # court-circuitait le mode strict — la CI laissait passer un plafond qu'elle
+    # ne pouvait pas lire.
+    config = read_layered_config(root)
 
     cap = config.get_float("MaxCostPerRun", 0.0)
     if cap <= 0:

@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import AGENT_BUILDERS, ALLOW, agent_of, allow, deny, run  # noqa: E402
+from _hook import AGENT_BUILDERS, ALLOW, agent_of, allow, deny, mission_of, run  # noqa: E402
 
 #: La pré-passe de `dev-orchestration` (`/sdda-build` 4.0) : `shared/` et
 #: l'INTERFACE mémoire, avant `dev-prompt` (4.1). Elle n'implémente aucun
@@ -41,7 +41,7 @@ REQUIRED = ("maxIterations", "maxToolCalls", "maxDelegationDepth", "timeoutSec",
 def check(root: Path, data: dict) -> int:
     from sdda_lib import paths  # noqa: E402
 
-    mission = data.get("mission")
+    mission = mission_of(data)
     ir_files = ([paths.ir_path(root, mission)] if mission is not None
                 else sorted(paths.ir_dir(root).glob("*-system.ir.json")))
     ir_files = [p for p in ir_files if p.is_file()]
@@ -53,8 +53,11 @@ def check(root: Path, data: dict) -> int:
     for path in ir_files:
         try:
             ir = json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError):
-            continue
+        except (OSError, ValueError) as exc:
+            # Un IR illisible n'est pas un IR borné : il était SAUTÉ, et le
+            # spawn passait sans qu'aucune borne ait été lue.
+            return deny(HOOK, "IR_INVALID", f"`{paths.rel(root, path)}` illisible ({exc.__class__.__name__})",
+                        "recompiler l'IR (`python .sdda/sdda.py ir-compiler --mission {n}`)")
         for agent in ir.get("agents") or []:
             bounds = agent.get("bounds") or {}
             # `0` est une VALEUR, pas une absence — et c'est la plus sûre :

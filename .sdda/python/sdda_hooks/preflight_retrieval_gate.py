@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _hook import AGENT_BUILDERS, ALLOW, allow, bypassed, deny, gate_status, run  # noqa: E402
+from _hook import AGENT_BUILDERS, ALLOW, allow, bypassed, deny, gate_status, mission_of, run  # noqa: E402
 
 HOOK = "preflight_retrieval_gate"
 
@@ -39,7 +39,7 @@ def _no_retrieval(root: Path) -> bool:
 
 
 def check(root: Path, data: dict) -> int:
-    verdict, reasons = gate_status(root, "G4", data.get("mission"))
+    verdict, reasons = gate_status(root, "G4", mission_of(data))
     if verdict == "green":
         return ALLOW
     if verdict == "absent" and _no_retrieval(root):

@@ -99,7 +99,7 @@ def test_dev_agent_may_write_in_its_own_directory(tmp_path: Path) -> None:
     code = _hook("preflight_ownership.py", {
         "tool_name": "Write",
         "tool_input": {"subagent_type": "dev-agent",
-                       "file_path": "workspace/src/agents/billing/agent.py"},
+                       "file_path": "workspace/src/SupportAssistant/agents/billing/agent.py"},
     }, project)
     assert code == 0, "dev-agent doit pouvoir écrire dans src/agents/{son agent}/"
 
@@ -108,7 +108,7 @@ def test_dev_agent_may_write_in_its_own_directory(tmp_path: Path) -> None:
     "workspace/pipeline/datasets/golden/items.jsonl",
     "workspace/src/SupportAssistant/prompts/billing.system.md",
     "workspace/pipeline/suites/s.yml",
-    "workspace/src/tools/crm.py",
+    "workspace/src/SupportAssistant/tools/crm.py",
 ])
 def test_dev_agent_is_still_confined(forbidden: str, tmp_path: Path) -> None:
     """La règle critique de l'agentic tient : l'agent qui écrit le code ne

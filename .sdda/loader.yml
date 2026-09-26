@@ -101,7 +101,7 @@ shared_writes:
       mêmes fichiers : la détection de recouvrement le voyait, la
       comparaison de chaînes d'avant non.
 
-  - path: workspace/src/**/tests/**
+  - path: workspace/src/*/**/tests/**
     agents: [qa-tests, dev-tools, dev-retrieval, dev-data, dev-agent, dev-orchestration, dev-api, dev-backend, dev-app]
     mode: disjoint-by-layer
     why: |
@@ -131,39 +131,39 @@ shared_writes:
     agents: [dev-app, dev-backend]
     mode: exclusive-by-profile
     why: racine du projet — dev-backend hors poc, dev-app en poc
-  - path: workspace/src/**/app/**
+  - path: workspace/src/*/**/app/**
     agents: [dev-app, dev-backend]
     mode: exclusive-by-profile
     why: coquille — dev-backend hors poc, dev-app en poc
-  - path: workspace/src/**/tools/**
+  - path: workspace/src/*/**/tools/**
     agents: [dev-app, dev-tools]
     mode: exclusive-by-profile
     why: outils — dev-tools hors poc, dev-app en poc
-  - path: workspace/src/**/retrieval/**
+  - path: workspace/src/*/**/retrieval/**
     agents: [dev-app, dev-retrieval]
     mode: exclusive-by-profile
     why: retrieval — dev-retrieval hors poc, dev-app en poc
-  - path: workspace/src/**/data/**
+  - path: workspace/src/*/**/data/**
     agents: [dev-app, dev-data]
     mode: exclusive-by-profile
     why: données — dev-data hors poc, dev-app en poc
-  - path: workspace/src/**/agents/{agent}/**
+  - path: workspace/src/*/**/agents/{agent}/**
     agents: [dev-app, dev-agent]
     mode: exclusive-by-profile
     why: agents du produit — dev-agent (une instance par agent) hors poc, dev-app en poc
-  - path: workspace/src/**/orchestration/**
+  - path: workspace/src/*/**/orchestration/**
     agents: [dev-app, dev-orchestration]
     mode: exclusive-by-profile
     why: graphe — dev-orchestration hors poc, dev-app en poc
-  - path: workspace/src/**/memory/**
+  - path: workspace/src/*/**/memory/**
     agents: [dev-app, dev-orchestration]
     mode: exclusive-by-profile
     why: mémoire — dev-orchestration hors poc, dev-app en poc
-  - path: workspace/src/**/shared/**
+  - path: workspace/src/*/**/shared/**
     agents: [dev-app, dev-orchestration]
     mode: exclusive-by-profile
     why: types partagés — dev-orchestration (pré-passe) hors poc, dev-app en poc
-  - path: workspace/src/**/serving/**
+  - path: workspace/src/*/**/serving/**
     agents: [dev-app, dev-api]
     mode: exclusive-by-profile
     why: surface — dev-api hors poc, dev-app en poc
@@ -411,13 +411,22 @@ dev-prompt:
 # `audit_ownership.real_overlaps` le détecte ; la règle qui le résout : un
 # chemin appartient à la couche la PLUS EXTERNE qu'il traverse. Chaque `dev-*`
 # s'interdit donc sa couche quand elle est NICHÉE sous une autre :
-#     workspace/src/**/{autres couches}/**/{sa couche}/**
+#     workspace/src/*/**/{autres couches}/**/{sa couche}/**
 # Les tests (`tests/`) ne sont pas une couche : zone partagée par couche,
 # déclarée dans `shared_writes:`. Les prompts, skills et rules sont interdits à
 # tout `dev-*` (§2.2 de rules/ownership.md), en une ligne.
 # Conséquence à connaître : une APPLICATION ne porte pas le nom d'une couche
 # (`agents`, `tools`, `app`…) — `src/App/` et `src/app/` sont le même
 # répertoire sous Windows, et `src/**/app/**` couvrirait l'application entière.
+# Pire : l'interdit imbriqué `src/**/{…,app}/**/tools/**` prend alors le
+# segment d'application pour la couche englobante, et `dev-tools` se voit
+# refuser `src/App/tools/x.py`. Ancrer les seuls interdits
+# (`workspace/src/*/**/{…}/**`) ne suffit pas : les `writes:` non ancrés se
+# recouvrent alors pour une application nommée comme une couche
+# (`[OWNERSHIP_ZONE_CONTESTED]`, 40 recouvrements). L'ancrage doit porter sur
+# les `writes:` ET les interdits ensemble — ce qui exige que les lecteurs de
+# motifs (`gen_app_context.layer_owners`, `_instances`) acceptent
+# `workspace/src/*/**/{couche}/**`. En attendant : aucun `AppName` de couche.
 dev-tools:
   model_tier: balanced
   budget_bytes: 360000      # recalibré sur le premier projet réel (était 160000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
@@ -434,13 +443,13 @@ dev-tools:
     - .sdda/stacks/tools/{tools}.md
     - .sdda/stacks/observability/otel-genai.md
   writes:
-    - workspace/src/**/tools/**
+    - workspace/src/*/**/tools/**
   forbidden_writes:
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
     - workspace/src/*/{prompts,skills,rules}/**      # [PROMPT_OWNERSHIP_VIOLATION]
     - workspace/pipeline/baselines/**
     # Couche externe : `agents/x/tools/` est à dev-agent, `data/tools/` à dev-data.
-    - workspace/src/**/{agents,orchestration,memory,shared,retrieval,data,serving,app}/**/tools/**
+    - workspace/src/*/**/{agents,orchestration,memory,shared,retrieval,data,serving,app}/**/tools/**
 
 dev-retrieval:
   model_tier: balanced
@@ -460,12 +469,12 @@ dev-retrieval:
     - .sdda/stacks/embedding/{embedding}.md
     - .sdda/stacks/rerank/{rerank}.md
   writes:
-    - workspace/src/**/retrieval/**
+    - workspace/src/*/**/retrieval/**
   forbidden_writes:
     - workspace/pipeline/datasets/**
     - workspace/src/*/{prompts,skills,rules}/**
     - workspace/pipeline/baselines/**
-    - workspace/src/**/{agents,orchestration,memory,shared,tools,data,serving,app}/**/retrieval/**
+    - workspace/src/*/**/{agents,orchestration,memory,shared,tools,data,serving,app}/**/retrieval/**
 
 dev-data:
   model_tier: balanced
@@ -485,14 +494,14 @@ dev-data:
     - .sdda/stacks/lang/{lang}.md
     - .sdda/stacks/dataaccess/{dataaccess}.md
   writes:
-    - workspace/src/**/data/**
+    - workspace/src/*/**/data/**
   forbidden_writes:
     - workspace/pipeline/datasets/**
     - workspace/src/*/{prompts,skills,rules}/**
     - workspace/pipeline/baselines/**
     # `data/tools/` reste à dev-data (data est la couche externe) ; `tools/data/`
     # ou `agents/x/data/` ne le sont pas.
-    - workspace/src/**/{agents,orchestration,memory,shared,tools,retrieval,serving,app}/**/data/**
+    - workspace/src/*/**/{agents,orchestration,memory,shared,tools,retrieval,serving,app}/**/data/**
 
 dev-agent:
   model_tier: deep
@@ -525,7 +534,7 @@ dev-agent:
     - .sdda/stacks/framework/{framework}.libs.json
     - .sdda/stacks/guardrails/{guardrails}.md
   writes:
-    - workspace/src/**/agents/{agent}/**                # répertoire DISJOINT par agent
+    - workspace/src/*/**/agents/{agent}/**                # répertoire DISJOINT par agent
   forbidden_writes:
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION] — sans bypass
     - workspace/src/*/{prompts,skills,rules}/**      # [PROMPT_OWNERSHIP_VIOLATION] — sans bypass
@@ -533,8 +542,8 @@ dev-agent:
     - workspace/pipeline/baselines/**
     - workspace/pipeline/calibration/**
     - workspace/pipeline/fixtures/**
-    - workspace/src/**/{orchestration,memory,shared,tools,retrieval,data,serving,app}/**/agents/**
-    # PAS de `workspace/src/**/agents/{other}/**` ici. Le motif se compilait en
+    - workspace/src/*/**/{orchestration,memory,shared,tools,retrieval,data,serving,app}/**/agents/**
+    # PAS de `workspace/src/*/**/agents/{other}/**` ici. Le motif se compilait en
     # `[^/]+`, donc EXACTEMENT comme `{agent}` de `writes:` — et les interdits
     # étant testés en premier, `dev-agent` était refusé dans sa PROPRE zone :
     # la phase 4 était impossible dès que le hook recevait l'identité.
@@ -573,9 +582,9 @@ dev-orchestration:
     - .sdda/stacks/framework/{framework}.libs.json
     - .sdda/stacks/orchestration/{orchestration}.md
   writes:
-    - workspace/src/**/orchestration/**
-    - workspace/src/**/memory/**                        # l'implémentation du contrat de mémoire : une mémoire est un état qui survit au tour
-    - workspace/src/**/shared/**                        # pré-passe (/sdda-build 4.0) : types partagés, puis gelés
+    - workspace/src/*/**/orchestration/**
+    - workspace/src/*/**/memory/**                        # l'implémentation du contrat de mémoire : une mémoire est un état qui survit au tour
+    - workspace/src/*/**/shared/**                        # pré-passe (/sdda-build 4.0) : types partagés, puis gelés
     # `memory/**` : l'INTERFACE (`memory/interface.*`) en pré-passe 4.0, gelée
     # pendant les phases 4 et 5 ; l'implémentation en phase 5, derrière elle.
     # Sans la pré-passe, dev-agent (phase 4) implémentait ses `memoryScopes`
@@ -586,7 +595,7 @@ dev-orchestration:
     - workspace/pipeline/baselines/**
     # `agents/x/memory/` ou `agents/x/shared/` sont à dev-agent : `**/shared/**`
     # et `**/memory/**` les capturaient sous ses répertoires.
-    - workspace/src/**/{agents,tools,retrieval,data,serving,app}/**/{orchestration,memory,shared}/**
+    - workspace/src/*/**/{agents,tools,retrieval,data,serving,app}/**/{orchestration,memory,shared}/**
 
 dev-api:
   model_tier: balanced
@@ -611,12 +620,12 @@ dev-api:
     - .sdda/stacks/serving/{serving}.md
     - .sdda/stacks/observability/otel-genai.md
   writes:
-    - workspace/src/**/serving/**
+    - workspace/src/*/**/serving/**
   forbidden_writes:
     - workspace/pipeline/datasets/**
     - workspace/src/*/{prompts,skills,rules}/**
     - workspace/pipeline/baselines/**
-    - workspace/src/**/{agents,orchestration,memory,shared,tools,retrieval,data,app}/**/serving/**
+    - workspace/src/*/**/{agents,orchestration,memory,shared,tools,retrieval,data,app}/**/serving/**
 
 dev-backend:
   model_tier: balanced
@@ -640,20 +649,20 @@ dev-backend:
     # racine du projet applicatif (pyproject.toml, package.json, Dockerfile,
     # README.md, .env.example) ; `**/app/**` = composition, config, Domaine.
     - workspace/src/*/*
-    - workspace/src/**/app/**
+    - workspace/src/*/**/app/**
   forbidden_writes:
     - workspace/src/*/{CLAUDE,AGENTS,GEMINI}.md        # contexte projet — écrit par `project-init`, jamais à la main
     - workspace/src/*/{prompts,skills,rules}/**        # [PROMPT_OWNERSHIP_VIOLATION] — dev-prompt
     - workspace/pipeline/datasets/**     # [DATASET_OWNERSHIP_VIOLATION]
     - workspace/pipeline/baselines/**
-    - workspace/src/**/memory/**      # dev-orchestration — `src/*/*` couvrait `memory/x`
-    - workspace/src/**/shared/**      # dev-orchestration — idem `shared/x`
-    - workspace/src/**/agents/**      # dev-agent
-    - workspace/src/**/orchestration/**   # dev-orchestration
-    - workspace/src/**/tools/**       # dev-tools
-    - workspace/src/**/retrieval/**   # dev-retrieval
-    - workspace/src/**/data/**        # dev-data
-    - workspace/src/**/serving/**     # dev-api
+    - workspace/src/*/**/memory/**      # dev-orchestration — `src/*/*` couvrait `memory/x`
+    - workspace/src/*/**/shared/**      # dev-orchestration — idem `shared/x`
+    - workspace/src/*/**/agents/**      # dev-agent
+    - workspace/src/*/**/orchestration/**   # dev-orchestration
+    - workspace/src/*/**/tools/**       # dev-tools
+    - workspace/src/*/**/retrieval/**   # dev-retrieval
+    - workspace/src/*/**/data/**        # dev-data
+    - workspace/src/*/**/serving/**     # dev-api
   forbidden_reads:
     - workspace/pipeline/datasets/**
     - workspace/src/*/prompts/**        # il charge un prompt par HASH, il ne le lit pas
@@ -723,7 +732,7 @@ qa-evals:
     - workspace/src/**
     - workspace/src/*/prompts/**
   forbidden_reads:
-    - workspace/src/**/agents/**   # construire le jeu en lisant le code produit
+    - workspace/src/*/**/agents/**   # construire le jeu en lisant le code produit
                                 # un jeu qui teste ce que le code fait déjà
 
 qa-tests:
@@ -739,11 +748,16 @@ qa-tests:
   reads:
     - workspace/.sys/.ir/{n}-system.ir.json          # semi
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
+    # Les suites L2 de qa-evals : leur `id` et leurs `cases[].id` sont ce que
+    # `run-tool-suites` exige de voir exercé. Sans cette lecture, la part
+    # `suites` de G3 était rouge par construction — qa-tests écrivait des tests
+    # de contrat qu'aucun cas déclaré ne reconnaissait.
+    - workspace/pipeline/suites/tool-{n}-*.yaml      # volatile — lecture seule
     - workspace/src/*/*                              # volatile — fichiers racine du projet (config du runner)
     - workspace/src/*/{object}/**                    # volatile — LA couche du spawn, lecture seule
   writes:
     - workspace/src/*/tests/**          # tests TRANSVERSES — la zone propre de qa-tests
-    - workspace/src/**/tests/**         # tests de couche, partagés (cf. shared_writes)                      # territoire test UNIQUEMENT
+    - workspace/src/*/**/tests/**         # tests de couche, partagés (cf. shared_writes)                      # territoire test UNIQUEMENT
   forbidden_writes:
     # PAS de `workspace/src/**` ici. Le motif recouvrait entièrement les
     # `writes:` ci-dessus — et les interdits étant testés en premier,
@@ -765,7 +779,7 @@ review-spec:
     - workspace/pipeline/missions/{n}-*.md           # BR, AC système, Quantified Goal, out_of_scope
     - workspace/pipeline/caps/{n}-*-*.md
     - workspace/pipeline/suites/**
-    - workspace/pipeline/calibration/*.json          # statut de chaque juge
+    - workspace/pipeline/calibration/*.json          # l'ENTRÉE de chaque juge (grille, labelsRef) — le statut mesuré est G5-{n}.calibration.json, ci-dessous
     - workspace/.sys/reports/{n}-*.json              # les rapports d'eval-runner de CETTE mission
     - workspace/.sys/.validation/G*-*.json           # rapports de gate G3→G6, à plat (gate_reports.report_path)
     - workspace/.sys/.ir/{n}-system.ir.json
@@ -835,7 +849,8 @@ review-rag:
     # La groundedness est une suite d'eval-runner, dans le rapport de son run —
     # il lisait `groundedness-*.json`, que rien n'écrit.
     - workspace/.sys/reports/{n}-*.json
-    - workspace/pipeline/calibration/*.json              # κ de chaque juge
+    - workspace/pipeline/calibration/*.json              # l'ENTRÉE de chaque juge (grille, labelsRef)
+    - workspace/.sys/.validation/G5-{n}.calibration.json # κ MESURÉ de chaque juge (calibrate-judge)
     - workspace/src/*/retrieval/*/index.manifest.json    # indexHash et config effective
   writes:
     - workspace/.sys/.validation/reports/rag-quality-{n}.md

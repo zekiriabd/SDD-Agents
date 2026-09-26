@@ -45,7 +45,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 MARK = "\x00"                      # une valeur que l'analyse ne connaît pas
-GOVERNED_ROOTS = ("workspace", ".sdda")
+#: `.claude`, `.codex`, `.gemini`, `.agents` portent les hooks et les façades
+#: que les harnais exécutent ; `.git` porte ses propres hooks. Un sous-agent
+#: qui les réécrit au shell (`echo {} > .claude/settings.json`) neutralise la
+#: matrice à la session suivante — `Write` les refusait déjà, pas le shell.
+GOVERNED_ROOTS = ("workspace", ".sdda", ".claude", ".codex", ".gemini", ".agents", ".git")
 MAX_DEPTH = 4                      # récursion bash -c / eval / $(…)
 
 
@@ -116,6 +120,44 @@ CODE_INLINE_FLAGS = {
     "python": {"-c"}, "node": {"-e", "-p", "--eval", "--print"}, "deno": {"eval"},
     "bun": {"-e", "--eval"}, "perl": {"-e", "-E"}, "ruby": {"-e"}, "php": {"-r"},
 }
+#: `python -m` de modules qui écrivent les fichiers qu'on leur nomme.
+WRITING_MODULES = {"json", "zipfile", "tarfile", "gzip", "shutil", "py_compile", "compileall", "venv",
+                   "pip", "ensurepip", "http", "urllib"}
+#: Drapeaux Python sans valeur qui peuvent précéder `c` dans un groupe (`-Ic`, `-IScode`).
+_PY_NOARG_FLAGS = "bBdEhiIOPqRsSuvx"
+
+
+def _inline_code(verb: str, args: list[str]) -> tuple[str | None, bool]:
+    """(code en ligne, édition sur place ?) d'un interpréteur.
+
+    La correspondance EXACTE des drapeaux laissait passer les formes usuelles :
+    `python -Ic "…"` (drapeaux groupés), `node --eval="…"`, `perl -pe`/`-pi -e`
+    (le `e` groupé à d'autres lettres), `ruby -ne`. Le code passait sans être
+    lu, et `perl -pi` réécrivait les fichiers nommés sans qu'aucune écriture ne
+    soit jugée.
+    """
+    flags = CODE_INLINE_FLAGS[verb]
+    in_place = False
+    code: str | None = None
+    for i, a in enumerate(args):
+        name, eq, val = a.partition("=")
+        if verb in ("perl", "ruby") and re.match(r"^-[A-Za-z0-9.]*i", a) and not a.startswith("--"):
+            in_place = True
+        if code is not None:
+            continue
+        if eq and name in flags:
+            code = val
+        elif a in flags and i + 1 < len(args):
+            code = args[i + 1]
+        elif verb == "python":
+            m = re.match(rf"^-[{_PY_NOARG_FLAGS}]*c(.*)$", a, re.S)
+            if m and not a.startswith("--"):
+                code = m.group(1) if m.group(1) else (args[i + 1] if i + 1 < len(args) else "")
+        elif verb in ("perl", "ruby") and re.match(r"^-[A-Za-z0-9.]*[eE]$", a) and i + 1 < len(args):
+            code = args[i + 1]
+    return code, in_place
+
+
 SKIP_WORDS = {"sudo", "time", "nice", "command", "builtin", "exec", "nohup", "stdbuf", "ionice",
               "doas", "chronic", "unbuffer", "caffeinate"}
 #: Options qui prennent une valeur, par verbe (pour ne pas lire la valeur comme un chemin).
@@ -147,8 +189,12 @@ VALUE_OPTS: dict[str, set[str]] = {
 #: Chmod/chown : le premier positionnel est un mode ou un propriétaire.
 FIRST_IS_NOT_PATH = {"chmod", "chown", "chgrp", "chattr", "setfacl"}
 
-#: Sous-commandes git qui écrivent l'arbre de travail.
-GIT_PATH_WRITES = {"checkout", "restore", "rm", "mv", "clean", "update-index"}
+#: Sous-commandes git qui écrivent l'arbre de travail (`clone`/`init`/`worktree`/
+#: `submodule` : un dépôt entier déposé à l'endroit nommé).
+GIT_PATH_WRITES = {"checkout", "restore", "rm", "mv", "clean", "update-index", "clone", "init", "worktree",
+                   "submodule"}
+#: Sous-commandes git qui LISENT le contenu des chemins nommés.
+GIT_PATH_READS = {"show", "cat-file", "diff", "log", "blame", "grep"}
 GIT_TREE_WRITES = {"reset", "stash", "switch", "merge", "pull", "rebase", "revert", "cherry-pick",
                    "checkout-index", "read-tree", "apply", "am"}
 
@@ -183,6 +229,11 @@ PS_DOTNET_WRITE_RE = re.compile(
     r"setattributes|setlastwritetime|open(?!read))|\.(?:delete|moveto|copyto|writealltext|writealllines|"
     r"writeallbytes|appendalltext|create|createtext|appendtext)\s*\(|new-object\s+(?:system\.)?io\.streamwriter|"
     r"\[(?:system\.)?io\.streamwriter\]", re.I)
+#: Lectures .NET : `[IO.File]::ReadAllText('…/.env')` rendait le secret — seules
+#: les écritures .NET étaient reconnues.
+PS_DOTNET_READ_RE = re.compile(
+    r"\[(?:system\.)?io\.file\]::(?:read|openread|opentext|open\b)|new-object\s+(?:system\.)?io\.streamreader|"
+    r"\[(?:system\.)?io\.streamreader\]", re.I)
 PS_OPAQUE_RE = re.compile(r"\[scriptblock\]::create|\$executioncontext|\.invoke\s*\(|add-type", re.I)
 
 # --- Code en ligne ----------------------------------------------------------
@@ -332,6 +383,35 @@ def lex(command: str, dialect: str = "bash") -> tuple[list[_Fragment], list[str]
                     buf.append(" ")
                     i += m.end()
                     continue
+            if ch in "<>":
+                # Une redirection COLLÉE (`echo x>f`, `'x'>f`, `2>f`, `&>f`) :
+                # `shlex` ne coupe pas sur `>`, le jeton `x>f` ne commençait
+                # pas par l'opérateur et l'écriture passait — golden écrit,
+                # rapport de gate fabriqué. L'opérateur devient un jeton à part,
+                # son descripteur (`2`, `&`) avec lui s'il ouvre un mot.
+                j = i + 1
+                op = ch
+                while j < n and command[j] in "<>" and len(op) < 3:
+                    op += command[j]
+                    j += 1
+                if j < n and command[j] in "|&":
+                    op += command[j]
+                    j += 1
+                    if op.endswith("&"):
+                        while j < n and (command[j].isdigit() or command[j] == "-"):
+                            op += command[j]
+                            j += 1
+                k = len(buf)
+                while k > 0 and buf[k - 1].isdigit():
+                    k -= 1
+                if k > 0 and buf[k - 1] == "&" and op.startswith(">"):
+                    k -= 1
+                prefix = buf[k:] if (k == 0 or buf[k - 1] in " \t") else []
+                if prefix:
+                    del buf[k:]
+                buf.extend([" ", *prefix, *op, " "])
+                i = j
+                continue
             if ch == "\n":
                 flush(False)
                 i += 1
@@ -505,6 +585,9 @@ def analyze(root: Path, command: str, cwd: str | Path | None = None, dialect: st
                 _add_write(ctx, result, lit.rstrip(".,"), why="appel .NET d'écriture")
             if not lits and _cwd_governed(ctx):
                 result.opaque.append("appel .NET d'écriture depuis un répertoire courant régi")
+        if PS_DOTNET_READ_RE.search(command):
+            for lit in (x.group(0) for x in GOVERNED_LITERAL_RE.finditer(command)):
+                _add_read(ctx, result, lit.rstrip(".,"), "file")
         if PS_OPAQUE_RE.search(command) and (result.mentions_governed or _cwd_governed(ctx)):
             result.opaque.append("PowerShell dynamique ([scriptblock]::Create, .Invoke, Add-Type)")
     frags, subs = lex(command, dialect)
@@ -601,6 +684,8 @@ def _add_write(ctx: _Ctx, res: Analysis, token: str, *, recursive: bool = False,
             res.opaque.append(f"{why or 'écriture'} vers `{token.replace(MARK, '$?')}` — cible non résolue")
         return
     for p in paths:
+        if recursive and _contains_root(ctx, p):
+            p = "."
         # `.` (la racine du projet) récursif : `git reset --hard`, `rm -rf .` —
         # tout le projet, zones régies comprises.
         if is_governed(p) or (recursive and p == "."):
@@ -619,8 +704,41 @@ def _add_read(ctx: _Ctx, res: Analysis, token: str, scope: str) -> None:
             res.unresolved_reads.append(token.replace(MARK, "$?"))
         return
     for p in paths:
+        if scope != "file" and _contains_root(ctx, p):
+            p = "."
         if is_governed(p) or p in (".",) or p.rsplit("/", 1)[-1].casefold().startswith(".env"):
             res.reads.append((p, scope))
+
+
+def _bulk_read(ctx: _Ctx, res: Analysis, token: str) -> None:
+    """Une lecture EN VRAC d'un répertoire — fichiers cachés compris.
+
+    `find … -exec cat {} +`, `tar -c`, `cp -r`, `Copy-Item -Recurse` lisent
+    tout ce qui est dessous, sans les exclusions de ripgrep : un `.env` y est
+    rendu comme le reste. Jugée comme `grep -r` (`hidden_content_reads`).
+    """
+    _add_read(ctx, res, token, "content")
+    paths, ok = _resolve(ctx, token)
+    if ok:
+        res.hidden_content_reads.extend("." if _contains_root(ctx, p) else p for p in paths)
+
+
+def _contains_root(ctx: _Ctx, rel: str) -> bool:
+    """Un chemin ABSOLU hors projet qui CONTIENT la racine (`..`, `G:/Dev`).
+
+    Rendu tel quel par `relative_to_root`, il semblait « hors projet » : `grep
+    -r LLM_ ..` fouillait `workspace/assets/.env`, et `forbidden_reads` ne voyait
+    rien. Le lire comme la racine elle-même rend la lecture jugeable.
+    """
+    from sdda_scripts import audit_ownership as ao
+
+    if not ao._is_absolute(rel):
+        return False
+    import posixpath
+    r = posixpath.normpath(ao._native(Path(ctx.root).as_posix()))
+    t = posixpath.normpath(ao._native(rel)).rstrip("/")
+    rf, tf = (r.casefold(), t.casefold()) if ao.CASE_INSENSITIVE else (r, t)
+    return rf.startswith(tf + "/") or rf == tf
 
 
 def _verb_of(token: str) -> str:
@@ -842,7 +960,9 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
         code = [a for a in args if a.lower() in ("/c", "/k")]
         if code:
             k = [a.lower() for a in args].index(code[0].lower())
-            _recurse(ctx, res, " ".join(args[k + 1:]), "bash", "`cmd /c`")
+            # cmd n'a pas d'échappement `\` : relu en dialecte bash, `workspace\
+            # assets\.env` devenait `workspaceassets.env` et plus rien n'était régi.
+            _recurse(ctx, res, " ".join(args[k + 1:]).replace("\\", "/"), "bash", "`cmd /c`")
         return
     if verb in ("eval",):
         _recurse(ctx, res, " ".join(args), "bash", "`eval`")
@@ -852,20 +972,27 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
             _script_file(ctx, res, pos[0], verb)
         return
     if verb in CODE_INLINE_FLAGS:
-        flags = CODE_INLINE_FLAGS[verb]
-        code = None
-        for i, a in enumerate(args):
-            if a in flags and i + 1 < len(args):
-                code = args[i + 1]
-                break
-            if verb == "python" and a.startswith("-c") and len(a) > 2:
-                code = a[2:]
-                break
+        code, in_place = _inline_code(verb, args)
         if code is not None:
             _code_analysis(ctx, res, code, verb)
+            if in_place:
+                # `perl -pi -e … fichier` : les fichiers nommés sont RÉÉCRITS.
+                for p in [a for a in pos if a != code]:
+                    _add_write(ctx, res, p, why=f"`{verb} -i`")
             return
-        if verb == "python" and args and args[0] == "-m":
-            return                       # un module installé : hors de portée lexicale
+        if verb == "python" and "-m" in args:
+            # Un module installé : son code est hors de portée lexicale, mais
+            # ses ARGUMENTS ne le sont pas — `python -m base64 .env` lit le
+            # secret, `python -m json.tool a.json <golden>` l'écrit.
+            k = args.index("-m")
+            module = args[k + 1] if k + 1 < len(args) else ""
+            margs = [a for a in args[k + 2:] if not a.startswith("-")]
+            for p in margs:
+                _add_read(ctx, res, p, "file")
+            if module.split(".", 1)[0] in WRITING_MODULES and margs and (
+                    res.mentions_governed or _cwd_governed(ctx)):
+                res.opaque.append(f"`python -m {module}` — écrit des fichiers que l'analyse ne nomme pas")
+            return
         stdin_code = (not pos) or (pos and pos[0] == "-")
         if frag.heredoc is not None and stdin_code:
             _code_analysis(ctx, res, frag.heredoc, verb)
@@ -878,9 +1005,11 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
         inner = pos
         if inner:
             iv = _verb_of(inner[0])
-            if iv in WRITE_ALL | WRITE_LAST | WRITE_MOVE | TEE or iv in SHELLS or iv in CODE_INLINE_FLAGS:
-                if res.mentions_governed or _cwd_governed(ctx):
-                    res.opaque.append(f"`xargs {iv}` — les chemins arrivent par l'entrée standard")
+            # Toujours opaque : `… | base64 -d | xargs rm -f` ne nomme aucun
+            # chemin régi dans son texte — c'est justement l'intérêt de l'encoder.
+            if iv in WRITE_ALL | WRITE_LAST | WRITE_MOVE | TEE or iv in SHELLS or iv in CODE_INLINE_FLAGS \
+                    or iv in ("sed", "perl", "ruby", "dd", "truncate"):
+                res.opaque.append(f"`xargs {iv}` — les chemins arrivent par l'entrée standard")
         return
 
     # --- git ----------------------------------------------------------------
@@ -902,17 +1031,24 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
         for t in _option_values(args, {"-t", "--target-directory"}):
             _add_write(ctx, res, t, why=f"`{verb}`")
         return
+    if verb in ("ln", "link"):
+        # La CIBLE d'un lien est une écriture : `ln -s workspace/pipeline/datasets
+        # vendor` puis `echo x > vendor/golden/g.jsonl` écrivait le golden sous
+        # un nom anodin. Juger la cible comme écrite ferme la voie au lien.
+        for p in pos + _option_values(args, {"-t", "--target-directory"}):
+            _add_write(ctx, res, p, why=f"`{verb}`")
+        return
     if verb in WRITE_LAST:
         targets = _option_values(args, {"-t", "--target-directory"})
         if targets:
             for t in targets:
                 _add_write(ctx, res, t, recursive=True, why=f"`{verb}`")
             for p in pos:
-                _add_read(ctx, res, p, "file")
+                (_bulk_read(ctx, res, p) if any(_recursive_flag(a) for a in args) else _add_read(ctx, res, p, "file"))
         elif pos:
             _add_write(ctx, res, pos[-1], recursive=True, why=f"`{verb}`")
             for p in pos[:-1]:
-                _add_read(ctx, res, p, "content")
+                (_bulk_read(ctx, res, p) if any(_recursive_flag(a) for a in args) else _add_read(ctx, res, p, "content"))
         return
     if verb in TEE:
         for p in pos:
@@ -942,14 +1078,30 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
             or "r" in letters or "u" in letters
         for d in _option_values(args, {"-C", "--directory"}):
             (_add_write(ctx, res, d, recursive=True, why="`tar -x`") if extract else _add_read(ctx, res, d, "content"))
-        if extract and not _option_values(args, {"-C", "--directory"}) and _cwd_governed(ctx):
-            res.opaque.append("`tar -x` extrait dans le répertoire courant, régi")
+        if extract and not _option_values(args, {"-C", "--directory"}):
+            # Une archive porte ses propres chemins (`workspace/pipeline/…`) :
+            # extraite depuis la racine, elle écrit n'importe où dessous.
+            res.opaque.append("`tar -x` sans `-C` — les chemins écrits sont ceux de l'archive")
         for f in _option_values(args, {"-f", "--file"}):
             (_add_write(ctx, res, f, why="`tar -c`") if create else _add_read(ctx, res, f, "file"))
+        if create:
+            # `tar -cf - <chemins>` LIT les chemins nommés : `| cat` rendait un `.env`.
+            skip = set(_option_values(args, {"-f", "--file", "-C", "--directory"}))
+            for p in [a for a in args[1:] if not a.startswith("-") and a not in skip]:
+                _bulk_read(ctx, res, p)
         return
     if verb in ("unzip", "7z", "7za"):
-        for d in _option_values(args, {"-d"}) + [a[2:] for a in args if a.startswith("-o") and verb.startswith("7z")]:
+        dests = _option_values(args, {"-d"}) + [a[2:] for a in args if a.startswith("-o") and verb.startswith("7z")]
+        for d in dests:
             _add_write(ctx, res, d, recursive=True, why=f"`{verb}`")
+        if not dests and (verb == "unzip" or "x" in [a.lower() for a in args[:1]] or "e" in [a.lower() for a in args[:1]]):
+            res.opaque.append(f"`{verb}` sans destination — les chemins écrits sont ceux de l'archive")
+        return
+    if verb == "mklink":
+        # `mklink /J lien cible` : un lien vers une zone régie est une écriture
+        # future de cette zone, sous un nom anodin.
+        for p in [a for a in args if not a.startswith("/")]:
+            _add_write(ctx, res, p, why="`mklink`")
         return
     if verb == "patch":
         for t in _option_values(args, {"-o", "--output"}):
@@ -974,8 +1126,11 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
             _add_write(ctx, res, t, recursive=True, why="`mktemp`")
         return
     if verb in READ_WITH_PROGRAM:
-        in_place = verb in ("sed", "perl", "ruby") and any(
-            a == "-i" or a.startswith("-i") or a == "--in-place" for a in args) \
+        # `-Ei`, `-ni` (lettres groupées) et `--in-place=.bak` réécrivent aussi :
+        # seules `-i…` et `--in-place` nus étaient vus.
+        in_place = verb == "sed" and any(
+            a == "--in-place" or a.startswith("--in-place=")
+            or (not a.startswith("--") and re.match(r"^-[A-Za-z]*i", a) is not None) for a in args) \
             or (verb in ("gawk", "awk") and "inplace" in args)
         has_script_opt = bool(_option_values(args, {"-e", "-f", "--expression", "--file"}))
         files = pos if has_script_opt else pos[1:]
@@ -1005,7 +1160,7 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
                 paths, ok = _resolve(ctx, p)
                 excluded = any(".env" in a for a in args if a.startswith(("--exclude", "-g", "--glob", "--iglob")))
                 if ok and not excluded:
-                    res.hidden_content_reads.extend(paths)
+                    res.hidden_content_reads.extend("." if _contains_root(ctx, x) else x for x in paths)
         return
     if verb in LIST_TREE:
         if verb == "find":
@@ -1025,7 +1180,7 @@ def _verb(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Fragment)
                 elif any(_verb_of(v) in SHELLS or _verb_of(v) in CODE_INLINE_FLAGS for v in exec_verbs):
                     res.opaque.append("`find -exec` d'un interpréteur")
                 elif any(_verb_of(v) in READ_FILE | READ_TREE for v in exec_verbs):
-                    _add_read(ctx, res, r, "content")
+                    _bulk_read(ctx, res, r)
             for t in _option_values(args, {"-fprint", "-fprint0", "-fprintf", "-fls"}):
                 _add_write(ctx, res, t, why="`find -fprint`")
             return
@@ -1048,14 +1203,17 @@ def _recursive_flag(a: str) -> bool:
 def _script_file(ctx: _Ctx, res: Analysis, script: str, verb: str) -> None:
     """Un script sur disque (`python x.py`, `bash build.sh`, `. env.sh`).
 
-    Le hook ne le lit pas, et ne le refuse pas non plus : les agents lancent
-    légitimement l'outillage du framework (`python .sdda/sdda.py …`) et le
-    produit qu'ils construisent (smoke, tests). Refuser tout script rendrait le
-    hook inutilisable ; le lire serait l'interpréter. Ce qu'un script écrit de
+    Le hook ne l'interprète pas, et ne le refuse pas non plus : les agents
+    lancent légitimement l'outillage du framework (`python .sdda/sdda.py …`) et
+    le produit qu'ils construisent (smoke, tests). Ce qu'un script écrit de
     l'intérieur est la limite déclarée de l'analyse lexicale, et c'est
     `audit-ownership --since-snapshot` qui le voit, après la phase.
+
+    Mais EXÉCUTER un fichier le LIT : `source workspace/assets/.env` rend
+    toutes les valeurs dans l'environnement, et c'était un no-op — le secret
+    passait. Le script est donc jugé comme une lecture.
     """
-    return None
+    _add_read(ctx, res, script, "file")
 
 
 def _git(ctx: _Ctx, res: Analysis, args: list[str]) -> None:
@@ -1095,7 +1253,12 @@ def _git(ctx: _Ctx, res: Analysis, args: list[str]) -> None:
         for r in roots:
             _add_read(ctx, res, r, "content")
         return
-    if sub in ("show", "cat-file", "diff", "log", "blame"):
+    if sub in GIT_PATH_READS:
+        # `git diff --no-index /dev/null <fichier>` affiche un fichier entier,
+        # `git show HEAD:<chemin>` un fichier versionné : ce sont des lectures.
+        paths = sargs[sargs.index("--") + 1:] if "--" in sargs else pos
+        for p in paths:
+            _add_read(ctx, res, p.split(":", 1)[1] if re.match(r"^[^/\\:]+:[^/\\]", p) else p, "file")
         return
 
 
@@ -1188,6 +1351,25 @@ def _ps_fragment(ctx: _Ctx, frag: _Fragment, res: Analysis) -> None:
     _verb(ctx, res, _verb_of(tokens[0]), args, frag)
 
 
+def _ps_param(name: str) -> str:
+    """Un paramètre PowerShell ABRÉGÉ -> son nom complet.
+
+    PowerShell accepte tout préfixe non ambigu (`-Dest`, `-LiteralP`, `-Val`) :
+    la correspondance exacte laissait `Copy-Item … -Dest <golden>` écrire sans
+    que la destination soit vue. Un préfixe ambigu est résolu vers le chemin
+    plutôt que vers la valeur : juger un argument de trop comme un chemin coûte
+    moins cher que d'en laisser passer un.
+    """
+    known = PS_PATH_PARAMS | PS_DEST_PARAMS | PS_VALUE_PARAMS | {"-target"}
+    if name in known or len(name) < 3:
+        return name
+    for family in (PS_PATH_PARAMS, PS_DEST_PARAMS, {"-target"}, PS_VALUE_PARAMS):
+        hits = sorted(p for p in family if p.startswith(name))
+        if hits:
+            return hits[0]
+    return name
+
+
 def _ps_split(args: list[str]) -> tuple[dict[str, list[str]], list[str]]:
     named: dict[str, list[str]] = {}
     positional: list[str] = []
@@ -1196,10 +1378,10 @@ def _ps_split(args: list[str]) -> tuple[dict[str, list[str]], list[str]]:
         a = args[i]
         if a.startswith("-") and len(a) > 1 and not re.match(r"^-\d", a):
             name, colon, val = a.partition(":")
-            name = name.lower()
+            name = _ps_param(name.lower())
             if colon:
                 named.setdefault(name, []).append(val)
-            elif name in PS_PATH_PARAMS | PS_DEST_PARAMS | PS_VALUE_PARAMS and i + 1 < len(args):
+            elif name in PS_PATH_PARAMS | PS_DEST_PARAMS | PS_VALUE_PARAMS | {"-target"} and i + 1 < len(args):
                 named.setdefault(name, []).append(args[i + 1])
                 i += 1
             else:
@@ -1244,7 +1426,7 @@ def _ps_cmdlet(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Frag
         src = paths or pos[:1]
         dst = dests or pos[1:2]
         for s in src:
-            _add_read(ctx, res, s, "content")
+            (_bulk_read(ctx, res, s) if recursive else _add_read(ctx, res, s, "content"))
         for d in dst:
             _add_write(ctx, res, d, recursive=True, why="`Copy-Item`")
         return
@@ -1266,10 +1448,15 @@ def _ps_cmdlet(ctx: _Ctx, res: Analysis, verb: str, args: list[str], frag: _Frag
         base = targets[0] if targets else "."
         targets = [base.rstrip("/\\") + "/" + named["-name"][0]]
     if verb in PS_WRITE_PATH:
-        is_dir = verb == "new-item" and any(
-            v.lower() == "directory" for v in named.get("-itemtype", []) + named.get("-type", []))
+        kinds = [v.lower() for v in named.get("-itemtype", []) + named.get("-type", [])]
+        is_dir = verb == "new-item" and "directory" in kinds
         for p in targets:
             _add_write(ctx, res, p, recursive=recursive, why=f"`{verb}`", directory=is_dir)
+        if verb == "new-item" and any(k in ("symboliclink", "junction", "hardlink") for k in kinds):
+            # La CIBLE d'un lien est une écriture future (cf. `ln`) : sans ce
+            # jugement, une jonction vers `pipeline/datasets` ouvrait le golden.
+            for t in named.get("-target", []) + named.get("-value", []):
+                _add_write(ctx, res, t, recursive=True, why="`New-Item` lien")
         return
     if verb in PS_READ_PATH:
         for p in targets:

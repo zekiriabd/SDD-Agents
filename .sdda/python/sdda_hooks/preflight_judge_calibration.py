@@ -6,72 +6,57 @@ rendre un verdict BLOQUANT sans l'avoir validé contre des labels humains ne
 l'est pas : on mesure alors la complaisance d'un modèle envers un autre —
 souvent le même — et on appelle ça de la qualité.
 
-Un juge non calibré n'est pas interdit : il est rétrogradé en `advisory`. C'est
-la nuance qui rend la règle tenable — sinon elle se contourne le jour où elle
-gêne, et elle ne revient jamais.
+Un juge non calibré n'est pas interdit : il est rétrogradé en `advisory`, et
+c'est l'eval runner qui le fait, en ne donnant au juge que la calibration
+MESURÉE par `calibrate-judge` (`calibration.measured_for_suite`). Ce hook
+garde ce que le runner ne peut pas rattraper : lancer un agent d'évaluation
+alors que la calibration mesurée de la MISSION est ROUGE — labels synthétiques
+(`[JUDGE_CALIBRATION_SYNTHETIC]`), ou juge déclaré bloquant sans repli advisory.
+
+Il lisait une clé `blocking` que rien n'écrit, dans les ENTRÉES de calibration
+(`pipeline/calibration/`) : il autorisait donc tout, toujours.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _hook import ALLOW, EVAL_BUILDERS, allow, deny, run  # noqa: E402
+from _hook import EVAL_BUILDERS, allow, deny, mission_of, run  # noqa: E402
 
 HOOK = "preflight_judge_calibration"
 
 #: Câblage — lu par `harness_build.py`. Devant ceux qui font rendre un verdict
 #: à un juge. Un juge non calibré n'est pas refusé, il est rétrogradé en
-#: `advisory` : le refus ne porte que sur un juge déclaré BLOQUANT sans mesure.
+#: `advisory` : le refus ne porte que sur une calibration mesurée ROUGE.
 WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": EVAL_BUILDERS}
 
 
 def check(root: Path, data: dict) -> int:
-    from sdda_lib.layered_config import read_layered_config  # noqa: E402
-    from sdda_scripts import calibrate_judge  # noqa: E402
+    from sdda_lib import gate_reports, paths  # noqa: E402 — import tardif : coût de démarrage du hook
 
-    try:
-        config = read_layered_config(root)
-        min_kappa = config.get_float("JudgeCalibrationMinKappa", 0.6)
-        min_items = config.get_int("JudgeCalibrationMinItems", 50)
-    except Exception:
-        min_kappa, min_items = 0.6, 50
-
-    from sdda_lib import paths  # noqa: E402 — import tardif : coût de démarrage du hook
-
-    # Par `paths`, jamais par un chemin assemblé à la main. Assemblé ici, il a
-    # survécu intact à la réorganisation de l'arbre : le hook cherchait dans un
-    # répertoire disparu, n'y trouvait rien, concluait « aucun rapport de
-    # calibration » et AUTORISAIT. Un juge bloquant non calibré serait passé,
-    # et le message de sortie aurait dit que tout allait bien.
-    cal_dir = paths.calibration_dir(root)
-    reports = list(cal_dir.glob("*.json")) if cal_dir.is_dir() else []
-    if not reports:
-        return allow("aucun rapport de calibration — les juges restent en `advisory` jusqu'à mesure")
-
-    import json  # noqa: E402
-
-    uncalibrated: list[str] = []
-    for path in sorted(reports):
+    mission = mission_of(data)
+    vdir = paths.validation_dir(root)
+    candidates = ([gate_reports.report_path(root, "G5", mission, "calibration")] if mission
+                  else sorted(vdir.glob("G5-*.calibration.json")) if vdir.is_dir() else [])
+    red: list[str] = []
+    for path in candidates:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            report = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             continue
-        if not payload.get("blocking", False):
-            continue  # juge `advisory` : la calibration n'est pas exigée
-        kappa = payload.get("kappa")
-        items = payload.get("items") or payload.get("n") or 0
-        if not isinstance(kappa, (int, float)) or kappa < min_kappa or int(items) < min_items:
-            uncalibrated.append(f"{path.stem} (kappa={kappa}, n={items})")
-
-    if not uncalibrated:
-        return ALLOW
+        if isinstance(report, dict) and not report.get("ok", True):
+            classes = sorted({str(e.get("class", "?")) for e in report.get("errors") or []})
+            red.append(f"{path.name} : {', '.join(classes) or 'rouge'}")
+    if not red:
+        return allow("calibration mesurée non rouge — un juge non calibré reste `advisory`")
     return deny(HOOK, "JUDGE_NOT_CALIBRATED",
-                f"{len(uncalibrated)} juge(s) bloquant(s) non calibré(s) — {uncalibrated[0]}",
-                f"calibrer contre >= {min_items} labels humains jusqu'à kappa >= {min_kappa} "
-                f"(`calibrate_judge.py`), ou basculer le juge en `advisory`. "
-                f"Module : {calibrate_judge.__name__}")
+                f"calibration mesurée ROUGE — {red[0]}",
+                "faire labelliser les items de calibration par un humain et relancer "
+                "`python .sdda/sdda.py calibrate-judge --mission {n}` ; un juge sans mesure reste "
+                "`advisory` (score informatif), il ne bloque rien")
 
 
 def main() -> int:

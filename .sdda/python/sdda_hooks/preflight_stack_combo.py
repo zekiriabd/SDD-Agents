@@ -201,7 +201,10 @@ def _check_languages(activated: list[tuple[str, str]]) -> tuple[list[str], list[
 #: Vector stores qui peuvent vivre DANS la base métier — `Mode:
 #: same-as-database` n'est légitime que pour eux. Tous les autres sont des
 #: services distincts : sans `Endpoint`, personne ne sait où ils sont.
-EMBEDDED_STORES = {"pgvector"}
+#: Les variantes par écosystème sont le MÊME pgvector (extension de la base
+#: PostgreSQL), lu par un autre pilote : sans elles, toute combo C#, TypeScript
+#: ou JVM était refusée alors que son index vit bien dans la base métier.
+EMBEDDED_STORES = {"pgvector", "pgvector-dotnet", "pgvector-node", "pgvector-jvm"}
 
 
 def _retrieval_drift(root: Path, activated: list[tuple[str, str]]) -> str | None:
@@ -535,7 +538,8 @@ def check(root: Path, data: dict) -> int:
             "n'aura pas lieu, ou l'index sera cherché dans la base métier. Aucune des deux pannes "
             "ne se voit à l'exécution. Accorder RerankEnabled avec `## Active Reranker`, et "
             "VectorStoreConnection.Mode avec le store actif (`same-as-database` n'est légitime que "
-            "pour pgvector ; tout autre store exige Mode: dedicated + Endpoint)",
+            "pour pgvector et ses variantes -dotnet, -node, -jvm ; tout autre store exige Mode: "
+            "dedicated + Endpoint)",
         )
 
     notes: list[str] = []

@@ -1069,6 +1069,17 @@ def _sha(path: Path) -> str:
 
 #: Un instantané qui n'a pas pu être posé. Littéral ici pour le registre.
 CLS_SNAPSHOT_FAILED = "OWNERSHIP_SNAPSHOT_FAILED"
+#: Une entrée humaine modifiée pendant une phase : signalée, jamais révoquée.
+CLS_HUMAN_INPUT_CHANGED = "OWNERSHIP_HUMAN_INPUT_CHANGED"
+
+#: Ce que l'HUMAIN fournit (ARCHITECTURE §2.ter) — jamais révoqué par l'audit.
+HUMAN_INPUT_PREFIXES = ("workspace/stack/", "workspace/feats/", "workspace/assets/", "workspace/seed/")
+
+
+def _is_human_input(path: str) -> bool:
+    p = normalize(path)
+    folded = p.casefold() if CASE_INSENSITIVE else p
+    return is_secret_file(p) or any(folded.startswith(h) for h in HUMAN_INPUT_PREFIXES)
 
 
 class SnapshotError(OSError):
@@ -1201,6 +1212,17 @@ def check_since_snapshot(root: Path, loader: dict[str, Any], report: Report, *, 
     violations: list[dict[str, str]] = []
     for kind in ("created", "modified", "deleted"):
         for path in changes[kind]:
+            if _is_human_input(path):
+                # Ce que l'humain fournit peut changer PENDANT une phase (il
+                # corrige STACK.md, dépose une donnée) : l'audit ne sait pas
+                # distinguer sa main de celle d'un agent — que les hooks
+                # refusent déjà ici. Signalé, jamais révoqué : `--restore`
+                # effaçait une donnée déposée ou annulait une correction humaine.
+                report.warn(CLS_HUMAN_INPUT_CHANGED, f"phase {phase} : entrée humaine `{path}` {kind}",
+                            fix="si ce n'est pas vous, un agent a écrit hors de sa zone : relire le diff "
+                                "et restaurer à la main (git) — l'audit ne révoque jamais une entrée humaine",
+                            location=path)
+                continue
             if frozen and any(matches(f, path) for f in frozen):
                 violations.append({"path": path, "kind": kind, "class": CLS_FROZEN_ZONE_CHANGED})
                 report.error(CLS_FROZEN_ZONE_CHANGED, f"`{path}` {kind} alors que sa zone est GELÉE pour la phase {phase}",
@@ -1233,8 +1255,11 @@ def check_since_snapshot(root: Path, loader: dict[str, Any], report: Report, *, 
             path, kind = v["path"], v["kind"]
             target = root / path
             if kind == "created":
+                # En QUARANTAINE, pas supprimé : une révocation à tort ne détruit rien.
+                parked = snapshot_dir(root, mission, phase) / "quarantine" / path
                 try:
-                    target.unlink()
+                    parked.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(target, parked)
                     restored.append(path)
                 except OSError:
                     pass

@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _hook import PHASE2_ARCHITECTS, require_gate, run  # noqa: E402
+from _hook import PHASE2_ARCHITECTS, mission_of, require_gate, run  # noqa: E402
 
 HOOK = "preflight_cap_gate"
 
@@ -24,7 +24,7 @@ WIRING = {"event": "PreToolUse", "matcher": "Task|Agent", "applies_to": PHASE2_A
 
 def check(root: Path, data: dict) -> int:
     return require_gate(
-        HOOK, root, "G1", data.get("mission"),
+        HOOK, root, "G1", mission_of(data),
         "CAP_GATE_NOT_PASSED",
         "lancer `/sdda-caps {n}` et obtenir un verdict vert avant `/sdda-topology`. "
         "Un AC non mesurable est [AC_NOT_EVALUABLE] : il se corrige dans la CAP, pas plus tard",

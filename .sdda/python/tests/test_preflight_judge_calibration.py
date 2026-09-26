@@ -1,8 +1,10 @@
-"""preflight_judge_calibration — aucun juge BLOQUANT ne rend de verdict sans mesure (P9).
+"""preflight_judge_calibration — aucun agent d'évaluation sur une calibration mesurée ROUGE (P9).
 
-Le hook ne refuse que le juge déclaré `blocking` et non calibré. Un juge
-`advisory` n'est pas concerné : c'est la nuance qui rend la règle tenable —
-sinon elle se contourne le jour où elle gêne.
+Un juge non calibré est rétrogradé en `advisory` par l'eval runner lui-même
+(il ne reçoit que la calibration mesurée par `calibrate-judge`). Le hook garde
+ce que le runner ne rattrape pas : une calibration mesurée rouge — labels
+synthétiques, juge bloquant sans repli. Il lisait une clé `blocking` que rien
+n'écrivait, dans les ENTRÉES de calibration : il autorisait tout, toujours.
 
 Comme dans `test_hooks.py`, on appelle `check` directement pour le verdict ; le
 périmètre (`applies_to`) et la dégradation sûre passent par `main()`, en
@@ -12,7 +14,6 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
 from contextlib import redirect_stderr
 from pathlib import Path
 
@@ -22,8 +23,7 @@ from sdda_hooks import _hook
 from sdda_hooks import preflight_judge_calibration as hook
 
 ALLOW, DENY = _hook.ALLOW, _hook.DENY
-CAL_DIR = "workspace/pipeline/calibration"
-STACK = "workspace/stack/STACK.md"
+VAL_DIR = "workspace/.sys/.validation"
 
 
 def call(project: Path, **payload) -> tuple[int, str]:
@@ -43,195 +43,77 @@ def via_harness(monkeypatch: pytest.MonkeyPatch, project: Path, **payload) -> tu
     return code, buf.getvalue()
 
 
-def write_judge(project: Path, name: str = "groundedness", **fields) -> None:
-    path = project / CAL_DIR / f"{name}.json"
+def write_measured(project: Path, mission: str = "1", *, ok: bool, classes: tuple[str, ...] = ()) -> None:
+    """Le rapport que `calibrate-judge` écrit : `G5-{n}.calibration.json`."""
+    path = project / VAL_DIR / f"G5-{mission}.calibration.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"grader": name, **fields}), encoding="utf-8")
-
-
-def set_config(project: Path, **values) -> None:
-    path = project / STACK
-    text = path.read_text(encoding="utf-8")
-    extra = "".join(f"{k}: {v}\n" for k, v in values.items())
-    path.write_text(text.replace("AppName: SupportAssistant\n", "AppName: SupportAssistant\n" + extra, 1),
+    path.write_text(json.dumps({"gate": "G5", "artifact": mission, "part": "calibration", "ok": ok,
+                                "errors": [{"class": c, "message": "x"} for c in classes], "warnings": []}),
                     encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Le contrat de câblage
-# ---------------------------------------------------------------------------
+def brief(mission: str) -> dict:
+    return {"tool_name": "Task", "tool_input": {"subagent_type": "qa-evals", "prompt": f"MISSION : {mission}\n…"}}
+
+
 def test_the_hook_is_wired_on_task_for_the_eval_builders() -> None:
     assert hook.HOOK == "preflight_judge_calibration" and callable(hook.main)
-    # Les deux noms de l'outil de délégation : `Task` dans Claude Code, `Agent`
-    # dans l'Agent SDK. Un matcher qui n'en nomme qu'un ne se plaint pas, il ne
-    # se déclenche jamais.
     assert hook.WIRING["event"] == "PreToolUse" and hook.WIRING["matcher"] == "Task|Agent"
     assert hook.WIRING["applies_to"] == _hook.EVAL_BUILDERS
     assert "qa-evals" in hook.WIRING["applies_to"]
 
 
-# ---------------------------------------------------------------------------
-# Autorisé : rien à exiger
-# ---------------------------------------------------------------------------
-def test_the_fixture_judge_is_not_blocking_so_nothing_is_required(project: Path) -> None:
-    """`groundedness.json` ne porte pas `blocking` : un juge advisory n'a pas à être calibré."""
-    code, err = call(project)
-    assert code == ALLOW, err
-
-
-def test_no_calibration_dir_allows_and_says_why(project: Path) -> None:
-    shutil.rmtree(project / CAL_DIR)
+def test_no_measured_calibration_allows_and_says_advisory(project: Path) -> None:
     code, err = call(project)
     assert code == ALLOW and "advisory" in err
 
 
-def test_an_empty_calibration_dir_allows(project: Path) -> None:
-    (project / CAL_DIR / "groundedness.json").unlink()
-    assert call(project)[0] == ALLOW
+def test_a_green_measured_calibration_allows(project: Path) -> None:
+    write_measured(project, ok=True)
+    assert call(project, **brief("1"))[0] == ALLOW
 
 
-def test_a_blocking_judge_above_both_thresholds_passes(project: Path) -> None:
-    write_judge(project, blocking=True, kappa=0.71, items=52)
-    code, err = call(project)
-    assert code == ALLOW, err
-
-
-def test_n_is_accepted_as_an_alias_of_items(project: Path) -> None:
-    write_judge(project, blocking=True, kappa=0.8, n=60)
-    assert call(project)[0] == ALLOW
-
-
-def test_an_unreadable_report_is_skipped_not_a_reason_to_refuse(project: Path) -> None:
-    write_judge(project, blocking=True, kappa=0.8, items=60)
-    (project / CAL_DIR / "casse.json").write_text("{ pas du json", encoding="utf-8")
-    assert call(project)[0] == ALLOW
-
-
-def test_a_bom_prefixed_report_is_still_read(project: Path) -> None:
-    path = project / CAL_DIR / "groundedness.json"
-    path.write_text(json.dumps({"blocking": True, "kappa": 0.2, "items": 60}), encoding="utf-8-sig")
-    code, err = call(project)
-    assert code == DENY and "JUDGE_NOT_CALIBRATED" in err
-
-
-# ---------------------------------------------------------------------------
-# Refusé : un juge bloquant sans mesure suffisante
-# ---------------------------------------------------------------------------
-def test_a_blocking_judge_under_kappa_is_refused_with_a_fix(project: Path) -> None:
-    write_judge(project, blocking=True, kappa=0.3, items=60)
-    code, err = call(project)
+def test_a_red_measured_calibration_refuses_with_its_classes(project: Path) -> None:
+    write_measured(project, ok=False, classes=("JUDGE_CALIBRATION_SYNTHETIC",))
+    code, err = call(project, **brief("1"))
     assert code == DENY
-    assert "CAUSE: [JUDGE_NOT_CALIBRATED]" in err and "groundedness (kappa=0.3, n=60)" in err
-    assert "FIX:" in err and "calibrate_judge" in err and "advisory" in err
+    assert "CAUSE: [JUDGE_NOT_CALIBRATED]" in err and "JUDGE_CALIBRATION_SYNTHETIC" in err
+    assert "FIX:" in err and "calibrate-judge" in err
 
 
-def test_a_blocking_judge_with_too_few_items_is_refused(project: Path) -> None:
-    write_judge(project, blocking=True, kappa=0.9, items=10)
-    code, err = call(project)
-    assert code == DENY and "n=10" in err
+def test_the_red_report_of_another_mission_does_not_block_this_one(project: Path) -> None:
+    """La mission se lit dans le brief (`MISSION : n`) : un rouge de la mission 2 ne ferme pas la 1."""
+    write_measured(project, "2", ok=False, classes=("JUDGE_CALIBRATION_SYNTHETIC",))
+    assert call(project, **brief("1"))[0] == ALLOW
+    assert call(project, **brief("2"))[0] == DENY
 
 
-def test_a_blocking_judge_without_kappa_is_refused(project: Path) -> None:
-    """Un kappa absent n'est pas un kappa parfait."""
-    write_judge(project, blocking=True, items=60)
-    code, err = call(project)
-    assert code == DENY and "kappa=None" in err
-
-
-def test_a_non_numeric_kappa_is_refused(project: Path) -> None:
-    write_judge(project, blocking=True, kappa="0.9", items=60)
-    assert call(project)[0] == DENY
-
-
-def test_one_bad_judge_among_good_ones_is_enough_to_refuse(project: Path) -> None:
-    write_judge(project, "groundedness", blocking=True, kappa=0.9, items=60)
-    write_judge(project, "tone", blocking=True, kappa=0.1, items=60)
-    code, err = call(project)
-    assert code == DENY and "1 juge(s)" in err and "tone" in err
-
-
-def test_the_default_thresholds_are_those_of_the_base_config(project: Path) -> None:
-    write_judge(project, blocking=True, kappa=0.59, items=50)
-    assert call(project)[0] == DENY
-    write_judge(project, blocking=True, kappa=0.6, items=49)
-    assert call(project)[0] == DENY
-    write_judge(project, blocking=True, kappa=0.6, items=50)
+def test_the_old_inputs_with_a_blocking_key_no_longer_decide(project: Path) -> None:
+    """Les ENTRÉES `pipeline/calibration/*.json` ne sont pas le verdict : seul le rapport mesuré l'est."""
+    path = project / "workspace/pipeline/calibration/tone.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"blocking": True, "kappa": 0.1, "items": 5}), encoding="utf-8")
     assert call(project)[0] == ALLOW
 
 
-# ---------------------------------------------------------------------------
-# Configuration : seuils du projet, config illisible
-# ---------------------------------------------------------------------------
-def test_the_project_config_threshold_is_honoured(project: Path) -> None:
-    set_config(project, JudgeCalibrationMinKappa=0.8)
-    write_judge(project, blocking=True, kappa=0.71, items=52)
-    code, err = call(project)
-    assert code == DENY and "kappa >= 0.8" in err
+def test_an_unreadable_report_is_skipped(project: Path) -> None:
+    path = project / VAL_DIR / "G5-1.calibration.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{ pas du json", encoding="utf-8")
+    assert call(project, **brief("1"))[0] == ALLOW
 
 
-def test_the_project_config_item_floor_is_honoured(project: Path) -> None:
-    set_config(project, JudgeCalibrationMinItems=100)
-    write_judge(project, blocking=True, kappa=0.9, items=60)
-    code, err = call(project)
-    assert code == DENY and ">= 100 labels" in err
-
-
-def test_an_unreadable_config_falls_back_to_the_framework_defaults(
+def test_an_out_of_scope_agent_passes_even_on_a_red_calibration(
         project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Le projet relâche le seuil à 0,3 — mais sa config est refusée : on juge à 0,6.
-
-    Dégrader vers les défauts du framework, jamais vers « tout passe » : une
-    config illisible ne doit pas devenir le moyen d'éteindre le contrôle.
-    """
-    set_config(project, JudgeCalibrationMinKappa=0.3, ZzzCleInconnue=1)
-    write_judge(project, blocking=True, kappa=0.5, items=60)
-
-    # Sanity : lisible (mode non strict), le seuil du projet s'applique.
-    assert call(project)[0] == ALLOW
-
-    monkeypatch.setenv("SDDA_CONFIG_STRICT", "1")   # la clé inconnue rend la config fatale
-    code, err = call(project)
-    assert code == DENY and "kappa >= 0.6" in err
-
-
-# ---------------------------------------------------------------------------
-# Périmètre et dégradation, par le chemin réel du harnais
-# ---------------------------------------------------------------------------
-def test_an_out_of_scope_agent_passes_even_with_an_uncalibrated_judge(
-        project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`po-elicitor` en phase 0 n'a rien à faire d'un juge : le refuser paralyserait le pipeline."""
-    write_judge(project, blocking=True, kappa=0.1, items=5)
-    code, err = via_harness(monkeypatch, project, tool_name="Task",
-                            tool_input={"subagent_type": "po-elicitor"})
+    write_measured(project, ok=False, classes=("JUDGE_CALIBRATION_SYNTHETIC",))
+    code, err = via_harness(monkeypatch, project, tool_name="Task", tool_input={"subagent_type": "po-elicitor"})
     assert code == ALLOW, err
-    assert "JUDGE_NOT_CALIBRATED" not in err
 
 
 def test_an_in_scope_agent_is_refused(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    write_judge(project, blocking=True, kappa=0.1, items=5)
-    code, err = via_harness(monkeypatch, project, tool_name="Task",
-                            tool_input={"subagent_type": "qa-evals"})
+    write_measured(project, ok=False, classes=("JUDGE_CALIBRATION_SYNTHETIC",))
+    code, err = via_harness(monkeypatch, project, **brief("1"))
     assert code == DENY and "JUDGE_NOT_CALIBRATED" in err
-
-
-def test_no_agent_named_means_the_hook_rules(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Invocation manuelle ou CI : refuser de juger faute d'étiquette rendrait le filet inutile."""
-    write_judge(project, blocking=True, kappa=0.1, items=5)
-    code, err = via_harness(monkeypatch, project, tool_name="Task")
-    assert code == DENY and "JUDGE_NOT_CALIBRATED" in err
-
-
-def test_the_identity_is_read_at_the_root_as_well_as_under_tool_input(
-        project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    write_judge(project, blocking=True, kappa=0.1, items=5)
-    assert via_harness(monkeypatch, project, subagent_type="dev-agent")[0] == ALLOW
-    assert via_harness(monkeypatch, project, subagent_type="dev-orchestration")[0] == DENY
-
-
-def test_an_in_scope_agent_on_a_calibrated_project_passes(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    write_judge(project, blocking=True, kappa=0.8, items=60)
-    code, err = via_harness(monkeypatch, project, tool_input={"subagent_type": "qa-tests"})
-    assert code == ALLOW, err
 
 
 def test_a_crash_inside_check_degrades_to_allow(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:

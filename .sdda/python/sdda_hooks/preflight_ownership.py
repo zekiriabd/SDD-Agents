@@ -110,7 +110,7 @@ def verdict_for(root: Path, loader: dict, agent: str, rel: str, data: dict) -> i
         return ALLOW
 
     if not isinstance(loader.get(agent), dict):
-        return unknown_subagent(HOOK, agent, rel)
+        return unknown_subagent(HOOK, agent, rel, write=True)
 
     bindings, verdict = bindings_for(root, loader, agent, rel, data)
     if verdict != ALLOW:

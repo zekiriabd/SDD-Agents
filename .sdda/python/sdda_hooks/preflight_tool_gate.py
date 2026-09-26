@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _hook import AGENT_BUILDERS, ALLOW, allow, bypassed, deny, gate_status, run  # noqa: E402
+from _hook import AGENT_BUILDERS, ALLOW, allow, bypassed, deny, gate_status, mission_of, run  # noqa: E402
 
 HOOK = "preflight_tool_gate"
 
@@ -29,7 +29,9 @@ NEVER_BYPASSED = ("SIDE_EFFECT_UNDECLARED", "SAFETY_STRATEGY_MISSING", "TOOL_RET
 
 
 def check(root: Path, data: dict) -> int:
-    verdict, reasons = gate_status(root, "G3", data.get("mission"))
+    # `gate_status` rend désormais TOUTES les classes d'un rapport rouge : une
+    # classe jamais bypassée placée en 4e position n'échappe plus au refus.
+    verdict, reasons = gate_status(root, "G3", mission_of(data))
     if verdict == "green":
         return ALLOW
 

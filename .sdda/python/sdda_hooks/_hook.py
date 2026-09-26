@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -347,12 +348,36 @@ def agent_of(data: dict[str, Any]) -> str:
 WORKSPACE_PREFIX = "workspace/"
 
 
-def unknown_subagent(hook: str, agent: str, rel: str) -> int:
-    """Verdict pour un SOUS-AGENT absent de `loader.yml` : refus sous `workspace/`."""
+#: Ce qui APPLIQUE la matrice : un sous-agent hors matrice qui les réécrit
+#: neutralise les hooks — pour lui et pour tous les agents après lui. C'était
+#: le cas que le module disait fermer (« general-purpose à qui l'on dit tu es
+#: dev-agent ») : il réécrivait `_hook.py`, puis écrivait dans le workspace.
+ENFORCEMENT_FILES = (
+    ".sdda/python/sdda_hooks/", ".sdda/loader.yml", ".sdda/agent-bounds.yaml", ".sdda/INVARIANTS.yml",
+    ".claude/settings.json", ".claude/settings.local.json", ".codex/hooks.json", ".codex/config.toml",
+    ".gemini/settings.json", ".agents/hooks.json", ".git/hooks/",
+)
+#: Le développement du FRAMEWORK par sous-agents est légitime : il se déclare,
+#: il ne se devine pas.
+FRAMEWORK_DEV_ENV = "SDDA_FRAMEWORK_DEV"
+
+
+def unknown_subagent(hook: str, agent: str, rel: str, *, write: bool = False) -> int:
+    """Verdict pour un SOUS-AGENT absent de `loader.yml` : refus sous `workspace/`,
+    et refus d'ÉCRIRE ce qui applique la matrice (`ENFORCEMENT_FILES`)."""
     from sdda_scripts.audit_ownership import CASE_INSENSITIVE, normalize  # noqa: E402
 
     normalized = normalize(rel)
     probe = normalized.casefold() if CASE_INSENSITIVE else normalized
+    if write and not bypassed(FRAMEWORK_DEV_ENV):
+        for guarded in ENFORCEMENT_FILES:
+            g = guarded.casefold() if CASE_INSENSITIVE else guarded
+            if probe == g.rstrip("/") or (g.endswith("/") and probe.startswith(g)):
+                return deny(hook, "OWNERSHIP_AGENT_UNKNOWN",
+                            f"`{agent}` n'est dans aucune matrice et réécrit `{normalized}`, qui applique la matrice",
+                            "un sous-agent hors matrice ne touche ni aux hooks, ni à loader.yml, ni aux réglages "
+                            f"de hooks des harnais ; pour développer le framework par sous-agents, lancer la "
+                            f"session avec `{FRAMEWORK_DEV_ENV}=1` (décision explicite, pas une déduction)")
     if not (probe == WORKSPACE_PREFIX.rstrip("/") or probe.startswith(WORKSPACE_PREFIX)):
         return ALLOW  # hors du workspace : pas notre affaire
     return deny(hook, "OWNERSHIP_AGENT_UNKNOWN",
@@ -385,6 +410,89 @@ def out_of_scope(data: dict[str, Any], applies_to: tuple[str, ...]) -> bool:
     return agent not in applies_to
 
 
+# ---------------------------------------------------------------------------
+# Payloads des autres harnais -> forme Claude Code
+# ---------------------------------------------------------------------------
+# Tous les hooks jugent `tool_name` + `tool_input.file_path` / `.command` /
+# `.subagent_type` : la forme Claude Code. Un payload Gemini (`write_file`) ou
+# Codex (`apply_patch`) qui arrivait tel quel était un outil inconnu, donc
+# AUTORISÉ — un hook câblé et muet. La commande générée par `harness_build`
+# pose `SDDA_HARNESS` ; sans elle (Claude Code, appel manuel), rien ne change.
+#
+# Ce qui n'est PAS traduit, faute de source : l'identité de l'agent auteur
+# d'un appel (aucun des deux payloads ne la porte) — les hooks qui en dépendent
+# ne sont pas câblés sur ces harnais (cf. `harness_build`, rapport d'impact).
+HARNESS_ENV = "SDDA_HARNESS"
+
+#: https://geminicli.com/docs/reference/tools/ — nom Gemini -> nom Claude.
+_GEMINI_TOOLS = {"write_file": "Write", "replace": "Edit", "read_file": "Read", "glob": "Glob",
+                 "list_directory": "Glob", "grep_search": "Grep", "run_shell_command": "Bash"}
+
+#: En-têtes de fichier de la grammaire `apply_patch` de Codex
+#: (github.com/openai/codex, codex-rs/apply-patch/apply_patch_tool_instructions.md).
+_PATCH_FILE_RE = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*$", re.M)
+
+
+def _command_text(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        import shlex
+        return shlex.join(str(v) for v in value)
+    return str(value or "")
+
+
+def foreign_payloads(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Le payload traduit en une ou plusieurs actions de forme Claude Code."""
+    harness = os.environ.get(HARNESS_ENV, "").strip().lower()
+    if harness in ("", "claude-code"):
+        return [data]
+    tool = str(data.get("tool_name") or "")
+    tool_input = data.get("tool_input")
+    raw: dict[str, Any] = tool_input if isinstance(tool_input, dict) else {}
+    base = {k: v for k, v in data.items() if k not in ("tool_name", "tool_input")}
+
+    def action(name: str, tool_input: dict[str, Any], **extra: Any) -> dict[str, Any]:
+        return {**base, **extra, "tool_name": name, "tool_input": tool_input}
+
+    if harness == "gemini-cli":
+        mapped = _GEMINI_TOOLS.get(tool)
+        if mapped in ("Write", "Edit", "Read"):
+            return [action(mapped, dict(raw))]
+        if mapped == "Glob":
+            return [action("Glob", {"pattern": raw.get("pattern", ""), "path": raw.get("dir_path") or "."})]
+        if mapped == "Grep":
+            return [action("Grep", {"pattern": raw.get("pattern", ""), "path": raw.get("dir_path") or ".",
+                                    "glob": raw.get("include_pattern") or ""})]
+        if mapped == "Bash":
+            extra = {}
+            if raw.get("dir_path"):
+                extra["cwd"] = str(Path(str(data.get("cwd") or ".")) / str(raw["dir_path"]))
+            return [action("Bash", {"command": _command_text(raw.get("command"))}, **extra)]
+        if tool == "read_many_files":
+            items = raw.get("include") or []
+            items = [items] if isinstance(items, str) else list(items)
+            return [action("Grep", {"pattern": "", "path": ".", "glob": str(i)}) if any(c in str(i) for c in "*?[{")
+                    else action("Read", {"file_path": str(i)}) for i in items] or [data]
+        if tool:
+            # « Subagents are exposed to the main agent as a tool of the same
+            # name » (geminicli.com/docs/core/subagents/) : les hooks de spawn
+            # ne sont câblés que sur les noms des agents. Les paramètres de cet
+            # outil ne sont pas documentés : tout texte qu'il porte tient lieu
+            # de `prompt` (là où vivent `SDDA-INSTANCE:` et les marqueurs).
+            prompt = "\n".join(str(v) for v in raw.values() if isinstance(v, str))
+            return [action("Agent", {"subagent_type": tool, "prompt": prompt})]
+        return [data]
+
+    if harness == "codex":
+        if tool == "apply_patch":
+            files = _PATCH_FILE_RE.findall(_command_text(raw.get("command")))
+            return [action("Write", {"file_path": f}) for f in dict.fromkeys(files)] or [data]
+        if tool == "Bash":
+            return [action("Bash", {"command": _command_text(raw.get("command"))})]
+        if tool == "spawn_agent":
+            return [action("Agent", dict(raw))]
+    return [data]
+
+
 def run(hook: str, fn, applies_to: tuple[str, ...] = ()) -> int:
     """Enveloppe standard : usage, options, payload, périmètre, racine, verdict, dégradation sûre.
 
@@ -407,10 +515,16 @@ def run(hook: str, fn, applies_to: tuple[str, ...] = ()) -> int:
                 return deny(hook, CLS_ARG_UNKNOWN, f"option(s) inconnue(s) {unknown} — options : {known}",
                             "corriger l'appel : une option ignorée élargit le périmètre du hook au lieu de le restreindre")
             sys.stderr.write(f"[hook] {hook} : option(s) inconnue(s) {unknown} ignorée(s) — options : {known}\n")
-        data = payload(argv)
-        if out_of_scope(data, applies_to):
-            return ALLOW
-        return fn(root_of(data), data)
+        # Un payload d'un autre harnais peut désigner PLUSIEURS actions (un
+        # `apply_patch` Codex touche N fichiers) : chacune est jugée, le
+        # premier refus l'emporte. Sous Claude Code, une seule — comme avant.
+        for data in foreign_payloads(payload(argv)):
+            if out_of_scope(data, applies_to):
+                continue
+            verdict = fn(root_of(data), data)
+            if verdict != ALLOW:
+                return verdict
+        return ALLOW
     except SystemExit:
         raise
     except BaseException as exc:  # noqa: BLE001 — tout échec doit dégrader, pas bloquer
@@ -420,27 +534,89 @@ def run(hook: str, fn, applies_to: tuple[str, ...] = ()) -> int:
 # ---------------------------------------------------------------------------
 # Lecture des gates déjà franchies
 # ---------------------------------------------------------------------------
-def gate_status(root: Path, gate: str, artifact: str | None = None) -> tuple[str, list[str]]:
+import re as _re  # noqa: E402
+
+_MISSION_RE = _re.compile(r"\bMISSION\s*:?\s*(\d+)\b")
+
+
+def mission_of(data: dict[str, Any]) -> str | None:
+    """La MISSION d'un spawn : champ du payload, sinon `MISSION : n` du brief, sinon `SDDA_MISSION`.
+
+    Le harnais n'envoie jamais `mission` : les hooks de gate lisaient donc les
+    rapports de TOUTES les missions, et un G1 vert d'une autre mission ouvrait
+    la phase 2 de celle-ci.
+    """
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    mission = data.get("mission") or (tool_input or {}).get("mission")
+    if not mission:
+        m = _MISSION_RE.search(str((tool_input or {}).get("prompt") or ""))
+        mission = m.group(1) if m else os.environ.get("SDDA_MISSION") or None
+    head = str(mission).split("-", 1)[0] if mission else ""
+    return head if head.isdigit() else None
+
+
+def _of_mission(artifact: str, mission: str | None) -> bool:
+    """Un artefact de rapport relève-t-il de la MISSION (`1`, `1-Name`, `1-2-Cap`, `1-lookup`) ou du projet ?"""
+    if mission is None:
+        return True
+    a = str(artifact)
+    return a == mission or a.startswith(mission + "-") or a == "stack"
+
+
+def gate_status(root: Path, gate: str, mission: str | None = None) -> tuple[str, list[str]]:
     """`(verdict, raisons)` pour une gate : `green` | `red` | `absent`.
 
     Une gate composite (G2, G3, G7, G8) n'est verte que si **toutes** ses parts
-    le sont. Une part manquante rend `absent`, jamais `green` : l'absence de
-    preuve n'est pas une preuve, et c'est précisément par là qu'un pipeline se
-    déclare vert tout seul.
+    OBLIGATOIRES le sont, pour chaque artefact qui en porte ; une part
+    contributive ne compte que par son rouge. Une part manquante, ou périmée
+    (source modifiée depuis le rapport), rend `absent`, jamais `green` :
+    l'absence de preuve n'est pas une preuve. Cette fonction ne regardait que le
+    champ `ok` de tous les rapports de la gate, toutes missions confondues —
+    un seul `G3-stack.dataaccess` vert suffisait à câbler les agents.
     """
+    from sdda_lib.gate_reports import GATE_PARTS, GATE_PARTS_ADVISORY  # noqa: PLC0415
+
     reports = [r for r in load_gate_reports(root)
-               if r.get("gate") == gate and (artifact is None or str(r.get("artifact")) == str(artifact))]
+               if r.get("gate") == gate and _of_mission(str(r.get("artifact", "")), mission)]
+    where = paths.rel(root, paths.validation_dir(root))
     if not reports:
-        return "absent", [f"aucun rapport {gate} dans {paths.rel(root, paths.validation_dir(root))}"]
+        return "absent", [f"aucun rapport {gate}{f' pour la mission {mission}' if mission else ''} dans {where}"]
 
     red = [r for r in reports if not r.get("ok")]
     if red:
         reasons = []
         for r in red:
-            classes = [e.get("class", "?") for e in (r.get("errors") or [])][:3]
+            classes = [e.get("class", "?") for e in (r.get("errors") or [])]
             reasons.append(f"{r.get('gate')}{'.' + r['part'] if r.get('part') else ''} : {classes}")
         return "red", reasons
-    return "green", [f"{len(reports)} part(s) verte(s)"]
+
+    try:
+        from sdda_scripts.compute_status import stale_keys  # noqa: PLC0415
+    except Exception:  # noqa: BLE001 — sans l'index, on juge sans la péremption plutôt que de refuser
+        stale_keys = None  # type: ignore[assignment]
+    if stale_keys is not None:
+        stale = [(r, stale_keys(root, r)) for r in reports]
+        stale = [(r, keys) for r, keys in stale if keys]
+        if stale:
+            r, keys = stale[0]
+            return "absent", [f"{gate}{'.' + r['part'] if r.get('part') else ''} ({r.get('artifact')}) périmé : "
+                              f"{', '.join(keys)} a changé depuis le rapport"]
+
+    required = set(GATE_PARTS.get(gate, ()))
+    if required:
+        advisory = set(GATE_PARTS_ADVISORY.get(gate, ()))
+        by_artifact: dict[str, set[str]] = {}
+        for r in reports:
+            by_artifact.setdefault(str(r.get("artifact")), set()).add(str(r.get("part") or ""))
+        carrying = {a: parts for a, parts in by_artifact.items() if parts - advisory}
+        if not carrying:
+            return "absent", [f"{gate} : seules des parts contributives ({', '.join(sorted(advisory))}) — "
+                              f"parts obligatoires {sorted(required)} absentes"]
+        for artifact, parts in sorted(carrying.items()):
+            missing = required - parts
+            if missing:
+                return "absent", [f"{gate} ({artifact}) : part(s) obligatoire(s) absente(s) {sorted(missing)}"]
+    return "green", [f"{len(reports)} rapport(s) vert(s)"]
 
 
 def require_gate(hook: str, root: Path, gate: str, artifact: str | None, cls: str, fix: str) -> int:

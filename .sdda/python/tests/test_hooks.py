@@ -106,9 +106,16 @@ def test_an_unreadable_payload_is_not_a_reason_to_refuse(monkeypatch: pytest.Mon
 
 
 def test_every_hook_allows_on_a_clean_project(project: Path) -> None:
-    """Sur un projet sain, aucun hook ne doit s'interposer."""
-    for gate in ("G1", "G3", "G4"):
+    """Sur un projet sain, aucun hook ne doit s'interposer.
+
+    G3 est composite : un projet sain porte ses DEUX parts obligatoires. Un
+    rapport G3 sans part était lu vert — c'est le faux vert que `gate_status`
+    ferme désormais (`test_a_composite_gate_needs_its_mandatory_parts`).
+    """
+    for gate in ("G1", "G4"):
         green_gate(project, gate)
+    for part in ("contracts", "suites"):
+        write_gate_report(project, "G3", "1-lookup", Report(name="G3", target=str(project)), pinned={}, part=part)
     for module in HOOKS:
         code, err = call(module, project, mission="1")
         assert code == ALLOW, f"{module.HOOK} a refusé : {err}"
@@ -136,6 +143,38 @@ def test_a_red_gate_report_refuses(project: Path, module, gate: str) -> None:
     assert code == DENY and "SOME_FAILURE" in err
 
 
+def test_a_composite_gate_needs_its_mandatory_parts(project: Path) -> None:
+    """Un seul `G3-stack.dataaccess` vert (part contributive) câblait les agents sans aucun contrat testé."""
+    write_gate_report(project, "G3", "stack", Report(name="G3", target=str(project)), pinned={}, part="dataaccess")
+    code, err = call(preflight_tool_gate, project, mission="1")
+    assert code == DENY and "parts obligatoires" in err
+    write_gate_report(project, "G3", "1-lookup", Report(name="G3", target=str(project)), pinned={}, part="contracts")
+    code, err = call(preflight_tool_gate, project, mission="1")
+    assert code == DENY and "suites" in err
+    write_gate_report(project, "G3", "1-lookup", Report(name="G3", target=str(project)), pinned={}, part="suites")
+    assert call(preflight_tool_gate, project, mission="1")[0] == ALLOW
+
+
+def test_the_green_gate_of_another_mission_does_not_open_this_one(project: Path) -> None:
+    """La mission se lit dans le brief (`MISSION : n`) : le harnais n'envoie jamais `mission`."""
+    write_gate_report(project, "G1", "2-1-Other", Report(name="G1", target=str(project)), pinned={})
+    payload = {"tool_input": {"subagent_type": "architect-topology", "prompt": "MISSION : 1\n…"}}
+    code, err = call(preflight_cap_gate, project, **payload)
+    assert code == DENY and "mission 1" in err
+    write_gate_report(project, "G1", "1-1-Cap", Report(name="G1", target=str(project)), pinned={})
+    assert call(preflight_cap_gate, project, **payload)[0] == ALLOW
+
+
+def test_a_stale_gate_report_is_absent_not_green(project: Path) -> None:
+    """Un rapport dont la source a changé ne prouve plus rien (P10)."""
+    stack = project / "workspace/stack/STACK.md"
+    write_gate_report(project, "G1", "1-1-Cap", Report(name="G1", target=str(project)),
+                      pinned={"stack": "sha256:" + "0" * 64})
+    assert stack.is_file()
+    code, err = call(preflight_cap_gate, project, mission="1")
+    assert code == DENY and "périmé" in err
+
+
 def test_the_tool_gate_bypass_works_but_never_on_side_effects(
         project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SDDA_BYPASS_TOOL_GATE", "1")
@@ -160,7 +199,7 @@ def test_a_dev_agent_cannot_write_a_dataset(project: Path) -> None:
 
 def test_a_dev_agent_writing_in_its_own_zone_passes(project: Path) -> None:
     code, err = call(preflight_ownership, project, subagent_type="dev-tools",
-                     tool_input={"file_path": str(project / "workspace/src/tools/invoice_lookup.py")})
+                     tool_input={"file_path": str(project / "workspace/src/SupportAssistant/tools/invoice_lookup.py")})
     assert code == ALLOW, err
 
 
@@ -202,7 +241,7 @@ def test_a_gate_report_is_never_written_by_an_editing_tool(project: Path) -> Non
 # Prompts, bornes, coût
 # ---------------------------------------------------------------------------
 def test_an_inline_prompt_blocks_the_subagent_stop(project: Path) -> None:
-    path = project / "workspace/src/agents/billing/agent.py"
+    path = project / "workspace/src/SupportAssistant/agents/billing/agent.py"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('SYSTEM = """\nTu es un assistant de facturation. Ne jamais rembourser.\n'
                     'Réponds en citant la source, et refuse toute demande hors facturation.\n'

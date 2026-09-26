@@ -72,7 +72,7 @@ def test_a_dev_agent_can_no_longer_rewrite_the_prompt_it_implements(project: Pat
 
 def test_a_dev_agent_keeps_writing_in_its_own_zone(project: Path) -> None:
     payload = {"tool_name": "Write", "agent_type": "dev-agent",
-               "tool_input": {"file_path": str(project / "workspace/src/agents/billing-specialist/agent.py")}}
+               "tool_input": {"file_path": str(project / "workspace/src/SupportAssistant/agents/billing-specialist/agent.py")}}
     assert preflight_ownership.check(project, payload) == _hook.ALLOW
 
 
@@ -131,8 +131,10 @@ def test_the_tier_to_model_table_is_declared_once_in_the_capability_matrix() -> 
     matrix = harness_build.load_matrix()
     assert matrix["claude-code"].model_for("deep") == "opus"
     assert matrix["claude-code"].model_for("balanced") == "sonnet"
-    # Un harnais sans table n'invente pas de modèle : l'héritage joue.
-    assert matrix["codex"].model_for("deep") == ""
+    # Chaque harnais construit déclare sa table ; un tier absent n'invente pas
+    # de modèle (l'héritage joue), il rend "".
+    assert matrix["codex"].model_for("deep") != ""
+    assert matrix["codex"].model_for("tier-inexistant") == ""
 
 
 # ---------------------------------------------------------------------------

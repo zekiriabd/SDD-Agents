@@ -23,6 +23,7 @@ que les agents. Les formes OPAQUES ne sont refusées qu'aux sous-agents.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -88,6 +89,54 @@ def _deny_secret(agent: str, what: str, fix: str = "") -> int:
                 fix or "`python .sdda/sdda.py install-env` copie assets/.env vers src/{App}/.env, sans LLM")
 
 
+#: Un nom de fichier de secrets dans le TEXTE de la commande. L'analyse
+#: lexicale ne peut pas énumérer tous les lecteurs de fichiers (`source`,
+#: `perl -pe 1`, `git diff --no-index`, `[IO.File]::ReadAllText`, `cmd /c type`,
+#: `Get-Content (Join-Path …)`) : chacun trouvé en ferme un, le suivant reste
+#: ouvert. Aucun agent n'a de raison de NOMMER un `.env` dans une commande —
+#: `install-env` le copie sans qu'on le nomme — donc un sous-agent qui le
+#: nomme est refusé, quelle que soit la forme. `process.env`, `os.environ`,
+#: `.venv`, `$env:` ne correspondent pas ; les gabarits (`.env.example`…) non plus.
+_SECRET_IN_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_$])\.env(?![A-Za-z0-9_])(?:\.[A-Za-z0-9_-]+)?|\benv~\d", re.I)
+#: Motifs d'EXCLUSION (`grep --exclude='.env*'`, `rg -g '!.env'`) : nommer le
+#: secret pour l'écarter est précisément ce qu'on demande de faire.
+_EXCLUDE_OPT_RE = re.compile(r"""--exclude(?:-dir)?(?:=|\s+)\S+|(?:-g|--g?lob|--iglob)(?:=|\s+)['"]?!\S+""", re.I)
+
+
+def _names_secret(ao, command: str) -> str | None:
+    text = _EXCLUDE_OPT_RE.sub(" ", command)
+    for m in _SECRET_IN_TEXT_RE.finditer(text):
+        name = m.group(0)
+        if name.casefold().startswith("env~") or ao.is_secret_file(name.rstrip("'\")]};,")):
+            return name
+    return None
+
+
+def _with_real_paths(ao, root: Path, res) -> None:
+    """Ajoute à l'analyse les chemins RÉELS (liens, jonctions) quand ils diffèrent.
+
+    `_shell` résout lexicalement : une jonction `agents/a/j -> pipeline/datasets`
+    rendait `agents/a/j/golden/g.jsonl`, anodin, pour une écriture du golden.
+    `preflight_ownership` jugeait déjà le chemin réel ; le shell non.
+    """
+    extra_writes = []
+    for p in res.writes:
+        real = ao.real_relative_to_root(root, p)
+        if real and real not in res.writes:
+            extra_writes.append(real)
+            if p in res.recursive_writes:
+                res.recursive_writes.append(real)
+            if p in res.mkdirs:
+                res.mkdirs.append(real)
+    res.writes.extend(extra_writes)
+    extra_reads = []
+    for p, scope in res.reads:
+        real = ao.real_relative_to_root(root, p)
+        if real and (real, scope) not in res.reads:
+            extra_reads.append((real, scope))
+    res.reads.extend(extra_reads)
+
+
 def check(root: Path, data: dict) -> int:
     import _shell  # noqa: E402
 
@@ -98,32 +147,50 @@ def check(root: Path, data: dict) -> int:
         return ALLOW
     dialect = "powershell" if str(data.get("tool_name") or "").lower() == "powershell" else "bash"
 
+    from sdda_scripts import audit_ownership as ao  # noqa: E402
+
+    # 0. Le filet : un sous-agent qui NOMME un fichier de secrets.
+    if agent:
+        named = _names_secret(ao, command)
+        if named:
+            return _deny_secret(agent, named)
+
     res = _shell.analyze(root, command, data.get("cwd"), dialect)
     if not (res.writes or res.reads or res.opaque or res.unresolved_reads or res.hidden_content_reads):
         return ALLOW
 
     from sdda_lib.errors import Report  # noqa: E402  (import tardif : coût de démarrage du hook)
-    from sdda_scripts import audit_ownership as ao  # noqa: E402
 
+    _with_real_paths(ao, root, res)
     loader = ao.load_loader(root) if agent else {}
     verdict = _protected_verdict(ao, loader, agent, res.writes)
     if verdict != ALLOW or not agent:
         return verdict
 
-    # 1. Secrets — nommés, ou devinés derrière une variable.
+    # 1. Secrets — nommés, devinés derrière une variable, ou sous une lecture
+    #    en vrac qui lit aussi les fichiers cachés (`grep -r`, `find … -exec
+    #    cat`, `tar -c`, `cp -r`), y compris depuis un parent de la racine.
+    #    Jugé pour TOUT sous-agent : ce bloc ne venait qu'après la matrice,
+    #    donc jamais pour un sous-agent hors matrice.
     for path, _scope in res.reads:
         if ao.is_secret_file(str(path)):
             return _deny_secret(agent, path)
     for token in res.unresolved_reads:
         if ".env" in token.casefold():
             return _deny_secret(agent, token)
+    for directory in res.hidden_content_reads:
+        found = ao.secrets_under(root, directory)
+        if found:
+            return _deny_secret(agent, f"{found[0]} (via une lecture récursive de `{directory}`)",
+                                "exclure les secrets de la lecture (`--exclude='.env*'`), ou employer "
+                                "`rg`, qui saute les fichiers cachés")
 
     known = isinstance(loader.get(agent), dict)
     if not known:
         # Sous-agent hors matrice : rien sous workspace/, ni en écriture ni en
         # lecture. Voir `_hook.unknown_subagent` pour le pourquoi.
-        for path in [*res.writes, *(p for p, _scope in res.reads)]:
-            verdict = unknown_subagent(HOOK, agent, str(path))
+        for path, is_write in [*((p, True) for p in res.writes), *((p, False) for p, _scope in res.reads)]:
+            verdict = unknown_subagent(HOOK, agent, str(path), write=is_write)
             if verdict != ALLOW:
                 return verdict
 
@@ -164,15 +231,6 @@ def check(root: Path, data: dict) -> int:
         first = report.errors[0]
         return deny(HOOK, first.cls, f"via le shell — {first.message}",
                     first.fix or "passer par Write/Edit dans ta zone, ou élargir la matrice explicitement")
-
-    # 4. Une recherche récursive qui lit les fichiers cachés rend le `.env`
-    #    qui dort dessous : GNU `grep -r` n'a pas les exclusions de ripgrep.
-    for directory in res.hidden_content_reads:
-        found = ao.secrets_under(root, directory)
-        if found:
-            return _deny_secret(agent, f"{found[0]} (via une recherche récursive de `{directory}`)",
-                                "exclure les secrets de la recherche (`--exclude='.env*'`), ou employer "
-                                "`rg`, qui saute les fichiers cachés")
     return ALLOW
 
 

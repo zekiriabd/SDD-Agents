@@ -347,7 +347,7 @@ def test_an_agent_writing_in_another_agents_directory_is_blocked(project: Path) 
 
 
 def test_a_write_inside_the_declared_zone_passes(project: Path) -> None:
-    report = ao.run(project, agent="dev-tools", wrote=["workspace/src/tools/invoice_lookup.py"])
+    report = ao.run(project, agent="dev-tools", wrote=["workspace/src/SupportAssistant/tools/invoice_lookup.py"])
     assert report.ok, report.render_text()
 
 
@@ -382,6 +382,11 @@ def test_a_shared_zone_with_an_unknown_mode_is_refused(project: Path) -> None:
 
 
 def test_cli_json_mode(project: Path) -> None:
+    # Le projet déclare un RAG : sans aucun fichier de corpus, `scan-pii` est
+    # rouge (il n'attesterait rien de l'index). On lui en donne un, propre.
+    corpus = project / "workspace/assets/corpus"
+    corpus.mkdir(parents=True, exist_ok=True)
+    (corpus / "guide.md").write_text("# Guide\n\nAucune donnée personnelle ici.\n", encoding="utf-8")
     for main in (lp.main, ss.main, scan_pii.main, ao.main):
         code, out = run_main(main, ["--root", str(project), "--json", "--no-report"])
         assert code == 0, out
