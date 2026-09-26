@@ -24,6 +24,7 @@ liste chaque écart avec son chemin. Déterministe, validateur `jsonschema_mini`
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from sdda_lib.graders._base import (
@@ -76,7 +77,7 @@ class SchemaGrader(BaseGrader):
 
         try:
             violations = SchemaValidator(schema).validate(instance)
-        except (KeyError, ValueError, TypeError) as exc:
+        except (KeyError, ValueError, TypeError, re.error) as exc:   # `pattern` invalide : re.error
             # `$ref` non résolu, `type` inconnu… : le schéma est en cause, pas la sortie.
             return GradeResult.failure(CLS_EXPECTED_INVALID, f"item `{item.get('id', '?')}` : schéma inexploitable ({exc})")
 

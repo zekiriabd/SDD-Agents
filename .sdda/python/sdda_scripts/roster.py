@@ -147,7 +147,7 @@ def _agent_block(indent: str) -> str:
     )
 
 
-def render_scaffold(number: int, name: str, pattern: str, caps: list[str], requires: dict[str, Any]) -> str:
+def render_scaffold(number: int, pattern: str, caps: list[str], requires: dict[str, Any]) -> str:
     """Le manifeste pré-rempli. Dérivé : mission, pattern, CAPs. Décidé : le reste."""
     needs_sub = int(requires.get("subagents_min") or 0) > 0 or requires.get("subagents_max") != 0
     needs_rel = bool(requires.get("relations"))
@@ -271,7 +271,7 @@ def scaffold(root: Path, mission: int | str, *, force: bool = False, reason: str
     registry = va.load_registry(root, report)
     requires, _ = va.requirements_for(registry, "orchestration", pattern) if registry else ({}, {})
     caps = cap_ids(root, mission)
-    yaml_text = render_scaffold(spec.number, spec.name, pattern, caps, requires)
+    yaml_text = render_scaffold(spec.number, pattern, caps, requires)
     text = wrap_roster_markdown(spec.number, spec.name, yaml_text)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8", newline="\n")

@@ -193,7 +193,10 @@ def test_every_backend_sheet_of_the_map_exists_and_speaks_its_language() -> None
         assert path.is_file(), f"{framework} -> backend/{sheet}.md absent"
         text = path.read_text(encoding="utf-8")
         declared = re.search(r"^Languages:\s*(.+)$", text, re.M)
-        assert declared and declared.group(1).strip() in vp.API_FRAMEWORK_LANG[framework], sheet
+        # Une fiche peut porter plusieurs langages (`kotlin, java`) : chacun doit
+        # être l'un de ceux que le framework HTTP admet.
+        langs = [t.strip() for t in declared.group(1).split(",")] if declared else []
+        assert langs and all(lang in vp.API_FRAMEWORK_LANG[framework] for lang in langs), sheet
 
 
 def test_every_console_surface_has_a_sheet_on_disk() -> None:

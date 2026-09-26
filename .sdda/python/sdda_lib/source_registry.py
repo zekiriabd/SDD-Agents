@@ -453,9 +453,21 @@ def load_registry(root: Path, section: dict[str, Any]) -> Registry:
         # rattacherait la surface de données d'un agent à un fichier que
         # personne ne relit dans cette revue.
         try:
-            inside = resolved.is_relative_to(mroot.resolve()) or resolved.is_relative_to(root.resolve())
+            # Sous la racine des MANIFESTES, pas sous la racine du projet : le
+            # second élargissait la frontière à tout le dépôt, `.env` compris —
+            # et `YamlMiniError` recopie la ligne fautive, donc la clé, dans le
+            # rapport.
+            inside = resolved.is_relative_to(mroot.resolve())
         except (OSError, ValueError):
             inside = False
+        from sdda_scripts.audit_ownership import is_secret_file  # noqa: PLC0415 — évite un cycle d'import
+
+        if is_secret_file(resolved.name):
+            registry.error("DATA_MANIFEST_OUTSIDE_ROOT",
+                           f"manifeste `{rel_path}` : un fichier de secrets n'est pas un manifeste",
+                           fix="les secrets se NOMMENT dans le manifeste (`key_env: …`), leur valeur reste dans .env",
+                           location="workspace/stack/STACK.md")
+            continue
         if not inside:
             registry.error(
                 "DATA_MANIFEST_OUTSIDE_ROOT",
@@ -521,10 +533,22 @@ def store_host(store: dict[str, Any]) -> str | None:
 
 
 def _host_of(url: str) -> str | None:
-    m = re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://([^/:@]+(?::\d+)?)", url.strip())
-    if not m:
+    """L'hôte RÉEL d'une URL, tel que le client HTTP s'y connectera.
+
+    La regex d'avant s'arrêtait au premier `@` : `https://allowed.com@evil.com/`
+    rendait `allowed.com` (l'identifiant de connexion) alors que la requête part
+    vers `evil.com` — l'egress allowlist se contournait par une URL.
+    """
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    text = url.strip()
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", text):
         return None
-    return m.group(1).split(":", 1)[0].lower()
+    try:
+        host = urlsplit(text).hostname
+    except ValueError:
+        return None
+    return host.lower() if host else None
 
 
 def store_scheme(store: dict[str, Any]) -> str | None:

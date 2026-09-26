@@ -206,5 +206,7 @@ def test_cli_writes_g6_api_report(project: Path, ir: dict) -> None:
     write_openapi(project, conforming_doc(ir))
     code, out = run_main(validate_api_contract.main, ["--root", str(project), "--mission", "1", "--json"])
     assert code == 0, out
-    data = json.loads((paths.validation_dir(project) / "G6-1.api.json").read_text(encoding="utf-8"))
+    # Sous l'identifiant complet de la MISSION (audit 2026-09-25) : c'est lui que
+    # `compute_status` résout pour les épingles.
+    data = json.loads((paths.validation_dir(project) / "G6-1-SupportAssistant.api.json").read_text(encoding="utf-8"))
     assert data["ok"] is True and data["part"] == "api" and data["gate"] == "G6"

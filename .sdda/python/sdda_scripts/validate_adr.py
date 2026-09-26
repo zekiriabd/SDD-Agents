@@ -42,11 +42,12 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
+from sdda_lib import hashing, markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig, active_stacks, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root  # noqa: E402
+from sdda_scripts.validate_mission import mission_artifact  # noqa: E402
 
 #: Le registre, résolu depuis le framework qui s'exécute.
 REGISTRY = Path(__file__).resolve().parents[2] / "registry" / "adr-requirements.yml"
@@ -231,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Chaque décision qui exige un ADR est couverte par un ADR accepté.")
     add_common_args(parser)
     parser.add_argument("--explain", action="store_true", help="liste les décisions qui exigent un ADR")
-    parser.add_argument("--mission", default="0", help="numéro de MISSION (artefact du rapport de gate)")
+    parser.add_argument("--mission", default=None, help="numéro de MISSION (artefact du rapport de gate) ; défaut : `stack`, valable pour toutes")
     args = parser.parse_args(argv)
     if args.explain:
         return explain()
@@ -240,8 +241,24 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_report:
         # Part de G2 : une décision d'architecture se tranche avant la
         # première ligne de code, au même titre que le packaging.
-        write_gate_report(root, "G2", str(args.mission), report, {}, part="adr")
+        write_gate_report(root, "G2", mission_artifact(root, args.mission), report, source_pins(root), part="adr")
     return finish(report, args)
+
+
+def source_pins(root: Path) -> dict[str, str]:
+    """STACK.md et chaque ADR : ce que la part a jugé.
+
+    Épinglée à vide, la part restait verte après un passage de STACK.md à
+    `DbAgentRole: full` — et `/sdda-topology --recompile-only` ne la rejouait
+    pas. Un ADR déclassé (`Accepted` -> `Superseded`) la périme aussi.
+    """
+    pins: dict[str, str] = {}
+    stack = paths.stack_md_path(root)
+    if stack.is_file():
+        pins["stack"] = hashing.sha256_file(stack)
+    for p in adr_files(root):
+        pins[paths.rel(root, p)] = hashing.sha256_file(p)
+    return pins
 
 
 if __name__ == "__main__":

@@ -41,7 +41,6 @@ moyenne pondérée des critères.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -266,7 +265,11 @@ class CalibrationStatus:
 def calibration_status(config: dict) -> CalibrationStatus:
     raw = config.get("calibration") or {}
     kappa = raw.get("kappa") if isinstance(raw, dict) else None
-    n = raw.get("n", len(raw.get("items", ()))) if isinstance(raw, dict) else 0
+    n = 0
+    if isinstance(raw, dict):
+        items = raw.get("items")
+        # `items` est un compte (forme résumé) ou une liste de paires (inline).
+        n = raw.get("n", items if isinstance(items, int) else len(items or ()))
     return CalibrationStatus(
         kappa=float(kappa) if kappa is not None else None,
         n=int(n or 0),

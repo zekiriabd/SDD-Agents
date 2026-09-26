@@ -19,13 +19,12 @@ existant ne peut plus passer le smoke.
 """
 from __future__ import annotations
 
-import datetime as _dt
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 from sdda_lib import __version__ as _LIB_VERSION
+from sdda_lib.runtime_io import atomic_write_json, now_iso
 
 #: Version courante de l'arborescence `workspace/`. Historique :
 #:   1 — première version datée : tree canonique de `smoke_check.WORKSPACE_TREE`,
@@ -77,13 +76,12 @@ def framework_version() -> str:
 
 
 def utc_now_iso() -> str:
-    """Horodatage ISO 8601 UTC à la seconde ; honore `SOURCE_DATE_EPOCH` (builds reproductibles)."""
-    epoch = os.environ.get("SOURCE_DATE_EPOCH")
-    if epoch and epoch.isdigit():
-        now = _dt.datetime.fromtimestamp(int(epoch), _dt.timezone.utc)
-    else:
-        now = _dt.datetime.now(_dt.timezone.utc)
-    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    """Horodatage ISO 8601 UTC à la seconde ; honore `SOURCE_DATE_EPOCH` (builds reproductibles).
+
+    Délègue à `runtime_io.now_iso` : c'en était une copie, et `runtime_io`
+    annonce justement la fin de ces copies.
+    """
+    return now_iso()
 
 
 def read_workspace_json(root: Path) -> dict[str, Any] | None:
@@ -126,6 +124,6 @@ def write_workspace_version(root: Path, *, version: int = WORKSPACE_VERSION,
     if existing:
         data["updatedBy"] = author
         data["updatedAt"] = stamp
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return path
+    # Atomique : un `workspace.json` tronqué rend `read_workspace_version` None,
+    # et le smoke conclut à un workspace sans version.
+    return atomic_write_json(path, data, sort_keys=False)

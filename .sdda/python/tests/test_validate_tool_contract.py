@@ -55,8 +55,11 @@ def test_a_coherent_project_passes_and_writes_one_report_per_tool(compiled: Path
     for tool in TOOLS:
         gate = json.loads((paths.validation_dir(compiled) / f"G3-{tool}.contracts.json").read_text(encoding="utf-8"))
         assert gate["ok"] is True and gate["part"] == "contracts"
-        assert gate["pinnedHashes"]["toolSchema"].startswith("sha256:")
-        assert "contract" in gate["pinnedHashes"] and "ir" in gate["pinnedHashes"]
+        # Épingles RÉSOLVABLES (audit 2026-09-25, M5) : l'outil dans l'IR et
+        # son contrat sans `Status:` — plus l'identité de l'IR entier.
+        assert gate["pinnedHashes"][f"irtool:{tool}"].startswith("sha256:")
+        assert f"spec:workspace/pipeline/contracts/tools/{tool}.tool.md" in gate["pinnedHashes"]
+        assert "ir" not in gate["pinnedHashes"]
 
 
 def test_the_report_is_written_per_tool_because_that_is_what_the_state_machine_reads(compiled: Path) -> None:

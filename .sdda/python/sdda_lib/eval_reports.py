@@ -11,7 +11,7 @@ atomique.
 from __future__ import annotations
 
 import json
-import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -57,12 +57,30 @@ def mission_number(ir: dict[str, Any]) -> int:
     return int(head) if head.isdigit() else 0
 
 
+_RUN_SUFFIX_RE = re.compile(r"^(?P<run>.+?)(?:-(?P<k>\d+))?$")
+
+
+def _report_order(number: int, path: Path) -> tuple[str, int]:
+    """(RUN_ID, rang dans le run) : l'ordre dans lequel `eval_runner` écrit.
+
+    L'ordre lexical des noms plaçait `1-RUN-2.json` AVANT `1-RUN.json` (`-`
+    0x2D < `.` 0x2E) et `-10` avant `-2` : `latest_report` rendait donc le
+    premier rapport du dernier run, pas le dernier — celui de la PHASE 4 au lieu
+    de l'acceptation, pour `check-regression`, `promote-baseline` et `cost-report`.
+    """
+    stem = path.name[len(f"{number}-"):-len(REPORT_SUFFIX)]
+    m = _RUN_SUFFIX_RE.match(stem)
+    run, k = (m.group("run"), int(m.group("k") or 1)) if m else (stem, 1)
+    return run, k
+
+
 def list_reports(root: Path, number: int) -> list[Path]:
-    """Rapports d'une mission, du plus ancien au plus récent (ordre lexical = horodatage)."""
+    """Rapports d'une mission, du plus ancien au plus récent (RUN_ID horodaté, puis rang)."""
     d = reports_dir(root)
     if not d.is_dir():
         return []
-    return sorted(p for p in d.glob(f"{number}-*{REPORT_SUFFIX}") if p.is_file())
+    found = [p for p in d.glob(f"{number}-*{REPORT_SUFFIX}") if p.is_file()]
+    return sorted(found, key=lambda p: (*_report_order(number, p), p.name))
 
 
 def latest_report(root: Path, number: int) -> Path | None:

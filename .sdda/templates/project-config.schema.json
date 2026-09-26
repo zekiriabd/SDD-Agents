@@ -218,7 +218,7 @@
       "default": 0.6,
       "description": "Accord minimal (kappa de Cohen) entre le juge LLM et les labels humains pour que le juge rende un verdict bloquant (P9). Protégée security-down.",
       "x-readBy": [
-        "script:sdda_hooks/preflight_judge_calibration.py"
+        "script:sdda_scripts/calibrate_judge.py"
       ]
     },
     "JudgeCalibrationMinItems": {
@@ -227,7 +227,7 @@
       "default": 50,
       "description": "Taille minimale du set de calibration humain d'un juge LLM.",
       "x-readBy": [
-        "script:sdda_hooks/preflight_judge_calibration.py"
+        "script:sdda_scripts/calibrate_judge.py"
       ]
     },
     "JudgeAdvisoryFallback": {

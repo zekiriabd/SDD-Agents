@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import app_name, read_project_section  # noqa: E402
+from sdda_lib.layered_config import app_name  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 #: Au-delà, un prompt système n'est plus relu par personne — et le modèle en
@@ -71,7 +71,8 @@ INSTRUCTION_RE = re.compile(
     r"réponds? |respond |answer |assistant|system prompt|instructions? *:)", re.I)
 
 #: Le seul module autorisé à porter du texte de prompt : celui qui le CHARGE.
-PROMPT_MODULE_NAMES = ("prompts.py", "Prompts.cs", "prompts.ts", "Prompts.java")
+#: Le module qui CHARGE les prompts, par langage — le seul endroit où leur nom apparaît.
+PROMPT_MODULE_NAMES = ("prompts.py", "Prompts.cs", "prompts.ts", "Prompts.java", "Prompts.kt")
 
 #: Les deux champs de l'IR qui n'existent QUE dans le prompt, et leur point de
 #: rendez-vous. Sans section nommée, la symétrie contrat <-> prompt ne serait
@@ -369,11 +370,18 @@ def _is_docstring(text: str, start: int) -> bool:
 #: pydantic…) dès que `dev-backend` installait le projet dans `src/{App}/.venv`,
 #: et le hook de fin refusait en boucle l'arrêt d'un agent qui n'y était pour rien.
 VENDORED_DIRS = frozenset({".venv", "venv", ".tox", "site-packages", "node_modules",
-                           "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", "bin", "obj"})
+                           "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", "bin", "obj",
+                           # sorties de build Node et JVM : des copies, pas des sources
+                           "dist", "build", ".gradle", "target", "out"})
 
 
 def _vendored(path: Path, src: Path) -> bool:
     return any(part in VENDORED_DIRS for part in path.relative_to(src).parts[:-1])
+
+
+#: Les sources des cinq langages. `.kt` manquait : un prompt écrit en dur dans
+#: du Kotlin échappait au lint et au hook `postflight_no_inline_prompt`.
+INLINE_SCAN_SUFFIXES = (".py", ".cs", ".ts", ".mts", ".java", ".kt", ".kts")
 
 
 def scan_inline_prompts(root: Path, report: Report) -> int:
@@ -386,11 +394,11 @@ def scan_inline_prompts(root: Path, report: Report) -> int:
                             r'|@"(?:[^"]|"")*"|`(?:[^`\\]|\\.)*`)', re.S)
     scanned = 0
     for path in sorted(src.rglob("*")):
-        if not path.is_file() or path.suffix not in (".py", ".cs", ".ts", ".java"):
+        if not path.is_file() or path.suffix not in INLINE_SCAN_SUFFIXES:
             continue
         if _vendored(path, src):
             continue
-        if path.name in PROMPT_MODULE_NAMES or "/tests/" in path.as_posix():
+        if path.name in PROMPT_MODULE_NAMES or "/tests/" in path.as_posix().casefold():
             continue
         scanned += 1
         text = markdown_io.read_text(path)

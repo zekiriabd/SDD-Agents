@@ -420,9 +420,12 @@ def test_a_type_drift_refuses_the_startup(runtime) -> None:
     report = runtime.guard.check_source(runtime.data, source, index, 10,
                                         read_records(index.files[0], source))
     assert not report.ok
-    with pytest.raises(SystemExit) as excinfo:
+    # Une erreur d'accès, plus un `SystemExit` : levé depuis un outil, il
+    # traversait `RunService` et tuait le processus sans `run_finished`.
+    with pytest.raises(runtime.guard.SchemaDrift) as excinfo:
         runtime.guard.enforce(runtime.data, reg, [report])
     assert "DATA_SOURCE_SCHEMA_DRIFT" in str(excinfo.value)
+    assert excinfo.value.code == "DATA_SOURCE_SCHEMA_DRIFT"
 
 
 def test_an_undeclared_field_is_reported_as_omitted(runtime) -> None:

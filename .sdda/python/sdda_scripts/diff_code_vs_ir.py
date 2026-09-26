@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Le graphe codé est-il celui de l'IR ? — part `orchestration` de G6, 0 token.
+"""Le graphe codé est-il celui de l'IR ? — pré-condition de l'ORCH GATE (G6), 0 token.
+
+Ce n'est PAS une part de gate : aucun rapport n'est écrit, et `G6` ne connaît
+pas de part `orchestration` (`gate_reports`). Le verdict est le code de sortie,
+que `/sdda-build` §5.1 lit — le docstring qui disait l'inverse promettait un
+rouge que la machine à états ne verrait jamais.
 
 `dev-orchestration` matérialise `orchestration` de l'IR : mêmes nœuds, mêmes
 arêtes, mêmes conditions, même entrée, mêmes terminaux — « si le code et le
@@ -37,7 +42,6 @@ Usage :
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -59,7 +63,9 @@ def find_manifests(root: Path) -> list[Path]:
     src = root / "workspace" / "src"
     if not src.is_dir():
         return []
-    return sorted(p for p in src.rglob(MANIFEST_NAME) if p.parent.name == "orchestration")
+    # Casse ignorée : `Orchestration/` est la convention .NET, et un manifeste
+    # émis là était « introuvable » — `[ORCH_MANIFEST_MISSING]` sur un code juste.
+    return sorted(p for p in src.rglob(MANIFEST_NAME) if p.parent.name.lower() == "orchestration")
 
 
 def _norm_condition(value: Any) -> str:
@@ -155,7 +161,7 @@ def run(root: Path, ir: dict[str, Any], *, scope: str, manifest_path: Path | Non
             report.error("ORCH_MANIFEST_MISSING",
                          f"aucun `{MANIFEST_NAME}` sous workspace/src/**/orchestration/ — le graphe codé n'est pas comparable",
                          "faire émettre le manifeste par le module d'orchestration (`dump_graph()`, cf. fiche dev-orchestration STEP 6) ; "
-                         "sans lui, la part `orchestration` de G6 reste absente, donc rouge", "workspace/src/")
+                         "sans lui, ce contrôle sort en 1 et `/sdda-build` s'arrête avant l'ORCH GATE", "workspace/src/")
             return report
         if len(found) > 1:
             report.error("ORCH_MANIFEST_MISSING", f"{len(found)} manifestes trouvés : {', '.join(paths.rel(root, p) for p in found[:3])}",

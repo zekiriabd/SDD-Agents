@@ -53,20 +53,56 @@ def now_iso(at: _dt.datetime | None = None) -> str:
 
 
 def run_id_now(at: _dt.datetime | None = None) -> str:
-    """`20260922T140300Z` — l'horodatage compact des identifiants de run."""
-    return utc_now(at).strftime(RUN_ID_FORMAT)
+    """`20260922T140300Z` — l'horodatage compact des identifiants de run.
+
+    `SOURCE_DATE_EPOCH` n'est PAS honoré ici : il fige les horodatages pour
+    rendre un artefact reproductible, mais un identifiant de run doit rester
+    unique — figé, tous les runs écrivaient dans la même trace, qui finissait
+    avec N spans racines. `at` reste le moyen de figer l'horloge en test.
+    """
+    if at is not None:
+        return utc_now(at).strftime(RUN_ID_FORMAT)
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).strftime(RUN_ID_FORMAT)
 
 
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
-    """Temporaire + `os.replace` : le fichier est entier ou absent, jamais tronqué."""
+    """Temporaire + `os.replace` : le fichier est entier ou absent, jamais tronqué.
+
+    Temporaire UNIQUE (`mkstemp`, même répertoire) : avec un nom fixe
+    (`x.json.tmp`), deux écrivains du même rapport se marchaient dessus, et un
+    temporaire restait sur disque après une erreur. `fsync` avant le
+    remplacement : sans lui, une coupure peut rendre un fichier vide. Sous
+    Windows, `os.replace` échoue si un lecteur (un hook) tient la cible ouverte :
+    quelques tentatives brèves plutôt qu'un rapport perdu.
+    """
+    import tempfile  # noqa: PLC0415
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    # `newline="\n"` : sans lui, Windows traduit chaque `\n` en `\r\n`, et un
-    # ajout à un JSONL réécrit tout le fichier en CRLF — le diff d'un jeu
-    # append-only montre alors toutes les lignes changées, pas celles ajoutées.
-    tmp.write_text(text, encoding=encoding, newline="\n")
-    os.replace(tmp, path)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    tmp = Path(tmp_name)
+    try:
+        # `newline="\n"` : sans lui, Windows traduit chaque `\n` en `\r\n`, et un
+        # ajout à un JSONL réécrit tout le fichier en CRLF — le diff d'un jeu
+        # append-only montre alors toutes les lignes changées, pas celles ajoutées.
+        with os.fdopen(fd, "w", encoding=encoding, newline="\n") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
     return path
 
 

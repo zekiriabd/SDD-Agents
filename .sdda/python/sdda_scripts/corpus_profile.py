@@ -296,14 +296,12 @@ def near_duplicates(docs: list[Document], threshold: float) -> list[dict[str, An
 
 def pii_counts(doc: Document) -> dict[str, int]:
     """Types de PII par document, avec les motifs et le filtre de `scan_pii` — jamais la valeur."""
+    # `scan_pii.pii_matches` : le filtre d'exemple s'applique à la correspondance,
+    # plus à la ligne entière — un `<ticket>` voisin cachait l'e-mail réel.
     found: dict[str, int] = {}
     for line in (doc.text or "").split("\n"):
-        if scan_pii.EXAMPLE_RE.search(line):
-            continue
-        for label, pattern in scan_pii.COMPILED:
-            m = pattern.search(line)
-            if m and not (label == "carte bancaire" and not scan_pii._luhn(m.group(0))):
-                found[label] = found.get(label, 0) + 1
+        for label in scan_pii.pii_matches(line):
+            found[label] = found.get(label, 0) + 1
     return found
 
 

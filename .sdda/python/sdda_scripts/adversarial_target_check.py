@@ -62,9 +62,14 @@ from sdda_scripts._common import add_common_args, finish, resolve_root  # noqa: 
 
 CLS_UNSAFE = "ADVERSARIAL_TARGET_UNSAFE"
 CLS_DRY_RUN = "ADVERSARIAL_DRY_RUN_UNVERIFIED"
+CLS_MOCK_UNWIRED = "ADVERSARIAL_MOCK_NOT_WIRED"
 
 #: Surfaces qui tournent en processus local, lancées par le runner d'eval.
 LOCAL_SURFACES = frozenset({"cli", "cli-dotnet", "cli-node", "cli-kotlin", "batch"})
+
+#: Exécuteurs du squelette qui lancent l'application LIVRÉE en sous-processus :
+#: ils ne sont pas « en processus », et ils n'installent aucun mock d'outil.
+SUBPROCESS_EXECUTORS = frozenset({"CliExecutor"})
 
 _PROD_RE = re.compile(r"(?:^|_)(PROD|PRODUCTION|LIVE)(?:_|$)")
 _TEST_RE = re.compile(r"(?:^|_)(TEST|TESTS|SANDBOX|LOCAL|FIXTURE|FIXTURES|MOCK|DEV|CI)(?:_|$)")
@@ -76,7 +81,16 @@ _DB_LINE_RE = re.compile(r"^\s*-\s*(DB_[A-Z0-9_]+)\s*:\s*\$\{([A-Za-z_][A-Za-z0-
 def is_loopback(url_or_host: str) -> bool:
     """`http://127.0.0.1:8000`, `localhost`, `[::1]` : oui. `0.0.0.0` écoute partout : non."""
     text = str(url_or_host or "").strip()
-    host = urlparse(text).hostname if "://" in text else text.split(":")[0].strip("[]")
+    if "://" in text:
+        host = urlparse(text).hostname
+    elif text.startswith("["):
+        # `[::1]` ou `[::1]:8000` : couper au premier `:` rendait `[`, donc un
+        # hôte vide, donc un refus de la boucle locale IPv6 que la docstring admet.
+        host = text[1:].split("]", 1)[0]
+    elif text.count(":") > 1:
+        host = text  # IPv6 nue (`::1`) : les `:` font partie de l'adresse
+    else:
+        host = text.split(":")[0]
     if not host:
         return False
     if host == "localhost" or host.endswith(".localhost"):
@@ -124,8 +138,22 @@ def check_surface(root: Path, endpoint: str | None, executor: str | None, report
                          "lancer le système en local (127.0.0.1) et attaquer cette instance ; jamais un hôte partagé", loc)
         return out
     if executor:
-        out["inProcess"] = True           # l'exécuteur importé tourne dans CE processus
-        return out
+        # Seul un exécuteur EN PROCESSUS est local par construction. Toute
+        # chaîne suffisait naguère — y compris `…:CliExecutor`, qui lance
+        # l'application livrée en sous-processus, avec sa configuration réelle :
+        # celui-là est jugé comme la surface qu'il lance. `cli` et `cmd:` sont
+        # l'exécuteur générique en sous-processus (tout langage) : même règle.
+        if executor == "cli" or executor.startswith("cmd:"):
+            out["inProcess"] = False
+        elif ":" not in executor or not executor.rsplit(":", 1)[1].strip():
+            report.error(CLS_UNSAFE, f"`--executor {executor}` : attendu `cli`, `cmd:<commande>` ou `module:attr`",
+                         "désigner l'exécuteur réellement chargé par run-adversarial-suite", loc)
+            return out
+        elif executor.rsplit(":", 1)[1] not in SUBPROCESS_EXECUTORS:
+            out["inProcess"] = True           # l'exécuteur importé tourne dans CE processus
+            return out
+        else:
+            out["inProcess"] = False
     if not surfaces:
         report.error(CLS_UNSAFE, "aucune surface active : impossible de dire ce que l'attaque vise",
                      "activer une surface dans STACK.md, ou passer --executor module:attr", loc)
@@ -240,7 +268,10 @@ def check_integrations(root: Path, report: Report) -> dict[str, Any]:
 
 def tool_fixtures(directory: Path) -> set[str]:
     names: set[str] = set()
-    for path in sorted(directory.glob("*.jsonl")) if directory.is_dir() else ():
+    # `rglob`, comme `mocked_toolset` qui charge `fixtures/tools/**/*.jsonl` : une
+    # fixture rangée par outil (`tools/{outil}/x.jsonl`) était chargée par le
+    # mock et invisible pour la garde, qui refusait un outil pourtant mocké.
+    for path in sorted(directory.rglob("*.jsonl")) if directory.is_dir() else ():
         for line in markdown_io.read_text(path).split("\n"):
             try:
                 entry = json.loads(line) if line.strip() else None
@@ -251,9 +282,18 @@ def tool_fixtures(directory: Path) -> set[str]:
     return names
 
 
-def check_tools(root: Path, ir: dict[str, Any], fixtures_dir: Path, allow_dry_run: bool, report: Report) -> list[dict[str, Any]]:
+def check_tools(root: Path, ir: dict[str, Any], fixtures_dir: Path, allow_dry_run: bool, report: Report,
+                *, subprocess_executor: bool = False) -> list[dict[str, Any]]:
     mocked = tool_fixtures(fixtures_dir)
     out: list[dict[str, Any]] = []
+    if subprocess_executor and any(str(t.get("sideEffectClass") or "") not in ("", "read-only") for t in ir.get("tools") or []):
+        # Une fixture présente prouve qu'un mock EXISTE, pas que l'exécuteur le
+        # charge : `CliExecutor` lance l'application livrée, avec ses vrais outils.
+        # Tant que la surface ne sait pas recevoir l'isolement, le dire.
+        report.warn(CLS_MOCK_UNWIRED, "exécuteur en sous-processus : les fixtures de mock ne sont PAS câblées dans l'application attaquée — "
+                    "les outils à effet de bord répondront en réel",
+                    "attaquer par un exécuteur en processus isolé (`InProcessExecutor` + suite `isolation: mocked`), "
+                    "ou sur une configuration dont les outils pointent un bouchon local", paths.rel(root, fixtures_dir))
     for tool in ir.get("tools") or []:
         cls = str(tool.get("sideEffectClass") or "")
         if cls == "read-only":
@@ -286,7 +326,8 @@ def run(root: Path, ir: dict[str, Any], *, endpoint: str | None = None, executor
         payload["database"] = check_database(root, text, report)
         payload["sources"] = check_sources(root, report)
         payload["integrations"] = check_integrations(root, report)
-        payload["tools"] = check_tools(root, ir, fixtures_dir, allow_dry_run, report)
+        payload["tools"] = check_tools(root, ir, fixtures_dir, allow_dry_run, report,
+                                       subprocess_executor=payload["surface"].get("inProcess") is False)
     except Exception as exc:  # noqa: BLE001 — une garde qui plante doit refuser, pas laisser passer
         report.error(CLS_UNSAFE, f"contrôle interrompu ({type(exc).__name__}: {exc}) : la cible n'est pas prouvée isolée",
                      "corriger la déclaration illisible puis relancer ; aucune attaque d'ici là")

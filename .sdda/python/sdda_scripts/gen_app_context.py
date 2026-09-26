@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.layered_config import active_harness, active_profile, active_stacks, harness_memory_file  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_text  # noqa: E402
 from sdda_scripts import gen_app_skeleton as gas  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
@@ -56,7 +57,7 @@ CLS_NOT_INIT = "PROJECT_NOT_INIT"
 CLS_STALE = "PROJECT_CONTEXT_STALE"
 
 #: Premier segment de `workspace/src/**/{couche}/**` (ou `src/*/{couche}/`) dans `writes:`.
-_LAYER_RE = re.compile(r"^workspace/src/(?:\*\*|\*)/([a-z]+)/")
+_LAYER_RE = re.compile(r"^workspace/src/(?:\*\*|\*)(?:/\*\*)?/([a-z]+)/")
 
 #: Ce que chaque couche contient — une ligne, pour qu'un agent sache où chercher.
 LAYER_ROLE: dict[str, str] = {
@@ -210,10 +211,38 @@ def render_dependencies(ctx: gas.Context, report: Report) -> str:
     return "\n".join(lines)
 
 
+def _launch_and_tests(ctx: gas.Context) -> list[str]:
+    """Ce que le FRAMEWORK lancera — lu dans les mêmes tables que le code, jamais recopié.
+
+    `--executor cli` lance l'application par `LAUNCH_COMMANDS` ; la part `suites`
+    de G3 joue ses tests par `LANGUAGE_TESTS`. Écrit ici, un `dev-*` sait quelle
+    commande et quel point d'entrée il doit rendre vrais — c'est un contrat.
+    """
+    from sdda_lib.executors import LAUNCH_COMMANDS  # noqa: PLC0415
+    from sdda_scripts.run_tool_suites import LANGUAGE_TESTS  # noqa: PLC0415
+
+    out: list[str] = []
+    launch = LAUNCH_COMMANDS.get(ctx.language or "")
+    if launch:
+        out.append("Lancement par les runners (`--executor cli`, `stacks/serving/cli.md` §3.5), depuis la racine "
+                   "du dépôt : `" + " ".join(p.replace("{AppName}", ctx.app) for p in launch) + " run --json "
+                   "--input-file -`")
+    tests = LANGUAGE_TESTS.get(ctx.language or "")
+    if tests:
+        out.append("Tests L2 joués par G3 (`run-tool-suites`), depuis ce répertoire : `"
+                   + " ".join(tests.command).replace("{gradle}", "./gradlew").replace("{junit}", "<rapport.xml>")
+                   + "` — le nom affiché d'un test de contrat contient l'id du cas ; un test `network` le dit "
+                   "dans sa classe ou son nom.")
+    return out
+
+
 def render_commands(ctx: gas.Context) -> str:
     if ctx.language != gas.LANGUAGE:
-        return (f"Voir la fiche `.sdda/stacks/lang/{ctx.language or '?'}.md` (build, tests, lancement). "
-                "Le squelette de ce langage est écrit par `dev-backend`.")
+        return "\n".join([
+            f"Voir la fiche `.sdda/stacks/lang/{ctx.language or '?'}.md` (build, tests, lancement). "
+            "Le squelette de ce langage est écrit par `dev-backend`.", "",
+            *(f"- {line}" for line in _launch_and_tests(ctx)),
+        ])
     return "\n".join([
         f"Depuis `workspace/src/{ctx.app}/` — l'environnement est déjà installé par `project-init` :",
         "",
@@ -228,15 +257,23 @@ def render_commands(ctx: gas.Context) -> str:
 
 def render_tree(root: Path, ctx: gas.Context) -> str:
     owners = layer_owners(root)
-    lines = [f"Layout plat : `workspace/src/{ctx.app}/` EST le paquet `{ctx.app}`.", "",
+    python = ctx.language == gas.LANGUAGE
+    # Hors Python, ni `pyproject.toml` ni « le paquet » : affirmer une forme que
+    # le langage actif n'a pas fait coder contre elle (`lang/{langage}.md` fait foi).
+    root_files = "`pyproject.toml`, `README.md`, `.env`" if python else \
+        f"fichiers de build de `lang/{ctx.language or '?'}.md`, `README.md`, `.env`"
+    head = (f"Layout plat : `workspace/src/{ctx.app}/` EST le paquet `{ctx.app}`." if python else
+            f"`workspace/src/{ctx.app}/` est la racine du projet ({ctx.language or '?'}).")
+    lines = [head, "",
              "| Répertoire | Contenu | Propriétaire (seul à y écrire) |", "|---|---|---|",
-             f"| racine (`pyproject.toml`, `README.md`, `.env`) | projet et packaging | "
+             f"| racine ({root_files}) | projet et packaging | "
              f"`{owners.get('app', 'dev-backend')}` |"]
     for layer, role in LAYER_ROLE.items():
         if layer in owners:
             lines.append(f"| `{layer}/` | {role} | `{owners[layer]}` |")
-    lines += ["", "Générés par script, jamais édités à la main (`--check` les compare à l'octet) : "
-                  "le squelette (`gen-app-skeleton`), les outils de source (`gen-source-tools`), ce fichier."]
+    generated = ("le squelette (`gen-app-skeleton`), les outils de source (`gen-source-tools`), ce fichier."
+                 if python else "ce fichier (le squelette de ce langage est écrit par `dev-backend`).")
+    lines += ["", "Générés par script, jamais édités à la main (`--check` les compare à l'octet) : " + generated]
     return "\n".join(lines)
 
 
@@ -273,7 +310,7 @@ def render(root: Path, ctx: gas.Context, report: Report) -> str:
         "---",
         *[f"{k}: {v}" for k, v in header.items()],
         "---",
-        f"<!-- GÉNÉRÉ par gen_app_context.py (`project-init`) — ne pas éditer : toute retouche est "
+        "<!-- GÉNÉRÉ par gen_app_context.py (`project-init`) — ne pas éditer : toute retouche est "
         "perdue à la régénération, et `--check` la signale d'ici là. -->",
         "",
         f"# {ctx.app} — contexte projet",
@@ -342,6 +379,12 @@ def run(root: Path, *, mode: str = "check", mission: str | None = None) -> Repor
                      location=paths.rel(root, paths.ir_path(root, ctx.mission)))
         return report
 
+    problem = gas.app_name_problem(root, ctx.app, package=ctx.language == gas.LANGUAGE)
+    if problem:
+        report.error("CONFIG_VALUE_INVALID", f"`AppName: {ctx.app}` inutilisable : {problem}",
+                     fix="un identifiant simple (`SupportDesk`) dans `## Project Config`",
+                     location="workspace/stack/STACK.md ## Project Config")
+        return report
     target = context_path(root, ctx.app)
     rel = paths.rel(root, target)
     content = render(root, ctx, report)
@@ -351,8 +394,7 @@ def run(root: Path, *, mode: str = "check", mission: str | None = None) -> Repor
     written = False
     if mode == "write":
         if not same:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+            atomic_write_text(target, content)   # atomique, LF sur tous les postes
             written = True
     elif not exists:
         report.error(CLS_NOT_INIT, f"{rel} introuvable : le projet n'a pas été initialisé",

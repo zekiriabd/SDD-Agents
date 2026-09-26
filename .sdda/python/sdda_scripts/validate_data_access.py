@@ -49,7 +49,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import markdown_io, paths, source_registry as sr  # noqa: E402
+from sdda_lib import hashing, markdown_io, paths, source_registry as sr  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import active_stacks, read_project_section, read_stack_section_kv  # noqa: E402
@@ -209,6 +209,18 @@ def check_secrets(root: Path, section: dict[str, Any], registry: sr.Registry,
             referenced.setdefault(name, []).append(sid)
 
     summary = {"file": shown, "referenced": sorted(referenced), "present": False}
+
+    # Avant la PHASE 3.0, `src/{App}/.env` n'existe pas encore : c'est
+    # `project-init` qui le copie depuis `workspace/assets/.env`, où l'humain
+    # le dépose. Ce script tourne dès la PHASE 2 (`/sdda-topology`, post-step
+    # des architectes) : exiger la copie rendait la part `dataaccess` rouge sur
+    # tout store authentifié d'un projet neuf. La source fait foi tant que la
+    # copie manque — par les NOMS seulement, comme toujours.
+    if not env_path.is_file() and not candidate.is_absolute() and declared == ".env":
+        source = paths.env_source_path(root)
+        if source.is_file():
+            env_path, shown = source, paths.ENV_SOURCE_REL
+            summary["file"] = shown
 
     if not env_path.is_file():
         if referenced:
@@ -907,6 +919,49 @@ def check_none(root: Path, report: Report) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Confrontation à l'IR
 # ---------------------------------------------------------------------------
+#: Clés STACK.md de l'enveloppe, par famille de stratégie : (timeout, lignes,
+#: allowlist, rôle, egress).
+_STACK_ENVELOPE_KEYS = {
+    "sql": ("DbStatementTimeoutMs", "DbMaxRowsReturned", "DbAllowedSchemas", "DbAgentRole", None),
+    DECLARED: ("SourceReadTimeoutMs", "SourceMaxRecordsReturned", "SourceAllowedSources", "SourceAgentRole", "SourceEgressAllowlist"),
+}
+_ROLE_RANK = {"readonly": 0, "scoped-write": 1, "full": 2}
+
+
+def _check_envelope_within_stack(root: Path, eid: str, strategy: str, envelope: dict[str, Any],
+                                 report: Report, loc: str) -> None:
+    """L'enveloppe DÉCIDÉE (contrat, IR) tient-elle dans l'enveloppe POSSIBLE (STACK.md) ?
+
+    Le docstring du module promettait que STACK.md et l'IR « portent la même
+    enveloppe » ; seule la présence des clés était vérifiée. Un contrat à
+    `maxRows: 100000` passait sous `DbMaxRowsReturned: 100`. STACK.md dit ce
+    qui est permis, le contrat peut resserrer, jamais élargir.
+    """
+    family = DECLARED if strategy == DECLARED else ("sql" if strategy in SQL_STRATEGIES else "")
+    if not family:
+        return
+    section = read_stack_section_kv(root, "Active Data Sources" if family == DECLARED else "Active Data Access")
+    timeout_key, rows_key, allow_key, role_key, egress_key = _STACK_ENVELOPE_KEYS[family]
+    fix = "resserrer le contrat `{n}-data-*` (ou élargir STACK.md, en connaissance de cause), puis recompiler l'IR"
+    for ir_key, stack_key in (("statementTimeoutMs", timeout_key), ("maxRows", rows_key)):
+        bound, value = _positive_int(section.get(stack_key)), _positive_int(envelope.get(ir_key))
+        if bound is not None and value is not None and value > bound:
+            report.error("DATA_ACCESS_INCONSISTENT", f"accès `{eid}` : `{ir_key}: {value}` > `{stack_key}: {bound}` de STACK.md", fix, loc)
+    allowed = section.get(allow_key)
+    if isinstance(allowed, list) and allowed:
+        outside = sorted(set(map(str, envelope.get("schemas") or [])) - {str(a).strip() for a in allowed})
+        if outside:
+            report.error("DATA_ACCESS_INCONSISTENT", f"accès `{eid}` : `schemas` {outside} hors de `{allow_key}` de STACK.md", fix, loc)
+    stack_role = str(section.get(role_key) or "").strip().lower()
+    ir_role = str(envelope.get("role") or "").strip().lower()
+    if stack_role in _ROLE_RANK and ir_role in _ROLE_RANK and _ROLE_RANK[ir_role] > _ROLE_RANK[stack_role]:
+        report.error("DATA_ACCESS_INCONSISTENT", f"accès `{eid}` : `role: {ir_role}` plus permissif que `{role_key}: {stack_role}`", fix, loc)
+    if egress_key:
+        egress = section.get(egress_key)
+        allowed_hosts = {str(h).strip().lower() for h in egress} if isinstance(egress, list) else set()
+        extra = sorted({str(h).strip().lower() for h in envelope.get("egressAllowlist") or []} - allowed_hosts)
+        if extra:
+            report.error("DATA_ACCESS_INCONSISTENT", f"accès `{eid}` : hôte(s) {extra} hors de `{egress_key}` de STACK.md", fix, loc)
 def check_against_ir(root: Path, strategy: str, mission: int | str | None, report: Report) -> list[dict[str, Any]]:
     """L'IR décrit-il la même stratégie que STACK.md, avec une enveloppe bornée ?"""
     ir_files = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
@@ -957,8 +1012,11 @@ def check_against_ir(root: Path, strategy: str, mission: int | str | None, repor
                     fix="une borne absente est une borne infinie ; compléter l'enveloppe du contrat puis recompiler",
                     location=loc,
                 )
+            _check_envelope_within_stack(root, str(eid), str(entry_strategy or strategy), envelope, report, loc)
             if entry_strategy == DECLARED and not envelope.get("egressAllowlist"):
-                remote = [s for s in (entry.get("stores") or [])]
+                # `stores` vit DANS l'enveloppe (ir_compiler) : lu au niveau de
+                # l'entrée, ce contrôle ne voyait jamais rien.
+                remote = list(envelope.get("stores") or [])
                 if remote:
                     report.warn(
                         "DATA_EGRESS_UNDECLARED",
@@ -1031,8 +1089,22 @@ def main(argv: list[str] | None = None) -> int:
     report = run(root, mission=args.mission, only_source=args.source)
 
     if not args.no_report:
+        # Épinglé sur STACK.md et l'IR de la mission : vide, la part survivait
+        # à tout changement d'enveloppe — et rien ne la rejouait.
+        pins: dict[str, str] = {}
+        stack = paths.stack_md_path(root)
+        if stack.is_file():
+            pins["stack"] = hashing.sha256_file(stack)
+        # Artefact : le NUMÉRO nu. G3 s'évalue par OUTIL, et `compute_status`
+        # rattache à chaque outil `{n}-…` les rapports du numéro `{n}` — pas
+        # ceux du nom complet de la MISSION.
+        head = str(args.mission or "").split("-", 1)[0]
+        artifact = head if head.isdigit() and head != "0" else "stack"
+        if artifact != "stack" and paths.ir_path(root, artifact).is_file():
+            from sdda_scripts import ir_compiler  # noqa: PLC0415 — seul le rapport en a besoin
+            pins["dataaccess"] = ir_compiler.data_access_hash(ir_compiler.load_ir(paths.ir_path(root, artifact)))
         try:
-            write_gate_report(root, "G3", args.mission or "stack", report, pinned={}, part="dataaccess")
+            write_gate_report(root, "G3", artifact, report, pinned=pins, part="dataaccess")
         except OSError:
             pass
     return finish(report, args)

@@ -302,7 +302,8 @@ def test_a_default_stack_needs_no_adr_and_writes_a_green_g2_part(tmp_path: Path)
     project = make_project(tmp_path)
     code, payload = adr_report(project)
     assert code == 0 and classes_of(payload) == []
-    assert (project / "workspace/.sys/.validation/G2-1.adr.json").is_file()
+    # Sous l'identifiant complet (audit 2026-09-25) : `compute_status` en dérive la MISSION des épingles.
+    assert (project / "workspace/.sys/.validation/G2-1-SupportAssistant.adr.json").is_file()
 
 
 def test_a_write_role_without_adr_is_blocking(tmp_path: Path) -> None:
@@ -662,7 +663,7 @@ def test_code_that_follows_the_declared_frameworks_is_green(tmp_path: Path) -> N
     project = with_app(make_project(tmp_path), CONFORMING)
     code, payload = framework_report(project)
     assert code == 0, payload
-    assert (project / "workspace/.sys/.validation/G6-1.framework.json").is_file()
+    assert (project / "workspace/.sys/.validation/G6-1-SupportAssistant.framework.json").is_file()
 
 
 def test_a_declared_framework_that_the_code_ignores_is_drift(tmp_path: Path) -> None:

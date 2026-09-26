@@ -327,7 +327,13 @@ def validate_datasets(root: Path, *, mission: int | None = None, config: Layered
         "disjointCheck": mode,
         "content": content,
     }
-    if write_report:
+    # Un pré-requis de PHASE (`--require golden`) n'a pas vérifié le holdout :
+    # il n'écrit pas la part `datasets` de G8. Il l'écrivait verte au STEP 4.3
+    # de `/sdda-build` — le travers déjà fermé pour `validate-topology --pre` :
+    # un pré-contrôle informe, il ne rend pas de verdict de gate.
+    partial = bool(required_kinds) and set(required_kinds) != set(KINDS)
+    report.data["gateReportWritten"] = bool(write_report and not partial)
+    if write_report and not partial:
         for n, pins in per_mission.items():
             missions = sorted(paths.missions_dir(root).glob(f"{n}-*.md"))
             if missions:

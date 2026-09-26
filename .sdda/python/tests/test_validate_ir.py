@@ -190,17 +190,22 @@ def test_llm_judge_without_calibration_ref_is_rejected(ok_ir) -> None:
     assert "IR_INVALID" in _classes(report)     # le schéma l'exige aussi (if/then)
 
 
-def test_llm_judge_with_unresolvable_calibration_is_rejected(ok_ir) -> None:
+def test_llm_judge_with_unresolvable_calibration_is_said_not_blocking_at_g2(ok_ir) -> None:
+    """Audit 2026-09-25 (C2) : le jeu naît en PHASE 6a, après G2 — G5 tranche."""
     root, ir = ok_ir
     (root / "workspace/pipeline/calibration/groundedness.json").unlink()
-    assert "JUDGE_UNCALIBRATED" in _classes(_validate(root, ir))
+    report = _validate(root, ir)
+    assert "JUDGE_UNCALIBRATED" not in _classes(report)
+    assert "JUDGE_UNCALIBRATED" in {f.cls for f in report.warnings}
 
 
-def test_llm_judge_below_kappa_is_rejected(ok_ir) -> None:
+def test_llm_judge_below_kappa_is_said_not_blocking_at_g2(ok_ir) -> None:
     root, ir = ok_ir
     cal = root / "workspace/pipeline/calibration/groundedness.json"
     cal.write_text(json.dumps({"grader": "groundedness", "items": 52, "kappa": 0.41}), encoding="utf-8")
-    assert "JUDGE_UNCALIBRATED" in _classes(_validate(root, ir))
+    report = _validate(root, ir)
+    assert "JUDGE_UNCALIBRATED" not in _classes(report)
+    assert "JUDGE_UNCALIBRATED" in {f.cls for f in report.warnings}
 
 
 def test_advisory_llm_judge_needs_no_calibration(ok_ir) -> None:

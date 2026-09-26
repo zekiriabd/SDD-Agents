@@ -33,10 +33,8 @@ item : il ne sert qu'à vérifier la plomberie (tout grader doit lui donner 1.0)
 from __future__ import annotations
 
 import argparse
-import datetime as _dt
 import json
 import os
-import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -101,6 +99,16 @@ LEVEL_GATE: dict[str, tuple[str, str | None]] = {
 #: laisserait `evaluate_all("G5", cap_ids)` ne trouver aucun rapport — et l'état
 #: `Tested` serait inatteignable sans que rien ne le signale.
 GATE_ARTIFACT: dict[str, str] = {"G3": "tool", "G5": "cap"}
+
+#: Niveaux qui font tourner le système ENTIER : le plafond de coût et la cible
+#: de latence de la MISSION s'y appliquent. L9 en fait partie : l'acceptation
+#: sur holdout est un run de production, pas une mesure de qualité seule.
+SYSTEM_LEVELS = frozenset({"L5", "L6", "L7", "L9"})
+
+#: k minimal pour qu'un rapport de GATE soit écrit. Un run unique mesure un
+#: tirage, pas une distribution (eval-protocol.md §2) : il reste rapporté,
+#: jamais promu au rang de verdict de gate.
+GATE_MIN_RUNS = 2
 
 # ---------------------------------------------------------------------------
 # Exécuteur — injecté, jamais un LLM appelé ici
@@ -196,7 +204,10 @@ def _evaluated_models(root: Path, ir: dict[str, Any] | None, suite: dict[str, An
     agents = [a for a in ((ir or {}).get("agents") or []) if isinstance(a, dict)]
     ref = str(suite.get("agentRef") or "")
     chosen = [a for a in agents if a.get("id") == ref] if ref else agents
-    return sorted({tier_map[t] for t in (str(a.get("tier") or default_tier) for a in chosen) if tier_map.get(t)})
+    # L'IR porte `modelTier` (ir_compiler) : lire `tier` seul voyait chaque
+    # agent en `balanced`, et le juge pouvait être le modèle d'un agent `fast`.
+    tiers = (str(a.get("modelTier") or a.get("tier") or default_tier) for a in chosen)
+    return sorted({tier_map[t] for t in tiers if tier_map.get(t)})
 
 
 class JudgeTrace:
@@ -277,18 +288,68 @@ def normalize_grade(raw: Any) -> Grade:
 # Datasets et criticité
 # ---------------------------------------------------------------------------
 def load_items(path: Path) -> list[dict[str, Any]]:
+    return load_items_counted(path)[0]
+
+
+def load_items_counted(path: Path) -> tuple[list[dict[str, Any]], list[int]]:
+    """(items, numéros des lignes rejetées). Une ligne illisible n'est pas un item.
+
+    Les rejets étaient ignorés en silence : un jeu dont toutes les lignes étaient
+    invalides devenait un jeu VIDE, et une suite sans item sous un seuil `<=`
+    (latence, coût) rendait un vert. Les compter est la moitié du correctif ;
+    `execute_suite` refuse l'autre moitié, le jeu vide.
+    """
     items: list[dict[str, Any]] = []
+    rejected: list[int] = []
     for lineno, raw in enumerate(markdown_io.read_text(path).split("\n"), start=1):
         if not raw.strip():
             continue
         try:
             item = json.loads(raw)
         except ValueError:
+            rejected.append(lineno)
             continue
         if isinstance(item, dict):
             item.setdefault("id", f"ligne-{lineno}")
             items.append(item)
-    return items
+        else:
+            rejected.append(lineno)
+    return items, rejected
+
+
+def recomputed_cost(produced: dict[str, Any]) -> tuple[float, float, str | None]:
+    """(coût RECALCULÉ depuis les tokens, coût déclaré, problème) d'un item-run.
+
+    `cost_usd` est ce que l'application ANNONCE (`run_finished.cost_usd`,
+    `RunResult.cost_usd`) : le confronter au plafond, c'était relire
+    `sdda.cost.usd` — ce qu'ARCHITECTURE §8 interdit. Le coût se recalcule sur
+    les spans `chat` de la trace rendue (`tracing.span_cost_usd`, la même table
+    que `cost_report`). Un appel non tarifable, ou un coût déclaré sans aucun
+    span à recalculer, est un PROBLÈME : le coût retenu est alors le plus haut
+    des deux, jamais un zéro qui passerait sous n'importe quel plafond.
+    """
+    from sdda_lib import tracing  # noqa: PLC0415
+
+    declared = float(produced.get("cost_usd", 0.0) or 0.0)
+    trace = produced.get("trace")
+    spans: Any = trace.get("spans") if isinstance(trace, dict) else trace
+    if not spans and isinstance(trace, dict) and trace.get("trace_path"):
+        spans = list(tracing.read_spans(Path(str(trace["trace_path"]))))
+    llm = [s for s in spans or [] if isinstance(s, dict) and tracing.span_role(s) == "llm"]
+    if not llm:
+        if declared > 0:
+            return declared, declared, "coût déclaré sans aucun span `chat` à recalculer"
+        return 0.0, declared, None
+    total, problems = 0.0, []
+    for span in llm:
+        usd, problem = tracing.span_cost_usd(tracing.attributes_of(span))
+        if problem:
+            problems.append(problem)
+        else:
+            total += usd or 0.0
+    if problems:
+        return max(total, declared), declared, problems[0]
+    return round(total, 6), declared, None
 
 
 def item_class(item: dict[str, Any]) -> str | None:
@@ -461,9 +522,20 @@ def execute_suite(
         result.notes.append("dataset absent : rien mesuré")
         return result, {}, [], 0
 
-    items = load_items(dataset)
+    items, rejected = load_items_counted(dataset)
+    if rejected and report is not None:
+        report.warn("DATASET_ITEM_INVALID", f"suite `{sid}` : {len(rejected)} ligne(s) illisible(s) dans `{suite.get('dataset')}` "
+                    f"(lignes {rejected[:5]}) — exclues de la mesure", "corriger le JSONL (validate-datasets le dit aussi)", sid)
     if item_limit is not None:
         items = items[:item_limit]
+    if not items:
+        # Un jeu vide ne mesure rien, et sous un seuil `<=` la moyenne nulle
+        # d'aucun item passait le seuil : un vert pour une suite jamais jouée.
+        if report is not None:
+            report.error("EVAL_DATASET_EMPTY", f"suite `{sid}` : aucun item exploitable dans `{suite.get('dataset')}`",
+                         "produire le jeu (qa-evals) : une suite sans item n'est pas une mesure", sid)
+        result.notes.append("dataset vide : rien mesuré")
+        return result, {}, [], 0
     grader_name = str(suite.get("grader", ""))
     grader_config = suite.get("graderConfig") if isinstance(suite.get("graderConfig"), dict) else None
     if graders_registry.normalize_name(grader_name) == "llm-judge" and not (graders and grader_name in graders):
@@ -477,6 +549,16 @@ def execute_suite(
             span_sink=judge_trace)
         if problem is not None and report is not None:
             report.error(problem.cls, f"suite `{sid}` : {problem.error}", problem.fix, sid)
+        # Le juge ne croit que la calibration MESURÉE par calibrate-judge, jamais
+        # un `calibration:` déclaré dans la suite (P9) : sans elle, il est advisory.
+        from sdda_lib import calibration as _calibration  # noqa: PLC0415
+
+        grader_config = dict(grader_config or {})
+        measured = _calibration.measured_for_suite(root, (ir or {}).get("missionId"), sid)
+        if measured is None:
+            grader_config.pop("calibration", None)
+        else:
+            grader_config["calibration"] = measured
     grader = resolve_grader(grader_name, graders, grader_config)
     if grader is None:
         if report is not None:
@@ -512,6 +594,9 @@ def execute_suite(
     # shelle la surface console, l'autre est sans état partagé). Un exécuteur
     # qui ne le peut pas se déclare en `EvalMaxParallel: 1`.
     max_parallel = max(1, config.get_int("EvalMaxParallel", 4) if config else 4)
+    #: (run, item) -> (coût déclaré, problème de recalcul) : ce que le rapport
+    #: montre à côté du coût recalculé, et ce que le plafond de coût refuse.
+    cost_meta: dict[tuple[int, str], tuple[float, str | None]] = {}
 
     def measure(run_index: int, seed: int | None, item: dict[str, Any]) -> ItemResult:
         item_id = str(item.get("id"))
@@ -523,7 +608,9 @@ def execute_suite(
                 # Le modèle n'a jamais répondu : c'est une erreur d'EXÉCUTION,
                 # comptée comme telle — pas une mauvaise réponse de l'agent.
                 return ItemResult(item_id, run_index, 0.0, False, {}, f"{provider_down}: le fournisseur du modèle n'a pas répondu")
-            measures = {"cost_usd": float(produced.get("cost_usd", 0.0) or 0.0), "latency_ms": float(produced.get("latency_ms", 0.0) or 0.0)}
+            cost, declared, cost_problem = recomputed_cost(produced)
+            cost_meta[(run_index, item_id)] = (declared, cost_problem)
+            measures = {"cost_usd": cost, "latency_ms": float(produced.get("latency_ms", 0.0) or 0.0)}
             grade = normalize_grade(grader(item, produced.get("output"), produced.get("trace"), measures))
             passed = grade.passed if grade.passed is not None else plan.threshold.holds(grade.score)
             return ItemResult(item_id, run_index, grade.score, bool(passed), grade.detail, None, measures["cost_usd"], measures["latency_ms"])
@@ -548,9 +635,11 @@ def execute_suite(
                 class_scores.setdefault(cls, []).append(ir_item.score)
                 if critical_cap or item_is_critical(item):
                     critical_classes.add(cls)
+            declared, cost_problem = cost_meta.get((run_index, item_id), (0.0, None))
             detail_rows.append({
                 "itemId": item_id, "run": run_index, "class": cls, "score": round(ir_item.score, 6), "passed": ir_item.passed,
-                "costUsd": round(ir_item.cost_usd, 6), "latencyMs": round(ir_item.latency_ms, 2), "error": ir_item.error,
+                "costUsd": round(ir_item.cost_usd, 6), "costDeclaredUsd": round(declared, 6), "costProblem": cost_problem,
+                "latencyMs": round(ir_item.latency_ms, 2), "error": ir_item.error,
             })
         result.runs.append(run)
 
@@ -676,6 +765,12 @@ def run_evals(
     # les graders déterministes n'ouvrent de fichier.
     judge_trace = JudgeTrace(root, rid) if write_report else None
     for suite in selected:
+        if suite.get("threshold") in (None, ""):
+            # Le défaut était `>= 0` : toute suite sans seuil était verte, quoi
+            # qu'elle mesure. Le schéma d'IR l'exige ; un IR édité ou ancien non.
+            report.error("AC_NOT_EVALUABLE", f"suite `{suite.get('id')}` sans `threshold` : rien à franchir, donc aucun verdict",
+                         "déclarer le seuil de l'AC dans la CAP, puis recompiler l'IR", str(suite.get("id")))
+            continue
         plan = plan_suite(root, suite, config, runs_override=runs_override, base_seed=base_seed)
         sid = plan.id
         if plan.runs < 1:
@@ -697,7 +792,17 @@ def run_evals(
                 result.notes.append(f"baseline périmée : {', '.join(sorted(ex.stale_dimensions))} a bougé")
                 report.warn("EVAL_BASELINE_STALE", f"suite `{sid}` : la baseline mesurait autre chose ({', '.join(sorted(ex.stale_dimensions))} a bougé) — ce résultat n'est pas comparable",
                             "promote_baseline.py après lecture du résultat, sinon aucune régression n'est détectable", sid)
-        if isinstance(hard_cap, (int, float)) and rows and str(suite.get("level")) in ("L6", "L7"):
+        # Le plafond vaut pour tout niveau qui fait tourner le SYSTÈME entier :
+        # L5 et L9 (holdout, G8) en étaient exclus, et une acceptation pouvait
+        # passer à dix fois le budget de la MISSION.
+        if isinstance(hard_cap, (int, float)) and rows and str(suite.get("level")) in SYSTEM_LEVELS:
+            unverified = [r for r in rows if r["error"] is None and r.get("costProblem")]
+            if unverified:
+                report.error("BUDGET_PRICING_UNKNOWN",
+                             f"suite `{sid}` : {len(unverified)} item-run(s) au coût non recalculable depuis les tokens "
+                             f"({unverified[0]['costProblem']}) — le plafond {hard_cap} USD ne peut pas être attesté",
+                             "tracer chaque appel LLM (`gen_ai.request.model` + tokens) et compléter la table de tarifs "
+                             "(`.sdda/providers/*.yaml`) ; un coût déclaré n'est pas une mesure (ARCHITECTURE §8)", sid)
             worst = max((r["costUsd"] for r in rows if r["error"] is None), default=0.0)
             if worst > float(hard_cap) + 1e-9:
                 result.notes.append(f"coût max {worst:.4f} USD > costPerRunHardCapUsd {hard_cap}")
@@ -712,8 +817,8 @@ def run_evals(
         # Seuls les runs qui ont MESURÉ une latence comptent : un exécuteur
         # qui rend 0 ms (oracle, replay) n'a rien mesuré, et 0 < cible ne
         # prouverait rien.
-        if rows and str(suite.get("level")) in ("L5", "L6", "L7"):
-            latencies = [r["latencyMs"] for r in rows if r["error"] is None and r["latencyMs"] > 0]
+        if rows and str(suite.get("level")) in SYSTEM_LEVELS:
+            latencies =[r["latencyMs"] for r in rows if r["error"] is None and r["latencyMs"] > 0]
             if latencies and isinstance(latency_target, (int, float)) and latency_target > 0:
                 p95 = percentile(latencies, 0.95)
                 if p95 > float(latency_target) + 1e-9:
@@ -726,6 +831,17 @@ def run_evals(
         executed.append(ex)
         _emit_verdict_findings(report, ex)
 
+    # Un run de DÉBOGAGE (`--limit`, k=1) reste rapporté, mais n'écrit aucun
+    # rapport de gate. `--limit 1` écrivait la part `acceptance` de G8 sur un
+    # seul item du holdout, et `--runs 1` une G5 verte sur un tirage : hors CI,
+    # k=1 n'était qu'un avertissement, et le pipeline tourne hors CI.
+    thin = sorted(ex.plan.id for ex in executed if ex.plan.runs < GATE_MIN_RUNS)
+    if write_gates and executed and item_limit is not None:
+        report.warn("EVAL_PARTIAL_RUN", f"--limit {item_limit} : run de débogage, aucun rapport de gate écrit",
+                    "relancer sans --limit pour rendre un verdict de gate", mid)
+    elif write_gates and thin:
+        report.warn("EVAL_SINGLE_RUN_FORBIDDEN", f"k < {GATE_MIN_RUNS} sur {thin[:5]} : la gate de ces suites n'est pas écrite",
+                    "EvalRuns >= 3 (5 si critique) : un tirage n'est pas un verdict", mid)
     results = [ex.result for ex in executed]
     verdict = aggregate(results)
     if report.errors and SEVERITY[verdict] < SEVERITY["red"]:
@@ -765,7 +881,7 @@ def run_evals(
         out.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write_json(out, payload)
         written["report"] = paths.rel(root, out)
-    if write_gates and executed and mid:
+    if write_gates and executed and mid and item_limit is None:
         pins_all = gate_pins(root, ir, executed)
         by_gate: dict[tuple[str, str | None, str], list[ExecutedSuite]] = {}
         for ex in executed:
@@ -774,6 +890,8 @@ def run_evals(
                 by_gate.setdefault((key[0], key[1], gate_artifact(ir, ex.plan.suite, key[0], mid)), []).append(ex)
         for (gate, part, artifact), members in sorted(by_gate.items(), key=lambda kv: (kv[0][0], kv[0][1] or "", kv[0][2])):
             ids = {m.plan.id for m in members}
+            if ids & set(thin):
+                continue  # une gate écrite sans ses suites k=1 serait verte sur ce qu'elle n'a pas mesuré
             sub = Report(name=f"{gate}.eval", target=artifact, data={"runId": rid, "suites": sorted(ids), "verdict": aggregate([m.result for m in members])})
             for f in report.findings:
                 if f.location in ids:
@@ -854,7 +972,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Exécution des évaluations : k runs, variance, verdict trois couleurs (0 appel LLM dans ce script)")
     p.add_argument("--mission", type=int, default=None, help="numéro de mission ; défaut : l'unique IR compilé")
     p.add_argument("--ir", type=Path, default=None, help="fichier IR explicite")
-    p.add_argument("--executor", default=None, help="`module:attr` — l'exécuteur du système évalué (objet ou fabrique sans argument)")
+    p.add_argument("--executor", default=None, help="`cli` | `cmd:<commande>` | `module:attr` — l'exécuteur du système évalué (objet ou fabrique sans argument)")
     p.add_argument("--suite", action="append", default=None, help="identifiant(s) de suite, répétable ou séparés par des virgules")
     p.add_argument("--level", "--levels", dest="level", default=None, help="niveaux L0..L9, séparés par des virgules")
     p.add_argument("--cap", action="append", default=None, help="CAP(s) à évaluer")
@@ -892,12 +1010,12 @@ def main(argv: list[str] | None = None, *, executor: Any = None, graders: dict[s
     if executor is None:
         if not args.executor:
             report.error("EVAL_EXECUTOR_MISSING", "aucun exécuteur : ce script n'appelle aucun LLM lui-même",
-                         "--executor module:attr (le code généré expose l'exécuteur ; sdda_scripts.eval_runner:OracleExecutor vérifie la plomberie)", str(root))
+                         "--executor cli (l'application livrée, tout langage), cmd:<commande> ou module:attr (sdda_scripts.eval_runner:OracleExecutor vérifie la plomberie)", str(root))
             return finish(report, args)
         try:
             executor = load_executor(args.executor, root)
         except Exception as exc:
-            report.error("EVAL_EXECUTOR_MISSING", f"`{args.executor}` inutilisable : {type(exc).__name__}: {exc}", "corriger le chemin `module:attr` (le paquet est cherché sous workspace/src/) ; une dépendance absente : lancer avec l'interpréteur de l'application (`uv run --project workspace/src/{App} …`)", args.executor)
+            report.error("EVAL_EXECUTOR_MISSING", f"`{args.executor}` inutilisable : {type(exc).__name__}: {exc}", "`--executor cli` lance l'application livrée par sa CLI, quel que soit son langage (stacks/serving/cli.md §3.5) ; `cmd:<commande>` l'impose ; `module:attr` (Python en processus) : le paquet est cherché sous workspace/src/, une dépendance absente se règle en lançant le runner par `uv run --project workspace/src/{App} …`", args.executor)
             return finish(report, args)
 
     if args.ir:

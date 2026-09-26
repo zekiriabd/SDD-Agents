@@ -754,6 +754,203 @@ def check_facades_frontmatter_strict() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 4.ter-quater Façades des autres harnais : lisibles par LEUR parseur, dans LEURS limites
+# ---------------------------------------------------------------------------
+def _strict_frontmatter(path: Path, text: str, required: tuple[str, ...], problems: list[str]) -> dict[str, object]:
+    """Frontmatter relu comme le fait `facades.frontmatter_strict` : identifiant nu ou JSON."""
+    from sdda_admin.harness_build import YAML_PLAIN_RE, YAML_RETYPED
+
+    rel = path.relative_to(ROOT).as_posix()
+    match = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    if not match:
+        problems.append(f"{rel} : aucun frontmatter")
+        return {}
+    values: dict[str, object] = {}
+    for line in match.group(1).splitlines():
+        key, sep, raw = line.partition(":")
+        raw = raw.strip()
+        if not sep:
+            problems.append(f"{rel} : ligne sans `clé: valeur` — `{line[:60]}`")
+            continue
+        if YAML_PLAIN_RE.match(raw) and raw.lower() not in YAML_RETYPED:
+            values[key.strip()] = raw
+        elif raw in ("true", "false"):
+            values[key.strip()] = raw == "true"
+        else:
+            try:
+                values[key.strip()] = json.loads(raw)
+            except ValueError:
+                problems.append(f"{rel} : `{key.strip()}` n'est ni un identifiant nu ni du JSON")
+    for key in required:
+        if not values.get(key):
+            problems.append(f"{rel} : `{key}` absent ou vide")
+    return values
+
+
+def _memport_imports(text: str) -> list[str]:
+    """Les `@chemin` que l'import de mémoire de Gemini CLI tenterait de résoudre.
+
+    Même règle que `findImports` (github.com/google-gemini/gemini-cli,
+    memoryImportProcessor.ts) : un `@` en début de texte ou après un blanc,
+    suivi d'un `.`, d'un `/` ou d'une lettre, hors blocs et spans de code.
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        line = re.sub(r"`[^`]*`", "", line)
+        out.extend(re.findall(r"(?:^|(?<=\s))@([./A-Za-z]\S*)", line))
+    return out
+
+
+def check_facades_other_harnesses() -> None:
+    """`facades.harnesses` : chaque façade non-Claude se relit par le parseur de son harnais.
+
+    `harness-build --check` prouve qu'une façade est à jour ; il ne prouve pas
+    que son harnais sait la lire. Un TOML invalide, un frontmatter que Gemini
+    écarte, une règle Antigravity au-delà de 24 000 octets, un `@{…}` que Gemini
+    CLI exécute comme injection de fichier : chacun donne une façade à jour
+    ET inerte. Ce contrôle relit ce que le harnais relit, avec ses limites
+    documentées (constantes de `harness_build`, URL à côté).
+    """
+    try:
+        from sdda_admin import harness_build as hb
+    except Exception as exc:
+        warn("facades.harnesses", f"harness_build non chargeable ({exc!r})")
+        return
+    try:
+        import tomllib
+    except ImportError:  # Python < 3.11
+        warn("facades.harnesses", "tomllib indisponible (Python < 3.11) : TOML non relu")
+        tomllib = None  # type: ignore[assignment]
+
+    problems: list[str] = []
+    checked = 0
+
+    def rel(path: Path) -> str:
+        return path.relative_to(ROOT).as_posix()
+
+    # -- dérive et orphelins, harnais par harnais --------------------------
+    matrix = hb.load_matrix()
+    for name in hb.default_targets(matrix):
+        if name not in hb.ADAPTERS or name == "claude-code":
+            continue
+        plan, _counts = hb.build_harness(name, matrix[name])
+        for item in hb.drift(plan) + hb.orphans(plan, hb.ADAPTERS[name]):
+            problems.append(f"[{name}] {item} — python .sdda/sdda.py harness-build --prune")
+
+    # -- Codex : agents TOML, hooks.json, pointeur racine ------------------
+    for path in sorted((ROOT / ".codex" / "agents").glob("*.toml")):
+        checked += 1
+        if tomllib is None:
+            break
+        try:
+            data = tomllib.loads(read(path))
+        except Exception as exc:
+            problems.append(f"{rel(path)} : TOML invalide ({exc})")
+            continue
+        for key in ("name", "description", "developer_instructions"):
+            if not str(data.get(key) or "").strip():
+                problems.append(f"{rel(path)} : `{key}` absent (obligatoire pour Codex)")
+        if data.get("sandbox_mode") not in (None, *hb.CODEX_SANDBOX_MODES):
+            problems.append(f"{rel(path)} : sandbox_mode `{data.get('sandbox_mode')}` hors {hb.CODEX_SANDBOX_MODES}")
+        if data.get("model") and data["model"] not in matrix["codex"].tier_models.values():
+            problems.append(f"{rel(path)} : modèle `{data['model']}` absent de tier_models de la matrice")
+    for path in (ROOT / ".codex" / "hooks.json", ROOT / ".gemini" / "settings.json"):
+        if not path.is_file():
+            continue
+        checked += 1
+        try:
+            hooks = json.loads(read(path)).get("hooks") or {}
+            for event, entries in hooks.items():
+                for entry in entries:
+                    re.compile(str(entry.get("matcher") or ""))
+                    for hook in entry.get("hooks") or []:
+                        if hook.get("type") != "command" or "SDDA_HARNESS=" not in str(hook.get("command")):
+                            problems.append(f"{rel(path)} : hook {event} sans `SDDA_HARNESS` — son payload "
+                                            "ne serait pas traduit, donc jamais jugé")
+        except (ValueError, AttributeError, re.error) as exc:
+            problems.append(f"{rel(path)} : illisible ({exc})")
+
+    # -- Gemini CLI : commandes TOML, agents, import de la mémoire ---------
+    for path in sorted((ROOT / ".gemini" / "commands").glob("*.toml")):
+        checked += 1
+        if tomllib is None:
+            break
+        try:
+            data = tomllib.loads(read(path))
+        except Exception as exc:
+            problems.append(f"{rel(path)} : TOML invalide ({exc})")
+            continue
+        prompt = str(data.get("prompt") or "")
+        if not prompt.strip():
+            problems.append(f"{rel(path)} : `prompt` absent (obligatoire pour Gemini CLI)")
+        for injection in re.findall(r"[@!]\{[^}]*\}", prompt):
+            problems.append(f"{rel(path)} : `{injection}` serait exécuté par Gemini CLI (injection de fichier/shell)")
+    for path in sorted((ROOT / ".gemini" / "agents").glob("*.md")):
+        checked += 1
+        values = _strict_frontmatter(path, read(path), ("name", "description"), problems)
+        if values.get("name") and not hb.GEMINI_AGENT_NAME_RE.match(str(values["name"])):
+            problems.append(f"{rel(path)} : nom `{values['name']}` hors [a-z0-9_-]")
+        known = {t for tools in hb.GEMINI_TOOLS.values() for t in tools}
+        listed = values.get("tools")
+        for tool in listed if isinstance(listed, list) else []:
+            if tool not in known:
+                problems.append(f"{rel(path)} : outil `{tool}` inconnu de Gemini CLI")
+    memory = ROOT / ".gemini" / "GEMINI.md"
+    if memory.is_file():
+        stray = _memport_imports(read(memory))
+        if stray:
+            problems.append(f".gemini/GEMINI.md : `@{stray[0]}` serait résolu comme import par Gemini CLI")
+
+    # -- Antigravity : règles, agents -------------------------------------
+    for path in sorted((ROOT / ".agents" / "rules").glob("*.md")):
+        checked += 1
+        size = len(path.read_bytes())
+        if size > hb.ANTIGRAVITY_RULE_MAX_BYTES:
+            problems.append(f"{rel(path)} : {size} octets > {hb.ANTIGRAVITY_RULE_MAX_BYTES} (limite par règle)")
+        values = _strict_frontmatter(path, read(path), ("trigger",), problems)
+        if values.get("trigger") and values["trigger"] not in hb.ANTIGRAVITY_RULE_TRIGGERS:
+            problems.append(f"{rel(path)} : trigger `{values['trigger']}` hors {hb.ANTIGRAVITY_RULE_TRIGGERS}")
+        if values.get("trigger") == "model_decision" and not values.get("description"):
+            problems.append(f"{rel(path)} : `model_decision` exige une description")
+    for path in sorted((ROOT / ".agents" / "agents").glob("*.md")):
+        checked += 1
+        values = _strict_frontmatter(path, read(path), ("name", "description"), problems)
+        if values.get("model") and values["model"] not in hb.ANTIGRAVITY_MODELS:
+            problems.append(f"{rel(path)} : model `{values['model']}` hors {hb.ANTIGRAVITY_MODELS}")
+
+    # -- Skills partagées Codex / Antigravity -----------------------------
+    for path in sorted((ROOT / hb.SKILLS_DIR).glob("*/SKILL.md")):
+        checked += 1
+        values = _strict_frontmatter(path, read(path), ("name", "description"), problems)
+        if values.get("name") and values["name"] != path.parent.name:
+            problems.append(f"{rel(path)} : name `{values['name']}` ≠ dossier `{path.parent.name}`")
+
+    # -- Pointeurs racine ---------------------------------------------------
+    for filename, limit in (("AGENTS.md", hb.CODEX_PROJECT_DOC_MAX_BYTES), ("GEMINI.md", hb.ANTIGRAVITY_RULE_MAX_BYTES)):
+        path = ROOT / filename
+        checked += 1
+        if not path.is_file():
+            problems.append(f"{filename} absent : le harnais qui le lit à la racine ne voit aucune façade")
+            continue
+        size = len(path.read_bytes())
+        if size > min(limit, hb.ANTIGRAVITY_RULE_MAX_BYTES):
+            problems.append(f"{filename} : {size} octets — au-delà, Codex tronque en silence et Antigravity coupe")
+    if (ROOT / "GEMINI.md").is_file() and "@./.gemini/GEMINI.md" not in read(ROOT / "GEMINI.md"):
+        problems.append("GEMINI.md n'importe pas .gemini/GEMINI.md : Gemini CLI ne charge pas l'architecture")
+
+    for item in problems:
+        fail("facades.harnesses", item)
+    if not problems:
+        ok("facades.harnesses", f"{checked} fichiers de façade Codex / Gemini CLI / Antigravity relus par leur format")
+
+
+# ---------------------------------------------------------------------------
 # 4.quater Parité des jumeaux de documentation (`X.md` anglais / `X.fr.md`)
 # ---------------------------------------------------------------------------
 #: Un jumeau manquant est un ÉCHEC : toutes les docs ont leur référence anglaise
@@ -1138,7 +1335,13 @@ def check_context_budgets() -> None:
             if pattern in common_patterns:
                 continue  # déjà compté une fois : le commun ne se paie pas deux fois
             if pattern.startswith(".sdda/"):
-                stable += sum(p.stat().st_size for p in context_pack.expand(ROOT, pattern, mission=None, target=None, obj=None)[0])
+                sizes = [p.stat().st_size for p in context_pack.expand(ROOT, pattern, mission=None, target=None, obj=None)[0]]
+                # `.sdda/stacks/{cat}/{placeholder}.md` désigne LA fiche active,
+                # une seule par projet : à vide, le placeholder s'étend à toutes
+                # les fiches de la catégorie, et chaque langage ajouté gonflait
+                # un budget qu'aucun run réel ne consomme. On compte la pire.
+                one_of = pattern.startswith(".sdda/stacks/") and re.search(r"\{[a-z_]+\}", pattern)
+                stable += (max(sizes) if sizes else 0) if one_of else sum(sizes)
             elif "/.context/packs/" in pattern and not spec.get("pack_sources"):
                 missing_pack.append(agent)
         stable += context_pack.pack_source_bytes(ROOT, loader, agent)
@@ -1337,6 +1540,7 @@ def main() -> int:
         check_documented_classes,
         check_gate_classes_emitted,
         check_facades_frontmatter_strict,
+        check_facades_other_harnesses,
         check_docs_parity,
         check_json,
         check_honesty,

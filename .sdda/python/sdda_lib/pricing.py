@@ -265,14 +265,20 @@ def resolve_model(tier: str, tier_map: dict[str, str] | None = None) -> str:
     return str(tm.get(tier) or DEFAULT_TIER_MAP.get(tier) or DEFAULT_TIER_MAP["balanced"])
 
 
-def estimate_cost_usd(model_id: str, input_tokens: float, output_tokens: float, cache_read_tokens: float = 0.0, *, strict: bool = True) -> float:
+def estimate_cost_usd(model_id: str, input_tokens: float, output_tokens: float, cache_read_tokens: float = 0.0, *,
+                      cache_creation_tokens: float = 0.0, strict: bool = True) -> float:
     """Coût d'un appel : tokens x tarif / 1e6. Arrondi à 6 décimales (stable).
+
+    Les écritures en cache sont facturées (`cache_creation`) : les ignorer ici
+    alors que `tracing.span_cost_usd` les compte donnait deux coûts pour le même
+    appel — 0 $ contre 6,25 $ pour un million de tokens écrits en cache.
 
     Propage `UnknownModelPricing` (cf. `get_pricing`) : l'appelant qui produit
     un chiffre de budget doit le transformer en ERROR `[BUDGET_PRICING_UNKNOWN]`.
     """
     p = get_pricing(model_id, strict=strict)
-    cost = (input_tokens * p["input"] + output_tokens * p["output"] + cache_read_tokens * p["cache_read"]) / 1_000_000
+    cost = (input_tokens * p["input"] + output_tokens * p["output"] + cache_read_tokens * p["cache_read"]
+            + cache_creation_tokens * p.get("cache_creation", p["input"])) / 1_000_000
     return round(cost, 6)
 
 

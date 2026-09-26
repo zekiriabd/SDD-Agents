@@ -58,9 +58,15 @@ def test_worse_than_chance_is_negative() -> None:
 
 
 def test_two_constant_and_identical_annotators_do_not_get_a_flattering_one() -> None:
-    """Accord total mais non informatif : ni 1.0 flatteur, ni 0.0 faux."""
-    assert cohen_kappa(["a"] * 10, ["a"] * 10) == pytest.approx(1.0)
+    """Accord total mais non informatif : un jeu à une seule classe ne calibre pas.
+
+    Il rendait 1.0, donc un juge « toujours pass » sur un jeu « tout pass »
+    était déclaré calibré sans avoir rien distingué.
+    """
+    assert cohen_kappa(["a"] * 10, ["a"] * 10) == pytest.approx(0.0)
     assert cohen_kappa(["a"] * 10, ["b"] * 10) == pytest.approx(0.0)
+    report = calibrate("g", ["pass"] * 60, ["pass"] * 60)
+    assert report.calibrated is False and any("une seule classe" in n for n in report.notes)
 
 
 def test_mismatched_lengths_are_refused() -> None:

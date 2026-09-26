@@ -21,7 +21,11 @@ from typing import Any
 from sdda_lib import tracing
 
 A_CAP_IDS = "sdda.cap.ids"
-A_ITERATION = "sdda.agent.iteration"
+A_RUN_KIND = "sdda.run.kind"
+#: La trace des appels de JUGE d'un run d'eval (`eval_runner.JudgeTrace`) : un
+#: coût d'évaluation, jamais un run du produit.
+JUDGE_RUN_KIND = "eval-judge"
+A_JUDGE_ROLE = "sdda.judge.role"
 A_BOUND_POLICY = "sdda.bound.policy"
 A_BOUND_POLICY_APPLIED = "sdda.bound.policy_applied"
 A_TOOL_RETRY = "sdda.tool.retry_attempt"
@@ -90,9 +94,28 @@ class RunTrace:
         return [s for s in self.spans if tracing.span_role(s) == "agent"]
 
     @property
+    def judge(self) -> bool:
+        """La trace des appels du juge LLM d'un run d'eval.
+
+        Par son span racine, ou — racine jamais écrite, eval interrompue — par
+        ses spans : que des appels `chat` marqués `sdda.judge.role`.
+        """
+        if self.root is not None and tracing.attributes_of(self.root).get(A_RUN_KIND) == JUDGE_RUN_KIND:
+            return True
+        llm = [s for s in self.spans if tracing.span_role(s) == "llm"]
+        return bool(llm) and all(tracing.attributes_of(s).get(A_JUDGE_ROLE) for s in llm) \
+            and not any(tracing.span_role(s) in ("agent", "tool") for s in self.spans)
+
+    @property
     def product(self) -> bool:
-        """Un run du PRODUIT (au moins un agent ou un appel LLM), pas une trace de construction."""
-        return any(tracing.span_role(s) in ("agent", "llm", "tool") for s in self.spans)
+        """Un run du PRODUIT (au moins un agent ou un appel LLM), pas une trace de construction.
+
+        La trace du juge a des spans `chat` : sans l'exclure, elle entrait dans
+        la distribution de coût du produit comme un run « non attribué » — la
+        facture de toute une eval comptée comme UN run, qui pouvait crever le
+        plafond, ce que `JudgeTrace` promettait justement d'éviter.
+        """
+        return not self.judge and any(tracing.span_role(s) in ("agent", "llm", "tool") for s in self.spans)
 
     @property
     def status_ok(self) -> bool:
@@ -171,6 +194,7 @@ def mission_matches(run: RunTrace, number: int | None, mission_id: str) -> bool 
 class Loaded:
     runs: list[RunTrace] = field(default_factory=list)
     build_only: list[RunTrace] = field(default_factory=list)
+    judge: list[RunTrace] = field(default_factory=list)
     other_mission: list[str] = field(default_factory=list)
     unattributed: list[str] = field(default_factory=list)
 
@@ -182,6 +206,9 @@ def load_runs(traces_dir: Path, number: int | None, mission_id: str) -> Loaded:
         return out
     for path in sorted(traces_dir.glob("*.jsonl")):
         run = load_run(path)
+        if run.judge:
+            out.judge.append(run)
+            continue
         if not run.product:
             out.build_only.append(run)
             continue

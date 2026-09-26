@@ -81,6 +81,21 @@
           "additionalProperties": {
             "$ref": "#/$defs/sha256"
           }
+        },
+        "suiteHashes": {
+          "type": "object",
+          "description": "Empreinte de chaque suite systeme `workspace/pipeline/suites/{n}-*.yaml` : le compilateur projette ses suites L5/L7 dans evaluation.suites.",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "configHash": {
+          "$ref": "#/$defs/sha256",
+          "description": "Empreinte des cles du Project Config lues par le compilateur (EvalRunsCritical)."
+        },
+        "rosterHash": {
+          "type": "string",
+          "description": "Empreinte de `workspace/feats/{n}-roster.md`, ou chaine vide sans roster. Le roster commande la topologie (P7) et est confronte a l'IR par validate_ir."
         }
       }
     },
@@ -1198,7 +1213,12 @@
                 "description": "Options du grader, compilées depuis l'AC (ex. `fields: a, b` -> {\"fields\": [\"a\", \"b\"]} pour `exact`). Lu par eval_runner ; sans elle, une AC ne pouvait rien dire au grader que le jeu entier ne dise pas."
               },
               "threshold": {
-                "type": "number"
+                "description": "Un nombre (comparateur `>=` implicite) ou une chaîne `\"<= 0.05\"` : le comparateur fait partie du critère. Compilé en `2000` au lieu de `<= 2000`, un plafond se lisait `>= 2000` au runner. Les pourcentages sont déjà convertis en fraction.",
+                "type": [
+                  "number",
+                  "string"
+                ],
+                "pattern": "^(>=|<=|==|>|<) -?[0-9]+(\\.[0-9]+)?(e-?[0-9]+)?$"
               },
               "runs": {
                 "type": "integer",

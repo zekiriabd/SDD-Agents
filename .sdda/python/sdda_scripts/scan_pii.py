@@ -38,7 +38,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import read_stack_section_kv  # noqa: E402
+from sdda_lib.layered_config import active_stacks, read_stack_section_kv  # noqa: E402
+from sdda_scripts.audit_ownership import is_secret_file  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 TARGETS = ("vectorstore", "datasets", "traces", "prompts")
@@ -51,6 +52,7 @@ TARGET_PATHS: dict[str, tuple[str, ...]] = {
     # ce que le contrat de retrieval désigne.
     "vectorstore": ("workspace/assets/corpus", "workspace/pipeline/contracts/retrieval"),
 }
+CONTRACTS_REL = "workspace/pipeline/contracts/retrieval"
 
 #: Motifs à faible taux de faux positifs. Les PII « molles » (un nom propre, une
 #: adresse) ne sont PAS détectables par regex sans noyer le rapport — elles se
@@ -92,30 +94,74 @@ def _luhn(digits: str) -> bool:
     return total % 10 == 0
 
 
+#: Politiques de trace qui laissent passer une PII (la docstring dit `allow`,
+#: le gabarit de STACK.md dit `raw` : les deux sont admises).
+PERMISSIVE_POLICIES = frozenset({"raw", "allow"})
+
+
+def target_bases(root: Path, target: str) -> list[tuple[Path, str]]:
+    """(chemin, forme lisible) de chaque racine d'une cible.
+
+    `workspace/src/*/prompts` était pris au pied de la lettre : un chemin
+    contenant `*` n'existe jamais, et les prompts n'étaient jamais scannés.
+    """
+    out: list[tuple[Path, str]] = []
+    for rel in TARGET_PATHS[target]:
+        if any(ch in rel for ch in "*?["):
+            matches = sorted(root.glob(rel))
+            out.extend((p.resolve(), paths.rel(root, p)) for p in matches)
+            if not matches:
+                out.append((root / "__absent__" / rel.replace("*", "_"), rel))
+        else:
+            out.append(((root / rel).resolve(), rel))
+    return out
+
+
+def rag_active(root: Path) -> bool:
+    """Un RAG est-il déclaré ? Sans lui, un corpus absent n'est pas un trou."""
+    return any(s not in ("", "none") for s in active_stacks(root, "Active RAG Pattern"))
+
+
 def policy_of(root: Path) -> tuple[str, str]:
     trace = str(read_stack_section_kv(root, "Active Observability").get("TracePIIPolicy") or "redact")
     memory = str(read_stack_section_kv(root, "Active Memory Strategy").get("MemoryPIIPolicy") or "redact-before-write")
     return trace.strip().lower(), memory.strip().lower()
 
 
+def pii_matches(line: str) -> list[str]:
+    """Les types de PII d'une ligne — chaque correspondance filtrée ELLE-MÊME.
+
+    Le filtre « exemple » s'appliquait à la ligne entière : sur un JSONL, une
+    ligne est un item complet, et un seul `<ticket>` ou `latest.txt` (`test.`)
+    y cachait l'e-mail et le téléphone réels du même item. On écarte désormais
+    la correspondance qui EST un exemple (`jean@example.com`, `127.0.0.1`),
+    pas ses voisines.
+    """
+    found: list[str] = []
+    for label, pattern in COMPILED:
+        for m in pattern.finditer(line):
+            if EXAMPLE_RE.search(m.group(0)):
+                continue
+            if label == "carte bancaire" and not _luhn(m.group(0)):
+                continue
+            found.append(label)
+            break
+    return found
+
+
 def scan_file(root: Path, path: Path, target: str, blocking: bool, report: Report) -> int:
     try:
         text = markdown_io.read_text(path)
-    except (OSError, UnicodeDecodeError):
+    except UnicodeDecodeError:
+        text = path.read_bytes().decode("latin-1")
+    except OSError:
         return 0
     loc = paths.rel(root, path)
     hits = 0
     emit = report.error if blocking else report.warn
 
     for number, line in enumerate(text.split("\n"), start=1):
-        if EXAMPLE_RE.search(line):
-            continue
-        for label, pattern in COMPILED:
-            m = pattern.search(line)
-            if not m:
-                continue
-            if label == "carte bancaire" and not _luhn(m.group(0)):
-                continue
+        for label in pii_matches(line):
             hits += 1
             emit(
                 "PII_IN_INDEX" if target == "vectorstore" else "PII_DETECTED",
@@ -141,30 +187,46 @@ def run(root: Path, targets: list[str] | None = None, mission: int | str | None 
         return report
 
     trace_policy, memory_policy = policy_of(root)
-    # `allow` n'annule pas le scan : il transforme le blocage en avertissement
-    # tracé. Un scan désactivé ne laisse aucune trace de ce qu'il aurait vu.
-    blocking = trace_policy != "raw"
-    if trace_policy == "raw":
-        report.warn("PII_POLICY_PERMISSIVE", "`TracePIIPolicy: raw` — les PII détectées ne bloquent pas",
-                    fix="`raw` exige un ADR. Sans lui, revenir à `redact`",
+    # `raw` / `allow` n'annulent pas le scan : ils transforment le blocage en
+    # avertissement tracé. Un scan désactivé ne laisse aucune trace de ce qu'il
+    # aurait vu. Cette politique est celle des TRACES (et de ce qui s'écrit
+    # comme elles) : elle ne relâche jamais l'index — `pii-not-in-vector-store`
+    # n'a pas de mode permissif, et `TracePIIPolicy: raw` le désactivait.
+    permissive = trace_policy in PERMISSIVE_POLICIES
+    if permissive:
+        report.warn("PII_POLICY_PERMISSIVE", f"`TracePIIPolicy: {trace_policy}` — les PII détectées hors index ne bloquent pas",
+                    fix=f"`{trace_policy}` exige un ADR. Sans lui, revenir à `redact`",
                     location="workspace/stack/STACK.md")
 
     scanned = hits = 0
     absent: list[str] = []
+    per_target: dict[str, int] = {}
     for target in wanted:
-        for rel in TARGET_PATHS[target]:
-            base = (root / rel).resolve()
+        blocking = target == "vectorstore" or not permissive
+        per_target[target] = 0
+        for base, rel in target_bases(root, target):
             if not base.exists():
                 absent.append(rel)
                 continue
-            for path in sorted(p for p in base.rglob("*") if p.is_file()):
-                if SKIP_PARTS & set(path.parts) or path.suffix.lower() in SKIP_SUFFIXES:
-                    continue
+            for path in sorted(p for p in base.rglob("*") if p.is_file()) if base.is_dir() else [base]:
+                inner = path.relative_to(base).parts if path != base else ()
+                if SKIP_PARTS & set(inner) or path.suffix.lower() in SKIP_SUFFIXES or is_secret_file(path.as_posix()):
+                    continue  # `.env` : jamais ouvert, pas même pour y chercher une PII
                 hits += scan_file(root, path, target, blocking, report)
                 scanned += 1
+                if rel != CONTRACTS_REL:
+                    per_target[target] += 1  # les contrats ne sont pas le corpus : ils ne comptent pas
+
+    if "vectorstore" in wanted and not per_target.get("vectorstore") and rag_active(root):
+        # Rouge, pas un avertissement : un corpus introuvable rendait la part
+        # `pii` verte sur ZÉRO fichier de corpus, quand un RAG est déclaré.
+        report.error("PII_SCAN_PARTIAL", "RAG actif mais aucun fichier de corpus scanné sous workspace/assets/corpus — "
+                     "la part `pii` ne peut rien attester de l'index",
+                     fix="déposer le corpus destiné à l'index sous workspace/assets/corpus avant la revue",
+                     location="workspace/stack/STACK.md")
 
     report.data.update({
-        "targets": wanted, "filesScanned": scanned, "hits": hits,
+        "targets": wanted, "filesScanned": scanned, "filesByTarget": per_target, "hits": hits,
         "tracePiiPolicy": trace_policy, "memoryPiiPolicy": memory_policy,
         "pathsAbsent": absent, "mission": mission,
     })

@@ -43,15 +43,19 @@ def test_a_moved_dimension_is_named_not_just_flagged() -> None:
     assert moved["promptHash"] == ("sha256:aaa", "sha256:zzz")
 
 
-def test_an_empty_dimension_means_not_applicable_not_changed() -> None:
-    """Un agent sans retrieval n'a pas d'indexHash.
-
-    Traiter l'absence comme un changement périmerait tout, tout le temps — et
-    une mécanique qui crie toujours finit désactivée.
-    """
+def test_an_empty_dimension_on_both_sides_means_not_applicable_not_changed() -> None:
+    """Un agent sans retrieval n'a pas d'indexHash, ni avant ni après : rien n'a bougé."""
     pinned = PinTuple(promptHash="sha256:aaa", indexHash="")
-    current = PinTuple(promptHash="sha256:aaa", indexHash="sha256:idx")
+    current = PinTuple(promptHash="sha256:aaa", indexHash="")
     assert pinned.diff(current) == {}
+
+
+def test_a_dimension_that_appears_is_a_change() -> None:
+    """Un agent qui GAGNE un retriever ou un outil ne se comporte plus comme sa
+    baseline : l'ignorer la laissait « fraîche » (vide d'un seul côté)."""
+    pinned = PinTuple(promptHash="sha256:aaa", indexHash="", toolSchemaHash="")
+    current = PinTuple(promptHash="sha256:aaa", indexHash="sha256:idx", toolSchemaHash="sha256:tools")
+    assert set(pinned.diff(current)) == {"indexHash", "toolSchemaHash"}
 
 
 def test_model_id_is_part_of_the_tuple() -> None:
@@ -172,9 +176,13 @@ def test_regression_delta_respects_the_direction_of_the_metric() -> None:
     assert regression_delta(quality, 0.99, lower_is_better=False) == pytest.approx(10.0)
 
 
-def test_regression_against_a_zero_baseline_is_zero_not_a_division_error() -> None:
+def test_regression_against_a_zero_baseline_is_read_in_absolute_points() -> None:
+    """Pas de division par zéro, et pas de « stable » non plus : 0 -> 0,5 sur une
+    métrique `<=` est une régression de 50 points, 0 -> 0,5 sur `>=` un progrès."""
     baseline = Baseline("s", "m", 0.0, 0.0, 0.0, "red", PinTuple())
-    assert regression_delta(baseline, 0.5, lower_is_better=False) == 0.0
+    assert regression_delta(baseline, 0.5, lower_is_better=False) == pytest.approx(50.0)
+    assert regression_delta(baseline, 0.5, lower_is_better=True) == pytest.approx(-50.0)
+    assert regression_delta(baseline, 0.0, lower_is_better=True) == 0.0
 
 
 def test_non_hash_dimensions_compare_by_equality_not_by_hash_form() -> None:

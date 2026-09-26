@@ -97,8 +97,17 @@ class SchemaValidator:
             return
         if not isinstance(s, dict):
             return
-        if "$ref" in s:
-            merged = dict(self._resolve(s["$ref"]))
+        # Résolu en boucle : un `$ref` vers une définition qui pointe elle-même
+        # ailleurs n'était suivi que d'un niveau, et `5` passait pour une chaîne.
+        seen: set[str] = set()
+        while isinstance(s, dict) and "$ref" in s:
+            ref = str(s["$ref"])
+            if ref in seen:
+                errors.append(f"{path}: `$ref` circulaire ({ref})")
+                return
+            seen.add(ref)
+            target = self._resolve(ref)
+            merged = dict(target) if isinstance(target, dict) else {}
             merged.update({k: val for k, val in s.items() if k != "$ref"})
             s = merged
 

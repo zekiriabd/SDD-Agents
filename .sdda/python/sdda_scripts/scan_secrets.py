@@ -34,27 +34,46 @@ from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
-DEFAULT_PATHS = ("workspace/src", "workspace/.sys/traces", "workspace/pipeline/datasets")   # les prompts sont sous workspace/src/{App}/prompts/
+#: Les prompts sont sous workspace/src/{App}/prompts/. `reports/` porte les
+#: exécutions enregistrées (`runs/{n}-adversarial.jsonl`) : la sortie BRUTE des
+#: attaques d'exfiltration — l'endroit où un secret exfiltré atterrit d'abord.
+#: `fixtures/`, `calibration/` et `suites/` sont commités comme les datasets.
+DEFAULT_PATHS = ("workspace/src", "workspace/.sys/traces", "workspace/.sys/reports", "workspace/pipeline/datasets",
+                 "workspace/pipeline/fixtures", "workspace/pipeline/calibration", "workspace/pipeline/suites")
+
+#: Label du motif d'URL à identifiants : son mot de passe peut être un
+#: placeholder (`${DB_PASSWORD}`), filtré dans `scan_file`.
+URL_CREDENTIALS = "URL avec identifiants"
 
 #: Motifs à préfixe connu — sûrs, quasiment sans faux positif.
 PREFIXED = {
-    "clé OpenAI": r"sk-[A-Za-z0-9_-]{16,}",
+    "clé OpenAI / Anthropic": r"sk-[A-Za-z0-9_-]{16,}",
+    "clé Stripe": r"(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}",
+    "token Hugging Face": r"\bhf_[A-Za-z0-9]{30,}",
     "token Slack": r"xox[baprs]-[A-Za-z0-9-]{10,}",
     "token GitHub": r"gh[pousr]_[A-Za-z0-9]{20,}",
     "PAT GitHub": r"github_pat_[A-Za-z0-9_]{20,}",
     "clé AWS": r"(?:AKIA|ASIA)[0-9A-Z]{16}",
     "clé Google": r"AIza[A-Za-z0-9_-]{30,}",
     "token GitLab": r"glpat-[A-Za-z0-9_-]{16,}",
+    "clé Azure Storage / Service Bus": r"(?i)(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{30,}={0,2}",
     "JWT": r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{6,}",
     "clé privée": r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----",
-    "URL avec identifiants": r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s:@]{6,}@",
+    # Mot de passe d'un caractère ou plus : `postgresql://app:pw12@db` passait
+    # sous l'ancien minimum de six.
+    URL_CREDENTIALS: r"[a-z][a-z0-9+.-]*://[^/\s:@]+:(?P<password>[^/\s:@]+)@",
 }
 
 #: Affectation d'une variable au nom sensible. Plus bruyant, donc restreint aux
 #: valeurs qui ne ressemblent pas à un placeholder ou à un nom de variable.
 #: Le guillemet ouvrant est capturé : il dit si la valeur est un LITTÉRAL.
+#:
+#: Le nom admet un PRÉFIXE (`AZURE_OPENAI_API_KEY`, `DB_PASSWORD`) : `\b` ne
+#: coupe pas après `_`, si bien que la forme la plus courante d'un `.env` — un
+#: nom de variable préfixé — n'était jamais reconnue.
 ASSIGNMENT = re.compile(
-    r"""(?i)\b(?P<name>api[_-]?key|secret|password|passwd|token|credential|private[_-]?key)\b"""
+    r"""(?i)(?<![A-Za-z0-9])(?P<name>(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret|client[_-]?secret|password|passwd|pwd"""
+    r"""|token|credential|private[_-]?key|access[_-]?key|account[_-]?key))\b"""
     r"""\s*[:=]\s*(?P<quote>["']?)(?P<value>[^\s"',;)]{12,})["']?""")
 
 _PLACEHOLDER = re.compile(
@@ -76,8 +95,14 @@ _CODE_EXPR = re.compile(r"^(?:[A-Za-z_][\w.]*\s*[\(\[]|[A-Za-z_]\w*(?:\.[A-Za-z_
 SKIP_SUFFIXES = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".gz", ".whl", ".so", ".dll",
     ".pyc", ".parquet", ".xlsx", ".lock", ".ico", ".woff", ".woff2",
+    # Binaires des autres écosystèmes (.NET, JVM, Node) : décodés en Latin-1 ils
+    # ne rendraient que du bruit.
+    ".exe", ".pdb", ".jar", ".class", ".nupkg", ".snupkg", ".dylib", ".bin", ".7z", ".tar",
 })
-SKIP_PARTS = frozenset({"__pycache__", ".git", "node_modules", ".venv", "venv"})
+#: `obj/` (.NET) et `.gradle/` (Kotlin) sont des caches de build régénérés.
+#: `bin/`, `build/`, `dist/` restent scannés : c'est ce qui PART avec le livrable.
+SKIP_PARTS = frozenset({"__pycache__", ".git", "node_modules", ".venv", "venv", "obj", ".gradle",
+                        ".mypy_cache", ".pytest_cache", ".ruff_cache"})
 
 #: Les fichiers d'exemple LIVRÉS avec l'application : ils partent dans le
 #: dépôt, donc ils sont scannés — c'est le seul `.env*` qui doive l'être.
@@ -123,17 +148,46 @@ def is_literal_assignment(m: re.Match[str]) -> bool:
     return not is_placeholder(value) and (bool(m.group("quote")) or not is_code_expression(value))
 
 
-def scan_file(root: Path, path: Path, report: Report) -> int:
+def read_scannable(path: Path) -> str | None:
+    """Le texte d'un fichier, UTF-8 d'abord, Latin-1 ensuite ; None s'il est illisible.
+
+    Un fichier non UTF-8 (un `.cs` en cp1252, un `.properties` en ISO-8859-1)
+    était sauté en silence — et compté comme scanné. Latin-1 décode tout octet :
+    les motifs, tous ASCII, s'y retrouvent à l'identique.
+    """
     try:
-        text = markdown_io.read_text(path)
-    except (OSError, UnicodeDecodeError):
-        return 0
+        return markdown_io.read_text(path)
+    except UnicodeDecodeError:
+        try:
+            return path.read_bytes().decode("latin-1").replace("\r\n", "\n").replace("\r", "\n")
+        except OSError:
+            return None
+    except OSError:
+        return None
+
+
+def _is_placeholder_password(m: re.Match[str]) -> bool:
+    pw = m.groupdict().get("password") or ""
+    return pw.startswith(("$", "<", "{", "%", "*")) or is_placeholder(pw)
+
+
+def is_env_style_name(name: str) -> bool:
+    """`AZURE_OPENAI_API_KEY`, `DB_PASSWORD` : un nom de variable d'environnement."""
+    return bool(_ENV_NAME.match(name)) and "_" in name
+
+
+def scan_file(root: Path, path: Path, report: Report) -> int:
+    text = read_scannable(path)
+    if text is None:
+        return -1
     loc = paths.rel(root, path)
     found = 0
 
     for number, line in enumerate(text.split("\n"), start=1):
         for label, pattern in COMPILED:
             m = pattern.search(line)
+            if m and label == URL_CREDENTIALS and _is_placeholder_password(m):
+                continue  # `postgres://app:${DB_PASSWORD}@db` : la forme exigée, pas une fuite
             if m:
                 found += 1
                 report.error(
@@ -147,7 +201,12 @@ def scan_file(root: Path, path: Path, report: Report) -> int:
         m = ASSIGNMENT.search(line)
         if m and is_literal_assignment(m):
             found += 1
-            report.warn(
+            # Erreur quand le nom est celui d'une variable d'environnement
+            # (`DB_PASSWORD=…`) : c'est la ligne d'un `.env` recopiée hors de son
+            # fichier désigné, pas un exemple de code. Sinon un avertissement :
+            # `api_key = "…"` dans du code reste souvent une valeur de test.
+            emit = report.error if is_env_style_name(m.group("name")) else report.warn
+            emit(
                 "SECRET_LEAK",
                 f"{loc}:{number} — affectation `{m.group('name')}` avec une valeur littérale",
                 fix="référencer un NOM de variable (`key_env: CRM_API_KEY`) plutôt qu'une valeur. "
@@ -161,6 +220,7 @@ def run(root: Path, targets: list[str] | None = None) -> Report:
     report = Report(name="SECRETS", target=str(root))
     scanned = 0
     missing: list[str] = []
+    unreadable: list[str] = []
 
     for rel in (targets or list(DEFAULT_PATHS)):
         base = (root / rel).resolve()
@@ -169,12 +229,20 @@ def run(root: Path, targets: list[str] | None = None) -> Report:
             continue
         candidates = [base] if base.is_file() else sorted(p for p in base.rglob("*") if p.is_file())
         for path in candidates:
-            if SKIP_PARTS & set(path.parts) or path.suffix.lower() in SKIP_SUFFIXES or is_env_file(path):
+            # Parties RELATIVES à la cible : un projet rangé sous un répertoire
+            # nommé `obj` ou `venv` ne doit pas voir tout son arbre sauté.
+            inner = path.relative_to(base).parts if path != base else ()
+            if SKIP_PARTS & set(inner) or path.suffix.lower() in SKIP_SUFFIXES or is_env_file(path):
                 continue
-            scan_file(root, path, report)
+            if scan_file(root, path, report) < 0:
+                unreadable.append(paths.rel(root, path))
+                continue
             scanned += 1
 
-    report.data.update({"filesScanned": scanned, "pathsAbsent": missing})
+    report.data.update({"filesScanned": scanned, "pathsAbsent": missing, "filesUnreadable": unreadable[:20]})
+    if unreadable:
+        report.warn("SECRET_SCAN_PARTIAL", f"{len(unreadable)} fichier(s) illisible(s), non scanné(s) : {unreadable[:3]}",
+                    fix="un fichier qu'on ne lit pas n'est pas un fichier propre : vérifier ses droits")
     if missing:
         report.warn("SECRET_SCAN_PARTIAL", f"répertoire(s) absent(s), non scanné(s) : {missing}",
                     fix="normal avant la génération ; anormal en G7 — un scan partiel qui se présente "

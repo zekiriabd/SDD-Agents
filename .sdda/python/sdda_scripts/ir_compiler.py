@@ -46,9 +46,7 @@ from __future__ import annotations
 
 import argparse
 import copy
-import datetime as _dt
 import json
-import os
 import re
 import sys
 from collections import Counter
@@ -62,7 +60,7 @@ from sdda_lib import hashing, markdown_io, mermaid, paths, yaml_mini  # noqa: E4
 from sdda_lib.errors import Report, emit  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig, app_name, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, load_config, resolve_root  # noqa: E402
-from sdda_scripts.validate_cap import CapSpec, load_caps_for_mission  # noqa: E402
+from sdda_scripts.validate_cap import CapSpec, load_caps_for_mission, normalize_threshold  # noqa: E402
 from sdda_scripts.validate_mission import MissionSpec, load_mission  # noqa: E402
 from sdda_scripts.validate_topology import TopologySpec, load_mermaid, parse_topology  # noqa: E402
 
@@ -1108,11 +1106,13 @@ def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, ru
                  f"graders admis : {', '.join(GRADERS)}", f"{mloc}:Quantified Goal")
         return None
 
-    threshold = None
+    # Le comparateur de la cible voyage avec elle (`normalize_threshold`) : un
+    # objectif `<= 2000 ms` compilé en `2000` se lisait `>= 2000` au runner.
     raw_target = str(goal.get("Target", ""))
-    match = re.search(r"-?\d+(?:[.,]\d+)?", raw_target.replace(",", "."))
-    if match:
-        threshold = float(match.group(0))
+    threshold = normalize_threshold(raw_target)
+    if threshold is None:
+        match = re.search(r"(>=|<=|==|>|<)?\s*-?\d+(?:[.,]\d+)?\s*%?", raw_target)
+        threshold = normalize_threshold(match.group(0)) if match else None
     if threshold is None:
         ctx.fail(f"MISSION : `Quantified Goal: Target: {raw_target or '<absent>'}` ne porte aucun seuil chiffré",
                  "écrire une cible mesurable, ex. `>= 0.75 sur le holdout` — G0 le refuse aussi",
@@ -1132,7 +1132,7 @@ def compile_acceptance_suite(ctx: CompileContext, mission: Any, holdout: str, ru
     return suite
 
 
-def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[dict[str, Any]], tools: list[dict[str, Any]], retrievers: list[dict[str, Any]], mission: Any = None) -> tuple[dict[str, Any], dict[str, Any]]:
+def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[dict[str, Any]], mission: Any = None) -> tuple[dict[str, Any], dict[str, Any]]:
     suites: list[dict[str, Any]] = []
     traceability: dict[str, Any] = {}
     agents_by_cap: dict[str, list[str]] = {}
@@ -1247,15 +1247,17 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
         if level not in ("L5", "L7") or sid in existing:
             continue
         grader = str(spec.get("grader") or "")
-        threshold = spec.get("threshold")
+        # `threshold: "<= 300"` est la forme naturelle d'une suite de latence :
+        # l'exiger numérique écartait précisément les suites L7 de budget.
+        threshold = normalize_threshold(spec.get("threshold"))
         runs = spec.get("runs")
         dataset = str(spec.get("dataset") or "")
-        if grader not in GRADERS or not isinstance(threshold, (int, float)) or not isinstance(runs, int) or not dataset:
+        if grader not in GRADERS or threshold is None or not isinstance(runs, int) or not dataset:
             ctx.report.warn("EVAL_SUITE_INCOMPLETE", f"suite système `{sid}` ({level}) ignorée : grader, threshold, runs ou dataset manquant",
                             "compléter la suite (qa-evals) puis recompiler l'IR", paths.rel(ctx.root, path))
             continue
         suites.append({"id": sid, "level": level, "dataset": dataset, "grader": grader,
-                       "threshold": float(threshold), "runs": runs})
+                       "threshold": threshold, "runs": runs})
         existing.add(sid)
     evaluation["suites"] = sorted(suites, key=lambda s: s["id"])
 
@@ -1268,12 +1270,63 @@ def compile_evaluation(ctx: CompileContext, caps: list[CapSpec], agents: list[di
 # --------------------------------------------------------------------------
 # STACK.md -> mémoire, guardrails
 # --------------------------------------------------------------------------
-def compile_memory(root: Path) -> dict[str, Any] | None:
+MEMORY_KEYS: dict[str, str] = {
+    "ShortTermPolicy": "shortTermPolicy", "ShortTermMaxTurns": "shortTermMaxTurns", "SummarizeTriggerTokens": "summarizeTriggerTokens",
+    "LongTermEnabled": "longTermEnabled", "LongTermStore": "longTermStore", "LongTermWritePolicy": "longTermWritePolicy",
+    "LongTermRetentionDays": "longTermRetentionDays", "MemoryPIIPolicy": "piiPolicy", "CrossAgentSharedState": "crossAgentSharedState",
+}
+_MEMORY_INT_KEYS = ("shortTermMaxTurns", "summarizeTriggerTokens", "longTermRetentionDays")
+
+
+def _memory_contract_values(root: Path, number: int) -> tuple[dict[str, Any], str | None]:
+    """Les clés du contrat mémoire `{n}-memory.md` (tables `Clé | Valeur`), typées.
+
+    `architect-memory` écrit ce contrat — rétention, PII, partage entre agents —
+    et le compilateur ne le lisait pas : il n'en gardait que le hash. Les
+    décisions du contrat n'atteignaient ni l'IR ni `dev-orchestration`.
+    """
+    path = paths.contracts_dir(root, "memory") / f"{number}-memory.md"
+    if not path.is_file():
+        return {}, None
+    wanted = {_norm_key(k): ir for k, ir in MEMORY_KEYS.items()}
+    out: dict[str, Any] = {}
+    for key, value in _two_col_rows(markdown_io.read_text(path)):
+        ir = wanted.get(_norm_key(key))
+        raw = markdown_io.strip_code(value).strip()
+        if ir is None or ir in out or not raw or markdown_io.is_placeholder(raw) or raw.startswith("<"):
+            continue
+        if ir in _MEMORY_INT_KEYS:
+            n = _to_int(raw)
+            if n is not None:
+                out[ir] = n
+        elif ir == "longTermEnabled":
+            b = _to_bool(raw)
+            if b is not None:
+                out[ir] = b
+        else:
+            out[ir] = raw.split()[0].lower()
+    return out, paths.rel(root, path)
+
+
+def compile_memory(root: Path, number: int | None = None, report: Report | None = None) -> dict[str, Any] | None:
+    """`memory` : STACK.md (ce qui est POSSIBLE), recouvert par le contrat (ce qui est DÉCIDÉ).
+
+    Un désaccord n'est pas arbitré en silence : `[MEMORY_CONTRACT_MISMATCH]`,
+    comme `[RETRIEVAL_BINDING_MISMATCH]` pour le retrieval — deux vérités sur
+    le même fait, c'est zéro vérité vérifiable.
+    """
     kv = read_stack_section_kv(root, "Active Memory Strategy")
-    mapping = {"ShortTermPolicy": "shortTermPolicy", "ShortTermMaxTurns": "shortTermMaxTurns", "SummarizeTriggerTokens": "summarizeTriggerTokens",
-               "LongTermEnabled": "longTermEnabled", "LongTermStore": "longTermStore", "LongTermWritePolicy": "longTermWritePolicy",
-               "LongTermRetentionDays": "longTermRetentionDays", "MemoryPIIPolicy": "piiPolicy", "CrossAgentSharedState": "crossAgentSharedState"}
-    out = {ir: kv[k] for k, ir in mapping.items() if kv.get(k) is not None}
+    out = {ir: kv[k] for k, ir in MEMORY_KEYS.items() if kv.get(k) is not None}
+    if number is not None:
+        contract, loc = _memory_contract_values(root, number)
+        for ir, value in contract.items():
+            stacked = out.get(ir)
+            if report is not None and stacked is not None and str(stacked).strip().lower() != str(value).strip().lower():
+                report.error("MEMORY_CONTRACT_MISMATCH",
+                             f"mémoire : le contrat déclare `{ir}: {value}`, `STACK.md ## Active Memory Strategy` porte `{stacked}`",
+                             "aligner le contrat mémoire et STACK.md : une décision de rétention ou de PII ne vaut pas deux valeurs",
+                             f"{loc}", title="contrat mémoire hors de la stack active")
+            out[ir] = value
     # Sans mémoire longue, la rétention n'a pas d'objet : STACK.md écrit
     # `LongTermRetentionDays: 0` (le gabarit le propose), et le schéma exige
     # `>= 1` pour une rétention qui EXISTE. Porter 0 dans l'IR faisait échouer
@@ -1409,7 +1462,31 @@ def source_hashes(root: Path, number: int) -> dict[str, Any]:
         # épingler. Clé par slug de prompt, comme `capHashes` par CAP.
         "promptHashes": {p.stem.removesuffix(".system"): hashing.sha256_file(p)
                          for p in sorted(paths.prompts_dir(root, app_name(root)).glob("*.system.md"))},
+        # Trois sources que le compilateur LISAIT sans les suivre : l'IR se
+        # déclarait frais après l'ajout d'une suite système L5/L7 (projetée
+        # dans `evaluation.suites`), après un changement d'`EvalRunsCritical`
+        # (le `runs` des suites d'injection et d'acceptation), et après une
+        # édition du roster que la topologie matérialise (P7).
+        "suiteHashes": {paths.rel(root, p): hashing.sha256_file(p)
+                        for p in sorted(paths.suites_dir(root).glob(f"{number}-*.yaml"))},
+        "configHash": hashing.sha256_struct(_compile_config(root)),
+        "rosterHash": hashing.sha256_file(roster) if (roster := paths.roster_path(root, number)).is_file() else "",
     }
+
+
+#: Clés du Project Config que le compilateur lit — et donc que `configHash` suit.
+COMPILE_CONFIG_KEYS: tuple[str, ...] = ("EvalRunsCritical",)
+
+
+def _compile_config(root: Path) -> dict[str, Any]:
+    from sdda_lib.errors import SddaError  # noqa: PLC0415
+    from sdda_lib.layered_config import read_layered_config  # noqa: PLC0415
+
+    try:
+        config = read_layered_config(root)
+    except SddaError:
+        return {}
+    return {k: config.get(k) for k in COMPILE_CONFIG_KEYS}
 
 
 def ir_identity(ir: dict[str, Any]) -> dict[str, Any]:
@@ -1422,6 +1499,26 @@ def ir_identity(ir: dict[str, Any]) -> dict[str, Any]:
 
 def ir_identity_hash(ir: dict[str, Any]) -> str:
     return hashing.sha256_struct(ir_identity(ir))
+
+
+def data_access_hash(ir: dict[str, Any]) -> str:
+    """Empreinte de la branche `dataAccess[]` — ce que la part `dataaccess` de G3 confronte."""
+    return hashing.sha256_struct(ir.get("dataAccess") or [])
+
+
+def tool_identity_hash(ir: dict[str, Any], tool_id: str) -> str:
+    """Empreinte de CE QUE G3 JUGE d'un outil : son entrée `tools[]` et, pour un
+    contrat `{n}-data-*`, son entrée `dataAccess[]`.
+
+    G3 épinglait l'identité de l'IR ENTIER : un prompt écrit en PHASE 4, ou le
+    holdout apparu en 6a, force une recompilation (les deux sont des sources
+    de l'IR), l'identité bouge, et chaque rapport G3 devenait périmé sans
+    qu'un outil ait changé. La MISSION redescendait sous `Implemented` à
+    chaque prompt. Une gate ne se périme que sur ce qu'elle a jugé.
+    """
+    tool = next((t for t in ir.get("tools") or [] if str(t.get("id")) == tool_id), None)
+    access = next((d for d in ir.get("dataAccess") or [] if str(d.get("id")) == tool_id), None)
+    return hashing.sha256_struct({"tool": tool, "dataAccess": access})
 
 
 def dump_ir(ir: dict[str, Any]) -> bytes:
@@ -1484,6 +1581,13 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         # Le §4 d'un contrat d'agent nomme les outils comme le modèle les appelle ;
         # l'IR les porte par id de contrat (cf. `CompileContext.canonical_tool`).
         a["tools"] = sorted({ctx.canonical_tool(i) for i in a.get("tools", [])})
+        # `Vers` d'un handoff nomme l'agent par son slug (`billing-specialist`) ;
+        # l'IR identifie les agents qualifiés (`1-billing-specialist`). Non
+        # qualifié, `validate_ir` y voyait un handoff « ni nœud ni agent ».
+        for h in a.get("handoffs", []):
+            q = ctx.qualified(str(h.get("to", "")))
+            if q in ctx.agent_ids:
+                h["to"] = q
         for kind, ids, known in (("outil", a.get("tools", []), ctx.tool_ids), ("retriever", a.get("retrievers", []), ctx.retriever_ids)):
             for i in ids:
                 if i not in known:
@@ -1502,7 +1606,7 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         raise CompileError(report)
     topo = parse_topology(markdown_io.read_text(topo_path), topo_path)
     orchestration = compile_orchestration(ctx, topo, load_mermaid(root, topo))
-    evaluation, traceability = compile_evaluation(ctx, caps, agents, tools, retrievers, mission)
+    evaluation, traceability = compile_evaluation(ctx, caps, agents, mission)
 
     # L'IR décrit le SYSTÈME : un outil qu'aucun agent n'appelle, qu'aucune CAP
     # n'alloue et qu'aucun nœud ne référence n'en fait pas partie. Les sources
@@ -1521,7 +1625,6 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
                     f"{len(unwired)} outil(s) sous contrat mais câblé(s) à aucun agent, exclus de l'IR : {', '.join(unwired[:6])}{' …' if len(unwired) > 6 else ''}",
                     "rien à faire si c'est voulu (moindre privilège) ; sinon câbler l'outil dans le roster et la CAP qui l'exige",
                     paths.rel(root, paths.contracts_dir(root, "tools")))
-        report.data.setdefault(str(number), {})["unwiredTools"] = unwired
     tools = [t for t in tools if t["id"] in wired]
 
     ir: dict[str, Any] = {
@@ -1541,7 +1644,7 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         # `dataaccess/none` ne produit AUCUNE entrée : l'absence de la clé est
         # la représentation de `none` (ir.schema.json, `$defs/dataAccess`).
         ir["dataAccess"] = sorted(data_access, key=lambda d: d["id"])
-    memory = compile_memory(root)
+    memory = compile_memory(root, number, report)
     if memory:
         ir["memory"] = memory
     guardrails = compile_guardrails(root)
@@ -1563,7 +1666,10 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         ir["compiledFrom"]["compiledAt"] = default_compiled_at()
     report.data = {"missionId": mission.id, "nodes": len(orchestration.get("nodes", [])), "edges": len(orchestration.get("edges", [])),
                    "agents": len(agents), "tools": len(tools), "retrievers": len(retrievers), "dataAccess": len(data_access),
-                   "suites": len(evaluation["suites"]), "identityHash": ir_identity_hash(ir)}
+                   "suites": len(evaluation["suites"]), "identityHash": ir_identity_hash(ir),
+                   # Écrit ici et non plus avant : `report.data` est réaffecté
+                   # en bloc, et la liste posée plus haut était perdue.
+                   "unwiredTools": unwired}
     return ir, report
 
 

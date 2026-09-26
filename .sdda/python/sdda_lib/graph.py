@@ -127,9 +127,6 @@ class Graph:
                         sccs.append(sorted(comp))
         return sccs
 
-    def has_self_loop(self, n: str) -> bool:
-        return n in self.adj.get(n, [])
-
     # -- cycles élémentaires -----------------------------------------------
     def elementary_cycles(self, max_cycles: int = 500) -> list[list[str]]:
         """Cycles élémentaires, chacun rendu comme liste de nœuds (fermé implicitement).

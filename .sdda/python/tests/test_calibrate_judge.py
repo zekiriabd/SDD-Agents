@@ -98,12 +98,16 @@ def test_a_measured_kappa_above_threshold_is_a_green_verdict(compiled: Path) -> 
     assert judge["reason"] == "accord 0.800 sur 60 items"
 
 
-def test_a_declared_kappa_without_labels_passes_but_is_said_unverified(compiled: Path) -> None:
-    """La fixture ne porte qu'un résumé : on l'accepte, on ne le confond pas avec une mesure."""
+def test_a_declared_kappa_without_labels_never_calibrates(compiled: Path) -> None:
+    """La fixture ne porte qu'un résumé : un kappa écrit à la main n'est pas une mesure.
+
+    Il calibrait le juge (P9 contourné par une ligne de JSON) ; il le laisse
+    désormais advisory, avec le repli par défaut qui n'échoue pas le run.
+    """
     code, data = run_json(compiled, "--no-report")
     assert code == 0
     (judge,) = data["judges"]
-    assert judge["verified"] is False and judge["calibrated"] is True
+    assert judge["verified"] is False and judge["calibrated"] is False and judge["advisory"] is True
     assert judge["agreement"] == pytest.approx(0.71) and judge["items"] == 52
     assert classes(data, "warnings") == {"JUDGE_UNCALIBRATED"}
     assert any("déclaré sans labels vérifiables" in w["message"] for w in data["warnings"])
@@ -259,7 +263,7 @@ def test_json_output_has_the_shape_the_gate_reads(compiled: Path) -> None:
     (judge,) = data["judges"]
     assert set(judge) == {
         "grader", "items", "scale", "agreement", "rawAgreement", "minItems", "minAgreement",
-        "calibrated", "advisory", "reason", "confusion", "labelsAreSynthetic", "notes",
+        "calibrated", "advisory", "reason", "confusion", "labelsAreSynthetic", "declaredOnly", "notes",
         "suiteId", "declaredAdvisory", "verified",
     }
     assert judge["confusion"] == {"pass": {"pass": 24, "fail": 6}, "fail": {"fail": 30}}

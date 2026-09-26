@@ -44,11 +44,12 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import markdown_io, paths, yaml_mini  # noqa: E402
+from sdda_lib import hashing, markdown_io, paths, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import active_stacks, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
+from sdda_scripts.validate_mission import mission_artifact  # noqa: E402
 
 REGISTRY = "registry/architecture-requirements.yml"
 
@@ -310,11 +311,12 @@ def _roster_manifest(root: Path, mission: int | str | None, report: Report) -> R
     Sans numéro de mission, un roster unique dans le répertoire est pris ; deux
     ou plus, aucun — deviner lequel serait décider à la place de l'architecte.
     """
-    topo = paths.topology_dir(root)
     if mission is not None:
         candidates = [paths.roster_path(root, mission)]
     else:
-        candidates = sorted(topo.glob("*-roster.md"))
+        # Le roster vit dans `feats/` depuis le workspace v6 ; cette branche
+        # le cherchait encore sous `topology/`, et ne le trouvait donc jamais.
+        candidates = sorted(paths.feats_dir(root).glob("*-roster.md"))
         if len(candidates) > 1:
             candidates = []
 
@@ -652,10 +654,32 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_report and not args.explain:
         try:
-            write_gate_report(root, "G2", args.mission or "stack", report, pinned={}, part="architecture")
+            write_gate_report(root, "G2", mission_artifact(root, args.mission), report,
+                              pinned=source_pins(root, args.mission, report), part="architecture")
         except OSError:
             pass
     return finish(report, args)
+
+
+def source_pins(root: Path, mission: int | str | None, report: Report) -> dict[str, str]:
+    """STACK.md, la topologie et le roster LU : ce sur quoi la déclaration a été jugée.
+
+    Épinglée à vide, la part restait verte après une édition du roster ou un
+    changement de pattern dans STACK.md — et `/sdda-topology --recompile-only`
+    ne la rejouait pas. Un vert qui ne peut pas se périmer ne prouve rien sur
+    l'état présent.
+    """
+    pins: dict[str, str] = {}
+    stack = paths.stack_md_path(root)
+    if stack.is_file():
+        pins["stack"] = hashing.sha256_file(stack)
+    topology = _topology_path(root, mission)
+    if topology is not None and mission is not None:
+        pins["topology"] = hashing.sha256_spec_file(topology)
+    source = str(report.data.get("rosterSource") or "")
+    if source.endswith("-roster.md") and (root / source).is_file():
+        pins[source] = hashing.sha256_file(root / source)
+    return pins
 
 
 if __name__ == "__main__":

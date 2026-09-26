@@ -264,13 +264,27 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = resolve_root(args)
-    ir_path = args.ir if args.ir else paths.ir_path(root, args.mission or 1)
-    if args.ir and not args.ir.is_absolute():
-        ir_path = (root / args.ir).resolve()
+    if args.ir:
+        ir_path = args.ir if args.ir.is_absolute() else (root / args.ir).resolve()
+    else:
+        # Sans `--mission`, l'IR de la MISSION 1 était audité en silence — et son
+        # rapport écrit sous l'artefact `stack`. Même règle que les autres
+        # scripts : l'unique IR compilé, sinon on demande.
+        from sdda_lib.eval_reports import find_ir_file  # noqa: PLC0415
+
+        found, why = find_ir_file(root, int(args.mission) if str(args.mission or "").isdigit() else None)
+        if found is None:
+            report = Report(name="TOOL-SCOPE", target=str(root))
+            report.error("IR_NOT_FOUND", why, "préciser --mission {n} (ou --ir), après `ir-compiler`", str(paths.ir_dir(root)))
+            return finish(report, args)
+        ir_path = found
 
     report = run(root, ir_path, use_traces=not args.no_traces)
     if not args.no_report:
-        write_gate_report(root, "G7", str(args.mission or "stack"), report, {}, part="toolscope")
+        # L'artefact est la MISSION auditée : sous `stack`, la part `toolscope`
+        # n'était rattachée à aucune G7 de mission.
+        artifact = str(args.mission or ir_path.name.split("-", 1)[0] or "stack")
+        write_gate_report(root, "G7", artifact if artifact.isdigit() else "stack", report, {}, part="toolscope")
     return finish(report, args)
 
 

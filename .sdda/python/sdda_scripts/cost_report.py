@@ -25,8 +25,9 @@ l'application (`sdda.cost.usd`) et le coût recalculé est rapporté, jamais
 arbitré en faveur du déclaré.
 
 Seuils (IR) et classes : p95 > `costPerRunHardCapUsd` -> [BUDGET_EXCEEDED_MEASURED]
-(erreur) ; moyenne > `costPerRunTargetUsd` -> [BUDGET_TARGET_MISSED] ; p95 de
-latence > `latencyP95TargetMs` -> [LATENCY_P95_EXCEEDED] ; max de tokens >
+(erreur ; un appel non tarifable sous ce plafond -> [BUDGET_PRICING_UNKNOWN], erreur) ;
+moyenne > `costPerRunTargetUsd` -> [BUDGET_TARGET_MISSED] ; p95 de
+latence > `latencyP95TargetMs` -> [LATENCY_P95_EXCEEDED] (erreur) ; max de tokens >
 `tokenCeilingPerRun` -> [TOKEN_CEILING_EXCEEDED] ; hops > `maxHops` ->
 [UNBOUNDED_LOOP] (erreur) ; hops au plafond sur ≥ 5 % des runs ->
 [HOPS_AT_CEILING] ; p95 d'un agent > `bounds.budgetUsd` -> [AGENT_BUDGET_EXCEEDED] ;
@@ -250,7 +251,10 @@ def compare(ir: dict[str, Any], agg: dict[str, Any], crit: dict[str, str], repor
     if lat is not None:
         row("latencyMs.p95", p95l, lat, "LATENCY_P95_EXCEEDED", p95l > lat)
         if p95l > lat:
-            report.warn("LATENCY_P95_EXCEEDED", f"latence p95 {p95l:.0f} ms > latencyP95TargetMs {lat:.0f}", "lire la queue (`tail`) : quel chemin fait le p95", loc)
+            # Erreur, comme `eval_runner` ([LATENCY_EXCEEDED_MEASURED]) : la même
+            # cible, mesurée par deux scripts, ne peut pas être rouge chez l'un
+            # et jaune chez l'autre (P6 : un budget dépassé est rouge).
+            report.error("LATENCY_P95_EXCEEDED", f"latence p95 {p95l:.0f} ms > latencyP95TargetMs {lat:.0f}", "lire la queue (`tail`) : quel chemin fait le p95", loc)
     ceiling, tmax = _num(budget.get("tokenCeilingPerRun")), agg["tokens"]["max"]
     if ceiling is not None:
         row("tokens.max", tmax, ceiling, "TOKEN_CEILING_EXCEEDED", tmax > ceiling)
@@ -319,6 +323,7 @@ def run(root: Path, ir: dict[str, Any], traces: Path, *, min_runs: int = MIN_RUN
     payload: dict[str, Any] = {
         "missionId": mid, "generatedAt": now_iso(), "traces": paths.rel(root, traces),
         "runsRead": len(rows), "runsOtherMission": len(loaded.other_mission), "runsUnattributed": loaded.unattributed[:20],
+        "judgeTracesExcluded": [r.run_id for r in loaded.judge][:20],
         "buildCostUsd": build,
         "note": "buildCostUsd est DÉCLARÉ par le harnais (spans sdda.build.agent) ; il n'est jamais additionné au coût du produit",
     }
@@ -335,8 +340,14 @@ def run(root: Path, ir: dict[str, Any], traces: Path, *, min_runs: int = MIN_RUN
         report.warn("TRACE_MALFORMED", f"{len(incomplete)} trace(s) incomplète(s) ({', '.join(incomplete[:5])}) — span racine, tarif ou champs manquants",
                     "tracing.summarize(...).problems les nomme ; un coût partiel n'est pas un coût", paths.rel(root, traces))
     if any(r["unpricedCalls"] for r in rows):
-        report.warn("BUDGET_PRICING_UNKNOWN", f"{sum(r['unpricedCalls'] for r in rows)} appel(s) LLM non recalculables (modèle hors table de tarifs ou tokens absents) — exclus du coût",
-                    "compléter `sdda_lib/pricing.py` ; un zéro passerait sous n'importe quel plafond", paths.rel(root, traces))
+        # Erreur dès qu'un plafond est déclaré : l'appel non tarifable est exclu
+        # du coût, donc un modèle hors table donnait 0 $ et passait sous le
+        # plafond avec un simple avertissement — le zéro que ce message dénonce.
+        capped = _num((ir.get("budget") or {}).get("costPerRunHardCapUsd")) is not None
+        (report.error if capped else report.warn)(
+            "BUDGET_PRICING_UNKNOWN", f"{sum(r['unpricedCalls'] for r in rows)} appel(s) LLM non recalculables (modèle hors table de tarifs ou tokens absents) — exclus du coût"
+            + (" : le plafond costPerRunHardCapUsd ne peut pas être attesté" if capped else ""),
+            "compléter la table de tarifs (`.sdda/providers/*.yaml`) ; un zéro passerait sous n'importe quel plafond", paths.rel(root, traces))
     agg = aggregate(rows)
     payload.update(agg)
     payload["thresholds"] = compare(ir, agg, cap_criticality(root, number), report, paths.rel(root, traces))

@@ -34,7 +34,6 @@ Exit : 0 autorise · 1 refuse (ERROR sur stdout, format CAUSE/FIX).
 from __future__ import annotations
 
 import argparse
-import datetime as _dt
 import io
 import json
 import os
@@ -65,7 +64,10 @@ KNOWN_BYPASSES = {
 #: sont la raison pour laquelle desserrer les autres reste tolérable.
 NO_BYPASS_GATES = ("G0 MISSION", "G1 CAP", "G5 AGENT", "G6 ORCH", "G8 ACCEPTANCE")
 
-BYPASS_ENV_RE = re.compile(r"^(SDDA_BYPASS_[A-Z0-9_]+)=1$")
+#: Mêmes valeurs « vraies » que la lecture de `os.environ` (`parse_env_bypasses`) :
+#: `SDDA_BYPASS_X=true` passé par la commande était ignoré, alors que la même
+#: variable dans l'environnement comptait — deux lectures d'un même levier.
+BYPASS_ENV_RE = re.compile(r"^(SDDA_BYPASS_[A-Z0-9_]+)=(?:1|true|yes|on)$", re.IGNORECASE)
 
 #: Les classes émises. Déclarées en constantes `CLS_*` plutôt qu'en littéraux :
 #: c'est la forme que `sync_error_registry.py` reconnaît, donc celle qui garantit
@@ -86,7 +88,7 @@ def parse_env_bypasses(raw: str | None) -> list[str]:
     for token in (raw or "").replace(";", ",").split(","):
         match = BYPASS_ENV_RE.match(token.strip())
         if match:
-            found.add(match.group(1))
+            found.add(match.group(1).upper())
     for name, value in os.environ.items():
         if name.startswith("SDDA_BYPASS_") and name != "SDDA_BYPASS_REASON":
             if str(value).strip().lower() in ("1", "true", "yes", "on"):

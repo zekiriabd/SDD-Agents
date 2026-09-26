@@ -49,6 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_text  # noqa: E402
 from sdda_lib.layered_config import (  # noqa: E402
     active_stacks, read_project_section, read_runtime_tier_map, read_stack_section_kv,
 )
@@ -149,7 +150,8 @@ class Context:
     project_dir: Path = field(default_factory=Path)
 
     @classmethod
-    def resolve(cls, root: Path, report: Report, *, src_root: Path | None = None) -> "Context":
+    def resolve(cls, root: Path, report: Report, *, src_root: Path | None = None,
+                mission: str | None = None) -> "Context":
         project = read_project_section(root)
         config = load_config(root, report)
         languages = active_stacks(root, "Active Language & Runtime")
@@ -172,10 +174,19 @@ class Context:
             streaming=str(_section(root, "Active Serving Surface").get(
                 "StreamingEnabled", "false")).strip().lower() in ("true", "yes", "1"),
         )
-        ctx.mission = _detect_mission(root)
+        # `--mission` d'abord : avec deux MISSIONs, la détection rendait `""`, et
+        # l'application naissait sans `missionId` ni schémas de sortie de l'IR
+        # — en silence, guardrail `schema-validation` compris.
+        ctx.mission = str(mission).strip() if mission else _detect_mission(root)
         # Layout plat (SDD_Pro) : le projet EST le paquet — cf. paths.app_src_root.
-        ctx.project_dir = paths.app_dir(root, ctx.app or "App")
-        ctx.src_root = src_root or paths.app_src_root(root, ctx.app or "App")
+        try:
+            ctx.project_dir = paths.app_dir(root, ctx.app or "App")
+            ctx.src_root = src_root or paths.app_src_root(root, ctx.app or "App")
+        except ValueError:
+            # `sdda_lib.paths` refuse un nom qui sortirait de `workspace/src/` :
+            # le contexte reste constructible pour que `run` le DISE
+            # (`app_name_problem`) au lieu de planter sur une pile d'appels.
+            ctx.project_dir = ctx.src_root = paths.workspace(root) / "src" / "_invalid_app_name_"
         return ctx
 
 
@@ -186,6 +197,36 @@ def _section(root: Path, heading: str) -> dict[str, Any]:
 def _detect_mission(root: Path) -> str:
     found = sorted({p.name.split("-", 1)[0] for p in paths.missions_dir(root).glob("*-*.md")})
     return found[0] if len(found) == 1 else ""
+
+
+def detected_missions(root: Path) -> list[str]:
+    return sorted({p.name.split("-", 1)[0] for p in paths.missions_dir(root).glob("*-*.md")})
+
+
+#: Ce qu'un `AppName` doit être pour nommer à la fois un RÉPERTOIRE sous
+#: `workspace/src/` et un PAQUET Python importable. `../x` écrivait
+#: l'application (et son `.env`) hors du workspace ; `Mon-App` ne s'importe pas.
+_APP_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+def app_name_problem(root: Path, app: str, *, package: bool = True) -> str | None:
+    """Pourquoi `app` n'est pas un nom d'application utilisable, ou None.
+
+    Garde LOCALE : la validation canonique vit dans `sdda_lib` (nom et chemin
+    résolu) ; ce script ne doit de toute façon rien écrire hors de
+    `workspace/src/`, quelle que soit la version de la bibliothèque.
+    `package` : le nom doit aussi être un paquet Python importable.
+    """
+    if package and (not _APP_NAME_RE.match(app) or not app.isidentifier()):
+        return "lettres, chiffres et `_`, commençant par une lettre (c'est un nom de paquet Python)"
+    base = (paths.workspace(root) / "src").resolve()
+    try:
+        resolved = paths.app_dir(root, app).resolve()
+    except ValueError as exc:
+        return str(exc)
+    if resolved.parent != base:
+        return "le répertoire résolu sort de `workspace/src/`"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +246,11 @@ def _pricing(root: Path) -> dict[str, dict[str, float]]:
     except Exception:  # pragma: no cover - le paquet est une dépendance dure
         return {}
     out: dict[str, dict[str, float]] = {}
-    for model in sorted(set(read_runtime_tier_map(root).values())):
+    try:
+        tier_map = read_runtime_tier_map(root)
+    except Exception:  # section absente : `Context.resolve` l'a déjà tolérée, sans tarif
+        tier_map = {}
+    for model in sorted(set(tier_map.values())):
         try:
             rates = _pricing_table.get_pricing(model, strict=True)
         except Exception:
@@ -401,12 +446,8 @@ def _guardrails(ctx: Context) -> dict[str, Any]:
         "outputSchema": None,
         "outputSchemas": {},
     }
-    ir_file = paths.ir_path(ctx.root, ctx.mission) if ctx.mission else None
-    if ir_file is not None and ir_file.is_file():
-        try:
-            ir = json.loads(markdown_io.read_text(ir_file))
-        except ValueError:
-            ir = {}
+    ir = _load_ir(ctx)
+    if ir:
         agents = {str(a.get("id")): a for a in ir.get("agents") or [] if isinstance(a, dict)}
         schemas: dict[str, Any] = {}
         for agent_id, agent in sorted(agents.items()):
@@ -421,6 +462,108 @@ def _guardrails(ctx: Context) -> dict[str, Any]:
         if len(finals) == 1:
             config["outputSchema"] = schemas.get(finals.pop())
     return config
+
+
+def _load_ir(ctx: Context) -> dict[str, Any]:
+    ir_file = paths.ir_path(ctx.root, ctx.mission) if ctx.mission else None
+    if ir_file is None or not ir_file.is_file():
+        return {}
+    try:
+        payload = json.loads(markdown_io.read_text(ir_file))
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+#: IR (camelCase, `$defs/bounds`) -> bornes du runtime (snake_case, `bounds.py`).
+_IR_BOUND_KEYS = {"maxIterations": "max_iterations", "maxToolCalls": "max_tool_calls",
+                  "maxDelegationDepth": "max_delegation_depth", "timeoutSec": "timeout_s",
+                  "budgetUsd": "budget_usd"}
+
+
+def _snake_bounds(agent: dict[str, Any]) -> dict[str, Any] | None:
+    raw = agent.get("bounds") if isinstance(agent.get("bounds"), dict) else None
+    if not raw or any(k not in raw for k in _IR_BOUND_KEYS):
+        return None
+    out: dict[str, Any] = {snake: raw[camel] for camel, snake in _IR_BOUND_KEYS.items()}
+    out["timeout_s"] = float(out["timeout_s"])
+    out["budget_usd"] = float(out["budget_usd"])
+    out["on_bound_exceeded"] = str(agent.get("onBoundExceeded") or "fail-explicit")
+    return out
+
+
+def ir_bounds(ctx: Context) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """(bornes du run, bornes de RUN hops/tokens, bornes par agent) — DÉRIVÉES de l'IR.
+
+    `app_config.json` recevait toujours `STARTER_BOUNDS`, quoi que dise l'IR :
+    le contrat d'agent bornait à 12 itérations et 0,05 $, l'application
+    tournait à 4 et 0,50 $. Les bornes du run sont désormais celles de l'agent
+    d'ENTRÉE de l'orchestration (ou de l'agent unique), plafonnées par
+    `budget.costPerRunHardCapUsd` ; `maxHops` et `tokenCeilingPerRun` deviennent
+    des bornes de RUN que `RunLimits` applique. Sans IR : le démarrage serré.
+    """
+    ir = _load_ir(ctx)
+    agents = [a for a in ir.get("agents") or [] if isinstance(a, dict)]
+    orchestration = ir.get("orchestration") if isinstance(ir.get("orchestration"), dict) else {}
+    budget = ir.get("budget") if isinstance(ir.get("budget"), dict) else {}
+
+    per_agent: dict[str, Any] = {}
+    for agent in sorted(agents, key=lambda a: str(a.get("id"))):
+        bounds = _snake_bounds(agent)
+        if bounds is not None:
+            per_agent[str(agent.get("id"))] = bounds
+            per_agent.setdefault(re.sub(r"^\d+-", "", str(agent.get("id"))), bounds)
+
+    entry_ref = ""
+    nodes = {str(n.get("id")): n for n in orchestration.get("nodes") or [] if isinstance(n, dict)}
+    entry = nodes.get(str(orchestration.get("entryNode") or ""))
+    if isinstance(entry, dict):
+        entry_ref = str(entry.get("ref") or "")
+    if entry_ref in per_agent:
+        run_bounds = dict(per_agent[entry_ref])
+    elif len(agents) == 1 and str(agents[0].get("id")) in per_agent:
+        run_bounds = dict(per_agent[str(agents[0].get("id"))])
+    else:
+        run_bounds = dict(STARTER_BOUNDS)
+    hard_cap = budget.get("costPerRunHardCapUsd")
+    if isinstance(hard_cap, (int, float)) and not isinstance(hard_cap, bool) and hard_cap > 0:
+        run_bounds["budget_usd"] = min(float(run_bounds["budget_usd"]), float(hard_cap))
+
+    limits: dict[str, Any] = {}
+    if isinstance(orchestration.get("maxHops"), int) and orchestration["maxHops"] > 0:
+        limits["maxHops"] = orchestration["maxHops"]
+    if isinstance(budget.get("tokenCeilingPerRun"), int) and budget["tokenCeilingPerRun"] > 0:
+        limits["maxTokensPerRun"] = budget["tokenCeilingPerRun"]
+    return run_bounds, limits, per_agent
+
+
+def ir_tools(ctx: Context) -> tuple[list[str], dict[str, Any]]:
+    """(noms des outils que les agents ont le droit d'appeler, bornes de contrat par nom) — de l'IR.
+
+    Le NOM est celui que voit le modèle (`tools[].name`), c'est aussi celui
+    des fixtures d'isolement (`SDDA_EVAL_FIXTURES/tools/{outil}.jsonl`,
+    `serving/cli.md §3.5`). Les bornes (`timeoutSec`, `rateLimitRpm`,
+    `maxResponseBytes`) et la posture (`sideEffectClass`, `trust`) deviennent
+    les métadonnées que `DictToolset` applique — en eval comme en production.
+    """
+    ir = _load_ir(ctx)
+    tools = {str(t.get("id")): t for t in ir.get("tools") or [] if isinstance(t, dict)}
+    wired = {str(ref) for a in ir.get("agents") or [] if isinstance(a, dict) for ref in a.get("tools") or []}
+    names: set[str] = set()
+    meta: dict[str, Any] = {}
+    for ref in sorted(wired):
+        tool = tools.get(ref) or {}
+        name = str(tool.get("name") or ref)
+        names.add(name)
+        entry: dict[str, Any] = {}
+        for camel, snake in (("sideEffectClass", "side_effect_class"), ("trust", "trust"),
+                             ("timeoutSec", "timeout_s"), ("rateLimitRpm", "rate_limit_rpm"),
+                             ("maxResponseBytes", "max_response_bytes")):
+            if tool.get(camel) not in (None, ""):
+                entry[snake] = tool[camel]
+        if entry:
+            meta[name] = entry
+    return sorted(names), meta
 
 
 def render_app_config(ctx: Context, template: str) -> str:
@@ -440,13 +583,19 @@ def render_app_config(ctx: Context, template: str) -> str:
     declared = _declared_secret_names(ctx.root)
     if "LLM_API_KEY" in declared and "llmApiKey" in secrets:
         secrets["llmApiKey"] = "LLM_API_KEY"
+    run_bounds, run_limits, agent_bounds = ir_bounds(ctx)
+    tool_names, tool_meta = ir_tools(ctx)
     substitutions = {
+        "{Tools}": _json(tool_names),
+        "{ToolMeta}": _json(tool_meta),
         "{MissionId}": ctx.mission,
         "{RuntimeProvider}": ctx.provider,
         "{DefaultTier}": ctx.default_tier,
         "{TierMap}": _json(ctx.tier_map),
         "{Pricing}": _json(_pricing(ctx.root)),
-        "{Bounds}": _json(STARTER_BOUNDS),
+        "{Bounds}": _json(run_bounds),
+        "{RunLimits}": _json(run_limits),
+        "{AgentBounds}": _json(agent_bounds),
         "{DeliverableType}": ctx.deliverable,
         "{ServingSurface}": ctx.surfaces[0] if ctx.surfaces else "cli",
         "{Streaming}": "true" if ctx.streaming else "false",
@@ -584,8 +733,11 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
         missing_pins.extend(pins_absent)
         if write:
             if not same:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content, encoding="utf-8")
+                # Atomique et en LF : `write_text` traduisait `\n` en `\r\n`
+                # sous Windows — la même génération ne rendait pas les mêmes
+                # octets selon le poste — et un arrêt en cours d'écriture
+                # laissait un module tronqué qui ne s'importe plus.
+                atomic_write_text(target, content)
                 written.append(rel)
         elif not exists:
             missing.append(rel)
@@ -614,14 +766,15 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
     }
 
 
-def run(root: Path, *, mode: str = "check", src_root: Path | None = None) -> Report:
+def run(root: Path, *, mode: str = "check", src_root: Path | None = None,
+        mission: str | None = None) -> Report:
     report = Report(name="GEN-APP-SKELETON", target=str(root))
 
     if not paths.stack_md_path(root).is_file():
         report.error("STACK_MISSING", "STACK.md introuvable", fix="lancer `python bootstrap.py`")
         return report
 
-    ctx = Context.resolve(root, report, src_root=src_root)
+    ctx = Context.resolve(root, report, src_root=src_root, mission=mission)
 
     if ctx.language != LANGUAGE:
         report.error(
@@ -641,6 +794,21 @@ def run(root: Path, *, mode: str = "check", src_root: Path | None = None) -> Rep
             fix="renseigner `AppName` dans `## Project Config` — il nomme le paquet, le "
                 "point d'entrée console et le dossier du projet généré",
             location="workspace/stack/STACK.md ## Project Config")
+        return report
+    problem = app_name_problem(root, ctx.app)
+    if problem:
+        report.error(
+            "CONFIG_VALUE_INVALID", f"`AppName: {ctx.app}` inutilisable : {problem}",
+            fix="un identifiant simple (`SupportDesk`) : il devient un répertoire sous "
+                "`workspace/src/` ET le nom du paquet importé",
+            location="workspace/stack/STACK.md ## Project Config")
+        return report
+    if not ctx.mission and len(detected_missions(root)) > 1:
+        report.error(
+            "MISSION_AMBIGUOUS",
+            f"plusieurs MISSIONs ({', '.join(detected_missions(root))}) : laquelle l'application sert-elle ?",
+            fix="passer `--mission {n}` — il fixe `missionId` et les schémas de sortie lus dans l'IR",
+            location=paths.rel(root, paths.missions_dir(root)))
         return report
 
     # La cohérence livrable x langage x surface appartient à `validate_packaging`,
@@ -687,6 +855,8 @@ def build_parser() -> argparse.ArgumentParser:
                       help="défaut : comparer sans rien écrire, exit 1 si dérive")
     mode.add_argument("--write", action="store_true", help="écrire les fichiers manquants ou divergents")
     p.add_argument("--src-root", type=Path, default=None, help="racine du paquet applicatif généré")
+    p.add_argument("--mission", default=None,
+                   help="numéro de la MISSION servie (obligatoire s'il y en a plusieurs)")
     add_common_args(p)
     return p
 
@@ -695,7 +865,7 @@ def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdout()
     args = build_parser().parse_args(argv)
     report = run(resolve_root(args), mode="write" if args.write else "check",
-                 src_root=args.src_root)
+                 src_root=args.src_root, mission=args.mission)
     return finish(report, args)
 
 

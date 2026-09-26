@@ -39,7 +39,6 @@ journalise dans `workspace/.sys/.audit/bypasses.jsonl` et marque le rapport
 from __future__ import annotations
 
 import argparse
-import datetime as _dt
 import json
 import os
 import sys
@@ -270,7 +269,13 @@ def measure(
         for item in load_items(path)[: item_limit or None]:
             if not item.get("expected_documents"):
                 continue  # item de réponse, pas de retrieval : il relève de L4
-            raw = executor.retrieve(query_of(item), retriever=retriever, k=k, item=item) or {}
+            try:
+                raw = executor.retrieve(query_of(item), retriever=retriever, k=k, item=item) or {}
+            except Exception as exc:  # noqa: BLE001 — une requête qui lève n'a rien mesuré
+                # Une exception de l'exécuteur faisait tomber le script entier,
+                # sans rapport ; elle compte désormais comme requête NON mesurée.
+                skipped.append(f"{item.get('id')} ({type(exc).__name__})")
+                continue
             docs = raw.get("docIds") or raw.get("doc_ids") or raw.get("retrieved") or raw.get("documents")
             if docs is None:
                 skipped.append(str(item.get("id")))
@@ -294,20 +299,28 @@ def measure(
         report.error("RETRIEVAL_GATE_FAILED", f"retriever `{rid}` : 0 requête mesurée sur {len(files)} jeu(x), dont {len(skipped)} sans résultat de l'exécuteur",
                      "vérifier que le golden porte des `expected_documents` et que l'exécuteur rend `docIds`", rid)
         return None
+    # Deux erreurs, et non deux avertissements : exclure les requêtes absentes
+    # (pour ne pas fabriquer un recall de 0) laissait un replay d'UNE ligne
+    # choisie rendre G4 verte ; « trop peu de requêtes » n'informait que. G4
+    # exige un golden de n requêtes (ARCHITECTURE §4) : c'est le jeu entier qui
+    # rend le verdict, pas la part que l'exécuteur a bien voulu servir.
+    incomplete = False
     if skipped:
-        report.warn("MEASUREMENT_MISSING", f"retriever `{rid}` : {len(skipped)} requête(s) sans résultat, exclues — le taux porte sur {len(outcomes)} requêtes, pas sur le jeu entier",
-                    "compléter le replay ou corriger l'exécuteur ; une requête absente n'est pas un recall de 0", rid)
+        incomplete = True
+        report.error("MEASUREMENT_MISSING", f"retriever `{rid}` : {len(skipped)} requête(s) sans résultat ({', '.join(skipped[:3])}), exclues — le taux ne porte que sur {len(outcomes)} requêtes, pas sur le jeu entier",
+                     "compléter le replay ou corriger l'exécuteur ; une requête absente n'est pas un recall de 0, ni une requête tenue", rid)
 
     min_queries = config.get_int("RetrievalGoldenMinQueries", 50) if config else 50
     if len(outcomes) < min_queries:
-        report.warn("EVAL_DATASET_TOO_SMALL", f"retriever `{rid}` : {len(outcomes)} requêtes mesurées < RetrievalGoldenMinQueries {min_queries} — l'intervalle de confiance est large",
-                    "étoffer le golden de retrieval avant de traiter ce résultat comme un verdict", rid)
+        incomplete = True
+        report.error("EVAL_DATASET_TOO_SMALL", f"retriever `{rid}` : {len(outcomes)} requêtes mesurées < RetrievalGoldenMinQueries {min_queries} — l'intervalle de confiance est trop large pour un verdict",
+                     "étoffer le golden de retrieval (qa-evals) avant de franchir G4", rid)
 
     metrics = retrieval_metrics.evaluate(outcomes, k)
     values = metrics.to_dict()
     groundedness = (sum(grounded) / len(grounded)) if grounded else None
 
-    verdict = "green"
+    verdict = "red" if incomplete else "green"
     thresholds: dict[str, float] = {}
     for metric_key, contract_key, config_key, default, cls in THRESHOLDS:
         bound = threshold_for(retriever, contract_key, config_key, default, config)
@@ -443,7 +456,10 @@ def run(
         # pendant qu'un autre est rouge, et les câbler ensemble n'aurait pas de
         # sens.
         for m in measures:
-            sub = Report(name="G4.retrieval", target=m.id, data={"runId": rid, "verdict": m.verdict})
+            # `bypassed` entre dans le rapport de GATE : la docstring le promettait,
+            # seul le rapport d'eval le portait, et la gate franchie par bypass
+            # ne se distinguait plus d'une gate franchie.
+            sub = Report(name="G4.retrieval", target=m.id, data={"runId": rid, "verdict": m.verdict, "bypassed": bypassed})
             for finding in report.findings:
                 if finding.location == m.id:
                     sub.findings.append(finding)
@@ -462,7 +478,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="RETRIEVAL GATE (G4) : recall@k, nDCG, context precision, citations — 0 agent, 0 appel LLM")
     p.add_argument("--mission", type=int, default=None, help="numéro de mission ; défaut : l'unique IR compilé")
     p.add_argument("--ir", type=Path, default=None, help="fichier IR explicite")
-    p.add_argument("--executor", default=None, help="`module:attr` — le retriever évalué (objet ou fabrique sans argument)")
+    p.add_argument("--executor", default=None, help="`cli` | `cmd:<commande>` | `module:attr` — le retriever évalué (objet ou fabrique sans argument)")
     p.add_argument("--replay", type=Path, default=None, help="JSONL de runs enregistrés `{id, docIds, servedIds, answer, groundedness}`")
     p.add_argument("--retriever", action="append", default=None, help="identifiant(s) de retriever, répétable ou séparés par des virgules")
     p.add_argument("--dataset", type=Path, default=None, help="golden de retrieval explicite (sinon : suite L3 de l'IR, puis détection)")
@@ -512,11 +528,11 @@ def main(argv: list[str] | None = None, *, executor: Any = None) -> int:
                 executor = load_executor(args.executor, root)
             except Exception as exc:
                 report.error("RETRIEVAL_EXECUTOR_MISSING", f"`{args.executor}` inutilisable : {type(exc).__name__}: {exc}",
-                             "corriger le chemin `module:attr` (le paquet est cherché sous workspace/src/) ; une dépendance absente : lancer avec l'interpréteur de l'application (`uv run --project workspace/src/{App} …`)", args.executor)
+                             "`--executor cli` lance l'application livrée par sa CLI, quel que soit son langage (stacks/serving/cli.md §3.5) ; `cmd:<commande>` l'impose ; `module:attr` (Python en processus) : le paquet est cherché sous workspace/src/, une dépendance absente se règle en lançant le runner par `uv run --project workspace/src/{App} …`", args.executor)
                 return finish(report, args)
         else:
             report.error("RETRIEVAL_EXECUTOR_MISSING", "aucun retriever à interroger : ce script ne mesure pas un index, il fait mesurer le vôtre (0 appel LLM, 0 connexion)",
-                         "--executor module:attr (le code généré expose le retriever) ou --replay fichier.jsonl (runs enregistrés)", str(root))
+                         "--executor cli (la sous-commande `retrieve` de l'application, tout langage) ou --replay fichier.jsonl (runs enregistrés)", str(root))
             return finish(report, args)
 
     ir_file = resolve_ir_path(root, args, report)

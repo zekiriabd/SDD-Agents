@@ -83,11 +83,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-import os
 import re
-import sys
-import time
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
@@ -198,7 +194,13 @@ SAFE_KEYS: frozenset[str] = frozenset({
 
 REDACTED = "[REDACTED]"
 
-_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+#: Deux frontières : minuscule→majuscule (`apiKey`) ET acronyme→mot
+#: (`openAIKey` -> `open_ai_key`). Sans la seconde, `anthropicAPIKey` devenait
+#: `anthropic_apikey`, sans suffixe `_key`, et la clé partait en clair.
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+#: Suffixes collés, sans séparateur (`dbpwd`, `userpassphrase`, `apikey`).
+_GLUED_SECRET_SUFFIXES: tuple[str, ...] = ("apikey", "pwd", "passphrase", "password", "passwd")
 
 #: `Bearer <jeton>` / `Basic <b64>`. Le schéma reste lisible, seul le jeton
 #: est remplacé. La longueur minimale et le test `_looks_like_credential`
@@ -245,7 +247,7 @@ def is_sensitive_key(key: Any) -> bool:
         return False
     if name in FORBIDDEN_KEYS:
         return True
-    return name.endswith(SECRET_KEY_SUFFIXES)
+    return name.endswith(SECRET_KEY_SUFFIXES) or name.replace("_", "").endswith(_GLUED_SECRET_SUFFIXES)
 
 
 def _redact_auth_header(m: re.Match[str]) -> str:
@@ -442,8 +444,13 @@ def _duration_ms(span: dict[str, Any]) -> int:
         try:
             t0 = _dt.datetime.fromisoformat(start.replace("Z", "+00:00"))
             t1 = _dt.datetime.fromisoformat(end.replace("Z", "+00:00"))
+            # Un horodatage sans fuseau face à un horodatage UTC lève TypeError
+            # à la soustraction : un span mal formé faisait planter `summarize`.
+            if (t0.tzinfo is None) != (t1.tzinfo is None):
+                t0, t1 = t0.replace(tzinfo=_dt.timezone.utc) if t0.tzinfo is None else t0, \
+                    t1.replace(tzinfo=_dt.timezone.utc) if t1.tzinfo is None else t1
             return max(0, int((t1 - t0).total_seconds() * 1000))
-        except ValueError:
+        except (ValueError, TypeError):
             return 0
     return 0
 
@@ -693,7 +700,7 @@ def summarize(path: Path) -> TraceSummary:
     else:
         root = run_roots[0]
         summary.latency_ms = _duration_ms(root)
-        if not root.get("end") and not root.get("duration_ms"):
+        if not root.get("end") and root.get("duration_ms") is None:   # `0` ms est une durée
             summary.problems.append("le span racine n'a ni `end` ni `duration_ms` — le run n'a pas déclaré sa fin")
 
     summary.complete = bool(run_roots) and len(run_roots) == 1 and not summary.problems

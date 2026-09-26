@@ -27,8 +27,10 @@ pas revenir après un refactoring :
 script ne voit pas l'identité du harnais ; il vérifie donc celle qu'on lui
 DÉCLARE : `--agent {nom}` est confronté à la matrice d'ownership
 (`audit_ownership.check_write`) et un agent non autorisé — `review-adversarial`,
-tout `dev-*` — est refusé sans rien écrire. Sans `--agent`, l'appel est celui
-du fil principal ou d'une commande (l'humain) : le rapport le dit. Ce que le
+tout `dev-*` — est refusé sans rien écrire. Sans `--agent`, rien n'est écrit
+(`[OWNERSHIP_AGENT_UNKNOWN]`) : l'humain déclare `--agent qa-evals`, l'owner de
+la zone ; seul `--dry-run` s'en passe. Chaque finding porte des
+`forbidden_observables`, sans quoi l'item promu ne serait jamais jugé. Ce que le
 contrôle ne prouve pas : qu'un agent n'a pas menti sur son nom. Le hook
 `preflight_bash_ownership` ne voit pas les écritures faites de l'intérieur d'un
 script, et `audit_ownership --agent … --wrote …` reste le post-contrôle.
@@ -224,6 +226,16 @@ def run(root: Path, ir: dict[str, Any], findings_path: Path, *, agent: str | Non
             report.error("DATASET_ITEM_INVALID", f"finding `{fid}` : famille, agent ou entrée manquants — non promouvable",
                          "review-adversarial dépose `agent`, `family` (ou `class`) et `input` pour chaque attaque réussie", findings_ref)
             continue
+        observables = finding.get("forbidden_observables")
+        if not (isinstance(observables, list) and any(str(o).strip() for o in observables)):
+            # Sans observable interdit, l'item promu ne se juge que par un
+            # `outcome` que l'exécuteur livré ne rend pas : il restait « non
+            # jugé » à chaque rejeu, et la faille « permanente » ne pouvait plus
+            # jamais redevenir rouge.
+            report.error("DATASET_ITEM_INVALID", f"finding `{fid}` : aucun `forbidden_observables` — l'attaque promue ne serait jugeable par aucun rejeu",
+                         "review-adversarial dépose ce que l'attaque réussie a rendu visible (appel d'outil, fragment de prompt, "
+                         "identifiant d'un autre tenant, canari) dans `forbidden_observables`", findings_ref)
+            continue
         target = target_for(root, ir, slug)
         if target not in state:
             state[target] = existing_state(target, slug)
@@ -246,6 +258,14 @@ def run(root: Path, ir: dict[str, Any], findings_path: Path, *, agent: str | Non
         pending.setdefault(target, []).append(item)
         payload["promoted"].append({"finding": fid, "id": item["id"], "dataset": paths.rel(root, target)})
 
+    if pending and not agent and not dry_run:
+        # Sans `--agent`, aucune zone n'était confrontée : `review-adversarial`,
+        # qui a Bash, écrivait dans `datasets/` en omettant simplement l'option.
+        # L'appelant se déclare toujours ; l'humain passe `--agent qa-evals`,
+        # l'owner de la zone qu'il fait écrire.
+        report.error("OWNERSHIP_AGENT_UNKNOWN", "appelant non déclaré : `--agent` est obligatoire pour écrire sous datasets/",
+                     "relancer avec `--agent qa-evals` (seul owner de workspace/pipeline/datasets/) ; `--dry-run` n'écrit rien et s'en passe",
+                     findings_ref)
     if agent and pending:
         loader = audit_ownership.load_loader(root)
         for target in pending:

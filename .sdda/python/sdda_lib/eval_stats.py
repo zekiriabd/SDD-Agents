@@ -15,7 +15,7 @@ Aucun appel LLM, aucune I/O : ce module ne fait que du calcul.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal
 
 Verdict = Literal["green", "yellow", "red"]
@@ -213,6 +213,10 @@ class SuiteResult:
             return "red"
         if self.errors and self.errors == sum(len(r.items) for r in self.runs):
             return "red"  # tout a échoué à l'exécution : ce n'est pas un score bas
+        if self.errors and self.threshold.lower_is_better:
+            # Sous un plafond (latence, coût), le zéro d'un item en erreur est
+            # le MEILLEUR score possible : il tirerait la moyenne sous le seuil.
+            return "red"
         if not self.threshold.holds(self.mean):
             return "red"
         if self.failing_classes:
@@ -240,6 +244,9 @@ class SuiteResult:
             return "aucun run exécuté"
         if self.errors and self.errors == sum(len(r.items) for r in self.runs):
             return f"{self.errors} item(s) en erreur d'exécution — aucun score mesuré"
+        if self.errors and self.threshold.lower_is_better:
+            return (f"{self.errors} item(s) en erreur sous un plafond ({self.threshold}) — "
+                    "un item non mesuré ne peut pas attester qu'il tient")
         if not self.threshold.holds(self.mean):
             return f"moyenne {self.mean:.3f} hors seuil {self.threshold}"
         if self.failing_classes:

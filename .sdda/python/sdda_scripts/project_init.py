@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
-from sdda_scripts import gen_app_context, gen_app_skeleton  # noqa: E402
+from sdda_scripts import gen_app_context, gen_app_skeleton, install_env  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
 #: `uv` absent du PATH : le projet est initialisé, son environnement ne l'est pas.
@@ -75,13 +75,63 @@ def install_dependencies(root: Path, app: str, report: Report) -> dict[str, obje
     return {"ok": True}
 
 
+#: Hors Python — langage -> (manifeste de build qui doit exister, commande de restauration).
+#: Au premier `project-init`, le manifeste n'existe pas encore (`dev-backend`
+#: l'écrit depuis la fiche de langage) : l'étape se saute et le dit. Au rejeu,
+#: l'environnement est restauré une fois, avant les agents.
+NATIVE_RESTORE: dict[str, tuple[str, tuple[str, ...]]] = {
+    "csharp": ("*.csproj", ("dotnet", "restore")),
+    "typescript": ("package.json", ("npm", "install", "--no-audit", "--no-fund")),
+    "kotlin": ("build.gradle.kts", ("{gradle}", "dependencies", "--console=plain")),
+    "java": ("build.gradle.kts", ("{gradle}", "dependencies", "--console=plain")),
+}
+
+
+def install_native_dependencies(root: Path, app: str, language: str, report: Report) -> dict[str, object]:
+    spec = NATIVE_RESTORE.get(language)
+    project = paths.app_dir(root, app)
+    if spec is None:
+        return {"skipped": f"langage `{language}` sans restauration connue"}
+    marker, command = spec
+    if not list(project.glob(marker)):
+        return {"skipped": f"pas encore de `{marker}` (écrit par dev-backend)"}
+    wrapper = project / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
+    gradle = str(wrapper) if wrapper.is_file() else (shutil.which("gradle") or "gradle")
+    argv = [gradle if part == "{gradle}" else part for part in command]
+    if language == "typescript" and (project / "pnpm-lock.yaml").is_file():
+        argv = ["pnpm", "install", "--frozen-lockfile"]
+    exe = shutil.which(argv[0]) or (argv[0] if Path(argv[0]).is_file() else None)
+    if exe is None:
+        report.warn(CLS_DEPS_NOT_INSTALLED, f"`{argv[0]}` introuvable : dépendances non restaurées",
+                    fix=f"installer l'outil du langage `{language}`, puis `{' '.join(argv)}` dans le projet",
+                    location=paths.rel(root, project))
+        return {"skipped": f"{argv[0]} absent"}
+    try:
+        done = subprocess.run([exe, *argv[1:]], cwd=project, capture_output=True, text=True,  # noqa: S603
+                              encoding="utf-8", errors="replace", timeout=INSTALL_TIMEOUT_S, check=False)
+    except subprocess.TimeoutExpired:
+        report.error(CLS_DEPS_INSTALL_FAILED, f"`{' '.join(argv)}` bloqué au-delà de {INSTALL_TIMEOUT_S} s",
+                     fix="vérifier l'accès au registre de paquets, puis relancer project-init",
+                     location=paths.rel(root, project))
+        return {"ok": False, "timeout": True}
+    if done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-3:]
+        report.error(CLS_DEPS_INSTALL_FAILED, f"`{' '.join(argv)}` a échoué : " + " | ".join(tail),
+                     fix="une version épinglée ne se résout pas : corriger le `.libs.json` du catalogue en cause",
+                     location=paths.rel(root, project))
+        return {"ok": False, "returncode": done.returncode}
+    return {"ok": True, "command": argv}
+
+
 def run(root: Path, *, mission: str | None = None, install: bool = True) -> Report:
     report = Report(name="PROJECT-INIT", target=str(root))
     steps: dict[str, object] = {}
 
-    ctx = gen_app_skeleton.Context.resolve(root, Report(name="CTX", target=str(root)))
+    ctx = gen_app_skeleton.Context.resolve(root, Report(name="CTX", target=str(root)), mission=mission)
     if ctx.language == gen_app_skeleton.LANGUAGE:
-        skeleton = gen_app_skeleton.run(root, mode="write")
+        # La MISSION est transmise au squelette : avec plusieurs MISSIONs, il
+        # naissait sans `missionId` ni schémas de sortie de l'IR.
+        skeleton = gen_app_skeleton.run(root, mode="write", mission=mission)
         report.extend(skeleton)
         steps["skeleton"] = {"written": len(skeleton.data.get("written") or [])}
         if not skeleton.ok:
@@ -93,6 +143,17 @@ def run(root: Path, *, mission: str | None = None, install: bool = True) -> Repo
             return report
     else:
         steps["skeleton"] = {"skipped": f"langage `{ctx.language or '?'}` : squelette écrit par dev-backend"}
+        # Le `.env` part avec l'application, dans TOUS les langages : il n'était
+        # copié que par le squelette Python, donc un projet C#, TypeScript ou
+        # JVM passait ses smokes de packaging sans clé — alors que les prompts
+        # disaient que project-init l'avait copié.
+        if ctx.app and not ctx.app.startswith("<"):
+            paths.app_dir(root, ctx.app).mkdir(parents=True, exist_ok=True)
+            env = install_env.run(root, write=True, require=False)
+            report.extend(env)
+            steps["env"] = env.data
+            steps["dependencies"] = (install_native_dependencies(root, ctx.app, ctx.language, report) if install
+                                     else {"skipped": "--no-install"})
 
     context = gen_app_context.run(root, mode="write", mission=mission)
     report.extend(context)

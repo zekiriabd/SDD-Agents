@@ -72,12 +72,29 @@ def recall_at_k(retrieved: Sequence[str], expected: Iterable[Any], k: int) -> fl
     return len(found) / len(wanted)
 
 
+def _first_seen(retrieved: Sequence[str]) -> list[str | None]:
+    """Les positions gardées, un document répété remplacé par None.
+
+    Plusieurs chunks d'un même document occupent plusieurs rangs : k reste
+    compté en rangs servis, mais un document ne rapporte qu'UNE fois. Sans
+    cela nDCG dépassait 1 et trois chunks d'un document pertinent faisaient
+    une précision parfaite.
+    """
+    seen: set[str] = set()
+    out: list[str | None] = []
+    for doc in retrieved:
+        out.append(None if doc in seen else doc)
+        seen.add(doc)
+    return out
+
+
 def precision_at_k(retrieved: Sequence[str], expected: Iterable[Any], k: int) -> float:
     relevance = _relevance_map(expected)
-    top = retrieved[:k]
+    top = _first_seen(retrieved[:k])
     if not top:
         return 0.0
-    return sum(1 for d in top if relevance.get(d, DEFAULT_RELEVANCE) >= RELEVANT_FROM) / len(top)
+    return sum(1 for d in top
+               if d is not None and relevance.get(d, DEFAULT_RELEVANCE) >= RELEVANT_FROM) / len(top)
 
 
 def mrr(retrieved: Sequence[str], expected: Iterable[Any]) -> float:
@@ -101,7 +118,8 @@ def ndcg_at_k(retrieved: Sequence[str], expected: Iterable[Any], k: int) -> floa
     reranker corrige, et la mesure le dit sans ambiguïté.
     """
     relevance = _relevance_map(expected)
-    gains = [float(relevance.get(d, DEFAULT_RELEVANCE)) for d in retrieved[:k]]
+    gains = [0.0 if d is None else float(relevance.get(d, DEFAULT_RELEVANCE))
+             for d in _first_seen(retrieved[:k])]
     ideal = sorted((float(v) for v in relevance.values()), reverse=True)[:k]
     denominator = dcg(ideal)
     return (dcg(gains) / denominator) if denominator else 0.0

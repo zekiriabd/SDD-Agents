@@ -14,7 +14,6 @@ L'audit des bypasses vit dans `workspace/.sys/.audit/bypasses.jsonl` (R5).
 """
 from __future__ import annotations
 
-import datetime as _dt
 import json
 import os
 import re
@@ -25,7 +24,7 @@ from sdda_lib import paths
 from sdda_lib.errors import Report
 from sdda_lib.runtime_io import append_line, atomic_write_json, now_iso  # noqa: F401 — `now_iso` ré-exporté : `from sdda_lib.gate_reports import now_iso` reste valide
 
-_NAME_RE = re.compile(r"^(?P<gate>G[0-8]|PLAN)-(?P<artifact>[A-Za-z0-9-]+?)(?:\.(?P<part>[a-z]+))?\.json$")
+_NAME_RE = re.compile(r"^(?P<gate>G[0-8]|PLAN)-(?P<artifact>[A-Za-z0-9_-]+?)(?:\.(?P<part>[a-z]+))?\.json$")
 
 #: Parts OBLIGATOIRES d'une gate composite. Une gate composite n'est franchie
 #: que si TOUTES ses parts sont vertes : un rapport `G8.datasets` vert seul ne
@@ -39,7 +38,11 @@ GATE_PARTS: dict[str, tuple[str, ...]] = {
     # scans aux findings de reviewers : chaque part disait oui de son côté et
     # personne ne rendait de verdict.
     "G7": ("suites", "adversarial", "verdict"),
-    "G8": ("datasets", "acceptance"),
+    # `regression` (check_regression) : la non-régression contre la baseline
+    # est la moitié de G8 (ARCHITECTURE §4). Elle ne vivait que dans une sortie
+    # JSON redirigée que `compute_status` ne lisait pas : un `[REGRESSION]`
+    # laissait `--require-gate G8` rendre 0.
+    "G8": ("datasets", "acceptance", "regression"),
 }
 
 #: Parts CONTRIBUTIVES : leur absence ne bloque pas, leur ROUGE bloque.
@@ -95,6 +98,10 @@ def write_gate_report(root: Path, gate: str, artifact: str, report: Report, pinn
     }
     if part:
         payload["part"] = part
+    if report.data:
+        # Les mesures de la part (ex. l'accord de chaque juge) : sans elles, le
+        # rapport disait « vert » sans que personne puisse relire sur quoi.
+        payload["data"] = report.data
     # Atomique : les hooks (`_hook.gate_status`) lisent ces rapports pendant
     # que les validateurs les écrivent. Un `write_text` tronque puis remplit ;
     # entre les deux, un hook lisait un JSON vide — donc « rapport illisible »,
@@ -115,6 +122,8 @@ def load_gate_reports(root: Path) -> list[dict[str, Any]]:
         try:
             data = json.loads(p.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
             continue
         data.setdefault("gate", m.group("gate"))
         data.setdefault("artifact", m.group("artifact"))

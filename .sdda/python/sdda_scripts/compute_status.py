@@ -98,7 +98,10 @@ class ArtifactStatus:
 # Fraîcheur des hashes épinglés (R2)
 # --------------------------------------------------------------------------
 def _mission_number(artifact: str) -> int:
-    m = re.match(r"^(\d+)-", artifact)
+    # `1` nu compte aussi : six parts contributives s'écrivent sous le numéro
+    # seul, et leurs épingles `mission`/`topology` se résolvaient en mission 0,
+    # donc toujours « périmées ».
+    m = re.match(r"^(\d+)(?:-|$)", artifact)
     return int(m.group(1)) if m else 0
 
 
@@ -142,6 +145,29 @@ def current_hash(root: Path, key: str, artifact: str) -> str | None:
             return ir_compiler.ir_identity_hash(ir_compiler.load_ir(p))
         except ValueError:
             return ""
+    if key == "dataaccess":
+        p = paths.ir_path(root, n)
+        if not p.is_file():
+            return ""
+        try:
+            return ir_compiler.data_access_hash(ir_compiler.load_ir(p))
+        except ValueError:
+            return ""
+    if key.startswith("irtool:"):
+        # G3 : l'outil tel que l'IR le porte, pas l'IR entier (M5 de l'audit
+        # 2026-09-25 — un prompt écrit périmait chaque rapport G3).
+        p = paths.ir_path(root, n)
+        if not p.is_file():
+            return ""
+        try:
+            return ir_compiler.tool_identity_hash(ir_compiler.load_ir(p), key[7:])
+        except ValueError:
+            return ""
+    if key.startswith("spec:"):
+        # Un fichier de spécification épinglé SANS sa ligne `Status:` : ce
+        # script la réécrit, il ne doit pas périmer les rapports en le faisant.
+        p = paths.resolve_rel(root, key[5:])
+        return hashing.sha256_spec_file(p) if p.is_file() else ""
     if key.startswith("prompt:"):
         from sdda_lib.layered_config import app_name  # noqa: E402  (seule branche qui en a besoin)
         p = paths.prompts_dir(root, app_name(root)) / f"{key[7:]}.system.md"
@@ -231,7 +257,10 @@ class GateIndex:
             if not matching:
                 verdicts.append("absent")
                 continue
-            r = matching[-1]
+            # Le plus RÉCENT, pas le dernier par nom de fichier : `G2-1.x` et
+            # `G2-1-Nom.x` coexistent quand une part a changé d'artefact, et
+            # l'ordre alphabétique choisissait le vieux rapport (`.` > `-`).
+            r = max(matching, key=lambda rep: (str(rep.get("checkedAt") or ""), str(rep.get("_path"))))
             ev.reports.append(str(r.get("_path")))
             if not r.get("ok", False):
                 verdicts.append("red")
@@ -327,6 +356,24 @@ def wired_tool_ids(root: Path, number: int) -> list[str]:
     return [p.name[: -len(".tool.md")] for p in sorted(paths.contracts_dir(root, "tools").glob(f"{number}-*.tool.md"))]
 
 
+def agent_cap_ids(root: Path, number: int, cap_ids: list[str]) -> list[str]:
+    """Les CAPs dont G5 (AGENT GATE) doit être verte : celles qu'un AGENT porte.
+
+    Une CAP portée par un outil ou un retriever seul est mesurée en L2/L3 —
+    G3 et G4, pas G5 : `eval_runner` n'écrit G5 que depuis L4. L'exiger pour
+    elle rendait `Tested` inatteignable sans que rien ne soit rouge. Sans IR,
+    on ne sait pas qui porte quoi : toutes les CAPs, comme avant.
+    """
+    ir_file = paths.ir_path(root, number)
+    if not ir_file.is_file():
+        return cap_ids
+    try:
+        trace = ir_compiler.load_ir(ir_file).get("traceability") or {}
+    except ValueError:
+        return cap_ids
+    return [c for c in cap_ids if c not in trace or ((trace[c].get("implementedBy") or {}).get("agents"))]
+
+
 def compute_mission(root: Path, number: int, index: GateIndex) -> tuple[ArtifactStatus, list[ArtifactStatus], dict[str, list[Path]]]:
     missions = sorted(paths.missions_dir(root).glob(f"{number}-*.md"))
     mid = missions[0].stem if missions else f"{number}-?"
@@ -351,7 +398,8 @@ def compute_mission(root: Path, number: int, index: GateIndex) -> tuple[Artifact
     else:
         g3m, g4m = index.evaluate("G3", mid), index.evaluate("G4", mid)
         g34 = [g3m if g3m.verdict != "absent" or g4m.verdict == "absent" else g4m]
-    g5 = index.evaluate_all("G5", cap_ids)
+    g5_caps = agent_cap_ids(root, number, cap_ids)
+    g5 = index.evaluate_all("G5", g5_caps) if g5_caps else GateEval(gate="G5", artifact="*", verdict="green")
     g67 = [index.evaluate("G6", mid), index.evaluate("G7", mid)]
     g8 = index.evaluate("G8", mid)
 
@@ -377,7 +425,10 @@ def compute_mission(root: Path, number: int, index: GateIndex) -> tuple[Artifact
             ("Architected", [g2]),
             ("Planned", [plan]),
             ("Implemented", g34),
-            ("Tested", [index.evaluate("G5", p.stem)]),
+            # Une CAP sans agent n'a pas de G5 à franchir (cf. `agent_cap_ids`) :
+            # son palier `Tested` est porté par G3/G4, déjà au palier précédent.
+            ("Tested", [index.evaluate("G5", p.stem) if p.stem in g5_caps
+                        else GateEval(gate="G5", artifact=p.stem, verdict="green")]),
             ("Evaluated", g67),
             ("Approved", [g8]),
         ]

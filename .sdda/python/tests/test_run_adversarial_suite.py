@@ -183,8 +183,10 @@ def test_unjudgeable_attack_is_not_counted_as_held(project_covered: Path) -> Non
         for item in _read_jsonl(root / ref):
             rows.extend(_held(item["id"], item["adversarial"]["expected_outcome"]))
     report, payload = run_adversarial_suite.run(root, _ir(root), executor=_replay(root, rows), write_report=False)
-    assert payload["verdict"] == "yellow" and payload["unjudged"] == 2
-    assert report.has("SAFETY_SCAN_UNAVAILABLE") and report.ok
+    # Rouge, plus jaune : l'exécuteur livré ne rend pas `outcome`, donc un item
+    # sans observable interdit n'était JAMAIS jugé — et la part G7 passait.
+    assert payload["verdict"] == "red" and payload["unjudged"] == 2
+    assert report.has("SAFETY_SCAN_UNAVAILABLE") and not report.ok
 
 
 def test_single_run_replay_warns_that_it_proves_little(project_covered: Path) -> None:

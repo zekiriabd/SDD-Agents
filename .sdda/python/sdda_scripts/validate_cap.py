@@ -42,15 +42,44 @@ _THRESHOLD_RE = re.compile(r"^(>=|<=|>|<|==|=)?\s*-?\d+(\.\d+)?\s*%?(\s+.*)?$")
 _COVER_RE = re.compile(r"\b((?:BR|AC)-\d+)\b")
 
 
+#: Un seuil écrit par un humain : comparateur facultatif, nombre, `%` facultatif,
+#: puis de la prose (« >= 0.75 sur le holdout »).
+_THRESHOLD_PARTS_RE = re.compile(r"^\s*(>=|<=|==|=|>|<)?\s*(-?\d+(?:[.,]\d+)?)\s*(%)?")
+
+
+def normalize_threshold(raw: object) -> float | str | None:
+    """Le seuil tel que l'IR le porte : un nombre (`>=` implicite) ou `"<= 0.05"`.
+
+    L'IR ne gardait que le NOMBRE : `threshold: <= 5%` devenait `5.0`, que
+    `eval_stats.parse_threshold` lit `>= 5` — un taux d'hallucination de 0,9
+    passait. Le comparateur fait partie du critère, pas de sa mise en forme :
+    il voyage jusqu'au runner. `>=` (ou rien) reste un nombre, la forme que
+    tous les lecteurs existants savent lire ; `%` devient une fraction, parce
+    que les métriques du framework vivent dans [0, 1].
+    """
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    m = _THRESHOLD_PARTS_RE.match(str(raw or "").replace("`", ""))
+    if not m:
+        return None
+    op = {"=": "=="}.get(m.group(1) or ">=", m.group(1) or ">=")
+    value = float(m.group(2).replace(",", "."))
+    if m.group(3):
+        value = round(value / 100.0, 10)
+    return value if op == ">=" else f"{op} {value:g}"
+
+
 @dataclass
 class AcSpec:
     id: str
     fields: dict[str, str]
 
     @property
-    def threshold_value(self) -> float | None:
-        m = re.search(r"-?\d+(\.\d+)?", self.fields.get("threshold", ""))
-        return float(m.group(0)) if m else None
+    def threshold_value(self) -> float | str | None:
+        """Le seuil normalisé, comparateur compris (cf. `normalize_threshold`)."""
+        return normalize_threshold(self.fields.get("threshold", ""))
 
     @property
     def runs(self) -> int | None:

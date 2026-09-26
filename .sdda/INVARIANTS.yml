@@ -105,6 +105,11 @@ invariants:
       - .sdda/registry/architecture-requirements.yml
       - .sdda/python/sdda_scripts/validate_topology.py
       - .sdda/python/sdda_scripts/roster.py
+      # La confrontation roster <-> IR compilé : agents, tiers, outils et
+      # allocation que l'architecte a déclarés sont ceux que l'IR décrit
+      # (`[ARCH_ROSTER_INCOHERENT]`). Sans elle, la déclaration était vérifiée
+      # complète, et sa matérialisation jamais.
+      - .sdda/python/sdda_scripts/validate_ir.py
     bypasses: []
 
   - id: no-unbounded-loop

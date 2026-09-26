@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sdda_lib import hashing, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import LayeredConfig, active_stacks  # noqa: E402
+from sdda_lib.layered_config import active_stacks  # noqa: E402
 from sdda_scripts._common import add_common_args, finish, load_config, resolve_root  # noqa: E402
 
 MISSION_ID_RE = re.compile(r"^\d+-[A-Za-z0-9]+$")
@@ -131,6 +131,24 @@ def parse_mission(text: str, path: Path | None = None) -> MissionSpec:
     )
 
 
+def mission_artifact(root: Path, mission: object) -> str:
+    """L'artefact sous lequel un rapport de gate de MISSION s'écrit : `{n}-{Nom}`.
+
+    Les parts contributives s'écrivaient sous le numéro nu (`G2-1.adr.json`),
+    ou sous `0` quand `--mission` manquait : `compute_status` rattache le
+    numéro nu, mais ne sait pas en dériver la MISSION pour résoudre une
+    épingle `mission` — et `0` n'est rattaché à rien, donc un rouge y restait
+    invisible. Sans mission : `stack`, l'artefact global que la machine à
+    états applique à chaque MISSION (`gate_reports.GLOBAL_ARTIFACT`).
+    """
+    raw = str(mission if mission is not None else "").strip()
+    head = raw.split("-", 1)[0]
+    if not head.isdigit() or head == "0":
+        return "stack"
+    found = sorted(paths.missions_dir(root).glob(f"{head}-*.md"))
+    return found[0].stem if found else raw
+
+
 def load_mission(root: Path, mission_id: str) -> MissionSpec | None:
     p = paths.missions_dir(root) / f"{mission_id}.md"
     if not p.is_file():
@@ -141,7 +159,7 @@ def load_mission(root: Path, mission_id: str) -> MissionSpec | None:
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------
-def validate_mission_text(text: str, *, path: Path | None, root: Path | None, config: LayeredConfig | None) -> tuple[Report, MissionSpec]:
+def validate_mission_text(text: str, *, path: Path | None, root: Path | None) -> tuple[Report, MissionSpec]:
     spec = parse_mission(text, path)
     loc = paths.rel(root, path) if (root and path) else (str(path) if path else "<texte>")
     report = Report(name="G0", target=spec.id or loc)
@@ -285,9 +303,9 @@ def _check_stack(spec: MissionSpec, root: Path, report: Report, loc: str) -> Non
                          f"activer ` - .sdda/stacks/{key if key != 'language' else 'lang'}/{sorted(missing)[0]}.md` ou corriger la MISSION", loc)
 
 
-def validate_mission_file(path: Path, root: Path, config: LayeredConfig | None, *, write_report: bool = True) -> Report:
+def validate_mission_file(path: Path, root: Path, *, write_report: bool = True) -> Report:
     text = markdown_io.read_text(path)
-    report, spec = validate_mission_text(text, path=path, root=root, config=config)
+    report, spec = validate_mission_text(text, path=path, root=root)
     if write_report and MISSION_ID_RE.match(spec.id):
         write_gate_report(root, "G0", spec.id, report, {"mission": spec.hash})
     return report
@@ -311,7 +329,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = resolve_root(args)
     combined = Report(name="G0", target=str(root))
-    config = load_config(root, combined)
+    # Chargée pour ses findings de validation (`[CONFIG_VALUE_INVALID]`…) :
+    # G0 ne lit aucune clé du Project Config.
+    load_config(root, combined)
     if args.files:
         files = list(args.files)
     elif args.mission is not None:
@@ -319,9 +339,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(paths.missions_dir(root).glob("*.md"))
     if not files:
-        combined.error("MISSION_INCOMPLETE", "aucune MISSION trouvée", f"créer workspace/pipeline/missions/{{n}}-{{Name}}.md depuis le template", str(paths.missions_dir(root)))
+        combined.error("MISSION_INCOMPLETE", "aucune MISSION trouvée", "créer workspace/pipeline/missions/{n}-{Name}.md depuis le template", str(paths.missions_dir(root)))
     for f in files:
-        combined.extend(validate_mission_file(f, root, config, write_report=not args.no_report))
+        combined.extend(validate_mission_file(f, root, write_report=not args.no_report))
     return finish(combined, args)
 
 

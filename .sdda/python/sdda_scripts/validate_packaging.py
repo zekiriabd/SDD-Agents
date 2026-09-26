@@ -38,12 +38,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sdda_lib import hashing, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
-from sdda_lib.layered_config import active_stacks, read_stack_section_kv  # noqa: E402
+from sdda_lib.layered_config import active_stacks  # noqa: E402
 from sdda_scripts._common import (  # noqa: E402
     add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root,
 )
+from sdda_scripts.validate_mission import mission_artifact  # noqa: E402
 
 #: Framework HTTP -> langages qui peuvent le porter. Le seul accord que personne
 #: ne peut rattraper plus tard : on ne compile pas du Spring Boot en Python.
@@ -87,14 +89,25 @@ CONSOLE_SURFACES = {
     "cli-dotnet",   # [csharp]     serving/cli-dotnet.md
     "cli-node",     # [typescript] serving/cli-node.md
     "cli-kotlin",   # [kotlin]     serving/cli-kotlin.md
-    # "cli-java",   # (fiche absente) — lang/java.md n'existe pas non plus
+    "cli-java",     # [java]       serving/cli-java.md
+}
+
+#: Les surfaces HTTP/SSE, une par écosystème : c'est ce qui rend `backend-api`
+#: atteignable dans les cinq langages. Sans elles, la table n'admettait qu'une
+#: surface Python et une C#, et un backend TypeScript ou JVM était refusé en G2
+#: alors que sa fiche `backend/` existait.
+HTTP_SURFACES = {
+    "fastapi-sse",      # [python]        serving/fastapi-sse.md
+    "aspnet-minimal",   # [csharp]        serving/aspnet-minimal.md
+    "http-sse-node",    # [typescript]    serving/http-sse-node.md
+    "spring-sse",       # [kotlin, java]  serving/spring-sse.md
 }
 
 #: Livrable -> surfaces d'exposition qui le servent. Un livrable ne dicte pas la
 #: surface (un `container` peut exposer du HTTP ou tourner en lot) : la table ne
 #: liste que les accords qui ont un sens, et l'absence d'accord est un refus.
 DELIVERABLE_SURFACES = {
-    "backend-api": {"fastapi-sse", "aspnet-minimal", "mcp-server", "chainlit", "slack-bot"},
+    "backend-api": HTTP_SURFACES | {"mcp-server", "chainlit", "slack-bot"},
     "cli-exe": set(CONSOLE_SURFACES),
     "batch-job": {"batch"} | CONSOLE_SURFACES,
     "library": set(CONSOLE_SURFACES),   # une bibliothèque n'expose rien ; la console sert son smoke
@@ -158,7 +171,7 @@ def run(root: Path, report: Report) -> Report:
         if not backends:
             if expected_sheet:
                 report.error("PACKAGING_BACKEND_SHEET_MISSING",
-                             f"`DeliverableType: backend-api` sans fiche `backend/` active",
+                             "`DeliverableType: backend-api` sans fiche `backend/` active",
                              f"activer `.sdda/stacks/backend/{expected_sheet}.md` : c'est la fiche que "
                              "dev-backend lit pour le projet, la DI, la config et le packaging — sans "
                              "elle, il les invente", sheet_loc)
@@ -258,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Valide le livrable déclaré et sa surface.")
     add_common_args(parser)
     parser.add_argument("--explain", action="store_true", help="ce que chaque livrable exige")
-    parser.add_argument("--mission", default="0", help="numéro de MISSION (artefact du rapport de gate)")
+    parser.add_argument("--mission", default=None, help="numéro de MISSION (artefact du rapport de gate) ; défaut : `stack`, valable pour toutes")
     args = parser.parse_args(argv)
 
     if args.explain:
@@ -270,7 +283,14 @@ def main(argv: list[str] | None = None) -> int:
         # Le packaging est une décision d'architecture : son rapport est une
         # PART de G2, au même titre que le budget estimé ou l'IR. En faire une
         # gate séparée créerait un dixième verrou pour une seule question.
-        write_gate_report(root, "G2", str(args.mission), report, {}, part="packaging")
+        #
+        # Artefact `stack` sans `--mission` (et non plus `0`, rattaché à rien :
+        # `dev-backend` l'appelait ainsi, et son rouge restait invisible).
+        # Épinglé sur STACK.md, où vivent toutes les clés lues : vide, la part
+        # restait verte après n'importe quel changement de livrable.
+        stack = paths.stack_md_path(root)
+        pins = {"stack": hashing.sha256_file(stack)} if stack.is_file() else {}
+        write_gate_report(root, "G2", mission_artifact(root, args.mission), report, pins, part="packaging")
     return finish(report, args)
 
 

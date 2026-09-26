@@ -3,16 +3,22 @@
 Les cas vérifiés ici sont ceux où un script naïf mentirait : pas d'exécuteur,
 groundedness absente, requêtes manquantes du replay, et un recall sous le seuil
 du contrat — celui-là doit dire « RETRIEVAL », pas « l'agent hallucine ».
+
+Le projet de test déclare `RetrievalGoldenMinQueries: 6` : un golden plus petit
+que ce minimum est désormais une ERREUR (G4 exige n requêtes), donc les cas
+verts travaillent sur un jeu à la taille déclarée.
 """
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
 from conftest import make_project, run_main  # type: ignore
 from sdda_lib import paths
+from sdda_lib.layered_config import read_layered_config
 from sdda_scripts import ir_compiler, run_retrieval_eval
 from sdda_scripts.run_retrieval_eval import ReplayExecutor
 
@@ -40,9 +46,17 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
 
 
+def _set_min_queries(root: Path, n: int) -> None:
+    stack = paths.stack_md_path(root)
+    text = re.sub(r"RetrievalGoldenMinQueries: \d+\n", "", stack.read_text(encoding="utf-8"))
+    stack.write_text(text.replace("AdversarialSetMinItems: 2\n", f"AdversarialSetMinItems: 2\nRetrievalGoldenMinQueries: {n}\n"),
+                     encoding="utf-8")
+
+
 @pytest.fixture
 def project_with_golden(tmp_path: Path) -> Path:
     root = make_project(tmp_path)
+    _set_min_queries(root, 6)
     _write_jsonl(root / GOLDEN, _golden_items())
     ir_compiler.main(["--root", str(root), "--mission", "1", "--no-report"])
     return root
@@ -50,6 +64,10 @@ def project_with_golden(tmp_path: Path) -> Path:
 
 def _ir(root: Path) -> dict:
     return ir_compiler.load_ir(paths.ir_path(root, 1))
+
+
+def _run(root: Path, executor, **kw):
+    return run_retrieval_eval.run(root, _ir(root), executor, config=read_layered_config(root), **kw)
 
 
 def _replay(root: Path, rows: list[dict]) -> ReplayExecutor:
@@ -96,14 +114,14 @@ def test_no_retriever_in_ir_is_not_a_passed_gate(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 def test_perfect_retrieval_is_green_and_pins_index_and_dataset(project_with_golden: Path) -> None:
     root = project_with_golden
-    report, payload = run_retrieval_eval.run(root, _ir(root), _replay(root, _perfect()), run_id="R1")
+    report, payload = _run(root, _replay(root, _perfect()), run_id="R1")
     assert payload["verdict"] == "green", report.render_text()
     measured = payload["retrievers"][0]
     assert measured["recallAtK"] == 1.0 and measured["queries"] == 6
     assert measured["groundedness"] == 0.9 and "OK" in measured["diagnosis"]
 
     gate = json.loads((paths.validation_dir(root) / "G4-1-contracts-index.json").read_text(encoding="utf-8"))
-    assert gate["ok"] is True
+    assert gate["ok"] is True and gate["data"]["bypassed"] is False
     assert gate["pinnedHashes"]["index:1-contracts-index"] == "sha256:0123456789abcdef"
     assert f"dataset:{GOLDEN}" in gate["pinnedHashes"] and "contract:1-contracts-index" in gate["pinnedHashes"]
     assert (root / payload["written"]["report"]).is_file()
@@ -116,7 +134,7 @@ def test_low_recall_is_red_and_names_the_retrieval_layer(project_with_golden: Pa
     for row in rows[:5]:
         row["docIds"] = ["doc-hors-sujet"]
         row["servedIds"] = ["doc-hors-sujet"]
-    report, payload = run_retrieval_eval.run(root, _ir(root), _replay(root, rows), write_report=False)
+    report, payload = _run(root, _replay(root, rows), write_report=False)
     assert payload["verdict"] == "red"
     assert report.has("RETRIEVAL_BELOW_THRESHOLD")
     fix = next(f.fix for f in report.errors if "recallAtK" in f.message)
@@ -126,7 +144,7 @@ def test_low_recall_is_red_and_names_the_retrieval_layer(project_with_golden: Pa
 
 def test_groundedness_unmeasured_is_yellow_never_green(project_with_golden: Path) -> None:
     root = project_with_golden
-    report, payload = run_retrieval_eval.run(root, _ir(root), _replay(root, _perfect(groundedness=None)), write_report=False)
+    report, payload = _run(root, _replay(root, _perfect(groundedness=None)), write_report=False)
     assert payload["verdict"] == "yellow" and report.ok  # informe (P9), ne bloque pas
     assert payload["retrievers"][0]["groundedness"] is None
     assert report.has("RETRIEVAL_GATE_FAILED")
@@ -135,32 +153,39 @@ def test_groundedness_unmeasured_is_yellow_never_green(project_with_golden: Path
 
 def test_groundedness_below_threshold_is_red_and_names_the_generation_layer(project_with_golden: Path) -> None:
     root = project_with_golden
-    report, payload = run_retrieval_eval.run(root, _ir(root), _replay(root, _perfect(groundedness=0.40)), write_report=False)
+    report, payload = _run(root, _replay(root, _perfect(groundedness=0.40)), write_report=False)
     assert payload["verdict"] == "red"
     assert "GÉNÉRATION" in payload["retrievers"][0]["diagnosis"]
 
 
-def test_missing_replay_records_are_excluded_not_counted_as_zero(project_with_golden: Path) -> None:
+def test_missing_replay_records_are_excluded_not_counted_as_zero_and_block(project_with_golden: Path) -> None:
+    """Pas un recall de 0 (ce serait fabriquer une mesure) — ni un vert : la
+    moitié du jeu n'a pas été mesurée, et G4 juge le jeu entier."""
     root = project_with_golden
     executor = _replay(root, _perfect(3))
-    report, payload = run_retrieval_eval.run(root, _ir(root), executor, write_report=False)
+    report, payload = _run(root, executor, write_report=False)
     measured = payload["retrievers"][0]
     assert measured["queries"] == 3 and measured["recallAtK"] == 1.0  # pas 0.5
-    assert report.has("MEASUREMENT_MISSING") and len(executor.missing) == 3
+    assert len(executor.missing) == 3
+    assert "MEASUREMENT_MISSING" in {f.cls for f in report.errors} and payload["verdict"] == "red"
 
 
 def test_dangling_citation_is_reported(project_with_golden: Path) -> None:
     root = project_with_golden
     rows = _perfect()
     rows[0]["answer"] = "réponse [doc-fantome]"
-    report, payload = run_retrieval_eval.run(root, _ir(root), _replay(root, rows), write_report=False)
+    report, payload = _run(root, _replay(root, rows), write_report=False)
     assert payload["verdict"] == "red" and report.has("CITATION_UNRESOLVED")
     assert payload["retrievers"][0]["danglingCitations"] == ["doc-fantome"]
 
 
-def test_small_golden_warns_about_the_confidence_interval(project_with_golden: Path) -> None:
-    report, _ = run_retrieval_eval.run(project_with_golden, _ir(project_with_golden), _replay(project_with_golden, _perfect()), write_report=False)
-    assert report.has("EVAL_DATASET_TOO_SMALL")  # 6 requêtes < RetrievalGoldenMinQueries
+def test_golden_below_the_declared_minimum_blocks(project_with_golden: Path) -> None:
+    """« trop peu de requêtes » n'était qu'un avertissement : G4 verte sur 6
+    requêtes quand le projet en exige 50."""
+    root = project_with_golden
+    _set_min_queries(root, 50)
+    report, payload = _run(root, _replay(root, _perfect()), write_report=False)
+    assert "EVAL_DATASET_TOO_SMALL" in {f.cls for f in report.errors} and payload["verdict"] == "red"
 
 
 # ---------------------------------------------------------------------------
@@ -173,11 +198,13 @@ def test_bypass_downgrades_errors_but_leaves_the_verdict_red_and_audits(project_
     rows = _perfect()
     for row in rows:
         row["docIds"] = ["doc-hors-sujet"]
-    report, payload = run_retrieval_eval.run(root, _ir(root), _replay(root, rows), run_id="R2")
+    report, payload = _run(root, _replay(root, rows), run_id="R2")
     assert payload["verdict"] == "red" and payload["bypassed"] is True
     assert report.ok and report.has("RETRIEVAL_BELOW_THRESHOLD")  # dégradé en avertissement
     audit = (paths.audit_dir(root) / "bypasses.jsonl").read_text(encoding="utf-8")
     assert "G4" in audit and "réindexation" in audit
+    gate = json.loads((paths.validation_dir(root) / "G4-1-contracts-index.json").read_text(encoding="utf-8"))
+    assert gate["data"]["bypassed"] is True  # la gate franchie par bypass le dit
 
 
 # ---------------------------------------------------------------------------
@@ -192,3 +219,15 @@ def test_cli_json_carries_the_payload(project_with_golden: Path) -> None:
     ])
     payload = json.loads(out)
     assert code == 0 and payload["verdict"] == "green" and payload["executor"] == "replay"
+
+
+def test_an_executor_that_raises_is_a_missing_measure_not_a_crash(project_with_golden: Path) -> None:
+    class Boom:
+        name = "boom"
+
+        def retrieve(self, query, *, retriever, k, item):
+            raise TimeoutError("index injoignable")
+
+    report, payload = _run(project_with_golden, Boom(), write_report=False)
+    assert payload["verdict"] == "red"
+    assert {"RETRIEVAL_GATE_FAILED"} <= {f.cls for f in report.errors}

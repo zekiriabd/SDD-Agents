@@ -46,6 +46,7 @@ import csv
 import hashlib
 import io
 import json
+import keyword
 import math
 import re
 import sys
@@ -56,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io, paths, schema_infer, source_registry as sr  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.runtime_io import atomic_write_text  # noqa: E402
 from sdda_lib.layered_config import active_stacks, read_project_section, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
 
@@ -213,7 +215,7 @@ def read_records(ctx: Context, source_id: str, src: dict[str, Any], report: Repo
 
     files = _resolve_files(ctx.root, store, src, source_id, report)
     fmt = str(src.get("format") or "").strip().lower()
-    encoding = str(src.get("encoding") or "utf-8")
+    encoding = _bom_tolerant(str(src.get("encoding") or "utf-8"))
     records: list[dict[str, Any]] = []
     for path in files:
         if len(records) >= limit:
@@ -228,6 +230,27 @@ def read_records(ctx: Context, source_id: str, src: dict[str, Any], report: Repo
                     "délibéré : un remplacement silencieux produirait des données fausses",
             )
     return records[:limit], fmt in ("csv", "tsv", "xlsx")
+
+
+def _bom_tolerant(encoding: str) -> str:
+    """`utf-8` lu en `utf-8-sig` : même règle que le runtime (`formats/csv_reader.py`).
+
+    Un export Excel commence par un BOM, qui se collait au premier en-tête :
+    le schéma figé déclarait `\\ufeffid`, et le wrapper généré ne compilait pas.
+    """
+    return "utf-8-sig" if encoding.lower().replace("_", "-") in ("utf-8", "utf8") else encoding
+
+
+#: Noms qu'un champ ne peut pas porter dans le code généré : ils deviennent des
+#: attributs de modèles pydantic et des paramètres nommés.
+_RESERVED_FIELD_NAMES = frozenset({"model_config", "model_fields", "model_computed_fields", "params", "ctx"})
+
+
+def invalid_field_names(names: Any) -> list[str]:
+    """Les noms de champ qui ne sont pas des identifiants Python utilisables."""
+    return sorted({str(n) for n in names
+                   if not str(n).isidentifier() or keyword.iskeyword(str(n))
+                   or str(n).startswith("model_") or str(n) in _RESERVED_FIELD_NAMES})
 
 
 def _resolve_files(root: Path, store: dict[str, Any], src: dict[str, Any], source_id: str,
@@ -376,9 +399,16 @@ def infer_source(ctx: Context, source_id: str, report: Report, *, sample: Path |
     result = schema_infer.infer(records, source_id=source_id, coerce=coerce,
                                 string_only={f for f in locked if f}, no_enum=no_enum)
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(result.schema, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                      encoding="utf-8")
+    atomic_write_text(target, json.dumps(result.schema, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    bad = invalid_field_names((result.schema.get("properties") or {}).keys())
+    if bad:
+        report.warn(
+            "DATA_SCHEMA_REVIEW_REQUIRED",
+            f"source `{source_id}` : champ(s) {bad} non utilisable(s) comme identifiant Python — "
+            "`--write` refusera de générer l'outil",
+            fix="renommer ces colonnes à l'ingestion (export) : elles deviennent des attributs et des "
+                "paramètres du code généré",
+            location=paths.rel(ctx.root, target))
     for note in result.notes:
         report.warn("DATA_SCHEMA_REVIEW_REQUIRED", f"source `{source_id}` : {note}",
                     fix="corriger à la main dans le schéma figé, puis le commiter")
@@ -636,7 +666,9 @@ def _filter_doc(name: str, spec: dict[str, Any]) -> str:
 def _docstring(src: dict[str, Any], kind: str) -> str:
     first = next((l.strip() for l in str(src.get("description") or "").split("\n") if l.strip()), "")
     verbs = {"lookup": "Lecture par clé", "search": "Recherche filtrée", "count": "Comptage filtré"}
-    return f"{verbs[kind]}. {first}".replace('"', "'").strip()
+    # `\` doublé : une description finissant par `\` échappait le `"""` fermant
+    # et le wrapper généré ne compilait pas.
+    return f"{verbs[kind]}. {first}".replace("\\", "\\\\").replace('"', "'").strip()
 
 
 # ---------------------------------------------------------------------------
@@ -833,7 +865,7 @@ def _test_checklist(kind: str, src: dict[str, Any]) -> list[str]:
     items += [f"état `{field}`" for field in SIGNALED_STATES[kind] if field != "truncated: true"]
     items.append("`as_of` présent dans chaque réponse, y compris vide")
     if kind == "search":
-        items.append(f"plafond atteint -> `truncated: true` (lecture de maxRows+1)")
+        items.append("plafond atteint -> `truncated: true` (lecture de maxRows+1)")
         items.append("ordre déterministe : deux appels identiques rendent la même liste")
     if kind == "count":
         items.append("le compte porte sur le TOTAL, pas sur la page tronquée")
@@ -1096,9 +1128,8 @@ def emit_runtime(ctx: Context, report: Report, *, write: bool,
     for target, content in targets:
         rel = paths.rel(ctx.root, target)
         if write:
-            target.parent.mkdir(parents=True, exist_ok=True)
             if not target.is_file() or markdown_io.read_text(target) != content:
-                target.write_text(content, encoding="utf-8")
+                atomic_write_text(target, content)   # atomique, LF sur tous les postes
                 written.append(rel)
         elif not target.is_file() or markdown_io.read_text(target) != content:
             drifted.append(rel)
@@ -1129,9 +1160,24 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
     do_code = scope in ("all", "code")
     do_contracts = scope in ("all", "contracts")
 
-    for source_id, src, kind in planned(ctx, report, only):
+    planned_items = planned(ctx, report, only)
+    for source_id, src, kind in planned_items:
         schema = load_frozen(ctx, source_id, report)
         if schema is None:
+            continue
+        names = list((schema.get("properties") or {}).keys()) + [str(src.get("key") or "")] + \
+            [str(f) for f in (src.get("filters") or [])] + [str(f) for f in (src.get("ranges") or [])]
+        bad = invalid_field_names(n for n in names if n)
+        if bad:
+            # Refusé, jamais « corrigé » en silence : un champ `1st` ou
+            # `Order ID` produisait un wrapper qui ne compilait pas — et on le
+            # découvrait à l'import de l'application, pas ici.
+            report.error(
+                "DATA_SOURCE_FIELD_NAME_INVALID",
+                f"source `{source_id}` : champ(s) {bad} inutilisable(s) comme identifiant Python",
+                fix="renommer ces colonnes à l'ingestion (export), puis ré-inférer le schéma figé "
+                    "(`--infer --force --source " + source_id + "`)",
+                location=paths.rel(ctx.root, ctx.schema_path(source_id)))
             continue
         if do_code:
             wrapper = render_wrapper(ctx, source_id, src, schema, kind)
@@ -1139,9 +1185,8 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
             rel = paths.rel(ctx.root, wpath)
 
             if write:
-                wpath.parent.mkdir(parents=True, exist_ok=True)
                 if not wpath.is_file() or markdown_io.read_text(wpath) != wrapper:
-                    wpath.write_text(wrapper, encoding="utf-8")
+                    atomic_write_text(wpath, wrapper)
                     wrappers_written.append(rel)
             elif not wpath.is_file():
                 missing.append(rel)
@@ -1152,8 +1197,7 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
         crel = paths.rel(ctx.root, cpath)
         if not cpath.is_file():
             if write and do_contracts:
-                cpath.parent.mkdir(parents=True, exist_ok=True)
-                cpath.write_text(render_contract(ctx, source_id, src, schema, kind), encoding="utf-8")
+                atomic_write_text(cpath, render_contract(ctx, source_id, src, schema, kind))
                 contracts_written.append(crel)
             else:
                 # En portée `code`, un contrat absent n'est pas à créer ici : il
@@ -1181,6 +1225,19 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
             "wrappersWritten": [], "contractsWritten": contracts_written,
             "runtimeWritten": [], "runtimeDrifted": [], "stale": [], "missing": missing,
         }
+    orphans = _orphan_wrappers(ctx, planned_items) if not only else []
+    if orphans:
+        if write:
+            for orphan in orphans:
+                orphan.unlink()
+        else:
+            report.error(
+                "DATA_TOOL_ORPHAN",
+                f"{len(orphans)} wrapper(s) généré(s) sans source déclarée : "
+                + ", ".join(paths.rel(ctx.root, o) for o in orphans[:4]),
+                fix="`gen_source_tools.py --write` les retire : une source renommée ou retirée laissait "
+                    "son ancien outil importable, donc câblable, sans contrat ni schéma à jour",
+                location=paths.rel(ctx.root, ctx.tools_dir()))
     runtime_written, runtime_drifted = emit_runtime(ctx, report, write=write, only=only)
     if runtime_drifted:
         report.error(
@@ -1207,6 +1264,29 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
         "runtimeWritten": runtime_written, "runtimeDrifted": runtime_drifted,
         "stale": stale, "missing": missing,
     }
+
+
+def _orphan_wrappers(ctx: Context, planned_items: list[tuple[str, dict[str, Any], str]]) -> list[Path]:
+    """Les wrappers GÉNÉRÉS (bannière) sous `data/tools/` qu'aucune déclaration ne commande plus.
+
+    Seuls les fichiers qui portent la bannière du générateur sont visés : un
+    fichier écrit à la main n'est pas à nous à juger ni à retirer.
+    """
+    directory = ctx.tools_dir()
+    if not directory.is_dir():
+        return []
+    expected = {ctx.wrapper_path(s, k).name for s, _, k in planned_items}
+    out: list[Path] = []
+    for path in sorted(directory.glob("*.py")):
+        if path.name in expected or path.name == "__init__.py":
+            continue
+        try:
+            head = path.read_text(encoding="utf-8", errors="replace").split("\n", 1)[0]
+        except OSError:
+            continue
+        if BANNER in head:
+            out.append(path)
+    return out
 
 
 def _check_contract_drift(ctx: Context, path: Path, rel: str, source_id: str, src: dict[str, Any],
@@ -1289,6 +1369,26 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
         report.error("STACK_MISSING", "STACK.md introuvable", fix="lancer `python bootstrap.py`")
         return report
 
+    # Le code généré (wrappers pydantic, runtime `data/` et `tools/`) est du
+    # PYTHON. Sans ce garde, un projet C# en `declared-sources` recevait des
+    # `.py` dans `src/{App}/data/` à la PHASE 3, et l'échec n'apparaissait qu'à
+    # la compilation — ou jamais, si rien ne les importait.
+    languages = active_stacks(root, "Active Language & Runtime")
+    if mode != "infer" and (not languages or languages[0] != "python"):
+        report.error(
+            "STACK_LANGUAGE_MISMATCH",
+            f"`## Active Language & Runtime` active `{languages[0] if languages else '<aucune>'}` : "
+            "ce générateur n'écrit que du Python",
+            fix="le schéma figé (`--infer`) reste utilisable ; les outils d'accès du langage actif sont "
+                "écrits par `dev-data` depuis les contrats, en attendant un générateur de ce langage",
+            location="workspace/stack/STACK.md ## Active Language & Runtime")
+        return report
+    if mission is not None and not re.fullmatch(r"\d+", str(mission).strip()):
+        # Le numéro entre dans des NOMS DE FICHIERS (contrats) : `../x` écrivait hors du dépôt.
+        report.error("INVALID_ARG", f"`--mission {mission}` : un numéro de MISSION est un entier",
+                     fix="passer `--mission 1`")
+        return report
+
     # Écrit sans littéral de liste : `[DECLARED]` dans le source serait compté
     # comme une classe d'erreur par `sync_error_registry.py`, qui scanne les
     # formes `[CLASS]`. Un faux positif dans le registre le rend moins lu.
@@ -1303,7 +1403,13 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
         )
         return report
 
-    ctx = Context(root, mission=mission, src_root=src_root)
+    try:
+        ctx = Context(root, mission=mission, src_root=src_root)
+    except ValueError as exc:   # `AppName` refusé par `sdda_lib.paths` (il sortirait de workspace/src/)
+        report.error("CONFIG_VALUE_INVALID", f"`AppName` inutilisable : {exc}",
+                     fix="un identifiant simple (`SupportDesk`) dans `## Project Config`",
+                     location="workspace/stack/STACK.md ## Project Config")
+        return report
     for problem in ctx.registry.problems:
         (report.error if problem.severity == "error" else report.warn)(
             problem.cls, problem.message, problem.fix, problem.location or "workspace/stack/STACK.md")

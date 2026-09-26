@@ -64,6 +64,7 @@ from sdda_lib.workspace import (  # noqa: E402
     write_workspace_version,
 )
 from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, resolve_root  # noqa: E402
+from sdda_scripts.install_env import write_secret_file  # noqa: E402
 from sdda_scripts.smoke_check import WORKSPACE_TREE  # noqa: E402
 
 #: Répertoires créés par les bootstraps d'avant la v1 et lus par aucun script.
@@ -110,16 +111,27 @@ class Context:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8", newline="\n")
 
+    def write_secret(self, rel: str, text: str, detail: str = "", *, at_root: bool = False) -> None:
+        """Comme `write_text`, pour un fichier de SECRETS : 0600, atomique (`install_env`)."""
+        target = (self.root if at_root else self.workspace) / rel
+        self._log("write" if not target.exists() else "edit", rel, detail, at_root=at_root)
+        if not self.dry_run:
+            write_secret_file(target, text.encode("utf-8"))
+
     def move_file(self, old: str, new: str) -> bool:
         """Déplace UN fichier `workspace/{old}` -> `workspace/{new}` ; collision = l'original reste."""
         src, dst = self.workspace / old, self.workspace / new
         if not src.is_file():
             return False
         if dst.exists():
-            self.report.warn("WORKSPACE_MIGRATION_COLLISION",
-                             f"`workspace/{new}` existe déjà : l'original `workspace/{old}` reste en place",
-                             "fusionner à la main ; la migration ne tranche pas entre deux versions d'un fichier",
-                             f"workspace/{old}")
+            # ERREUR, plus avertissement : en WARN, la migration écrivait sa
+            # version et laissait deux exemplaires du fichier — l'ancien à un
+            # chemin que plus rien ne lit, le nouveau qu'on croyait migré.
+            # Bloquer arrête la chaîne avant `workspace.json` : on fusionne, on relance.
+            self.report.error("WORKSPACE_MIGRATION_COLLISION",
+                              f"`workspace/{new}` existe déjà : l'original `workspace/{old}` reste en place",
+                              "fusionner à la main (garder l'une des deux versions), puis relancer la migration",
+                              f"workspace/{old}")
             return False
         self._log("move", old, f"-> {new}")
         self.emptied.add(old)          # la simulation doit savoir que ce fichier n'est plus là
@@ -225,10 +237,10 @@ class Context:
                 self._merge_dir(item, target, f"{old}/{item.name}", f"{new}/{item.name}")
                 continue
             if target.exists():
-                self.report.warn("WORKSPACE_MIGRATION_COLLISION",
-                                 f"`workspace/{new}/{item.name}` existe déjà : l'original reste en place",
-                                 "fusionner à la main ; la migration ne tranche pas entre deux versions d'un fichier",
-                                 f"workspace/{old}/{item.name}")
+                self.report.error("WORKSPACE_MIGRATION_COLLISION",
+                                  f"`workspace/{new}/{item.name}` existe déjà : l'original reste en place",
+                                  "fusionner à la main (garder l'une des deux versions), puis relancer la migration",
+                                  f"workspace/{old}/{item.name}")
                 continue
             shutil.move(str(item), str(target))
         if not [e for e in src.iterdir() if e.name != ".gitkeep"]:
@@ -479,8 +491,8 @@ def v3_secrets_to_env(ctx: Context) -> None:
     header = "" if existing else ("# SDD_Agents — valeurs des secrets de L'APPLICATION. Gitignoré. "
                                   "STACK.md n'en porte que les noms (${NOM}).\n")
     sep = "" if not existing or existing.endswith("\n") else "\n"
-    ctx.write_text(env_rel, existing + sep + header + "# extrait de workspace/stack/STACK.md par migrate-workspace (v3)\n" + chunk,
-                   f"{len(moved)} variable(s) : {', '.join(n for n, _ in moved)}", at_root=True)
+    ctx.write_secret(env_rel, existing + sep + header + "# extrait de workspace/stack/STACK.md par migrate-workspace (v3)\n" + chunk,
+                     f"{len(moved)} variable(s) : {', '.join(n for n, _ in moved)}", at_root=True)
     ctx.write_text(STACK_REL, text, "valeurs remplacées par ${NOM} : " + ", ".join(n for n, _ in moved))
 
 
@@ -504,10 +516,11 @@ def _v3_env_to_app(ctx: Context, env_rel: str) -> None:
         if extra:
             base = dst.read_text(encoding="utf-8")
             sep = "" if not base or base.endswith("\n") else "\n"
-            ctx.write_text(env_rel, base + sep + "\n".join(extra) + "\n",
-                           f"{len(extra)} variable(s) rapatriée(s) depuis .env (racine)", at_root=True)
+            ctx.write_secret(env_rel, base + sep + "\n".join(extra) + "\n",
+                             f"{len(extra)} variable(s) rapatriée(s) depuis .env (racine)", at_root=True)
     else:
-        ctx.write_text(env_rel, src_text, "rapatrié depuis .env (racine) — le .env vit avec l'application", at_root=True)
+        ctx.write_secret(env_rel, src_text, "rapatrié depuis .env (racine) — le .env vit avec l'application",
+                         at_root=True)
     ctx.remove_file(".env", "remplacé par " + env_rel, at_root=True)
 
 
@@ -847,7 +860,8 @@ V6_PATH_RULES: tuple[tuple["re.Pattern[str]", str], ...] = (
     (re.compile(r"proof/seed\b"), "seed"),
     (re.compile(r"proof/(datasets|suites|baselines|calibration|fixtures)\b"), r"pipeline/\1"),
 )
-_V6_TEXT_SUFFIXES = {".md", ".yml", ".yaml", ".json", ".jsonl", ".py", ".toml", ".txt", ".csv"}
+#: Sans `.csv` : un export de données n'est pas un fichier de références (cf. étape 4).
+_V6_TEXT_SUFFIXES = {".md", ".yml", ".yaml", ".json", ".jsonl", ".py", ".toml", ".txt"}
 _V6_SKIP_DIRS = {".venv", "venv", "__pycache__", "node_modules", ".sys", "build", "dist"}
 
 
@@ -906,20 +920,32 @@ def v6_split_human_from_pipeline(ctx: Context) -> None:
     ctx.rmdir_if_empty("proof", "WORKSPACE_GHOST_DIR_NOT_EMPTY")
     # 4. Les références aux anciens chemins suivent — sinon une AC pointe un
     #    dataset qui n'est plus là, et un contrat un prompt introuvable.
-    if not ctx.dry_run:
-        for top in ("feats", "pipeline", "seed", "stack", "src"):
-            base = ws / top
-            for f in sorted(base.rglob("*")) if base.is_dir() else []:
-                if (not f.is_file() or f.suffix.lower() not in _V6_TEXT_SUFFIXES or f.name.startswith(".env")
-                        or any(part in _V6_SKIP_DIRS for part in f.relative_to(ws).parts)):
-                    continue
-                try:
-                    text = f.read_text(encoding="utf-8")
-                except UnicodeDecodeError:
-                    continue
-                new = v6_rewrite_paths(text)
-                if new != text:
-                    ctx.write_text(f.relative_to(ws).as_posix(), new, "chemins v6 (feats/ humain, pipeline/ généré)")
+    #    `seed/` et les `.csv` sont EXCLUS : c'est de la DONNÉE (vérité
+    #    terrain, exports), et une chaîne `proof/seed` dans un libellé réel
+    #    n'est pas une référence de chemin — la réécrire altérait le jeu qui
+    #    juge. En `--dry-run`, les réécritures sont annoncées (`edit`) : la
+    #    simulation les taisait, et sous-estimait ce que la migration touche.
+    if ctx.dry_run:
+        # En simulation, les déplacements n'ont pas eu lieu : les fichiers sont
+        # encore sous leurs anciens répertoires, qu'on parcourt donc aussi.
+        tops: tuple[str, ...] = ("feats", "pipeline", "proof", "stack", "src")
+    else:
+        tops = ("feats", "pipeline", "stack", "src")
+    for top in tops:
+        base = ws / top
+        for f in sorted(base.rglob("*")) if base.is_dir() else []:
+            rel_parts = f.relative_to(ws).parts
+            if (not f.is_file() or f.suffix.lower() not in _V6_TEXT_SUFFIXES or f.name.startswith(".env")
+                    or any(part in _V6_SKIP_DIRS for part in rel_parts)
+                    or rel_parts[:2] == ("proof", "seed")):
+                continue
+            try:
+                text = f.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            new = v6_rewrite_paths(text)
+            if new != text:
+                ctx.write_text(f.relative_to(ws).as_posix(), new, "chemins v6 (feats/ humain, pipeline/ généré)")
     # 5. Le `.env` de l'application a désormais sa SOURCE dans assets/.
     app = str(read_project_section(ctx.root).get("AppName") or "").strip()
     runtime_env = ws / "src" / app / ".env" if app else None
@@ -927,8 +953,7 @@ def v6_split_human_from_pipeline(ctx: Context) -> None:
     if runtime_env is not None and runtime_env.is_file() and not source_env.exists():
         ctx._log("copy", f"src/{app}/.env", "-> assets/.env (la source humaine ; install-env recopie)")
         if not ctx.dry_run:
-            source_env.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(runtime_env, source_env)
+            write_secret_file(source_env, runtime_env.read_bytes())   # 0600, comme install-env
 
 
 def migrate_to_v6(ctx: Context) -> None:

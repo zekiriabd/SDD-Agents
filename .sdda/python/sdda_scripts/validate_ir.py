@@ -52,7 +52,7 @@ from typing import Any, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, markdown_io, paths  # noqa: E402
+from sdda_lib import calibration, hashing, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.graph import Graph  # noqa: E402
@@ -162,8 +162,11 @@ def infra_leaks(ir: dict[str, Any]) -> list[tuple[str, str]]:
     contourner.
     """
     out = []
+    # `id` est élagué aussi : c'est le nom de FICHIER du contrat
+    # (`1-data-sqlite-tickets`), choisi pour qu'un humain le retrouve, pas une
+    # intention — le refuser imposait de renommer un contrat juste.
     for branch in ("retrievers", "dataAccess"):
-        for path, s in walk_strings(ir.get(branch), f"$.{branch}", frozenset({"binding"})):
+        for path, s in walk_strings(ir.get(branch), f"$.{branch}", frozenset({"binding", "id"})):
             for m in _INFRA_RE.finditer(s):
                 out.append((path, m.group(1)))
     return out
@@ -479,27 +482,37 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
         if not isinstance(s.get("runs"), int) or s.get("runs", 0) < 1:
             report.error("AC_NOT_EVALUABLE", f"suite `{sid}` : `runs` doit être un entier >= 1", "k runs, toujours (P3)", loc)
         if s.get("grader") == "llm-judge" and not s.get("advisory"):
+            # G2 exige que la calibration soit DÉCLARÉE, pas qu'elle soit FAITE.
+            #
+            # Le jeu de calibration naît en PHASE 6a, lancée par `/sdda-build`,
+            # qui refuse de démarrer sans G2 : exiger ici le fichier et son kappa
+            # fermait la boucle sur elle-même — la même impasse que le holdout,
+            # et que la fixture ne voyait pas parce qu'elle livre son fichier.
+            # Le verdict sur l'accord appartient à G5 (`calibrate_judge`, part
+            # `calibration`). Ici, un fichier présent est relu par la MÊME
+            # lecture que G5 (`calibration.load_calibration_set`) : l'ancienne
+            # lecture maison refusait la forme inline (60 paires d'accord total
+            # rendaient « accord None ») et croyait un kappa recopié à la main.
             cal = s.get("judgeCalibrationRef")
             if not cal:
                 report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : `llm-judge` bloquant sans `judgeCalibrationRef`", "calibrer le juge (kappa >= seuil) ou le marquer `advisory: true` (P9)", loc)
             elif root is not None:
                 p = paths.resolve_rel(root, str(cal))
-                if not p.is_file():
-                    report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : rapport de calibration `{cal}` introuvable", "produire le rapport de calibration (calibrate_judge.py) ou passer le juge en advisory", loc)
+                dataset = calibration.load_calibration_set(p) if p.is_file() else None
+                if dataset is None:
+                    report.warn("JUDGE_UNCALIBRATED", f"suite `{sid}` : jeu de calibration `{cal}` absent ou illisible — attendu avant G5, pas avant G2",
+                                "qa-evals le produit en PHASE 6a ; G5 (calibrate-judge) rendra le verdict, advisory s'il reste absent", loc)
                 else:
-                    try:
-                        cal_data = json.loads(markdown_io.read_text(p))
-                    except ValueError:
-                        cal_data = None
-                    if not isinstance(cal_data, dict):
-                        report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : `{cal}` n'est pas un rapport JSON lisible", "", loc)
+                    if dataset.declared_only:
+                        result_reason, ok = "accord déclaré sans labels résolvables — rien n'a été recalculé", False
                     else:
-                        kappa = cal_data.get("kappa", cal_data.get("correlation"))
-                        items = cal_data.get("items")
-                        if not isinstance(kappa, (int, float)) or kappa < min_kappa:
-                            report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : accord {kappa!r} < JudgeCalibrationMinKappa {min_kappa}", "retravailler la grille du juge ou le passer en advisory", loc)
-                        if not isinstance(items, int) or items < min_items:
-                            report.error("JUDGE_UNCALIBRATED", f"suite `{sid}` : {items!r} items de calibration < JudgeCalibrationMinItems {min_items}", "labelliser (humainement) au moins le minimum d'items", loc)
+                        result = calibration.calibrate(dataset.grader, dataset.human, dataset.judge, min_items=min_items,
+                                                       min_agreement=min_kappa, scale=dataset.scale,
+                                                       labels_are_synthetic=dataset.labels_are_synthetic)
+                        result_reason, ok = result.reason, result.calibrated
+                    if not ok:
+                        report.warn("JUDGE_UNCALIBRATED", f"suite `{sid}` : calibration non acquise ({result_reason})",
+                                    "G5 rendra le juge advisory tant qu'elle ne l'est pas : retravailler la grille, ou labelliser davantage", loc)
         if root is not None and ds.startswith("workspace/pipeline/datasets/") and not paths.resolve_rel(root, ds).is_file():
             report.warn("EVAL_DATASET_MISSING", f"suite `{sid}` : dataset `{ds}` absent sur disque", "", loc)
 
@@ -586,8 +599,86 @@ def validate_ir_data(ir: dict[str, Any], *, root: Path | None = None, config: La
                 loc,
             )
 
+    # Roster <-> IR (P7) -------------------------------------------------------------
+    if root is not None and mid:
+        check_roster(root, mid, agents, tools, traceability, report, loc)
+
     report.data.update({"missionId": mid, "nodes": len(nodes), "edges": len(edges), "agents": len(agents), "tools": len(tools), "suites": len(suites)})
     return report
+
+
+def _roster_list(value: Any) -> list[str] | None:
+    """`[a, b]` -> noms ; clé absente ou `<à préciser>` -> None (rien à confronter)."""
+    if value is None:
+        return None
+    items = value if isinstance(value, list) else [v for v in str(value).split(",")]
+    out = [str(v).strip() for v in items if str(v).strip() and str(v).strip().lower() not in ("aucun", "none", "[]")]
+    return None if any(v.startswith("<") for v in out) else out
+
+
+def check_roster(root: Path, mid: str, agents: dict[str, dict[str, Any]], tools: dict[str, dict[str, Any]],
+                 traceability: dict[str, Any], report: Report, loc: str) -> None:
+    """Ce que l'IR décrit est-il ce que l'ARCHITECTE a déclaré au roster ?
+
+    `architect-topology` MATÉRIALISE le roster (P7) ; rien ne vérifiait qu'il
+    l'avait fait. `validate_architecture` et `roster validate` jugent la
+    déclaration complète ; personne ne confrontait le système compilé à la
+    déclaration. Un agent ajouté, un tier relevé, un outil de plus ou une CAP
+    réallouée par le LLM passaient la TOPOLOGY GATE — exactement l'architecture
+    émergente que `architecture-declared-by-architect` existe pour refuser.
+
+    Sans roster `feats/{n}-roster.md` (repli `## 2. Roster déclaré`), rien
+    n'est confronté ici : la section vit dans la topologie, qui EST la source.
+    """
+    from sdda_scripts import validate_architecture  # noqa: PLC0415 — même lecture que G2
+
+    head = mid.split("-", 1)[0]
+    path = paths.roster_path(root, head)
+    if not path.is_file():
+        return
+    try:
+        data = validate_architecture.read_roster_yaml(path)
+    except Exception:  # noqa: BLE001 — l'illisibilité est jugée par `roster validate`
+        return
+    where = paths.rel(root, path)
+    fix = ("l'IR décrit ce que le roster déclare, rien d'autre : aligner la topologie et les contrats sur le roster "
+           "(architect-topology le matérialise, il ne le modifie pas), ou faire modifier le roster par l'architecte, puis recompiler")
+    declared: dict[str, dict[str, Any]] = {}
+    orch = data.get("orchestrator") if isinstance(data.get("orchestrator"), dict) else {}
+    for entry in [orch, *[s for s in data.get("subagents") or [] if isinstance(s, dict)]]:
+        slug = str(entry.get("id") or "").strip()
+        if slug and not slug.startswith("<"):
+            declared[slug if re.match(r"^\d+-", slug) else f"{head}-{slug}"] = entry
+    if not declared:
+        return
+    for aid in sorted(set(declared) - set(agents)):
+        report.error("ARCH_ROSTER_INCOHERENT", f"agent `{aid}` déclaré au roster `{where}`, absent de l'IR", fix, loc)
+    for aid in sorted(set(agents) - set(declared)):
+        report.error("ARCH_ROSTER_INCOHERENT", f"agent `{aid}` dans l'IR, que le roster `{where}` ne déclare pas", fix, loc)
+    tool_names = {tid: str(t.get("name") or "") for tid, t in tools.items()}
+    for aid in sorted(set(declared) & set(agents)):
+        entry, agent = declared[aid], agents[aid]
+        tier = str(entry.get("tier") or "").strip().lower()
+        if tier in ("fast", "balanced", "deep") and agent.get("modelTier") != tier:
+            report.error("ARCH_ROSTER_INCOHERENT", f"agent `{aid}` : roster `tier: {tier}`, IR `modelTier: {agent.get('modelTier')}`", fix, loc)
+        wanted = _roster_list(entry.get("tools")) if "tools" in entry else None
+        if wanted is not None:
+            wired = {tool_names.get(t) or t for t in agent.get("tools") or []}
+            norm = {w.replace("-", "_") for w in wanted}
+            extra = sorted(w for w in wired if w.replace("-", "_") not in norm)
+            if extra:
+                report.error("ARCH_ROSTER_INCOHERENT", f"agent `{aid}` porte {extra}, que le roster ne lui donne pas", fix, loc)
+    for item in data.get("allocation") or []:
+        if not isinstance(item, dict):
+            continue
+        cap = str(item.get("cap") or "").strip()
+        owner = str(item.get("agent") or "").strip()
+        if not cap or not owner or owner.startswith("<") or cap not in traceability:
+            continue
+        owner_id = owner if re.match(r"^\d+-", owner) else f"{head}-{owner}"
+        impl = (traceability[cap].get("implementedBy") or {}).get("agents") or []
+        if owner_id not in impl:
+            report.error("ARCH_ROSTER_INCOHERENT", f"CAP `{cap}` allouée à `{owner_id}` au roster, portée par {impl or 'aucun agent'} dans l'IR", fix, loc)
 
 
 def validate_ir_file(path: Path, root: Path, config: LayeredConfig | None, *, write_report: bool = True) -> Report:
@@ -612,6 +703,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="G2 (IR) — les 11 contrôles d'AGENTIC-IR.md §4, déterministes, 0 token")
     p.add_argument("--ir", type=Path, default=None, help="fichier IR ; défaut : tous les IR de workspace/.sys/.ir/")
     p.add_argument("--mission", type=int, default=None, help="numéro de mission (IR par défaut : workspace/.sys/.ir/{n}-system.ir.json)")
+    # Positionnel, comme `validate-topology` et `validate-mission` : une fiche
+    # d'agent qui écrit `validate-ir {chemin}` sortait en `usage:` argparse
+    # (exit 2), et l'agent lisait un refus d'argument comme un verdict.
+    p.add_argument("files", nargs="*", type=Path, help="fichier(s) IR ; équivalent de --ir")
     add_common_args(p)
     return p
 
@@ -621,8 +716,8 @@ def main(argv: list[str] | None = None) -> int:
     root = resolve_root(args)
     combined = Report(name="G2.ir", target=str(root))
     config = load_config(root, combined)
-    if args.ir:
-        files = [args.ir if args.ir.is_absolute() else root / args.ir]
+    if args.ir or args.files:
+        files = [f if f.is_absolute() else root / f for f in ([args.ir] if args.ir else []) + list(args.files)]
     elif args.mission is not None:
         files = [paths.ir_path(root, args.mission)]
     else:

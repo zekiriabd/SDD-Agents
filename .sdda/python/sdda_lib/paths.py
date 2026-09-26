@@ -7,6 +7,7 @@ aux scripts de tourner sur un workspace de test qui n'embarque pas `.sdda/`.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 # .sdda/python/sdda_lib/paths.py -> parents[2] == .sdda
@@ -63,10 +64,6 @@ FEATS = "feats"
 SEED = "seed"
 ASSETS = "assets"
 PIPELINE = "pipeline"
-
-#: Ce que le pipeline range sous `pipeline/`, et que la migration v6 y déplace.
-PIPELINE_SPEC_DIRS: tuple[str, ...] = ("missions", "caps", "topology", "contracts", "decisions")
-PIPELINE_PROOF_DIRS: tuple[str, ...] = ("datasets", "suites", "baselines", "calibration", "fixtures")
 
 
 def feats_dir(root: Path) -> Path:
@@ -223,8 +220,19 @@ def stack_md_path(root: Path) -> Path:
     return stack_dir(root) / "STACK.md"
 
 
+#: Un nom d'application : il devient un segment de chemin, jamais plus.
+APP_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
+
+
 def app_dir(root: Path, app_name: str) -> Path:
-    """`workspace/src/{App}` : la racine du LIVRABLE — projet, build, `.env`."""
+    """`workspace/src/{App}` : la racine du LIVRABLE — projet, build, `.env`.
+
+    Refuse un nom qui n'est pas un segment (`..`, `/`, `\\`) : dernier filet
+    derrière `layered_config.app_name`, pour les appelants qui passent un nom
+    venu d'ailleurs (argument, IR).
+    """
+    if not APP_NAME_RE.match(str(app_name)):
+        raise ValueError(f"nom d'application invalide pour un chemin : {app_name!r}")
     return workspace(root) / "src" / app_name
 
 

@@ -38,8 +38,9 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import paths  # noqa: E402
+from sdda_lib import hashing, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.eval_pinning import Baseline, load_baselines, regression_delta  # noqa: E402
 from sdda_lib.eval_reports import baseline_path, find_ir_file, latest_report, load_json, merged_run_report, mission_number, report_by_run_id, report_suites, suite_pins  # noqa: E402
 from sdda_lib.eval_stats import parse_threshold  # noqa: E402
@@ -131,11 +132,32 @@ def compare(
             row["status"] = "stable"
         rows.append(row)
 
+    # Une suite qui a une baseline et que le rapport ne mesure plus n'est pas
+    # « sans régression » : elle n'a pas été regardée. Le taire laissait un run
+    # filtré (`--level L9` seul) passer pour une non-régression de tout le système.
+    for sid in sorted(set(baselines) - set(entries)):
+        report.warn("EVAL_SUITE_NOT_FOUND", f"suite `{sid}` : baseline présente, absente du rapport `{rloc}` — non comparée",
+                    "comparer le run entier (`--run $RUN_ID`, qui réunit tous ses rapports) ou retirer la baseline orpheline", sid)
+    report.data.update({"sourceReports": list(data.get("sourceReports") or [rloc])})
     report.data.update({"report": rloc, "baseline": bloc, "tolerancePct": tolerance_pct, "noiseSigma": noise_sigma, "runId": data.get("runId"), "suites": rows,
                         "regressions": sorted(r["suiteId"] for r in rows if r["status"] == "regression"),
                         "withinNoise": sorted(r["suiteId"] for r in rows if r["status"] == "within-noise"),
                         "stale": sorted(r["suiteId"] for r in rows if r["status"] == "stale")})
     return report
+
+
+def regression_pins(root: Path, ir: dict[str, Any], sub: Report) -> dict[str, str]:
+    """Ce qui périme la part `regression` : l'IR, la baseline, les rapports comparés.
+
+    Une promotion de baseline après coup doit rejouer la comparaison : sans la
+    baseline épinglée, le vert d'hier resterait lu contre une référence qui a bougé.
+    """
+    pins: dict[str, str] = {"ir": ir_compiler.ir_identity_hash(ir)}
+    for rel in [sub.data.get("baseline"), *(sub.data.get("sourceReports") or [sub.data.get("report")])]:
+        p = paths.resolve_rel(root, str(rel)) if rel else None
+        if p is not None and p.is_file():
+            pins[f"file:{rel}"] = hashing.sha256_file(p)
+    return pins
 
 
 def render_rows(report: Report) -> str:
@@ -191,10 +213,14 @@ def main(argv: list[str] | None = None) -> int:
     report.extend(sub)
     report.data.update(sub.data)
     report.target = sub.target
-    # Pas de rapport de gate ici : G8 est composite (`datasets`, `acceptance`) et
-    # la régression est UNE ligne de son verdict, portée par la sortie JSON que
-    # /sdda-eval agrège — un rapport à part que compute_status ignorerait
-    # ne ferait que rassurer.
+    # La part `regression` de G8. Elle n'était portée que par la sortie JSON,
+    # redirigée vers `.validation/regression-{n}.json` : un nom que
+    # `load_gate_reports` ne reconnaît pas, donc un `[REGRESSION]` que
+    # `compute-status --require-gate G8` ne voyait jamais. Le blocage promis
+    # reposait sur la lecture d'un LLM.
+    if not args.no_report and ir.get("missionId"):
+        report.data["gatePart"] = paths.rel(root, write_gate_report(
+            root, "G8", str(ir["missionId"]), sub, regression_pins(root, ir, sub), part="regression"))
     if not args.json:
         detail = render_rows(sub)
         if detail:

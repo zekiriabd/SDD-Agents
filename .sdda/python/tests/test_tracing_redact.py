@@ -99,7 +99,10 @@ def test_nested_dicts_and_lists_are_walked() -> None:
 #: doit plus apparaître. Le test de couverture ci-dessous refuse qu'un motif
 #: ajouté au scan reste sans échantillon ici.
 SAMPLES: dict[str, tuple[str, str]] = {
-    "clé OpenAI": ("sk-abcdefghijklmnopqrstuvwx", "abcdefghijklmnopqrstuvwx"),
+    "clé OpenAI / Anthropic": ("sk-ant-api03-abcdefghijklmnopqrstuvwx", "abcdefghijklmnopqrstuvwx"),
+    "clé Stripe": ("sk_" + "live_51Habcdefghijklmnopqrstuv", "51Habcdefghijklmnopqrstuv"),
+    "token Hugging Face": ("hf_abcdefghijklmnopqrstuvwxyzABCD", "abcdefghijklmnopqrstuvwxyzABCD"),
+    "clé Azure Storage / Service Bus": ("AccountKey=abcdEFGH1234abcdEFGH1234abcdEFGH1234abcd==", "abcdEFGH1234abcdEFGH1234"),
     "token Slack": ("xoxb-1234567890-abcdefghij", "1234567890-abcdefghij"),
     "token GitHub": ("ghp_0123456789abcdefghijklmnopqrstuvwx", "0123456789abcdefghij"),
     "PAT GitHub": ("github_pat_0123456789abcdefghijklmnopqrstuvwx", "0123456789abcdefghij"),

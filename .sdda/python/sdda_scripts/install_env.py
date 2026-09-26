@@ -33,15 +33,16 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import contextlib
+import os
 import re
-import shutil
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import markdown_io, paths  # noqa: E402
-from sdda_lib.errors import Report  # noqa: E402
+from sdda_lib.errors import Report, SddaError  # noqa: E402
 from sdda_lib.layered_config import app_name  # noqa: E402
 from sdda_scripts._common import add_common_args, finish, resolve_root  # noqa: E402
 
@@ -78,11 +79,49 @@ def declared_names(root: Path) -> set[str]:
     return names
 
 
+#: Permissions d'un fichier de secrets : lecture et écriture par le seul
+#: propriétaire. `copyfile` et `write_text` rendaient 0644 (umask) : sur un
+#: poste ou un serveur partagé, chaque compte lisait les clés du projet. Sous
+#: Windows, `chmod` ne règle que la lecture seule — les ACL héritées du
+#: répertoire restent la protection, et c'est dit plutôt que promis.
+SECRET_FILE_MODE = 0o600
+
+
+def write_secret_file(target: Path, data: bytes) -> None:
+    """Écrit un fichier de secrets : ATOMIQUE, créé en 0600, jamais en suivant un lien.
+
+    Le temporaire est créé avec `O_EXCL` et le mode 0600 dès l'ouverture (pas
+    d'instant où il serait lisible par d'autres), puis `os.replace` remplace
+    la cible — un lien symbolique posé à sa place est remplacé, pas suivi.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), SECRET_FILE_MODE)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.chmod(tmp, SECRET_FILE_MODE)
+        os.replace(tmp, target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
+
+
 def run(root: Path, *, write: bool, require: bool, target: Path | None = None) -> Report:
     """`target` : le `.env` du projet généré ; défaut `workspace/src/{AppName}/.env`."""
     report = Report(name="INSTALL-ENV", target=str(root))
     source = paths.env_source_path(root)
-    target = target or paths.env_path(root, app_name(root))
+    if target is None:
+        try:
+            target = paths.env_path(root, app_name(root))
+        except (SddaError, ValueError) as exc:
+            # Un `AppName` refusé ne désigne aucun répertoire : ne rien copier,
+            # et le dire, plutôt que d'écrire des clés à un chemin inventé.
+            report.error("CONFIG_VALUE_INVALID", f"cible du `.env` indécidable : {exc}",
+                         fix="corriger `AppName` dans `## Project Config`",
+                         location="workspace/stack/STACK.md ## Project Config")
+            return report
     report.data.update({"source": paths.rel(root, source), "target": paths.rel(root, target)})
 
     if not source.is_file():
@@ -107,6 +146,10 @@ def run(root: Path, *, write: bool, require: bool, target: Path | None = None) -
     same = target.is_file() and target.read_bytes() == source.read_bytes()
     report.data["upToDate"] = same
     if same:
+        if write:
+            # Contenu à jour, permissions peut-être pas (copie d'une version antérieure).
+            with contextlib.suppress(OSError):
+                os.chmod(target, SECRET_FILE_MODE)
         report.data["copied"] = False
         return report
     if not write:
@@ -115,8 +158,7 @@ def run(root: Path, *, write: bool, require: bool, target: Path | None = None) -
                     f"{paths.ENV_SOURCE_REL}", "python .sdda/sdda.py install-env", paths.rel(root, target))
         report.data["copied"] = False
         return report
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, target)
+    write_secret_file(target, source.read_bytes())
     report.data["copied"] = True
     return report
 

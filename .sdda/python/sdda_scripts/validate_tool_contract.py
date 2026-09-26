@@ -56,12 +56,20 @@ BYPASS_ENV = "SDDA_BYPASS_TOOL_GATE"
 #: qu'aucune variable d'environnement ne desserre.
 BYPASS_NEVER = ("SIDE_EFFECT_UNDECLARED", "SAFETY_STRATEGY_MISSING", "TOOL_RETRY_UNSAFE")
 
-#: Effets de bord ordonnés du plus inoffensif au plus dangereux.
-SIDE_EFFECTS = ("read-only", "idempotent-write", "external-side-effect", "write-destructive")
+#: Les classes d'effet de bord — celles de l'IR, et aucune autre. Ce module
+#: portait `idempotent-write` à la place de `write-scoped` : un code marqué
+#: `write-scoped` (la valeur du contrat) était ignoré, et la confrontation
+#: code <-> contrat ne jouait jamais pour cette classe.
+SIDE_EFFECTS = ir_compiler.SIDE_EFFECTS
 
 #: Dans le code généré, la classe d'effet de bord se déclare par l'un de ces
 #: marqueurs. Plusieurs formes acceptées : le générateur n'est pas encore écrit,
 #: et figer une seule syntaxe maintenant reviendrait à la décider ici.
+#: Langage -> suffixes des sources où chercher le code d'un outil.
+CODE_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "python": (".py",), "csharp": (".cs",), "typescript": (".ts", ".mts"), "kotlin": (".kt",), "java": (".java",),
+}
+
 _CODE_SIDE_EFFECT_RE = re.compile(
     r"""(?:side[_-]?effect(?:[_-]?class)?)\s*[:=]\s*["']?([a-z][a-z-]+)["']?""", re.I)
 
@@ -84,6 +92,9 @@ class ToolCheck:
     contract_tests: str = ""
     code_files: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    #: Les findings que CET outil a produits — attribués à l'émission, jamais
+    #: retrouvés après coup par sous-chaîne de `location` (cf. `run`).
+    findings: list[Any] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -203,9 +214,27 @@ def check_code(root: Path, tool: dict[str, Any], report: Report, loc: str, *, re
                          "générer le socle (/sdda-build {n} --layer socle) avant de rejouer G3 en --require-code", loc)
         return []
 
-    files = [p for p in sorted(directory.rglob("*.py"))
-             if name and "tools" in p.relative_to(directory).parts and "tests" not in p.parts
-             and name in markdown_io.read_text(p)]
+    # Les sources du langage actif : `*.py` seulement rendait `--require-code`
+    # rouge sur tout outil C#, TypeScript, Kotlin ou Java (« aucun fichier
+    # d'outil »). Le nom se cherche tel quel ou normalisé (`invoice_lookup` ->
+    # `InvoiceLookup`, `invoiceLookup`).
+    from sdda_lib.layered_config import active_stacks  # noqa: PLC0415
+
+    languages = active_stacks(root, "Active Language & Runtime")
+    suffixes = CODE_SUFFIXES.get(languages[0] if languages else "python", (".py",))
+    wanted = re.sub(r"[^a-z0-9]", "", name.casefold())
+
+    def _names_tool(text: str) -> bool:
+        if name in text or suffixes == (".py",):
+            return name in text
+        return bool(wanted) and wanted in re.sub(r"[^a-z0-9]", "", text.casefold())
+
+    files = [p for p in sorted(directory.rglob("*"))
+             if name and p.suffix in suffixes and p.is_file()
+             and "tools" in [s.casefold() for s in p.relative_to(directory).parts[:-1]]
+             and not ({"tests", "test", "bin", "obj", "node_modules", "build", "dist"}
+                      & {s.casefold() for s in p.relative_to(directory).parts})
+             and _names_tool(markdown_io.read_text(p))]
     if not files:
         if require_code:
             report.error("TOOL_CONTRACT_INCONSISTENT", f"outil `{tid}` : aucun fichier d'outil sous `{paths.rel(root, directory)}/` ne mentionne `{name}`",
@@ -227,24 +256,45 @@ def check_code(root: Path, tool: dict[str, Any], report: Report, loc: str, *, re
     return rels
 
 
-def check_envelopes(root: Path, ir: dict[str, Any], report: Report, loc: str) -> list[dict[str, Any]]:
-    """Enveloppe DB de chaque `dataAccess[]` — l'invariant `db-safety-envelope-present`."""
+def _full_role_accepted(root: Path) -> bool:
+    """Un ADR `Accepted` porte-t-il `Covers: DbAgentRole=full` ?
+
+    INVARIANTS (`db-safety-envelope-present`) fait de cet ADR la seule sortie
+    légitime ; le refuser quand même rendait l'ADR décoratif.
+    """
+    from sdda_scripts import validate_adr  # noqa: PLC0415 — import local, module de gate voisin
+
+    adrs = [validate_adr.parse_adr(p) for p in validate_adr.adr_files(root)]
+    return any(a.accepted and ("dbagentrole", "full") in a.covers for a in adrs)
+
+
+def check_envelopes(root: Path, ir: dict[str, Any], report: Report, loc: str,
+                    attributed: dict[str, list[Any]] | None = None) -> list[dict[str, Any]]:
+    """Enveloppe DB de chaque `dataAccess[]` — l'invariant `db-safety-envelope-present`.
+
+    `attributed` reçoit, par id d'accès, les findings que l'entrée a produits :
+    l'id d'un accès EST l'id de son contrat `{n}-data-*` (un outil), et c'est
+    dans le rapport de cet outil qu'ils doivent tomber.
+    """
     out: list[dict[str, Any]] = []
     for entry in ir.get("dataAccess") or []:
         did = str(entry.get("id"))
+        before = len(report.findings)
         envelope = entry.get("envelope") or {}
         missing = [k for k in ("role", "statementTimeoutMs", "maxRows", "schemas") if not envelope.get(k)]
         if missing:
             report.error("DB_ENVELOPE_MISSING", f"accès données `{did}` : enveloppe incomplète — {missing} absent(s)",
                          "déclarer rôle, timeout, plafond de lignes et schémas autorisés : une requête sans bornes finit par ramener la table entière", loc)
         role = str(envelope.get("role") or "")
-        if role == "full":
+        if role == "full" and not _full_role_accepted(root):
             report.error("DATA_ACCESS_ADR_REQUIRED", f"accès données `{did}` : `role: full` — un agent avec les pleins droits SQL n'est pas une stratégie d'accès",
                          "passer en `readonly` ou `scoped-write`, ou porter un ADR explicite qui assume le risque", loc)
         elif role == "scoped-write" and not envelope.get("forbidden"):
             report.warn("DB_ENVELOPE_MISSING", f"accès données `{did}` : `scoped-write` sans liste d'instructions interdites",
                         "lister au minimum DROP, TRUNCATE, ALTER : ce qui n'est pas interdit sera un jour émis", loc)
         out.append({"id": did, "role": role, "strategy": (entry.get("binding") or {}).get("strategy")})
+        if attributed is not None:
+            attributed[did] = list(report.findings[before:])
     return out
 
 
@@ -291,16 +341,27 @@ def validate_tools(
             tool_id=tid, name=str(tool.get("name") or ""), side_effect=str(tool.get("sideEffectClass") or ""),
             verdict=verdict, schema_hash=tool_schema_hash(tool), contract_tests=tests_ref,
             code_files=code_files, notes=[f.message.split(" : ", 1)[-1] for f in new],
+            findings=list(new),
         ))
     return checks
 
 
 def pinned_hashes(root: Path, ir: dict[str, Any], check: ToolCheck) -> dict[str, str]:
-    """Ce qui rend ce rapport périmé : le schéma de l'outil, son contrat, l'IR."""
-    pins = {"toolSchema": check.schema_hash, "ir": ir_compiler.ir_identity_hash(ir)}
+    """Ce qui rend ce rapport périmé : l'outil tel que l'IR le porte, et son contrat.
+
+    Deux clés, toutes deux RÉSOLVABLES par `compute_status.current_hash` :
+    - `irtool:{id}` — l'entrée `tools[]` (+ `dataAccess[]`) de l'IR, pas son
+      identité entière (cf. `ir_compiler.tool_identity_hash`) ;
+    - `spec:{contrat}` — le contrat sans sa ligne `Status:`, que
+      `compute_status` réécrit.
+    Les anciennes clés `toolSchema` et `contract` ne se résolvaient pas
+    (`current_hash` rendait None) : elles étaient ignorées, et seule `ir`
+    comptait — c'est-à-dire tout l'IR.
+    """
+    pins = {f"irtool:{check.tool_id}": ir_compiler.tool_identity_hash(ir, check.tool_id)}
     path = contract_path(root, check.tool_id)
     if path.is_file():
-        pins["contract"] = hashing.sha256_file(path)
+        pins[f"spec:{paths.rel(root, path)}"] = hashing.sha256_spec_file(path)
     return dict(sorted(pins.items()))
 
 
@@ -316,7 +377,18 @@ def run(
 ) -> dict[str, Any]:
     mid = str(ir.get("missionId") or "")
     checks = validate_tools(root, ir, report=report, only=only, require_code=require_code, static=static)
-    envelopes = check_envelopes(root, ir, report, mid or str(root))
+    by_access: dict[str, list[Any]] = {}
+    envelopes = check_envelopes(root, ir, report, mid or str(root), attributed=by_access)
+    # Une enveloppe fautive tombe dans le rapport de SON outil (même id que le
+    # contrat `{n}-data-*`) ; un accès sans outil câblé tombe dans tous : il
+    # n'a pas d'autre rapport où rougir, et un rouge sans rapport est un vert.
+    tool_ids = {c.tool_id for c in checks}
+    for did, found in by_access.items():
+        for check in checks:
+            if did == check.tool_id or did not in tool_ids:
+                check.findings.extend(found)
+                if any(f.severity == "error" for f in found):
+                    check.verdict = "red"
 
     if not (ir.get("tools") or []):
         # Une MISSION sans outil est une MISSION sans TOOL GATE à franchir — et
@@ -363,10 +435,13 @@ def run(
         # machine à états n'ouvre jamais.
         written: dict[str, str] = {}
         for check in checks:
+            # Les findings sont ceux que l'outil a PRODUITS (`check.findings`).
+            # Les retrouver par sous-chaîne de `location` perdait les erreurs
+            # localisées sur le fichier de code (`tools/invoice.py` ne contient
+            # pas `1-invoice-lookup`) : console rouge, rapport vert — et
+            # mêlait les findings de `1-lookup` à ceux de `1-lookup-order`.
             sub = Report(name="G3.contracts", target=check.tool_id, data={"verdict": check.verdict, "notes": check.notes})
-            for finding in report.findings:
-                if finding.location and check.tool_id in finding.location:
-                    sub.findings.append(finding)
+            sub.findings.extend(check.findings)
             path = write_gate_report(root, "G3", check.tool_id, sub, pinned_hashes(root, ir, check), part="contracts")
             written[check.tool_id] = paths.rel(root, path)
         payload["written"] = written

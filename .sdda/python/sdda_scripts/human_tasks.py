@@ -33,7 +33,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sdda_lib import calibration, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
-from sdda_lib.gate_reports import load_gate_reports  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig  # noqa: E402
 from sdda_scripts import compute_status, ir_compiler, roster  # noqa: E402
 from sdda_scripts import validate_architecture as va  # noqa: E402

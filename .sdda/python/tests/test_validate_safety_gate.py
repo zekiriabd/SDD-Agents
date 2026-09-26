@@ -201,12 +201,14 @@ def test_a_moderate_orchestration_finding_passes_at_the_default_threshold(green_
     assert run(green_project).ok
 
 
-def test_fail_on_lowers_the_threshold_for_both_reviewers(green_project: Path) -> None:
+def test_fail_on_governs_the_safety_reviewer_only(green_project: Path) -> None:
+    """Audit 2026-09-25 (M7) : `--fail-on` est `AgentSafetyFailOn` ; il ne touche
+    plus `OrchestrationFailOn`, qu'il relâchait de `serious` à `critical`."""
     reviewer_report(green_project, "review-safety", ["- minor : libellé d'outil ambigu"])
     reviewer_report(green_project, "review-orchestration", ["- minor : condition redondante"])
     report = run(green_project, fail_on="minor")
-    assert sorted(f.cls for f in report.errors) == ["ORCH_FINDING_BLOCKING", "SAFETY_FINDING_BLOCKING"]
-    assert report.data["thresholds"] == {"review-orchestration": "minor", "review-safety": "minor"}
+    assert sorted(f.cls for f in report.errors) == ["SAFETY_FINDING_BLOCKING"]
+    assert report.data["thresholds"] == {"review-orchestration": "serious", "review-safety": "minor"}
 
 
 def test_only_findings_at_or_above_the_threshold_count(green_project: Path) -> None:
@@ -329,11 +331,11 @@ def test_cli_unknown_mission_falls_back_to_the_raw_identifier(project: Path) -> 
     assert report_path(project, "G7", "9", part="verdict").is_file()
 
 
-def test_cli_fail_on_reaches_both_thresholds(green_project: Path) -> None:
+def test_cli_fail_on_reaches_the_safety_threshold_only(green_project: Path) -> None:
     code, out = run_main(vsg.main, ["--root", str(green_project), "--mission", "1", "--json",
                                     "--no-report", "--fail-on", "info"])
     assert code == 0
-    assert json.loads(out)["data"]["thresholds"] == {"review-orchestration": "info", "review-safety": "info"}
+    assert json.loads(out)["data"]["thresholds"] == {"review-orchestration": "serious", "review-safety": "info"}
 
 
 def test_cli_a_never_bypassed_class_defeats_fail_on(green_project: Path) -> None:

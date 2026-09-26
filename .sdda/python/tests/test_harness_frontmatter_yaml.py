@@ -104,7 +104,13 @@ def test_generated_facade_frontmatter_is_strict_yaml(path: Path) -> None:
         assert sep, f"{path.name} : ligne d'en-tête sans `: ` — {line!r}"
         assert _is_strict_scalar(value), f"{path.name} : `{key}` n'est ni identifiant nu ni JSON — {value!r}"
         seen[key] = value
-    assert seen.get("name") and seen.get("description"), path.name
+    # Une COMMANDE n'a pas de `name:` : Claude Code l'ignore (« same fields
+    # except `name` »), le nom vient du fichier. Un AGENT en a un.
+    is_command = path.parent.name == "commands"
+    assert seen.get("description") and (is_command or seen.get("name")), path.name
+    assert not (is_command and "name" in seen), f"{path.name} : `name:` n'a pas de sens pour une commande"
     if yaml is not None:
         meta = yaml.safe_load(front)
-        assert isinstance(meta, dict) and meta.get("name") == seen["name"].strip('"')
+        assert isinstance(meta, dict)
+        if not is_command:
+            assert meta.get("name") == seen["name"].strip('"')

@@ -45,7 +45,9 @@ DEFAULT_PROTECTED_KEYS: tuple[str, ...] = (
 )
 
 #: Ordres « du plus strict au plus laxiste » pour les valeurs symboliques.
-SEVERITY_ORDER = ("critical", "serious", "moderate", "minor", "info")
+#: Un `*FailOn` bloque tout finding de sévérité >= au seuil
+#: (validate_safety_gate) : `info` bloque tout, `critical` presque rien.
+SEVERITY_ORDER = ("info", "minor", "moderate", "serious", "critical")
 MODE_ORDER = ("full", "manual", "off")
 GATE_ORDER = ("strict", "warn", "off")
 
@@ -117,7 +119,17 @@ def app_name(root: Path) -> str:
     outils générés) se résout par lui ; un seul endroit pour le lire évite que
     deux scripts se disputent le nom du répertoire.
     """
-    return str(read_project_section(root).get("AppName") or "App").strip() or "App"
+    name = str(read_project_section(root).get("AppName") or "App").strip() or "App"
+    if not paths.APP_NAME_RE.match(name):
+        # Le nom devient un répertoire : `../../../x` écrivait l'application —
+        # `.env` compris — hors du workspace, et le générateur rendait « OK ».
+        # Le motif du schéma n'était appliqué qu'au preflight ; tout script qui
+        # résout un chemin d'application passe par ici.
+        raise SddaError(f"`AppName: {name}` n'est pas un nom d'application valide", "CONFIG_VALUE_INVALID",
+                        "un identifiant : une lettre puis lettres, chiffres, `_` ou `-` (motif "
+                        f"`{paths.APP_NAME_RE.pattern}`) — il devient `workspace/src/{{AppName}}/`",
+                        location=f"{STACK_LOC} ## Project Config")
+    return name
 
 
 def read_project_section(root: Path) -> dict[str, Any]:
@@ -610,8 +622,15 @@ def judge_issues(root: Path, lc: LayeredConfig | None = None) -> list[ConfigIssu
     judge = str(read_stack_section_kv(root, "Runtime Models").get("JudgeModel") or "").strip()
     if not judge or judge.lower() == "none":
         return []
-    tier_map = read_runtime_tier_map(root)
-    judge_model = tier_map.get(judge, judge)
+    from sdda_lib import pricing  # noqa: PLC0415 — évite un cycle d'import
+
+    raw_map = read_runtime_tier_map(root)
+    # Un tier absent de `RuntimeTierMap` tourne sur le repli documenté, et
+    # `claude-opus-5[1m]` EST `claude-opus-5` : comparer les chaînes brutes
+    # laissait le juge noter sa propre sortie sous une autre graphie.
+    tier_map = {t: pricing.base_model_id(pricing.resolve_model(t, raw_map))
+                for t in {*raw_map, *pricing.DEFAULT_TIER_MAP}}
+    judge_model = pricing.base_model_id(tier_map.get(judge, judge))
     loc = f"{STACK_LOC} ## Runtime Models"
     fix = ("choisir un `JudgeModel` qu'aucun tier porté par un agent ne résout (un modèle plus fort, ou d'un autre "
            "fournisseur) ; ou, si c'est impossible, `JudgeMustDifferFromEvaluated: false` dans `## Project Config`, "

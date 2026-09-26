@@ -72,7 +72,33 @@ from sdda_scripts._common import add_common_args, finish, resolve_root  # noqa: 
 DECLARED = validate_data_access.DECLARED
 
 #: Parsers SQL qui produisent un arbre : c'est sur lui que `forbidden` se vérifie.
-AST_PARSERS = frozenset({"sqlglot", "pglast", "sqlparse", "sqlfluff", "sqloxide", "mo_sql_parsing"})
+AST_PARSERS = frozenset({"sqlglot", "pglast", "sqlparse", "sqlfluff", "sqloxide", "mo_sql_parsing",
+                         # hors Python : JSqlParser (JVM), node-sql-parser / pgsql-ast-parser (Node),
+                         # ScriptDom (.NET, T-SQL) — le préfixe d'import suffit
+                         "net.sf.jsqlparser", "node-sql-parser", "pgsql-ast-parser",
+                         "microsoft.sqlserver.transactsql.scriptdom"})
+
+#: Hors Python — suffixes des sources et motif d'import, par langage (cf. validate_framework).
+NATIVE_SUFFIXES: dict[str, str] = {".cs": "csharp", ".ts": "typescript", ".mts": "typescript", ".kt": "kotlin",
+                                   ".java": "java"}
+_NATIVE_IMPORT_RE: dict[str, re.Pattern[str]] = {
+    "csharp": re.compile(r"^\s*(?:global\s+)?using\s+(?:static\s+)?(?:\w+\s*=\s*)?([A-Za-z_][\w.]*)\s*;", re.M),
+    "typescript": re.compile(r"""(?:\bfrom\s+|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']([^"']+)["']"""),
+    "kotlin": re.compile(r"^\s*import\s+([\w.]+)", re.M),
+    "java": re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+)", re.M),
+}
+#: Chaînes littérales : `"…"` (tous), `@"…"`/`$"…"` (C#), `` `…` `` (TypeScript), `"""…"""` (Kotlin, Java).
+_NATIVE_STRING_RE = re.compile(r'"""(.*?)"""|`((?:[^`\\]|\\.)*)`|"((?:[^"\\\n]|\\.)*)"', re.S)
+#: SQL assemblé par interpolation ou concaténation, par langage.
+_NATIVE_INTERPOLATION_RE: dict[str, re.Pattern[str]] = {
+    "csharp": re.compile(r'\$@?"[^"\n]*\b(?:select|insert|update|delete|with|merge)\b[^"\n]*\{', re.I),
+    "typescript": re.compile(r"`[^`]*\b(?:select|insert|update|delete|with|merge)\b[^`]*\$\{", re.I),
+    "kotlin": re.compile(r'"[^"\n]*\b(?:select|insert|update|delete|with|merge)\b[^"\n]*\$\{?[A-Za-z_]', re.I),
+    "java": re.compile(r'"[^"\n]*\b(?:select|insert|update|delete|with|merge)\b[^"\n]*"\s*\+\s*[A-Za-z_(]'
+                       r'|String\.format\(\s*"[^"\n]*\b(?:select|insert|update|delete)\b', re.I),
+}
+_IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+_CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 RETRY_LIBS = frozenset({"tenacity", "backoff", "retrying"})
 
 #: Indices de matérialisation, par clé — comparés en minuscules sur les chaînes
@@ -218,16 +244,45 @@ def scan_python(facts: Facts, rel: str, text: str) -> None:
         facts.retry_on_write.append(rel)
 
 
+def scan_native(facts: Facts, rel: str, text: str, language: str) -> None:
+    """C#, TypeScript, Kotlin, Java : les mêmes faits que `scan_python`, lus par motif.
+
+    Seuls les faits que `check_sql` consulte sont produits : chaînes littérales
+    (rôle, timeout, `LIMIT`, `search_path`, identité de session), identifiants
+    normalisés en snake_case (`statementTimeout` -> `statement_timeout`),
+    imports (parser SQL) et SQL interpolé. Hors Python, `data/` n'était pas lu :
+    l'enveloppe d'une application C# ou JVM passait pour absente, ou pour
+    conforme, sans qu'une ligne de son code ait été regardée.
+    """
+    facts.py_files.append(rel)   # « fichier de code servi », tous langages
+    for m in _NATIVE_STRING_RE.finditer(text):
+        value = next(g for g in m.groups() if g is not None)
+        facts.strings.append((value.lower(), rel))
+    for ident in _IDENT_RE.findall(text):
+        name = _CAMEL_RE.sub("_", ident).lower()
+        facts.names.setdefault(name, rel)
+    for module in _NATIVE_IMPORT_RE[language].findall(text):
+        low = module.lower()
+        parts = low.split(".")
+        for k in range(1, len(parts) + 1):
+            facts.imports.setdefault(".".join(parts[:k]), rel)
+    for m in _NATIVE_INTERPOLATION_RE[language].finditer(text):
+        facts.interpolated.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1}")
+
+
 def collect(root: Path, data_dir: Path) -> tuple[Facts, dict[str, str]]:
-    """(faits Python, {fichier .sql: texte sans commentaires}). Les tests ne sont pas du code servi."""
+    """(faits du code, {fichier .sql: texte sans commentaires}). Les tests ne sont pas du code servi."""
     facts = Facts()
     sql: dict[str, str] = {}
     for path in sorted(p for p in data_dir.rglob("*") if p.is_file()):
-        parts = set(path.relative_to(data_dir).parts)
-        if parts & {"tests", "__pycache__"} or path.name.startswith("test_"):
+        parts = {s.casefold() for s in path.relative_to(data_dir).parts}
+        if parts & {"tests", "test", "__pycache__", "bin", "obj", "node_modules", "build", "dist"} \
+                or path.name.startswith("test_"):
             continue
         rel = paths.rel(root, path)
-        if path.suffix == ".py":
+        if path.suffix in NATIVE_SUFFIXES:
+            scan_native(facts, rel, markdown_io.read_text(path), NATIVE_SUFFIXES[path.suffix])
+        elif path.suffix == ".py":
             scan_python(facts, rel, markdown_io.read_text(path))
         elif path.suffix == ".sql":
             facts.sql_files.append(rel)
@@ -366,7 +421,7 @@ def check_declared(facts: Facts, entry: dict[str, Any], loc: str, report: Report
     return checks
 
 
-def identity_fields(root: Path, data_dir: Path, entry: dict[str, Any]) -> set[str]:
+def identity_fields(data_dir: Path, entry: dict[str, Any]) -> set[str]:
     """Champs d'identité : `identityFilter` de l'IR, et les `required_filter` du registre généré."""
     out = {str((entry.get("envelope") or {}).get("identityFilter") or "").strip()} - {""}
     registry = data_dir / "sources.json"
@@ -383,9 +438,9 @@ def identity_fields(root: Path, data_dir: Path, entry: dict[str, Any]) -> set[st
     return out
 
 
-def check_common(root: Path, data_dir: Path, facts: Facts, entry: dict[str, Any], report: Report) -> None:
+def check_common(data_dir: Path, facts: Facts, entry: dict[str, Any], report: Report) -> None:
     eid = str(entry.get("id") or "data")
-    idents = identity_fields(root, data_dir, entry)
+    idents = identity_fields(data_dir, entry)
     for where, owner, name in facts.params:
         exposed = "/tools/" in where or "/repositories/" in where
         if name in idents and exposed:
@@ -456,7 +511,7 @@ def run(root: Path, ir: dict[str, Any], data_dir: Path) -> tuple[Report, dict[st
             report.warn("DATA_ACCESS_STRATEGY_UNKNOWN", f"accès `{entry.get('id')}` : stratégie `{strategy or '?'}` inconnue de ce contrôle",
                         "ajouter son contrôle ici : une stratégie non vérifiée n'est pas une stratégie sûre", loc)
             checks = []
-        check_common(root, data_dir, facts, entry, report)
+        check_common(data_dir, facts, entry, report)
         payload["entries"].append({"id": entry.get("id"), "strategy": strategy, "checks": [c.to_dict() for c in checks]})
     payload["secretHits"] = scan_code_secrets(root, data_dir, report)
     return report, payload

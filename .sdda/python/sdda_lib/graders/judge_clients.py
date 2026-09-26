@@ -100,6 +100,11 @@ class ProviderSheet:
     def base_url(self, environ: Mapping[str, str]) -> str:
         """La variable déclarée si elle est posée, le défaut de la fiche sinon ; préfixe d'API ajouté."""
         raw = str(environ.get(self.base_url_env, "") if self.base_url_env else "").strip() or self.default_base_url
+        if raw and "://" not in raw:
+            # `OLLAMA_HOST=0.0.0.0:11434` est la forme documentée par Ollama,
+            # sans schéma : l'URL devenait « unknown url type », reclassée en
+            # 503, rejouée trois fois puis diagnostiquée comme une surcharge.
+            raw = "http://" + raw
         base = raw.rstrip("/")
         if base and self.api_prefix and not base.endswith(self.api_prefix.rstrip("/")):
             base += "/" + self.api_prefix.strip("/")
@@ -437,6 +442,14 @@ def build_client(settings: JudgeSettings, *, environ: Mapping[str, str] | None =
     if not base_url:
         raise SddaError(f"fiche `{name}` sans `default_base_url` ni `{sheet.base_url_env}`", CLS_PROVIDER_UNKNOWN,
                         f"poser `{sheet.base_url_env}` ou compléter `default_base_url` dans la fiche")
+    scheme = base_url.split("://", 1)[0].lower()
+    if scheme not in ("http", "https") or (scheme == "http" and api_key and not _is_local(base_url)):
+        # La clé part vers l'URL que pose une variable d'environnement : en
+        # clair (`http://`) vers un hôte distant, elle circule lisible sur le
+        # réseau. Un Ollama local n'a pas de clé à protéger.
+        raise SddaError(f"juge `{settings.model_id}` ({name}) : URL `{base_url}` refusée — "
+                        "une clé d'API ne part qu'en HTTPS vers un hôte distant", CLS_PROVIDER_UNKNOWN,
+                        f"corriger `{sheet.base_url_env or 'default_base_url'}` en `https://…`")
     opts = dict(options or {})
     return factory(settings.model_id, api_key=api_key, base_url=base_url, api_key_env=key_env,
                    timeout_s=float(opts.get("timeoutSec", DEFAULT_TIMEOUT_S)),
@@ -464,7 +477,9 @@ def prepare_config(root: Path, grader_config: Mapping[str, Any] | None, *, layer
     cfg: dict[str, Any] = dict(grader_config or {})
     if layered is not None and "judge_must_differ" not in cfg:
         raw = layered.get("JudgeMustDifferFromEvaluated", True)
-        cfg["judge_must_differ"] = raw if isinstance(raw, bool) else str(raw).strip().lower() not in ("false", "0", "no")
+        # Même lecture que `layered_config.judge_issues` : `off` y valait faux,
+        # ici vrai — le preflight et le runner ne jugeaient pas la même règle.
+        cfg["judge_must_differ"] = raw if isinstance(raw, bool) else str(raw).strip().lower() not in ("false", "0", "no", "off")
     if evaluated_model_id and "evaluated_model_id" not in cfg:
         cfg["evaluated_model_id"] = evaluated_model_id
     if cfg.get("client") is not None:
@@ -483,6 +498,16 @@ def prepare_config(root: Path, grader_config: Mapping[str, Any] | None, *, layer
 # ---------------------------------------------------------------------------
 # Aides
 # ---------------------------------------------------------------------------
+def _is_local(url: str) -> bool:
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or host.endswith(".localhost")
+
+
 def _strict_json(text: str, what: str) -> Any:
     try:
         return json.loads(text)

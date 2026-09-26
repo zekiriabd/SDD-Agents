@@ -418,7 +418,7 @@ def test_the_cli_and_the_executor_serve_the_composed_system(rt: Runtime) -> None
     assert getattr(rt.cli._service(rt.settings()), "composed", False) is True
     client = rt.models.StubClient(answer="réponse")
     executor = rt.executor.InProcessExecutor(settings=rt.settings(), client=client)
-    assert getattr(executor._build(isolated=False), "composed", False) is True
+    assert getattr(executor._build((False, False)), "composed", False) is True
     composition = importlib.import_module(f"{APP}.app.composition")
     assert composition.CALLS[-1] is client, "le client de l'exécuteur doit atteindre build_system"
 
@@ -436,10 +436,11 @@ def test_the_executor_tolerates_an_isolated_keyword(rt: Runtime) -> None:
     outcome = executor.run({"id": "i1", "input": "x"}, suite={}, run_index=0, seed=None,
                            isolated=True)
     assert outcome["status"] == "ok"
-    # La suite déclare l'isolement de la même façon (`pytest-eval.md §3.1`).
-    assert rt.executor.InProcessExecutor._suite_isolated(
-        {"isolation": {"tools": "mocked", "retrieval": "frozen"}}) is True
-    assert rt.executor.InProcessExecutor._suite_isolated({}) is False
+    # La suite déclare l'isolement de la même façon (`pytest-eval.md §3.1`) ;
+    # outils et retrieval s'isolent séparément.
+    assert rt.executor._isolation({"isolation": {"tools": "mocked", "retrieval": "frozen"}}) == {
+        "tools": "mocked", "retrieval": "frozen"}
+    assert rt.executor._isolation({}) == {"tools": "live", "retrieval": "live"}
 
 
 def test_mocked_tools_answer_from_fixtures_and_a_missing_one_is_loud(rt: Runtime) -> None:

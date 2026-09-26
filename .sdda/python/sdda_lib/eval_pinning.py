@@ -76,15 +76,17 @@ class PinTuple:
     def diff(self, other: "PinTuple") -> dict[str, tuple[str, str]]:
         """Dimensions qui ont bougé : {clé: (épinglé, courant)}.
 
-        Une dimension VIDE d'un côté n'est pas une divergence : elle signifie
-        « non applicable » (un agent sans retrieval n'a pas d'`indexHash`).
-        Traiter l'absence comme un changement périmerait tout, tout le temps,
-        et la mécanique finirait désactivée.
+        Une dimension vide DES DEUX CÔTÉS n'est pas une divergence : elle
+        signifie « non applicable » (un agent sans retrieval n'a pas
+        d'`indexHash`). Vide d'un seul côté, c'en est une : ignorer ce cas
+        laissait « fraîche » la baseline d'un agent qui venait de GAGNER un
+        outil ou un retriever — exactement le changement de comportement
+        qu'aucun score passé ne mesure.
         """
         moved: dict[str, tuple[str, str]] = {}
         for key in PIN_KEYS:
             pinned, current = getattr(self, key), getattr(other, key)
-            if not pinned or not current:
+            if not pinned and not current:
                 continue
             if _same(pinned, current):
                 continue
@@ -120,8 +122,11 @@ def current_pins(
     index_hash = ""
     retrievers = ir.get("retrievers") or []
     if target and target in agents:
+        # Comme pour les outils : un agent sans retriever n'en épingle AUCUN.
+        # Le repli `or retrievers` lui donnait l'index de tout l'IR, et la
+        # réindexation d'un index qu'il ne lit pas périmait sa baseline.
         used = agents[target].get("retrievers") or []
-        retrievers = [r for r in retrievers if r.get("id") in used] or retrievers
+        retrievers = [r for r in retrievers if r.get("id") in used]
     if retrievers:
         index_hash = hashing.sha256_struct(
             sorted((r.get("id", ""), r.get("indexHash", "")) for r in retrievers)
@@ -298,7 +303,10 @@ def regression_delta(baseline: Baseline, mean: float, lower_is_better: bool) -> 
     Le signe tient compte du sens de la métrique : une latence qui baisse est
     une amélioration, un groundedness qui baisse ne l'est pas.
     """
-    if not baseline.mean:
-        return 0.0
-    raw = (mean - baseline.mean) / abs(baseline.mean) * 100.0
+    # Baseline nulle : le rapport relatif n'existe pas. Rendre 0 déclarait
+    # « stable » un taux d'hallucination passé de 0 à 0,5 — la dégradation la
+    # plus grave possible pour une métrique `<=`. On la lit alors en points
+    # absolus (dénominateur 1) : les scores du framework vivent dans [0, 1].
+    denominator = abs(baseline.mean) if baseline.mean else 1.0
+    raw = (mean - baseline.mean) / denominator * 100.0
     return -raw if lower_is_better else raw

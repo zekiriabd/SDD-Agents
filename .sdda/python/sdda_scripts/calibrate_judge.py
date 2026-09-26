@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import calibration, paths  # noqa: E402
+from sdda_lib import calibration, hashing, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.layered_config import read_layered_config  # noqa: E402
 
@@ -74,6 +74,12 @@ def run(root: Path, *, only: str | None = None, write: bool = True, mission: int
             report.error("IR_INVALID", f"{ir_path.name} illisible ({exc})", "recompiler l'IR", paths.rel(root, ir_path))
             continue
         first_finding, first_outcome = len(report.findings), len(outcomes)
+        # Un rapport de calibration n'est valable que pour le juge, la grille
+        # et les labels qu'il a lus : il était épinglé sur `{}` et ne
+        # périmait jamais, même après un changement de `JudgeModel`.
+        # `stack` porte `JudgeModel` ; recalibrer ne coûte aucun token.
+        stack_md = paths.stack_md_path(root)
+        pins: dict[str, str] = {"stack": hashing.sha256_file(stack_md) if stack_md.is_file() else ""}
 
         for suite in judge_suites(ir):
             suite_id = str(suite.get("id", "?"))
@@ -122,6 +128,7 @@ def run(root: Path, *, only: str | None = None, write: bool = True, mission: int
                     min_agreement=min_kappa,
                     labels_are_synthetic=dataset.labels_are_synthetic,
                     notes=["accord DÉCLARÉ dans le rapport, non recalculé (labels absents)"],
+                    declared_only=True,
                 )
                 report.warn(
                     "JUDGE_UNCALIBRATED",
@@ -146,6 +153,9 @@ def run(root: Path, *, only: str | None = None, write: bool = True, mission: int
                 "verified": not dataset.declared_only,
             }
             outcomes.append(payload)
+            pins[f"calibration:{ref}"] = hashing.sha256_file(path) if path.is_file() else ""
+            if dataset.labels_path is not None:
+                pins[f"labels:{ref}"] = hashing.sha256_file(dataset.labels_path)
 
             if result.labels_are_synthetic:
                 # Sans bypass : des labels générés transforment la calibration
@@ -175,10 +185,13 @@ def run(root: Path, *, only: str | None = None, write: bool = True, mission: int
             for note in result.notes:
                 report.warn("JUDGE_UNCALIBRATED", f"suite `{suite_id}` : {note}", "", loc)
 
-        if write:
+        # `--grader` ne traite qu'un sous-ensemble : réécrire la part avec lui
+        # effaçait le verdict des autres juges — un rouge du juge A disparaissait
+        # à l'appel pour le juge B. Un appel filtré informe, il n'écrit pas.
+        if write and not only:
             sub = Report(name="G5.calibration", target=str(ir.get("missionId") or ir_path.stem))
             sub.findings.extend(report.findings[first_finding:])
-            _write_report(root, sub, outcomes[first_outcome:], mission_artifact(ir, ir_path))
+            _write_report(root, sub, outcomes[first_outcome:], mission_artifact(ir, ir_path), pins)
 
     report.data["judges"] = outcomes
     return report, outcomes
@@ -199,11 +212,12 @@ def mission_artifact(ir: dict, ir_path: Path) -> str:
     return head if head.isdigit() else "stack"
 
 
-def _write_report(root: Path, report: Report, outcomes: list[dict], artifact: str) -> Path:
+def _write_report(root: Path, report: Report, outcomes: list[dict], artifact: str,
+                  pins: dict[str, str] | None = None) -> Path:
     from sdda_lib import gate_reports
 
     report.data["judges"] = outcomes
-    return gate_reports.write_gate_report(root, "G5", artifact, report, {}, part="calibration")
+    return gate_reports.write_gate_report(root, "G5", artifact, report, dict(pins or {}), part="calibration")
 
 
 def build_parser() -> argparse.ArgumentParser:

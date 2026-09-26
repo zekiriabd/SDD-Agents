@@ -47,11 +47,12 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import paths  # noqa: E402
+from sdda_lib import hashing, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import active_stacks  # noqa: E402
 from sdda_scripts import ir_compiler  # noqa: E402
+from sdda_scripts.validate_mission import mission_artifact  # noqa: E402
 from sdda_scripts._common import (  # noqa: E402
     add_common_args, ensure_utf8_stdout, finish, load_config, resolve_root,
 )
@@ -98,7 +99,15 @@ def find_openapi(root: Path) -> Path | None:
     déterministe ne démarre pas l'application. C'est la commande de smoke de la
     fiche de serving qui produit ce fichier (`--check` puis export).
     """
-    candidates = sorted((paths.workspace(root) / "src").rglob("openapi.json"))
+    # Les dépendances installées (`.venv`, `node_modules`, `bin`, `obj`)
+    # embarquent leurs propres `openapi.json` : le premier trouvé pouvait être
+    # celui d'une bibliothèque, confronté à l'IR à la place du nôtre.
+    # `build/`, `dist/`, `target/` : la COPIE que Gradle, tsc ou Maven posent à
+    # côté de la source — trouvée avant elle, elle masquait le fichier réel.
+    skip = {".venv", "venv", "node_modules", "bin", "obj", "__pycache__", "site-packages",
+            "build", "dist", "target", ".gradle", "out"}
+    candidates = sorted(p for p in (paths.workspace(root) / "src").rglob("openapi.json")
+                        if not skip & set(p.parts))
     return candidates[0] if candidates else None
 
 
@@ -118,14 +127,33 @@ def resolve_ref(doc: dict[str, Any], node: Any, _depth: int = 0) -> dict[str, An
 
 
 def entry_agent(ir: dict[str, Any]) -> dict[str, Any] | None:
-    """L'agent du `entryNode` : c'est SON contrat que la surface publie."""
+    """Le premier agent atteint depuis `entryNode` : c'est SON contrat que la surface publie.
+
+    Le gabarit de topologie dessine `entry([entrée]) --> router{…}` : l'entrée
+    n'est pas un agent, et la gate rendait un simple WARN — donc AUCUNE
+    confrontation de schémas sur le pattern le plus courant, et une part
+    verte. On suit les passages obligés (une seule arête sortante, jusqu'au
+    premier nœud agent) comme `validate_ir` le fait pour trouver le routeur ;
+    au premier embranchement, l'agent de ses cibles directes s'il est unique,
+    sinon None — plusieurs agents derrière un routeur n'ont pas UN contrat.
+    """
     orch = ir.get("orchestration") or {}
     nodes = {str(n.get("id")): n for n in orch.get("nodes") or []}
-    node = nodes.get(str(orch.get("entryNode")))
-    if not node or node.get("kind") != "agent":
-        return None
-    ref = str(node.get("ref"))
-    return next((a for a in ir.get("agents") or [] if str(a.get("id")) == ref), None)
+    edges = [e for e in orch.get("edges") or [] if isinstance(e, dict)]
+    agents = {str(a.get("id")): a for a in ir.get("agents") or []}
+    current, seen = str(orch.get("entryNode") or ""), set()
+    while current and current not in seen:
+        seen.add(current)
+        node = nodes.get(current) or {}
+        if node.get("kind") == "agent":
+            return agents.get(str(node.get("ref")))
+        targets = sorted({str(e.get("to")) for e in edges if str(e.get("from")) == current})
+        if len(targets) == 1:
+            current = targets[0]
+            continue
+        refs = {str((nodes.get(t) or {}).get("ref")) for t in targets if (nodes.get(t) or {}).get("kind") == "agent"}
+        return agents.get(next(iter(refs))) if len(refs) == 1 else None
+    return None
 
 
 def _properties(schema: Any) -> tuple[set[str], set[str]]:
@@ -260,11 +288,27 @@ def check_statuses(doc: dict[str, Any], mapping: set[str], report: Report, loc: 
 
 def read_status_mapping(root: Path) -> tuple[set[str], str | None]:
     """Codes HTTP cités par le module de mapping de la surface, s'il existe."""
-    for pattern in ("**/serving/status.py", "**/Serving/Status.cs", "**/serving/status.ts"):
-        for path in sorted((paths.workspace(root) / "src").glob(pattern)):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            return set(re.findall(r"\b([1-5]\d{2})\b", text)), paths.rel(root, path)
-    return set(), None
+    # Le module de mapping de chaque langage, sous `serving/` (arborescence plate,
+    # couches en minuscules) ou `serving/http/` — Kotlin et Java n'étaient pas
+    # cherchés, et un backend JVM était jugé sans mapping.
+    names = {"status.py", "status.ts", "Status.cs", "Status.kt", "Status.java"}
+    src = paths.workspace(root) / "src"
+    found = sorted(p for p in src.rglob("*") if p.name in names and p.is_file()
+                   and "serving" in {s.casefold() for s in p.parts}
+                   and not {"build", "dist", "bin", "obj", "node_modules", "target"} & set(p.parts)) \
+        if src.is_dir() else []
+    if not found:
+        return set(), None
+    text = found[0].read_text(encoding="utf-8", errors="replace")
+    return set(re.findall(r"\b([1-5]\d{2})\b", text)), paths.rel(root, found[0])
+
+
+def _contract_first(config: Any) -> bool:
+    """`ApiContractFirst`, booléen ou chaîne : `bool("false")` vaut True."""
+    value = config.get("ApiContractFirst", True)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in ("false", "no", "off", "0", "non")
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +324,18 @@ def run(root: Path, mission: str, report: Report) -> bool:
     })
 
     if openapi_path is None:
+        # Un `backend-api` à contrat d'abord PROMET un contrat dérivé de l'IR
+        # (ARCHITECTURE §4) : son absence n'est pas « non applicable », c'est
+        # la promesse rompue. La part restait sans rapport, donc G6 verte.
+        deliverable = str(config.get("DeliverableType", "cli-exe"))
+        if deliverable == "backend-api" and _contract_first(config):
+            report.error("API_CONTRACT_DRIFT",
+                         "`DeliverableType: backend-api` avec `ApiContractFirst: true`, et aucun `openapi.json` publié sous workspace/src/",
+                         "exporter le contrat dérivé de l'IR (commande de smoke de la fiche de serving) avant l'ORCH GATE : "
+                         "un appelant qu'on ne contrôle pas ne se corrige pas après coup",
+                         "workspace/src/")
+            report.data["applicable"] = True
+            return True
         report.data["applicable"] = False
         report.data["reason"] = "aucun openapi.json publié sous workspace/src/"
         return False
@@ -323,7 +379,7 @@ def run(root: Path, mission: str, report: Report) -> bool:
     # `ApiContractFirst: false` autorise la divergence de SCHÉMAS — jamais celle
     # des routes ni des statuts : une route non soutenue reste une surface
     # d'attaque, que la divergence soit assumée ou non.
-    if not bool(config.get("ApiContractFirst", True)):
+    if not _contract_first(config):
         report.warn(
             "API_CONTRACT_DRIFT",
             "`ApiContractFirst: false` — confrontation des schémas désactivée",
@@ -368,7 +424,9 @@ def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdout()
     parser = argparse.ArgumentParser(description="API GATE — l'OpenAPI publié est dérivé de l'IR (0 token).")
     add_common_args(parser)
-    parser.add_argument("--mission", default="1", help="numéro de MISSION")
+    # Plus de défaut `1` : sur un workspace à deux MISSIONs, l'appel sans
+    # numéro confrontait silencieusement l'API à l'IR de la mission 1.
+    parser.add_argument("--mission", default=None, help="numéro de MISSION ; défaut : l'unique IR compilé")
     parser.add_argument("--explain", action="store_true", help="ce que la gate confronte")
     args = parser.parse_args(argv)
 
@@ -377,6 +435,13 @@ def main(argv: list[str] | None = None) -> int:
 
     root = resolve_root(args)
     report = Report(name="G6.api", target=str(root))
+    if args.mission is None:
+        irs = sorted(paths.ir_dir(root).glob("*-system.ir.json"))
+        if len(irs) != 1:
+            report.error("IR_NOT_FOUND", f"{len(irs)} IR compilé(s) : préciser --mission",
+                         "python .sdda/sdda.py validate-api-contract --mission {n}", str(paths.ir_dir(root)))
+            return finish(report, args)
+        args.mission = irs[0].name.split("-", 1)[0]
     applicable = run(root, str(args.mission), report)
 
     if not applicable:
@@ -385,7 +450,16 @@ def main(argv: list[str] | None = None) -> int:
         return finish(report, args) if args.json else 0
 
     if not args.no_report:
-        write_gate_report(root, "G6", str(args.mission), report, {}, part="api")
+        # Épinglé sur le contrat publié et l'IR : vide, une part verte survivait
+        # à la réécriture de l'un comme de l'autre.
+        pins: dict[str, str] = {}
+        openapi = find_openapi(root)
+        if openapi is not None:
+            pins[paths.rel(root, openapi)] = hashing.sha256_file(openapi)
+        ir_file = paths.ir_path(root, args.mission)
+        if ir_file.is_file():
+            pins["ir"] = ir_compiler.ir_identity_hash(ir_compiler.load_ir(ir_file))
+        write_gate_report(root, "G6", mission_artifact(root, args.mission), report, pins, part="api")
     return finish(report, args)
 
 

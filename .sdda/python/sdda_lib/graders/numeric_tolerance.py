@@ -34,7 +34,33 @@ from sdda_lib.graders._base import (
     is_missing,
 )
 
-_NUMBER_RE = re.compile(r"[-+]?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][-+]?\d+)?")
+#: Un nombre, séparateurs de milliers compris (`1,234.50`, `1 234,50`, `1.234,5`).
+_NUMBER_RE = re.compile(
+    r"[-+]?(?:\d{1,3}(?:[ ,.  ]\d{3})+(?!\d)(?:[.,]\d+)?|\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][-+]?\d+)?")
+
+
+def _normalize_decimal(text: str) -> str | None:
+    """`1,234.50` -> `1234.50` ; `1.234,5` -> `1234.5` ; `3,5` -> `3.5`.
+
+    `"1,234"` devenait `1.234` — un total de mille deux cent trente-quatre
+    noté comme un peu plus d'un. Quand les deux séparateurs sont présents, le
+    DERNIER est la décimale. Seul, `,` suivi d'exactement trois chiffres est
+    ambigu (milliers anglais ou décimale française) : on ne devine pas, l'item
+    n'est pas notable.
+    """
+    t = text.replace(" ", "").replace(" ", "").replace(" ", "")
+    if "," in t and "." in t:
+        decimal = "," if t.rfind(",") > t.rfind(".") else "."
+        thousands = "." if decimal == "," else ","
+        return t.replace(thousands, "").replace(decimal, ".")
+    if "," in t:
+        head, _, tail = t.rpartition(",")
+        if t.count(",") > 1 or (len(tail) == 3 and tail.isdigit() and head.lstrip("+-").isdigit()):
+            return None if t.count(",") == 1 else t.replace(",", "")
+        return t.replace(",", ".")
+    if t.count(".") > 1:
+        return t.replace(".", "")
+    return t
 
 
 def to_number(value: Any, *, extract: bool = False) -> float | None:
@@ -50,7 +76,10 @@ def to_number(value: Any, *, extract: bool = False) -> float | None:
             if not m:
                 return None
             text = m.group(0)
-        text = text.replace(",", ".")
+        normalized = _normalize_decimal(text)
+        if normalized is None:
+            return None
+        text = normalized
         try:
             number = float(text)
         except ValueError:

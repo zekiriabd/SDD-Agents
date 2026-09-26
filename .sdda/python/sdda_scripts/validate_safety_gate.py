@@ -34,7 +34,6 @@ Exit : 0 vert (ou jaune) · 1 rouge.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -43,7 +42,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import paths  # noqa: E402
+from sdda_lib import hashing, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import load_gate_reports, write_gate_report  # noqa: E402
 from sdda_scripts._common import (  # noqa: E402
@@ -154,7 +153,11 @@ def parts_of(root: Path, mission: str) -> dict[str, dict[str, Any]]:
         part = str(report.get("part") or "verdict")
         if part == "verdict":
             continue        # notre propre part : jamais une entrée de l'agrégation
-        out[part] = report
+        # Le plus récent l'emporte (`checkedAt`), pas le dernier par nom de
+        # fichier : deux artefacts pour une même part laissaient gagner le vieux.
+        prev = out.get(part)
+        if prev is None or str(report.get("checkedAt") or "") >= str(prev.get("checkedAt") or ""):
+            out[part] = report
     return out
 
 
@@ -194,6 +197,11 @@ def reviewer_findings(root: Path, mission: str) -> dict[str, list[tuple[str, str
             findings: list[tuple[str, str]] = []
             for line in text.splitlines():
                 m = _SEV_RE.search(line)
+                # Une ligne qui cite trois sévérités ou plus est une LÉGENDE
+                # (« info | minor | … | critical ») : la compter faisait d'un
+                # rapport vide un rapport à un finding `critical`.
+                if m and len({s.lower() for s in _SEV_RE.findall(line)}) >= 3:
+                    continue
                 if m and line.lstrip().startswith(("|", "-", "*")):
                     findings.append((m.group(1).lower(), line.strip()[:120]))
             out[reviewer] = findings
@@ -257,7 +265,13 @@ def run(root: Path, mission: str, fail_on: str | None, report: Report) -> Report
     found = reviewer_findings(root, mission)
     number = mission.split("-", 1)[0]
     for reviewer, (key, default, cls) in REVIEWERS.items():
-        configured = str(fail_on or config.get(key, default) or default).lower()
+        # `--fail-on` est le seuil de la revue SÉCURITÉ (`/sdda-review` y passe
+        # `AgentSafetyFailOn`). Appliqué aux deux reviewers, il remplaçait
+        # `OrchestrationFailOn: serious` par `critical` : les findings
+        # orchestration `serious` cessaient de bloquer sans que personne l'ait
+        # décidé.
+        override = fail_on if reviewer == "review-safety" else None
+        configured = str(override or config.get(key, default) or default).lower()
         threshold_used[reviewer] = configured
         mode_key = REVIEWER_MODE[reviewer]
         mode = str(config.get(mode_key, "full") or "full").strip().lower()
@@ -325,8 +339,25 @@ def main(argv: list[str] | None = None) -> int:
 
     report = run(root, mission_id, args.fail_on, Report(name="SAFETY-GATE", target=str(root)))
     if not args.no_report:
-        write_gate_report(root, "G7", mission_id, report, {}, part="verdict")
+        # Épinglé sur les rapports AGRÉGÉS et ceux des reviewers : un verdict
+        # vert rendu sur des parts depuis réécrites restait vert (pins vides).
+        write_gate_report(root, "G7", mission_id, report, verdict_pins(root, mission_id), part="verdict")
     return finish(report, args)
+
+
+def verdict_pins(root: Path, mission: str) -> dict[str, str]:
+    pins: dict[str, str] = {}
+    for part in parts_of(root, mission).values():
+        p = Path(str(part.get("_path") or ""))
+        if p.is_file():
+            pins[paths.rel(root, p)] = hashing.sha256_file(p)
+    reports_dir = paths.validation_dir(root) / "reports"
+    number = mission.split("-", 1)[0]
+    for reviewer in REVIEWERS:
+        p = reports_dir / f"{REPORT_STEM[reviewer]}-{number}.md"
+        if p.is_file():
+            pins[paths.rel(root, p)] = hashing.sha256_file(p)
+    return pins
 
 
 if __name__ == "__main__":

@@ -125,7 +125,11 @@ def parse_topology(text: str, path: Path | None = None) -> TopologySpec:
     alt = sec("Alternative plus simple considérée") or sec("Alternative plus simple écartée")
     justifications = [r for r in markdown_io.parse_table(alt or "") if not markdown_io.is_placeholder(markdown_io.strip_code(_col(r, "Agent")))]
     graph_sec = sec("Le graphe") or ""
-    meta = {_norm(k).replace("œ", "oe"): markdown_io.strip_code(v) for k, v in markdown_io.parse_kv_list(graph_sec).items()}
+    # `’` (U+2019) est l'apostrophe qu'un éditeur ou un LLM écrit spontanément :
+    # « Nœud d’entrée » n'était pas reconnu, et G2 comme la compilation
+    # échouaient sur un nœud d'entrée pourtant déclaré.
+    meta = {_norm(k).replace("œ", "oe").replace("’", "'").replace("ʼ", "'"): markdown_io.strip_code(v)
+            for k, v in markdown_io.parse_kv_list(graph_sec).items()}
     mm = markdown_io.fenced_blocks(graph_sec, "mermaid")
     spec = TopologySpec(
         mission_id=header.get("MISSION", "").strip(),
@@ -319,7 +323,10 @@ def validate_topology_text(text: str, *, path: Path | None, root: Path | None, c
                     report.error("TOPOLOGY_CONTRACT_MISSING", f"contrat annoncé introuvable : `{f}`", "produire le contrat ou retirer la ligne", loc)
         for slug in spec.agents:
             p = paths.contracts_dir(root, "agents") / f"{spec.qualified(slug)}.agent.md"
-            if not p.is_file():
+            # Le roster nomme parfois l'agent en snake_case (`intent_classifier`),
+            # le contrat est en kebab : même passage `_` -> `-` que les outils.
+            alt = paths.contracts_dir(root, "agents") / f"{spec.qualified(slug.replace('_', '-'))}.agent.md"
+            if not p.is_file() and not alt.is_file():
                 report.error("AGENT_CONTRACT_MISSING", f"agent `{slug}` sans contrat `{paths.rel(root, p)}`", "écrire le contrat depuis templates/agent-contract.template.md", loc)
     return report, spec
 
