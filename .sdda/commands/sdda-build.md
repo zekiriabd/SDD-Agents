@@ -13,13 +13,14 @@ Génère le code de la MISSION `{n}` depuis l'IR compilé, **couche par couche,
 une gate par couche** (PHILOSOPHY P5) :
 
 ```
-PHASE 3   INIT            project-init (script, 0 token) : squelette, uv sync, contexte projet
-          SOCLE           dev-backend (coquille)  →  dev-tools ∥ dev-retrieval ∥ dev-data   (parallèle, MaxParallel)
+PHASE 3   INIT            project-init (script, 0 token) : contexte projet ; en Python aussi squelette + uv sync
+          SOCLE           dev-backend (coquille) [∥ qa-evals si --with-datasets, puis IR recompilée]
+                          →  dev-tools ∥ dev-retrieval ∥ dev-data   (parallèle, MaxParallel)
                           [TOOL GATE G3]  [RETRIEVAL GATE G4]
 PHASE 4   PROMPTS+AGENTS  dev-orchestration --prepass (shared/ + memory/interface, gelés)
-                          →  dev-prompt (seul)  →  dev-agent × N   (1 instance / agent, parallèle)
+                          →  dev-prompt (seul)  →  IR recompilée (promptHash)  →  dev-agent × N   (1 instance / agent, parallèle)
                           [AGENT GATE G5]
-PHASE 5   ORCHESTRATION   dev-orchestration  →  dev-api
+PHASE 5   ORCHESTRATION   dev-orchestration  →  dev-api  →  dev-backend (packaging)
                           [ORCH GATE G6]
 ```
 
@@ -75,8 +76,10 @@ FIX: lister les agents avec /sdda-status {n}, ou relancer /sdda-topology {n} si 
    projet qui l'y pose. `project-init` (STEP 3.0, lancé par la commande, sans
    agent) copie `workspace/assets/.env` (déposé par l'humain) vers
    `workspace/src/{App}/.env` (lu par l'application), 0 token, aucune valeur
-   affichée. Absent : WARN, le build continue — la clé n'est exigée qu'aux
-   évaluations (`install-env --require` dans `/sdda-eval`). Aucun agent ne lit
+   affichée — en Python au passage de `gen-app-skeleton --write --mission {n}`, dans les
+   autres langages par la même copie, sans squelette. Absent : WARN, le build
+   continue — la clé n'est exigée qu'aux évaluations (`install-env --require`
+   dans `/sdda-eval`, qui recopie aussi une clé changée depuis). Aucun agent ne lit
    l'un ou l'autre fichier (`[SECRET_READ_FORBIDDEN]`) : l'agent lance le
    script, le script copie.
 4. Lire `## Project Config` : `MaxParallel`, `BuildLoopMaxCostUsd`,
@@ -132,7 +135,9 @@ en 3.0.
 
 Jonction : `lint-prompts` (4.1) vert, sinon STOP ; `qa-evals` en
 `[AC_NOT_EVALUABLE]` → STOP, FIX `/sdda-caps {n}` ; puis `/sdda-eval` STEP 4 et
-4.bis (`validate-datasets --freeze`, `calibrate-judge`) et
+4.bis (`validate-datasets --freeze`, `calibrate-judge`), la **recompilation de
+l'IR** de 4.1 bis — elle épingle d'un coup les prompts et projette le holdout
+et les suites système que `qa-evals` vient d'écrire — et
 `set-phase --phase eval_datasets --status pass`.
 
 **P.3 — `dev-app`, seul** (`.sdda/agents/dev-app.md`), qui écrit toute
@@ -162,13 +167,14 @@ python .sdda/sdda.py audit-ownership --mission {n} --phase 3 --since-snapshot # 
 **P.4 — Gates jouées, rapportées, jamais bloquantes.** Les mêmes scripts, dans
 cet ordre : 3.2 (G3), 3.3 (G4, si `retrievers[]`), 4.3 (G5), 5.3 et 5.3 bis
 (G6, parts `api` et `framework`), 5.4 (G6). Ils écrivent leurs rapports comme
-d'habitude — c'est la mesure. Les runners qui chargent un exécuteur
-(`eval-runner`, `run-retrieval-eval`) importent l'application : ils se lancent
-avec l'interpréteur de l'application, où `project-init` a installé ses
-dépendances — `uv run --project workspace/src/{App} python .sdda/sdda.py
-eval-runner … --executor {App}.evals.executor:InProcessExecutor`. Lancés avec
-l'interpréteur système, stdlib seul, ils sortent `[EVAL_EXECUTOR_MISSING]` en
-nommant la dépendance absente. Un **rouge** ne déclenche **ni STOP ni boucle
+d'habitude — c'est la mesure. Les runners (`eval-runner`,
+`run-retrieval-eval`) parlent à l'application LIVRÉE par `--executor cli` :
+ils la lancent par sa ligne de commande, quel que soit le langage
+(`stacks/serving/cli.md` §3.1-3.5), sans interpréteur d'application à
+fournir. Seule la forme `module:attr` (L4 en processus, **Python**) importe
+l'application et se lance sous `uv run --project workspace/src/{App}` ; lancée
+avec l'interpréteur système, elle sort `[EVAL_EXECUTOR_MISSING]` en nommant la
+dépendance absente. Un **rouge** ne déclenche **ni STOP ni boucle
 de correction** : il est rapporté dans le récap (`🔴 G5 … — poc : rapporté,
 pas corrigé`). Seule une erreur d'EXÉCUTION d'un script (IR absent, rapport
 illisible) arrête la commande. Les hooks `preflight_tool_gate` et
@@ -197,10 +203,10 @@ python .sdda/sdda.py project-init --mission {n}
 
 Trois étapes idempotentes, dans cet ordre :
 
-1. **Squelette** — `gen-app-skeleton --write` (Python) : projet, `pyproject.toml`
+1. **Squelette** — `gen-app-skeleton --write --mission {n}` (Python) : projet, `pyproject.toml`
    épinglé, plomberie, `.env` copié depuis `workspace/assets/`. Autre langage :
    sauté, `dev-backend` l'écrit en 3.0b depuis la fiche de langage.
-2. **Dépendances** — `uv sync` dans `workspace/src/{App}/` : l'environnement
+2. **Dépendances** (Python) — `uv sync` dans `workspace/src/{App}/` : l'environnement
    est installé une fois, avant les agents. `uv` absent → WARN
    `[PROJECT_DEPS_NOT_INSTALLED]`, le build continue ; `uv sync` en échec →
    `[PROJECT_DEPS_INSTALL_FAILED]`, STOP (une version épinglée ne se résout pas).
@@ -235,7 +241,9 @@ de la **coquille** : fichiers de projet (`workspace/src/{AppName}/*`),
 composition, configuration et Domaine (`workspace/src/**/app/**`). Le projet
 existe déjà (3.0) : il écrit ce qui demande un jugement, et seulement cela. En
 Python, il ne relance pas le générateur ; dans un autre langage, il écrit le
-squelette depuis la fiche de langage. Il part **seul et d'abord** : la
+squelette depuis la fiche de langage — et `gen-app-skeleton --check --mission {n}` ne s'y
+applique pas : hors Python il rend `[STACK_LANGUAGE_MISMATCH]` par
+construction. Il part **seul et d'abord** : la
 composition doit exposer les points d'attache que les outils, les agents et le
 graphe honoreront.
 
@@ -246,7 +254,7 @@ Livrable : {DeliverableType} · archi : {archi} · backend : {backend|aucune} ·
 Le projet est initialisé (project-init) : lire workspace/src/{App}/CLAUDE.md d'abord.
 Écrire la composition contre l'IR, la configuration par NOMS de variables, le Domaine (BR-x calculables).
 N'écrire ni agent, ni outil, ni orchestration, ni prompt, ni dataset, ni le fichier de contexte.
-Fin : `python .sdda/sdda.py gen-app-skeleton --check` et `validate-packaging` verts, une ligne de confirmation.
+Fin : `validate-packaging --mission {n}` vert (et, en Python seulement, `gen-app-skeleton --check --mission {n}`), une ligne de confirmation.
 ```
 
 Exit ≠ 0 → STOP : sans coquille, le socle n'a pas de points d'attache.
@@ -273,12 +281,26 @@ d'ownership de la phase 3 :
    veto remonte d'un étage). La coquille reste : elle ne dépend pas des AC.
 2. `/sdda-eval` STEP 4 et 4.bis : `validate-datasets --freeze`, puis
    `calibrate-judge` pour chaque grader `llm-judge`. Rouge → STOP avec la classe.
-3. `set-phase --phase eval_datasets --status pass` **puis** seulement le
+3. **Recompiler l'IR**, parce que les jeux viennent d'y entrer : le holdout,
+   la suite d'acceptation L9 et les suites système L5/L7
+   (`pipeline/suites/{n}-*.yaml`) ne sont projetés dans `evaluation.suites`
+   qu'à la compilation — et `eval-runner` ne lit que l'IR. Sans cette étape,
+   G6 (5.4) et G8 n'ont aucune suite à jouer. Jouée ici, avant G3, pour que
+   les rapports de la phase 3 épinglent l'IR qui servira :
+   ```bash
+   python .sdda/sdda.py ir-compiler --mission {n} --out workspace/.sys/.ir/{n}-system.ir.json
+   python .sdda/sdda.py validate-ir --mission {n}
+   python .sdda/sdda.py estimate-budget --mission {n}
+   ```
+   Exit ≠ 0 → STOP avec la classe rendue : une suite que `qa-evals` a mal
+   écrite se corrige dans `/sdda-eval`, pas en aval.
+4. `set-phase --phase eval_datasets --status pass` **puis** seulement le
    `set-item` de la coquille (`build_socle`, item `skeleton`) : l'ordre des
    phases de `sdda_state` reste celui que `--resume` parcourt.
 
 Sans `--with-datasets` (usage manuel, ou reprise après une PHASE 6a déjà
-verte), 3.0b part seul et `/sdda-build` suppose les jeux déjà figés.
+verte), 3.0b part seul et `/sdda-build` suppose les jeux déjà figés — et
+l'IR recompilée depuis : `check-ir-freshness` du STEP 2 le vérifie.
 
 ### 3.1 — Dispatch
 
@@ -388,7 +410,8 @@ c'est la clé que lit `compute_status`.
 python .sdda/sdda.py validate-tool-contract --mission {n} --json
 python .sdda/sdda.py validate-tool-contract --mission {n} --require-code --json   # après génération
 
-# part `suites` — les tests L2 réellement joués (pytest dans l'application, 0 token)
+# part `suites` — les tests L2 réellement joués dans l'application, 0 token.
+# (Python seulement) : le runner n'outille aujourd'hui que pytest ; ailleurs la part reste rouge.
 python .sdda/sdda.py run-tool-suites --mission {n} --json
 ```
 
@@ -401,7 +424,7 @@ python .sdda/sdda.py run-tool-suites --mission {n} --json
 | 5 | `safetyStrategy` cohérente si non read-only (idempotence vs retry, confirmation d'un destructif, dry-run) | contracts | `[SAFETY_STRATEGY_MISSING]` · `[TOOL_RETRY_UNSAFE]` |
 | 6 | Enveloppe DB présente et bornée pour chaque `dataAccess[]` | contracts | `[DB_ENVELOPE_MISSING]` · `[DATA_ACCESS_ADR_REQUIRED]` |
 | 7 | `toolSchemaHash` calculé et épinglé dans le rapport (P10) | contracts | — |
-| 8 | Connectivité live (`pytest -m network`) | suites | `[TOOL_LIVE_UNREACHABLE]` |
+| 8 | Connectivité live (tests marqués `network` — `pytest -m network` en Python) | suites | `[TOOL_LIVE_UNREACHABLE]` |
 
 **Qui rend la part `suites`.** `run-tool-suites` joue les tests que `qa-tests`
 a écrits pour chaque suite `tool-{n}-{outil}.yaml` de `qa-evals`, et exige que
@@ -419,13 +442,20 @@ stratégie ne se câble pas, point.
 Pré-requis : golden set présent.
 
 ```bash
-python .sdda/sdda.py validate-datasets --mission {n} --require golden --min-items 50
+python .sdda/sdda.py validate-datasets --mission {n} --require golden
 ```
+
+Un pré-contrôle, pas une gate : avec `--require`, `validate-datasets` n'écrit
+aucun rapport (la part `datasets` de G8 n'est écrite que par `--freeze`).
+
+La taille minimale est celle que `validate-datasets` résout en couches
+(`GoldenSetMinItems` : base < profil < STACK.md) : un nombre écrit ici en dur
+contredisait `Profile: poc`, qui l'abaisse.
 
 Absent → ERROR :
 ```
 ERROR: /sdda-build {n} — golden set de retrieval absent
-CAUSE: [GOLDEN_SET_MISSING] workspace/pipeline/datasets/golden/{index}.jsonl introuvable ou < 50 items
+CAUSE: [GOLDEN_SET_MISSING] workspace/pipeline/datasets/golden/{index}.jsonl introuvable ou sous GoldenSetMinItems
 FIX: produire le golden set via qa-evals (/sdda-eval {n} --datasets-only) puis relancer /sdda-build {n} --layer socle
 ```
 
@@ -434,8 +464,9 @@ FIX: produire le golden set via qa-evals (/sdda-eval {n} --datasets-only) puis r
 > `/sdda-build` (cf. `/sdda-full` STEP 4.5).
 
 ```bash
-uv run --project workspace/src/{App} python .sdda/sdda.py run-retrieval-eval --mission {n} --json \
-  --executor {module}:{Retriever}     # ou --replay workspace/.sys/reports/runs/{n}-retrieval.jsonl
+# l'application livrée, sous-commande `retrieve` (stacks/serving/cli.md §3.1), tous langages
+python .sdda/sdda.py run-retrieval-eval --mission {n} --json \
+  --executor cli     # ou --executor cmd:{commande de lancement} · ou --replay {une exécution enregistrée, .jsonl}
 ```
 
 Le script **écrit lui-même** `workspace/.sys/.validation/G4-{mission}.json` avec
@@ -451,6 +482,7 @@ n'appelle aucun LLM : sans `--executor` ni `--replay` il sort
 | `nDCG@k` | `RetrievalNdcgMin` (0.70) | `[RETRIEVAL_BELOW_THRESHOLD]` |
 | `groundedness` | `GroundednessMin` (0.85) | `[RETRIEVAL_BELOW_THRESHOLD]` — non mesurée : 🟡, jamais 🟢 (P9) |
 | `citation_resolve_rate` | `CitationResolveRateMin` (0.98) | `[CITATION_UNRESOLVED]` |
+| requêtes mesurées ≥ `RetrievalGoldenMinQueries` (50) | bloquant : sous ce nombre l'intervalle de confiance est trop large pour un verdict | `[EVAL_DATASET_TOO_SMALL]` |
 | `index_hash` calculé et épinglé | — | — |
 
 Bypass : `SDDA_BYPASS_RETRIEVAL_GATE=1`, audit-loggué. Le rapport reste écrit
@@ -552,8 +584,9 @@ python .sdda/sdda.py lint-prompts --mission {n} --json
 Contrôles : pas de secret, pas d'instruction contradictoire, taille sous
 plafond, variables de template résolvables, aucun outil inexistant référencé,
 **symétrie des skills** (`agents[].skills` de l'IR ↔ section `## Compétences` du
-prompt, dans les deux sens), `prompt_hash` calculé et injecté dans l'IR
-(`agents[].promptHash`).
+prompt, dans les deux sens), `prompt_hash` calculé et **rendu** dans le rapport
+(`promptHashes`). Le lint n'écrit pas l'IR : l'épinglage dans
+`agents[].promptHash` est fait par la recompilation de 4.1 bis.
 
 > La symétrie des skills ne se vérifie qu'ici. Une skill n'ayant ni schéma ni
 > effet de bord, aucune gate ne peut l'exécuter pour la juger : le seul constat
@@ -567,6 +600,28 @@ ERROR: /sdda-build {n} — lint de prompt rouge
 CAUSE: [PROMPT_LINT_FAILED] {agent}.system.md référence l'outil `{tool}` absent de agents[{agent}].tools ; instruction contradictoire L{a}/L{b}
 FIX: relancer /sdda-build {n} --layer agents (dev-prompt lit le rapport) — ou corriger le prompt à la main
 ```
+
+### 4.1 bis — Recompiler l'IR : épingler les prompts (0 token, après un lint vert)
+
+L'IR a été compilée en PHASE 2, avant que les prompts existent : aucun agent
+n'y porte de `promptHash`. `preflight_agent_bounds` refuse alors le spawn de
+chaque `dev-agent` (`[PROMPT_NOT_PINNED]`) — c'est voulu : implémenter un
+prompt que l'IR n'a pas épinglé, c'est implémenter un prompt que n'importe qui
+peut réécrire sans que la baseline le voie. L'épinglage se fait par
+recompilation, jamais à la main :
+
+```bash
+python .sdda/sdda.py ir-compiler --mission {n} --out workspace/.sys/.ir/{n}-system.ir.json
+python .sdda/sdda.py validate-ir --mission {n}
+python .sdda/sdda.py estimate-budget --mission {n}
+python .sdda/sdda.py lint-prompts --mission {n} --json      # ré-épingle la part `prompts` de G5 sur l'IR recompilée
+```
+
+Les parts `ir` et `budget` de G2 épinglent l'IR : `validate-ir` et
+`estimate-budget` ci-dessus les réécrivent sur l'IR recompilée — sans eux, G2
+serait périmée. G3 et G4 ne se rejouent pas : leurs rapports n'épinglent que
+l'entrée de leur outil (`irtool:{id}`) et le contrat, que l'épinglage d'un
+prompt ne touche pas. Exit ≠ 0 → STOP avec la classe rendue.
 
 ### 4.2 — `dev-agent` × N (parallèle, 1 instance par agent)
 
@@ -678,7 +733,7 @@ rejoue.
 Pré-requis : datasets golden des CAPs présents + juges calibrés.
 
 ```bash
-python .sdda/sdda.py validate-datasets --mission {n} --require golden,calibration
+python .sdda/sdda.py validate-datasets --mission {n} --require golden,calibration   # pré-contrôle, aucun rapport de gate
 python .sdda/sdda.py preflight-judge-calibration --mission {n}
 ```
 
@@ -689,8 +744,14 @@ CAP sont advisory → la CAP ne peut pas être verte → 🟡 au mieux, WARN
 `[JUDGE_UNCALIBRATED]`.
 
 ```bash
+# tous langages : l'application livrée, isolée par le bloc `isolation:` de la suite
+# (SDDA_EVAL_ISOLATION / SDDA_EVAL_FIXTURES, stacks/serving/cli.md §3.5)
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
+  --executor cli --json
+
+# (Python) variante en processus — l'exécuteur isolé du squelette, importé avec l'interpréteur de l'app
 uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L4 --isolated \
-  --executor {module}:{InProcessExecutor} --json
+  --executor {App}.evals.executor:InProcessExecutor --json
 ```
 
 Le script écrit lui-même ses rapports de gate, **un par CAP** —
@@ -822,8 +883,13 @@ python .sdda/sdda.py validate-api-contract --mission {n} --json
 | 4 | `/v1/runs/{}/resume` publiée ⇒ `orchestration.humanInTheLoop` | `[API_ROUTE_UNBACKED]` |
 | 5 | Tout statut HTTP publié est dans la table `[CLASS]` → code | `[API_STATUS_UNMAPPED]` |
 
-Tant qu'aucun `openapi.json` n'est publié sous `workspace/src/`, la part est
-**non applicable** : elle n'écrit aucun rapport et n'accorde donc aucun vert.
+Sous `DeliverableType: backend-api`, `openapi.json` doit être **exporté**
+(5.2bis, `dev-backend --phase packaging`) avant ce contrôle : absent, la part
+est rouge (`[API_CONTRACT_DRIFT]`) — un service appelé par un logiciel sans
+contrat publié n'a rien que l'appelant puisse vérifier. Pour les autres
+livrables, tant qu'aucun `openapi.json` n'est publié sous `workspace/src/`, la
+part est **non applicable** : elle n'écrit aucun rapport et n'accorde donc
+aucun vert.
 `ApiContractFirst: false` relâche les contrôles 1 et 2 — **jamais** 3 à 5, et
 exige un ADR référencé : une route non soutenue reste une surface d'entrée que
 rien n'a évaluée, que la divergence de schémas soit assumée ou non.
@@ -841,9 +907,15 @@ architecture que la fiche relue en revue ne décrit pas.
 
 ### 5.4 — ORCH GATE (G6)
 
+L'IR doit être celle que le code implémente : un contrat ou un jeu modifié
+depuis 4.1 bis la périme, et G6 mesurerait des suites que l'IR ne porte plus.
+Exit ≠ 0 → `[IR_STALE]`, STOP, FIX `/sdda-topology {n} --recompile-only`.
+
 ```bash
-uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
-  --executor {module}:{CliExecutor} --json
+python .sdda/sdda.py check-ir-freshness --mission {n}
+# l'application livrée, par sa ligne de commande — tous langages
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L5,L7 \
+  --executor cli --json
 ```
 
 Même règle qu'en 4.3 : le script écrit `workspace/.sys/.validation/G6-{n}-{MissionName}.json`

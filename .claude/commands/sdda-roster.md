@@ -1,5 +1,4 @@
 ---
-name: sdda-roster
 description: "/sdda-roster — Le roster d'agents de l'ARCHITECTE : gabarit pré-rempli, puis vérification (P7, 0 token)"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-roster.md.

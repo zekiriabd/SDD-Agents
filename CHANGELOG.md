@@ -14,8 +14,78 @@ A release is cut by pushing a `v*` tag whose version equals
 
 ## [Unreleased]
 
+### Security
+
+Audit of 2026-09-26: every bypass below was proven by a payload replayed
+against the hooks, and is now a regression test
+(`tests/test_audit_core_2026_09_26.py`).
+
+- Shell ownership hook (`sdda_hooks/_shell.py`, `preflight_bash_ownership.py`):
+  a redirection without spaces (`echo x>golden.jsonl`) wrote the golden set and
+  forged a gate report; `perl -pi`, `sed -Ei`, `sed --in-place=`, `python -Ic`,
+  `node --eval=`, `python -m json.tool`, archive extraction without a
+  destination, `xargs rm`, `git clone`, PowerShell abbreviated parameters
+  (`-Dest`, `-LiteralP`, `-Val`), `cmd /c` with backslashes, links and
+  junctions (`ln -s`, `mklink`, `New-Item -ItemType Junction -Target`) all
+  wrote outside the agent's zone. They are judged now, the real (resolved)
+  path included; `.claude/`, `.codex/`, `.gemini/`, `.agents/` and `.git/` are
+  governed roots.
+- Secret reads: `source .env`, `git diff --no-index`, `find … -exec cat`,
+  `tar -c`, `python -m base64`, `perl -pe`, `[IO.File]::ReadAllText`,
+  `Get-Content (Join-Path …)`, `cmd /c type` and `grep -r` from a parent of the
+  root all returned `.env`. A sub-agent that NAMES a secret file in a command is
+  refused, whatever the form; bulk reads are confronted with the secrets under
+  them; a `Grep` without `glob`/`type` over a directory holding a `.env` is
+  refused (this harness's Grep searches hidden files — verified).
+- A sub-agent outside the matrix can no longer rewrite what enforces it (hooks,
+  `loader.yml`, `agent-bounds.yaml`, `INVARIANTS.yml`, the four harnesses' hook
+  settings, `.git/hooks/`); `SDDA_FRAMEWORK_DEV=1` declares framework
+  development by sub-agents.
+- Spawn gate hooks read the mission from the brief (`MISSION : n`), require the
+  mandatory parts of a composite gate and treat a stale report as absent: a
+  single green `G3-stack.dataaccess` wired every agent, and a green G1 of
+  another mission opened phase 2.
+- `source_registry.store_host`: `https://allowed.com@evil.com/` passed the
+  egress allowlist as `allowed.com`. Manifests are restricted to their root and
+  secret files refused. `AppName: ../../x` wrote the application — `.env`
+  included — outside the workspace. The LLM judge refuses to send an API key
+  over plain `http://` to a remote host.
+- Traces: camelCase secret keys with acronyms (`openAIKey`, `dbPwd`) and tool
+  arguments in the runtime template were written in clear.
+- `audit-ownership --restore` never revokes a human input (`stack/`, `feats/`,
+  `assets/`, `seed/`, secrets) and quarantines revoked creations instead of
+  deleting them.
+
 ### Added
 
+- **Five languages down to the RAG chain.** C#/.NET, TypeScript, Kotlin and
+  Java (Spring, same libraries as Kotlin) now have, next to Python, their own
+  `rag/hybrid-*`, `vectorstore/pgvector-*`, `dataaccess/view-per-agent-*`,
+  `tools/mcp-*`, eval (`xunit-eval`, `vitest-eval`, `junit-eval`) and
+  observability (`otel-genai-*`) sheets, `lang/java.md`, `serving/cli-java.md`,
+  and HTTP/SSE surfaces (`http-sse-node`, `spring-sse`) — 22 new sheets, versions
+  verified against nuget.org, npm and Maven Central, .NET pins resolved and
+  compiled on an SDK probe, JVM checked by two verification builds. Four new
+  bootstrap combos: `C1-NET`, `C1-TS`, `C1-KT`, `C1-JAVA` (all `untested`).
+  Every language uses the same flat, lowercase layout under
+  `workspace/src/{AppName}/` so the ownership matrix holds on Linux.
+- **One evaluation contract for all languages** (`stacks/serving/cli.md`
+  §3.5): `run --json --input-file -` (stdin), L4 isolation through
+  `SDDA_EVAL_ISOLATION` / `SDDA_EVAL_FIXTURES`, and `retrieve --json --index ID
+  --query-file - [--k N]` for G4 (document ids). The runners accept
+  `--executor cli` (the delivered application, launched per language) and
+  `--executor cmd:<command>` (`sdda_lib/executors.py`); `module:attr` remains
+  for Python in-process L4. G4 to G8 were impossible outside Python.
+- Language-aware gates: `run-tool-suites` (G3) plays `dotnet test`, vitest or
+  Gradle and reads their JUnit reports; `validate-framework` (G6) reads C#,
+  TypeScript, Kotlin and Java imports; `validate-tool-contract --require-code`,
+  `validate-envelope` and `lint-prompts` (`.kt`) read those sources;
+  `validate-packaging` admits `cli-java` and the HTTP surfaces;
+  `project-init` copies `.env` and restores dependencies in every language.
+- Harnesses: Codex CLI gets TOML sub-agents, skills and a `hooks.json`
+  (protected zones); Gemini CLI native sub-agents and `BeforeTool` hooks;
+  Antigravity its own `.agents/` facade. What cannot be transposed (no agent
+  identity in the hook payloads) is stated in the matrix and MULTI-HARNESS.
 - `Profile: poc | standard | production` (`## Project Config`, default
   `standard`). A config layer — `.sdda/profiles/poc.yml` between base and team
   (smaller sets; STACK.md still wins) — and a switch read through the new
@@ -189,6 +259,37 @@ A release is cut by pushing a `v*` tag whose version equals
 
 ### Fixed
 
+Audit of 2026-09-26 — false greens and wrong measures, each with a test that
+failed before the fix:
+
+- **Thresholds**: an AC `<= 5%` was compiled to `>= 5` (the comparator was
+  lost in the IR) — every ceiling metric (hallucination rate, cost, latency)
+  was judged the wrong way. `%` becomes a fraction.
+- **Judge calibration (P9)**: a kappa written by hand in a suite made the judge
+  blocking; the judge now only trusts the MEASURED `G5-{n}.calibration.json`. A
+  single-class set no longer calibrates (κ was 1.0), `calibrate-judge
+  --grader` no longer erases the other judges' verdicts, the report is pinned.
+  G2 no longer requires a calibration file that only PHASE 6a produces.
+- **Gates that passed without measuring**: G7 green with no attack played or
+  with unjudged attacks; G8 blind to regressions (`regression` is now a
+  mandatory G8 part); G3 green on skipped tests or findings routed to the wrong
+  tool; G4 green on a fraction of the golden set; `--limit` / `--runs 1` wrote
+  gate reports; cost relied on what the application declared instead of the
+  tokens; `validate-framework` wrote a green part for a code it could not read.
+- **Stats**: errored items pulled a ceiling metric under its threshold; nDCG
+  exceeded 1 with repeated chunks; `latest_report` sorted `-2` after `-10`; a
+  zero baseline hid any regression; `1,234` was read as `1.234`.
+- **`*FailOn` security-down check was inverted**: relaxing `AgentSafetyFailOn`
+  from `moderate` to `critical` was accepted, tightening it refused.
+- **Runtime template**: `timeout_s` was never enforced, the injection
+  neutraliser returned the de-obfuscated attack, cost was lost on exception,
+  bounds were not projected from the IR, `retrieve` emitted chunk ids to a
+  gate that measures documents.
+- **Harness facades**: `$0`/`$N` in Claude commands were replaced by the first
+  argument (`--resume` never reached the model); `@{k}` triggered a file
+  injection in every Gemini command.
+- **Ownership**: an application named `App`, `Data` or `Tools` blocked its own
+  `dev-*` (layer patterns now anchored after the app segment).
 - The `F821` bug in `sdda_scripts/compute_status.py` (`app_name` on the
   `prompt:` hash branch raised `NameError`) and the Python 3.11 syntax error in
   `trajectory_report.py`; the ruff baseline that hid them is removed.

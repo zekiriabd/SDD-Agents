@@ -232,5 +232,4 @@ Si G0 rouge, ne rien ajouter (le bloc ERROR suffit).
 Applique ``.sdda/rules/output-protocol.md` (Read ce fichier avant de poursuivre)`. Label `[MISSION]`, plage
 `0-100%`. Erreurs : bloc ERROR/CAUSE/FIX 3 lignes. Bypass verbeux :
 `SDDA_CHAT_VERBOSE=1`.
-
 '''

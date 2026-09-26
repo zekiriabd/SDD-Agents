@@ -40,17 +40,17 @@ MISSION            versioned business specification (quantified goal, budget, gr
 The IR is designed multi-language and checks it: `validate_ir.py` rejects any
 framework API name inside a contract, including `spring-ai`, `langchain4j` and
 `vercel-ai-sdk`. But **a generator only exists where the stack sheets exist**,
-and the catalogue covers <!--sdda:count stacks-->45<!--/sdda:count--> of the 99 lines that `STACK.md` offers. The gap is
+and the catalogue covers <!--sdda:count stacks-->67<!--/sdda:count--> of the 99 lines that `STACK.md` offers. The gap is
 announced line by line — `(fiche absente)`, "sheet missing" — rather than
 implied.
 
 | | Language | Framework | RAG · vector · rerank | Serving | State |
 |---|---|---|---|---|---|
-| **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | usable — the only runtime with a skeleton generator |
-| **.NET** | ✅ | Microsoft Agent Framework | ❌ **no sheet** | cli-dotnet · aspnet-minimal | **no RAG** |
-| **TypeScript** | ✅ sheet | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **sheets only** — no bootstrap combo (eval/observability are `[python]`), no skeleton generator |
-| **Kotlin** | ✅ sheet | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **sheets only** — same reserve; Maven pins unverified |
-| **Java** | ❌ | — | ❌ | ❌ | **untested, no sheet** — `lang/java.md` and `serving/cli-java.md` are announced in `STACK.md.template` but absent from disk; the matrix lists `java: untested` |
+| **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | combo **C1** — the only runtime with a skeleton generator |
+| **.NET** | ✅ | Microsoft Agent Framework | ✅ hybrid-dotnet · pgvector-dotnet | cli-dotnet · aspnet-minimal | combo **C1-NET** — pins resolved and API compiled on an SDK probe; no skeleton generator (dev-backend writes it) |
+| **TypeScript** | ✅ | LangGraph.js | ✅ hybrid-node · pgvector-node | cli-node · http-sse-node | combo **C1-TS** — no skeleton generator |
+| **Kotlin** | ✅ | Spring AI | ✅ hybrid-jvm · pgvector-jvm | cli-kotlin · spring-sse | combo **C1-KT** — verification build only |
+| **Java** | ✅ | Spring AI (same libraries as Kotlin) | ✅ hybrid-jvm · pgvector-jvm | cli-java · spring-sse | combo **C1-JAVA** — verification build only |
 
 Two catalogue families are inherited from SDD_Pro since 2026-09-23: `archi/`
 (mvc · ddd · microservice — the architecture of the application **shell**,
@@ -60,13 +60,13 @@ around the serving surface, active only for `DeliverableType: backend-api`).
 They are rewritten for agentic systems, not copied: no ORM, no entity, the
 "Model" is derived from the IR.
 
-**.NET cannot do RAG today.** The whole retrieval chain (`rag/hybrid.md`,
-`vectorstore/pgvector.md`, `dataaccess/*`) is written in Python and says so
-(`Languages: python`). This is not a documentation omission:
-`preflight_stack_combo` **refuses** the combination
-(`[STACK_LANGUAGE_MISMATCH]`) instead of letting a .NET generator receive
-`psycopg` as a reference and improvise a translation. .NET RAG is Lot 7 of the
-[ROADMAP](.sdda/docs/ROADMAP.md).
+**Five languages, one evaluation contract.** Every language has its own RAG
+chain (`rag/hybrid-*`, `vectorstore/pgvector-*`, `dataaccess/view-per-agent-*`),
+eval sheet and observability sheet, and they all speak the same CLI contract
+(`stacks/serving/cli.md` §3.5) and write the same JSONL trace: the framework's
+runners judge the delivered application through `--executor cli`, whatever its
+language. What remains Python-only is said: the skeleton generator, the
+guardrails' reference code, and declared sources (`declared-sources`).
 
 Nothing here is *validated*: `frameworkStatus: design-phase`, and every
 component is `untested` until a measured run has taken place (Lot 6).
@@ -76,9 +76,9 @@ component is `untested` until a measured run has taken place (Lot 6).
 | Harness | Status | Blocking gates at runtime |
 |---|---|---|
 | **Claude Code** | **supported** — the reference harness | yes — hooks in `.claude/settings.json` refuse the tool call |
-| **Codex CLI** | **experimental** — compiled to `.codex/`, never validated by a conformance run | **no** — deferred to CI and the deterministic scripts |
-| **Gemini CLI** | **experimental** — compiled to `.gemini/`, same reserve | **no** — same |
-| **Antigravity** | **planned** — shares Gemini CLI's adapter and `.gemini/` facade, built only on explicit request (`--harness antigravity`) | **no** — same |
+| **Codex CLI** | **experimental** — agents `.codex/agents/*.toml`, commands as skills `.agents/skills/`, never validated by a conformance run | **partial** — `.codex/hooks.json` refuses writes to the protected zones (`apply_patch`); per-agent ownership deferred to CI (the payload carries no agent identity) |
+| **Gemini CLI** | **experimental** — agents `.gemini/agents/`, commands `.gemini/commands/*.toml` | **partial** — `BeforeTool` hooks in `.gemini/settings.json` (writes, spawn gates); no sub-agent stop event |
+| **Antigravity** | **experimental** — own facade `.agents/` (rules ≤ 24 KB, skills, agents), built by default | **no** — hook arguments undocumented; CI and the deterministic scripts |
 
 Under Codex or Gemini CLI nothing stops an out-of-ownership write or an agent
 wired before its TOOL GATE at the moment it happens; CI catches it later. The
@@ -386,11 +386,11 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 **Design phase.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commands,
 <!--sdda:count invariants-->22<!--/sdda:count--> invariants,
-<!--sdda:count stacks-->45<!--/sdda:count--> stack sheets,
-<!--sdda:count classes-->439<!--/sdda:count--> error classes,
+<!--sdda:count stacks-->67<!--/sdda:count--> stack sheets,
+<!--sdda:count classes-->444<!--/sdda:count--> error classes,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks and
 <!--sdda:count subcommands-->80<!--/sdda:count--> deterministic subcommands exist on disk and
-are tested (<!--sdda:count tests-->1623<!--/sdda:count--> test functions). No script
+are tested (<!--sdda:count tests-->1863<!--/sdda:count--> test functions). No script
 cited by a prompt is missing ([PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md)
 is empty). What does **not** exist yet is the proof: no pipeline has run end to
 end on a real product, so no combination is validated. That is Lot 6 of the
@@ -568,8 +568,8 @@ migration.
 **Honest maturity.** The deterministic layer is beta. The generation layer —
 eight `dev-*` agents, the Python skeleton — and the review layer — six reviewers
 — are written and wired to their gates, and **have never been run end to end**.
-Python is the only runtime with a skeleton generator, .NET has no retrieval
-chain, TypeScript and Kotlin have sheets but no generator, Java has nothing.
+Python is the only runtime with a skeleton generator; .NET, TypeScript, Kotlin
+and Java have their full C1 chain in sheets, written by the `dev-*` agents.
 
 **No stack combination is announced as validated**, because none has yet been
 measured by a real run. C1 is the MVP target, in `design-phase`. Announcing

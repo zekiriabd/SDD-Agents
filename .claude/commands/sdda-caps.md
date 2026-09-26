@@ -1,5 +1,4 @@
 ---
-name: sdda-caps
 description: "/sdda-caps — PHASE 1 : découpe d'une MISSION en capabilities mesurables + CAP GATE (G1)"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-caps.md.

@@ -20,7 +20,7 @@ The same in spirit as SDD_Pro, adapted to agentic systems.
 | Layer | Location | Nature | Read by |
 |---|---|---|---|
 | **Framework** | `.sdda/` | Neutral source: agents, commands, rules, stacks, templates, invariants | Compiled into the harness facades |
-| **Harness facades** | `.claude/`, `.codex/`, `.gemini/` | Generated from `.sdda/` by `harness_build.py` | The active harness |
+| **Harness facades** | `.claude/`, `.codex/`, `.gemini/`, `.agents/` | Generated from `.sdda/` by `harness_build.py` | The active harness |
 | **Workspace** | `workspace/` | The user's project: specifications, contracts, prompts, datasets, generated code | The agents, at runtime |
 
 > `.sdda/` (not `.sdd/`): a deliberately short name — it is referenced hundreds
@@ -73,44 +73,51 @@ SDD-Agents/
 │   │                                  #   prompts (see §7, rules/ownership.md §2.2)
 │   ├── providers/                     # anthropic · openai · google · azure-openai · local-ollama
 │   │                                  #   rates, URLs, key variable — read by pricing and the judge
-│   ├── stacks/                        # ── THE CATALOGUE — <!--sdda:count stacks-->45<!--/sdda:count--> sheets on disk ─
+│   ├── stacks/                        # ── THE CATALOGUE — <!--sdda:count stacks-->67<!--/sdda:count--> sheets on disk ─
 │   │   │                    # Every sheet declares `Languages:` (one language,
 │   │   │                    # several, or `*` when it assumes none).
 │   │   │                    # This is the SSoT of the coupling: preflight_stack_combo
 │   │   │                    # refuses a sheet for another runtime than the
 │   │   │                    # active language -> [STACK_LANGUAGE_MISMATCH].
-│   │   ├── lang/            python.md · csharp.md · typescript.md · kotlin.md
-│   │   │                    # typescript and kotlin: sheets present, no bootstrap
-│   │   │                    # combo (eval/ and observability/ are [python])
+│   │   ├── lang/            python.md · csharp.md · typescript.md · kotlin.md · java.md
+│   │   │                    # one C1 bootstrap combo per language: C1 · C1-NET · C1-TS
+│   │   │                    # · C1-KT · C1-JAVA (hybrid pgvector RAG all the way)
 │   │   ├── archi/           mvc.md · ddd.md · microservice.md     [*]
 │   │   │                    # inherited from SDD_Pro: the architecture of the SHELL
 │   │   │                    # (entry, composition, config, Domain) — the engine
 │   │   │                    # keeps its split by ownership
 │   │   ├── backend/         python-fastapi.md · node-express.md · nestjs.md
-│   │   │                    kotlin-spring-boot.md · dotnet-minimalapi.md
+│   │   │                    kotlin-spring-boot.md [kotlin, java] · dotnet-minimalapi.md
 │   │   │                    # inherited from SDD_Pro: the HTTP house around the
-│   │   │                    # surface, active only for backend-api; python/csharp
-│   │   │                    # pins in serving/*.libs.json
+│   │   │                    # surface, active only for backend-api
 │   │   ├── framework/       langchain.md · langgraph.md · ms-agent-framework.md
-│   │   │                    langgraph-js.md [typescript] · spring-ai.md [kotlin]
+│   │   │                    langgraph-js.md [typescript] · spring-ai.md [kotlin, java]
 │   │   │                      (+ .libs.json each)
 │   │   ├── orchestration/   single-agent.md · router.md · sequential.md
-│   │   ├── rag/             none.md · hybrid.md            [python except none]
-│   │   ├── vectorstore/     pgvector.md (+ .libs.json)     [python]
+│   │   ├── rag/             none.md · hybrid.md [python] · hybrid-dotnet.md
+│   │   │                    hybrid-node.md · hybrid-jvm.md
+│   │   ├── vectorstore/     pgvector.md · pgvector-dotnet.md · pgvector-node.md
+│   │   │                    pgvector-jvm.md (+ .libs.json each)
 │   │   ├── embedding/       voyage.md · bge-local.md
 │   │   ├── rerank/          none.md · cohere-rerank.md
 │   │   │                    bge-reranker-local.md (+ .libs.json)
-│   │   ├── dataaccess/      view-per-agent.md · declared-sources.md · none.md
+│   │   ├── dataaccess/      view-per-agent.md [python] · -dotnet · -node · -jvm
+│   │   │                    declared-sources.md [python] · none.md
 │   │   ├── memory/          buffer.md
-│   │   ├── tools/           mcp.md
-│   │   ├── eval/            pytest-eval.md (+ .libs.json)
-│   │   ├── observability/   otel-genai.md (+ .libs.json)
+│   │   ├── tools/           mcp.md [python] · mcp-dotnet.md · mcp-node.md · mcp-jvm.md
+│   │   ├── eval/            pytest-eval.md · xunit-eval.md · vitest-eval.md
+│   │   │                    junit-eval.md (+ .libs.json each)
+│   │   ├── observability/   otel-genai.md · -dotnet · -node · -jvm (+ .libs.json)
+│   │   │                    # all write the SAME JSONL trace file
 │   │   ├── guardrails/      schema-validation.md · pii-redaction.md
-│   │   │                    injection-detection.md
+│   │   │                    injection-detection.md   [*] (Python reference code)
 │   │   └── serving/         cli.md · cli-dotnet.md · cli-node.md · cli-kotlin.md
-│   │                        fastapi-sse.md · aspnet-minimal.md · batch.md
+│   │                        cli-java.md · fastapi-sse.md · aspnet-minimal.md
+│   │                        http-sse-node.md · spring-sse.md · batch.md
 │   │                        # surface = WHERE YOU ENTER; the DELIVERABLE
-│   │                        # (DeliverableType) lives in ## Project Config
+│   │                        # (DeliverableType) lives in ## Project Config;
+│   │                        # the evaluation contract (cli.md §3.5) is the
+│   │                        # same in all five languages
 │   ├── registry/                      # ── MACHINE REGISTRIES ────────────────
 │   │   ├── patterns.registry.json     # every pattern: id, family, criteria, cost, risks
 │   │   ├── compatibility.matrix.json  # lang x framework x pattern x provider x store; combos
@@ -288,7 +295,7 @@ creating the new tree next to the old one.
 **This tree describes the disk, not the intent.** 🟡 marks the only accepted
 gap: announced, not written yet — `plugin.json` and `.sdda/skills/`, nothing
 else. The rule matters most for `stacks/` —
-<!--sdda:count stacks-->45<!--/sdda:count--> sheets exist, while the target
+<!--sdda:count stacks-->67<!--/sdda:count--> sheets exist, while the target
 catalogue has three times as many. This is not a gap to close before
 announcing: it is the sequence of [docs/ROADMAP.md](docs/ROADMAP.md), which
 delivers **one combination validated end to end** (C1) before announcing
@@ -629,16 +636,17 @@ runs on GPT-4-mini is a nominal case, not an exception. Confusing the last two
 is the most frequent mistake of competing frameworks: it makes the runtime
 budget impossible to compute.
 
-**One harness is supported: Claude Code.** It is the only one where hooks refuse
-the tool call at the moment it happens. Codex CLI and Gemini CLI are
-**experimental**: their facades compile, no conformance run has validated them,
-and they have **no blocking gate at runtime** — what the hooks enforce is
-deferred to CI and the deterministic scripts. The root `AGENTS.md` and
-`GEMINI.md` files are generated pointers to their facade. A fourth harness,
-`antigravity`, is declared in `capability-matrix.yml` as `planned`: it shares
-Gemini CLI's adapter and `.gemini/` facade, is compiled only on explicit request
-(`--harness antigravity`), and carries the same reserve — experimental, no
-blocking gate at runtime. Details:
+**One harness is supported: Claude Code.** It is the only one where every hook
+refuses the tool call at the moment it happens. Codex CLI (`.codex/` and the
+`.agents/skills/` skills), Gemini CLI (`.gemini/`) and Antigravity (`.agents/`)
+are **experimental**: their facades compile into the formats their official
+documentation describes, no conformance run has validated them, and their
+runtime gates are **partial** (Codex, Gemini CLI: `runtime_hooks: partial`) or
+**absent** (Antigravity). Their hook payload does not name the agent making a
+call: only the protected zones are refused there at runtime (plus the spawn
+gates under Gemini CLI); the per-agent ownership matrix is deferred to CI and
+the deterministic scripts. The root `AGENTS.md` and `GEMINI.md` files are
+generated pointers, shared by all three. Details:
 [docs/MULTI-HARNESS.md](docs/MULTI-HARNESS.md).
 
 **Agents declare a tier** (`fast` / `balanced` / `deep`), never a model name.
@@ -734,7 +742,12 @@ start returns a code the harness treats as an authorisation. And
 `python .sdda/sdda.py hooks-selfcheck` **executes** every wired hook, with a
 harmless payload and a payload to refuse: the only proof a hook holds is to run
 it. `preflight_stack_combo` only judges pipeline agents: a sub-agent outside the
-pipeline is not blocked by a red `STACK.md`.
+pipeline is not blocked by a red `STACK.md`. Nor does it rewrite what enforces
+the matrix — the hooks, `loader.yml`, `agent-bounds.yaml`, `INVARIANTS.yml`,
+the hook settings of the four harnesses, `.git/hooks/`: that was the door
+through which a `general-purpose` told "you are dev-agent" disabled everything.
+Developing the framework through sub-agents remains possible, declared:
+`SDDA_FRAMEWORK_DEV=1`.
 
 **The case of skills — two owners, no single authority.** A product agent's
 skill crosses two files that are already owned: `architect-topology`
@@ -798,7 +811,7 @@ failing tools.
 
 Inherited from SDD_Pro (193 classes): every ERROR block carries a `[CLASS]` code
 in its `CAUSE:`, so that hooks, retry loops and dashboards classify without
-interpreting text. SDD_Agents carries **<!--sdda:count classes-->439<!--/sdda:count-->**, a closed list regenerated from
+interpreting text. SDD_Agents carries **<!--sdda:count classes-->444<!--/sdda:count-->**, a closed list regenerated from
 the real emitters by `sdda_admin/sync_error_registry.py` — writing the list by
 hand would let it drift both ways (`rules/error-classification.md §6`). The
 figure above is itself regenerated (`sync-counters`), not copied.

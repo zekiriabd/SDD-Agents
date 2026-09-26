@@ -87,10 +87,11 @@ d'agents il faut :
 `## Active Agent Framework` (§6 du contexte) nomme la fiche, et c'est elle qui
 dit OÙ l'importer — la boucle d'agent sous `agents/`, le graphe sous
 `orchestration/` (un graphe à un nœud pour un `single-agent`, si la fiche
-d'orchestration du framework en porte un). Le squelette généré appelle le SDK du fournisseur sans
+d'orchestration du framework en porte un). Le squelette généré (Python) appelle le SDK du fournisseur sans
 framework : c'est la plomberie de repli, pas l'implémentation attendue — le
 remplacer par le framework derrière le même point d'extension (`agent_factory`
-de `run_service.py`). `validate-framework` (G6, part `framework`) refuse un
+de `run_service.py` ; hors Python, le point d'extension que nomme la fiche de
+langage). `validate-framework` (G6, part `framework`) refuse un
 `agents/` ou un `orchestration/` qui n'importe pas le framework déclaré
 (`[FRAMEWORK_DRIFT]`) : au premier run poc, la boucle écrite à la main contre le
 SDK a rendu G6 rouge alors que tout le reste marchait.
@@ -108,10 +109,10 @@ et échoue proprement, il ne couvre pas chaque branche.
 ## STEP 4 — Vérifications, 0 token
 
 ```bash
-python .sdda/sdda.py gen-app-skeleton --check                 # Python : le squelette n'a pas dérivé
+python .sdda/sdda.py gen-app-skeleton --check --mission {n}   # Python seulement : le squelette n'a pas dérivé
 python .sdda/sdda.py gen-source-tools --check --scope code     # si declared-sources
 python .sdda/sdda.py gen-app-context --mission {n} --check     # le contexte n'a pas dérivé
-python .sdda/sdda.py validate-framework --no-report            # le framework déclaré est importé là où sa fiche le place
+python .sdda/sdda.py validate-framework --no-report            # le framework déclaré est importé là où sa fiche le place (imports Python seulement ; ailleurs un WARN)
 <depuis workspace/src/{App}/ : les commandes du §3 du contexte (tests, lint)>
 ```
 

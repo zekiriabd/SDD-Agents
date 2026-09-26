@@ -1,5 +1,4 @@
 ---
-name: sdda-mission
 description: "/sdda-mission — PHASE 0 : élicitation d'une MISSION + MISSION GATE (G0)"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-mission.md.

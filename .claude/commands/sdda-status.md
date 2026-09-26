@@ -1,5 +1,4 @@
 ---
-name: sdda-status
 description: "/sdda-status — État brut du pipeline, dérivé des rapports de gate (jamais déclaré)"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-status.md.
@@ -88,14 +87,14 @@ SDD_Agents — {M} MISSION(s) · STACK {lang} + {framework} · MaxParallel {mp}
 
 MISSION 1-SupportAssistant                                        Evaluated  🟡
   gates       G0 ✅  G1 ✅  G2 ✅  G3 ✅  G4 ✅  G5 🟡  G6 ✅  G7 ✅  G8 —
-  budget      $0.041/run (cible $0.05, cap $0.25)   p95 6.2 s (cible 8 s)   ✅
+  budget      \$0.041/run (cible \$0.05, cap \$0.25)   p95 6.2 s (cible 8 s)   ✅
   holdout     objectif 0.90 → non mesuré (G8 non lancée)
   CAPs        4 · 2 Approved · 1 Evaluated 🟡 · 1 Blocked 🔴
   dernier run 2026-09-19T14:02Z /sdda-full · partial · bypasses : 1 (G5 jaune assumé)
 
 MISSION 2-InvoiceExtractor                                        Architected  ✅
   gates       G0 ✅  G1 ✅  G2 ✅  G3 —  G4 n/a  G5 —  G6 —  G7 —  G8 —
-  budget      estimé $0.012/run (cible $0.02)
+  budget      estimé \$0.012/run (cible \$0.02)
   CAPs        3 · 3 Specified
 
 MISSION 3-Onboarding                                              Draft
@@ -121,7 +120,7 @@ adr, findings — puis MISSION, puis référence.
 ```
 MISSION 1-SupportAssistant                                        Evaluated  🟡
   confidence  high
-  budget      $0.041/run (cible $0.05)   p95 6.2s (cible 8s)   60k tokens cap   ✅
+  budget      \$0.041/run (cible \$0.05)   p95 6.2s (cible 8s)   60k tokens cap   ✅
   holdout     objectif 0.90 → mesuré 0.88                       🟡  G8 non franchie
 
   CAP 1-1 ClassifyIntent          Approved   0.97 ±0.01  (k=5)  ✅

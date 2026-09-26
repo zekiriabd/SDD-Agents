@@ -92,7 +92,8 @@ Invalide → ERROR `[INVALID_ARG]`.
 `--from-phase` hors liste → ERROR `[INVALID_ARG]`. `--from-phase` + `--resume` →
 ERROR `[INVALID_ARG]` (exclusifs).
 
-`--no-review` en prod/CI → ERROR :
+`--no-review` en prod/CI → ERROR, émis par la commande elle-même (aucun script
+ne lit `SDDA_ENV` pour elle) :
 ```
 ERROR: /sdda-full {n} — --no-review refusé
 CAUSE: [SAFETY_MODE_OFF_REFUSED] SDDA_ENV={production|ci} — sauter la SAFETY GATE hors dev local n'est pas une option
@@ -490,17 +491,18 @@ Garde `should-skip-step review`. Exécuter `/sdda-review {n}`.
 
 Garde `should-skip-step acceptance`. Exécuter `/sdda-eval {n} --acceptance`.
 
-La ligne `Non-régression` du récap final se lit dans
-`workspace/.sys/.validation/regression-{n}.json`, écrit par
-`check_regression.py` (tolérance **et** bande de bruit de la baseline :
-`regressions[]` bloque, `withinNoise[]` informe, `stale[]` = comparaison
-refusée). Ne jamais recalculer un delta à la main dans le récap.
+La ligne `Non-régression` du récap final se lit dans la part `regression`
+de G8 (`workspace/.sys/.validation/G8-{n}-{MissionName}.regression.json`), que
+`check-regression` écrit lui-même (tolérance **et** bande de bruit de la
+baseline : `regressions[]` bloque, `withinNoise[]` informe, `stale[]` =
+comparaison refusée). La part est **obligatoire** : sans elle, G8 n'est pas
+franchie. Ne jamais recalculer un delta à la main dans le récap.
 
 | G8 | Action |
 |---|---|
 | 🟢 | MISSION `Approved` ; proposer `promote_baseline.py` (action humaine tracée, jamais automatique) |
 | 🟡 | MISSION reste `Evaluated` ; récap |
-| 🔴 | STOP + ERROR `[ACCEPTANCE_GATE_FAILED]` ; **ne jamais** suggérer d'itérer contre le holdout |
+| 🔴 | STOP + ERROR `[ACCEPTANCE_GATE_FAILED]` ; **ne jamais** suggérer d'itérer contre le holdout. `check-regression` en exit 1 est un 🔴, même si l'objectif chiffré est atteint |
 
 ---
 

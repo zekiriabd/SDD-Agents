@@ -183,5 +183,4 @@ SDD_Agents — MISSION 2 : Evaluated 🟡 · CAP 2-3 groundedness 0.86 ±0.09 (k
 
 Applique ``.sdda/rules/output-protocol.md` (Read ce fichier avant de poursuivre)`. Label `[ANALYSIS]`. Sortie 1 passe,
 1-5 lignes. Erreurs : 1 ligne `🔴 [ANALYSIS/FAIL] {résumé}`.
-
 '''

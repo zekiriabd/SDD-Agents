@@ -190,5 +190,4 @@ un répertoire retiré de l'arborescence mais non vide est conservé et signalé
 
 Applique ``.sdda/rules/output-protocol.md` (Read ce fichier avant de poursuivre)`. Label `[BOOTSTRAP]`. Sortie en
 1 passe, 1 bloc. Erreurs : bloc ERROR/CAUSE/FIX 3 lignes.
-
 '''

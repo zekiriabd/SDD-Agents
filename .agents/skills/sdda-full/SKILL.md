@@ -1,0 +1,620 @@
+---
+name: sdda-full
+description: "/sdda-full — Pipeline complet de A à Z pour 1 MISSION (délégation pure)"
+---
+<!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-full.md.
+     NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
+     et le test de parité la signale. Éditer la source. -->
+
+> **Invocation** — Codex CLI : `$sdda-full {arguments}` · Antigravity : `/sdda-full {arguments}`.
+> Les arguments sont le texte tapé après le nom de la skill : là où cette fiche
+> parle d'arguments de la commande `/sdda-full`, ce sont eux.
+> **Déléguer à un agent** veut dire lancer le sous-agent natif du même nom :
+> `.codex/agents/{agent}.toml` sous Codex, `.agents/agents/{agent}.md` sous
+> Antigravity. Les appels `python .sdda/sdda.py …` sont les mêmes partout.
+
+# /sdda-full — Pipeline complet de A à Z pour 1 MISSION
+
+<!-- @llm-only-flags-file : tous les flags CLI de cette commande slash sont interprétés par Claude. -->
+
+Enchaîne **toutes les phases** du pipeline SDD_Agents pour la MISSION `{n}` :
+
+```
+PHASE 0    — ELICITATION       (po-elicitor,        via /sdda-mission)   [G0 MISSION]
+PHASE 1    — CAPABILITIES      (po-capabilities,    via /sdda-caps)      [G1 CAP]
+PHASE 2    — TOPOLOGIE + IR    (architect-topology + 4 architectes ∥, via /sdda-topology)  [G2 TOPOLOGY]
+PHASE 6a   — DATASETS          (qa-evals,           via /sdda-eval --datasets-only)
+PHASE 3→5  — BUILD             (dev-backend squelette → socle dev-* ∥ → dev-prompt (barrière) → dev-agent ∥
+                                → orchestration → dev-api → dev-backend packaging, via /sdda-build)
+                                                                          [G3 TOOL] [G4 RETRIEVAL] [G5 AGENT] [G6 ORCH]
+PHASE 6    — EVAL + TESTS      (qa-evals ∥ qa-tests, via /sdda-eval)
+PHASE 7    — REVUE A→B→C       (6 reviewers,             via /sdda-review)    [G7 SAFETY]
+PHASE 8    — ACCEPTATION       (script, holdout,         via /sdda-eval --acceptance)  [G8 ACCEPTANCE]
+                                                          → VERDICT vert / jaune / rouge
+```
+
+**Délégation pure** : `/sdda-full` n'invoque **AUCUN agent directement** — elle
+chaîne `/sdda-mission` → `/sdda-caps` → `/sdda-topology` → `/sdda-eval
+--datasets-only` → `/sdda-build` → `/sdda-eval` → `/sdda-review` →
+`/sdda-eval --acceptance`. L'orchestration appartient à la commande, donc la
+facture reste prévisible (ARCHITECTURE.md §3).
+
+**Checkpoint humain** : aucun en mode nominal vert. Toute gate **jaune** sans
+`--force` est un STOP propre (mode strict) ; toute gate **rouge** est un STOP
+quel que soit le flag.
+
+---
+
+## Utilisation
+
+```
+/sdda-full {Name}                       # PHASE 0 incluse : élicite une nouvelle MISSION puis enchaîne
+/sdda-full {n}                          # MISSION existante ; démarre à la 1re phase non franchie
+/sdda-full {n} --force                  # assume les gates JAUNES (variance élevée, WARN) — jamais les rouges
+/sdda-full {n} --resume                 # reprend le dernier run interrompu à la phase suivante
+/sdda-full {n} --from-phase build       # force le point de départ (les gates amont doivent être vertes)
+/sdda-full {n} --no-review              # saute PHASE 7 (dev local uniquement — refusé en prod/CI)
+```
+
+### Flags
+
+| Flag | Effet | Audit |
+|---|---|---|
+| `--force` | une gate 🟡 (G2 coût > cible sous cap, G5/G6 variance élevée, G7 findings serious sous seuil) **continue** au lieu de STOP. Ne change **rien** pour une gate 🔴. | 1 ligne `bypasses.jsonl` par gate jaune assumée |
+| `--resume` | ouvre un run lié au précédent (`new-run --resume`), lit `resume-target` et saute les phases `pass` de la lignée ; dans la phase reprise, `/sdda-build` saute aussi les **items** `pass` sur les mêmes entrées (couche du socle, instance de `dev-agent` — `should-skip-item`) ; les gates sont **rejouées** (0 token) pour vérifier qu'elles sont toujours vertes (un hash a pu bouger — R2) | — |
+| `--from-phase {mission\|caps\|topology\|build\|eval\|review\|acceptance}` | point de départ explicite. Refusé si une gate amont n'est pas verte : **aucun saut d'état** (LIFECYCLE §1) | — |
+| `--no-review` | saute PHASE 7 et donc G7 ; la MISSION s'arrête à `Tested` et PHASE 8 **n'est pas exécutée** (G8 exige G7). Refusé si `SDDA_ENV ∈ {production, ci}` ou `CI=true` | 1 ligne `bypasses.jsonl` |
+
+### Bypasses de gate (nominatifs, bornés, audités — LIFECYCLE R5)
+
+Chaque bypass est une **env var** lue par le script de gate, écrite dans
+`workspace/.sys/.audit/bypasses.jsonl` avec horodatage, opérateur
+(`SDDA_USER_EMAIL`), commande, gate, classe court-circuitée et raison
+(`SDDA_BYPASS_REASON`, libre mais **obligatoire** : vide → `[BYPASS_REASON_MISSING]`, refusé).
+
+| Gate | Bypass | Ce qu'il court-circuite | Ce qu'il ne court-circuite **jamais** |
+|---|---|---|---|
+| G0 MISSION | **aucun** | — | tout |
+| G1 CAP | **aucun** | — | tout |
+| G2 TOPOLOGY | `SDDA_BYPASS_BUDGET_ESTIMATE=1` | le budget estimé (contrôle B) | `[UNBOUNDED_LOOP]`, `[ARCH_SPEC_INCOMPLETE]`, références, scopes |
+| G3 TOOL | `SDDA_BYPASS_TOOL_GATE=1` | tests de contrat, connectivité live des outils `read-only` | `[SIDE_EFFECT_UNDECLARED]`, `[SAFETY_STRATEGY_MISSING]`, live KO d'un `write-destructive` |
+| G4 RETRIEVAL | `SDDA_BYPASS_RETRIEVAL_GATE=1` | seuils recall / nDCG / groundedness | le rapport est écrit avec `bypassed: true` et remonte en G7 et au récap |
+| G5 AGENT | **aucun** | — | tout |
+| G6 ORCH | **aucun** | — | tout (c'est la mesure de P6) |
+| G7 SAFETY | `--fail-on` (findings LLM) ; ADR pour `MemoryPIIPolicy: allow` | seuil des findings de reviewers | `[INJECTION_SUCCEEDED]`, `[SECRET_LEAK]`, `[TOOL_SCOPE_EXCESS]`, `[EXFILTRATION_SUCCEEDED]` |
+| G8 ACCEPTANCE | **aucun** | — | tout |
+
+**Anti-cumul** : `--force` + ≥ 1 env var de bypass, ou ≥ 2 env vars, sur un
+même run → `[FORCE_CUMUL_REJECTED]` sauf `SDDA_ALLOW_FORCE=1` (`preflight_force_cumul.py`,
+hérité de SDD_Pro). Un pipeline qu'on force deux fois n'est plus un pipeline.
+
+---
+
+## STEP 1 — Valider l'argument
+
+| Argument | Mode |
+|---|---|
+| `{Name}` PascalCase | **création** : PHASE 0 incluse, `{n}` = max + 1 |
+| `{n}` entier ≥ 1 | **existant** : démarre à la première phase non franchie |
+
+Absent → demander `Quel est le numéro (ou le nom PascalCase) de la MISSION ? (ex. : 1, ou SupportAssistant)`.
+Invalide → ERROR `[INVALID_ARG]`.
+
+`--from-phase` hors liste → ERROR `[INVALID_ARG]`. `--from-phase` + `--resume` →
+ERROR `[INVALID_ARG]` (exclusifs).
+
+`--no-review` en prod/CI → ERROR, émis par la commande elle-même (aucun script
+ne lit `SDDA_ENV` pour elle) :
+```
+ERROR: /sdda-full {n} — --no-review refusé
+CAUSE: [SAFETY_MODE_OFF_REFUSED] SDDA_ENV={production|ci} — sauter la SAFETY GATE hors dev local n'est pas une option
+FIX: relancer sans --no-review, ou exécuter en local (SDDA_ENV=dev)
+```
+
+---
+
+## STEP 1.bis — HARD-GATE anti-cumul (avant tout coût LLM)
+
+```bash
+python .sdda/sdda.py preflight-force-cumul \
+  $( [ "$FORCE" = "true" ] && echo --force ) \
+  $( [ "$NO_REVIEW" = "true" ] && echo --no-review ) \
+  --env-bypasses "$(env | grep -o '^SDDA_BYPASS_[A-Z_]*=1' | tr '\n' ',')"
+```
+
+| Exit | Action |
+|:-:|---|
+| `0` | continuer + `export SDDA_FORCE_CUMUL_OK=1` |
+| `1` | **STOP** + ERROR `[FORCE_CUMUL_REJECTED]` (émis par le script) |
+| `1` | **STOP** + ERROR `[BYPASS_REASON_MISSING]` si une env var est posée sans `SDDA_BYPASS_REASON` |
+
+---
+
+## STEP 1.ter — État du run et reprise
+
+Sans `--resume` :
+```bash
+RUN_ID=$(python .sdda/sdda.py state new-run \
+  --mission {n} --command "/sdda-full" --tags "$TAGS")     # TAGS = force,from-phase=…,no-review
+export SDDA_RUN_ID="$RUN_ID"      # propagé à toutes les sous-commandes : un seul audit-trail
+RESUME_TARGET=${FROM_PHASE:-mission}   # --from-phase, sinon la première phase : aucune garde ne saute
+```
+
+`RESUME_TARGET` est défini dans **tous** les modes, parce que chaque STEP le
+passe à `should-skip-step --target`, argument obligatoire : vide, argparse
+refuse, et « échec de la primitive → RUN » rejouait chaque phase par défaut —
+le comportement voulu, obtenu par accident, sans qu'aucune garde n'ait jamais
+été évaluée.
+
+**Avec `--resume`** — un seul appel, qui lit le run à reprendre **avant** d'ouvrir le nouveau :
+```bash
+RUN_ID=$(python .sdda/sdda.py state new-run \
+  --mission {n} --command "/sdda-full" --tags "$TAGS" --resume)   # lié au précédent par `resumedFrom`
+export SDDA_RUN_ID="$RUN_ID"
+RESUME_TARGET=$(python .sdda/sdda.py state resume-target --run-id "$RUN_ID")
+echo "RESUME: reprise à $RESUME_TARGET"
+```
+
+L'ancien enchaînement — `new-run`, puis `get-run --latest` — lisait le run
+qu'on venait d'ouvrir, vide : `resume-target` rendait `mission` et la reprise
+repartait de la PHASE 0. Le run de reprise hérite désormais de sa lignée
+(`resumedFrom`) : phases franchies, items `pass` (`should-skip-item`),
+tentatives et coût de chaque boucle de correction (`should-retry-item`,
+`BuildLoopMaxIter`, `BuildLoopMaxCostUsd`). Une reprise ne remet donc aucune
+borne à zéro. Sans run antérieur, `--resume` sort en `[STATE_RUN_NOT_FOUND]` :
+il n'y a rien à reprendre, et repartir de zéro en silence serait mentir sur ce
+qu'on a demandé.
+
+Phases canoniques (`PIPELINE_PHASES` de `sdda_state.py`) :
+`mission` · `caps` · `topology` · `eval_datasets` · `build_socle` ·
+`build_agents` · `build_orch` · `eval` · `review` · `acceptance`.
+Chaque STEP majeur commence par la garde
+`sdda_state.py should-skip-step --target $RESUME_TARGET --current {phase}`
+(exit 0 = SKIP, 1 = RUN). Échec de la primitive → RUN par sécurité.
+
+**Si `--from-phase`** : `RESUME_TARGET` = la phase demandée. STEP 2 vérifiera
+que les gates amont sont vertes.
+
+**Deux sources, une seule vérité.** Le point de départ **effectif** est celui
+que STEP 2 dérive des rapports de gate sur disque (R1) ; `RESUME_TARGET` ne
+fait que dire jusqu'où les gardes `should-skip-step` peuvent sauter, et STEP 2
+le **ramène** au point dérivé s'il le dépasse. Le journal d'un run dit ce
+qu'on a payé, les rapports disent ce qui tient encore — et seuls les seconds
+autorisent un saut.
+
+---
+
+## STEP 1.quater — Schémas des sources déclarées, avant le premier token
+
+Si `## Active Data Access` = `declared-sources` :
+
+```bash
+python .sdda/sdda.py gen-source-tools --infer --missing --json
+```
+
+Il infère le schéma figé de **chaque** source déclarée qui n'en a pas encore,
+depuis la donnée réelle, et ne touche jamais un schéma existant. Au premier
+run réel, ce schéma manquant arrêtait `/sdda-topology` 25 minutes après le
+départ (`[DATA_SOURCE_SCHEMA_MISSING]`, STOP humain, puis reprise du run) ;
+l'inférence n'a besoin que de la donnée, qui est là dès le bootstrap.
+
+| Sortie | Action |
+|---|---|
+| exit 0, `reviewRequired: false` | rien à relire → STEP 2 |
+| exit 0, `reviewRequired: true` | **une question à l'humain, puis on continue dans le même run** (ci-dessous) |
+| exit 1 `[DATA_SCHEMA_SAMPLE_REQUIRED]` | STOP avant toute dépense : source distante sans échantillon — `gen-source-tools --infer --source {id} --from-sample {fichier}` |
+| exit 1 autre (`[DATA_SOURCE_EMPTY]`, `[DATA_SOURCE_UNREADABLE]`…) | STOP avant toute dépense, avec la classe rendue |
+
+Si `reviewRequired: true`, montrer pour chaque source de `inferred` son
+chemin, le tableau `fields` (champ → type, format, enum) et `required`, puis
+les avertissements `[DATA_SCHEMA_REVIEW_REQUIRED]`, et poser **une** question :
+
+```
+Schémas inférés depuis la donnée réelle — à relire avant de lancer le pipeline :
+  {path} · {n} champs · required : {…}
+  {champ} : {type}  …
+Les descriptions de champ sont des gabarits : elles deviennent la description
+des outils que lit le modèle. Valider tel quel, ou corriger le fichier puis répondre ?
+```
+
+Réponse « valider » ou « corrigé » → STEP 2, **même run**. C'est, avec la
+PHASE 0, le seul dialogue humain nominal de `/sdda-full` : les deux ont lieu
+avant que le moindre agent ne soit payé.
+
+---
+
+## STEP 1.quinquies — Le profil décide du chemin
+
+```bash
+PROFILE=$(python .sdda/sdda.py project-profile)      # poc | standard | production
+```
+
+| Étape | `standard` / `production` | `poc` |
+|---|---|---|
+| PHASES 0 → 2 | inchangées | inchangées — la MISSION, les CAPs et l'IR restent ce que tout le reste lit |
+| STEP 4.5 (PHASE 6a) | avec la coquille : `/sdda-build --with-datasets` | avec les prompts : `/sdda-build` STEP P.2 |
+| STEP 5 (PHASES 3 → 5) | sept `dev-*`, une gate bloquante par couche | `/sdda-build` STEP P : `dev-prompt` + `dev-app`, gates **rapportées** |
+| STEP 6 (PHASE 6) | `/sdda-eval {n}` | `/sdda-eval {n} --run-only` — `dev-app` a écrit les tests de couche ; sous `poc`, ce mode exige **G2** et non G6 (`/sdda-eval` STEP 2) : les gates G3→G6 y sont rapportées, pas franchies |
+| STEP 7 (revue) | jouée | `⊘ PHASE 7 skipped (Profile: poc)` |
+| STEP 8 (acceptation) | jouée | `⊘ PHASE 8 skipped (Profile: poc)` |
+
+Un poc s'arrête donc à `Tested` au mieux : sans G7, `compute-status` ne monte
+pas plus haut, et le récap le dit (`POC — non revu, non accepté`). Passer le
+même projet en `Profile: standard` puis relancer `/sdda-full {n}` rejoue ce que
+le poc a sauté, à partir de l'état dérivé des gates.
+
+---
+
+## STEP 2 — Résoudre la MISSION et le point de départ (déterministe)
+
+Mode création → exécuter `/sdda-mission {Name}` (STEP 3.0), puis continuer.
+
+Mode existant → Glob `workspace/pipeline/missions/{n}-*.md` :
+`[MISSION_NOT_FOUND]` / `[MISSION_AMBIGUOUS]` → STOP.
+
+```bash
+python .sdda/sdda.py compute-status --mission {n} --json
+```
+
+Le point de départ est **dérivé** des rapports de gate sur disque (R1) :
+
+| Dernière gate verte | Départ |
+|---|---|
+| aucune | PHASE 0 (`/sdda-mission {n}`, ré-élicitation d'un `Draft`) |
+| G0 | PHASE 1 |
+| G1 | PHASE 2 |
+| G2 | PHASE 6a puis 3→5 |
+| G6 | PHASE 6 |
+| G6 + eval fraîche | PHASE 7 |
+| G7 | PHASE 8 |
+| G8 | `⊘ MISSION {n} déjà Approved — rien à faire. Un hash a bougé ? compute_status l'aurait fait redescendre.` STOP |
+
+Si `--from-phase` désigne une phase **au-delà** du point dérivé → ERROR :
+```
+ERROR: /sdda-full {n} --from-phase build — saut d'état refusé
+CAUSE: [STATE_SKIP_FORBIDDEN] G2 TOPOLOGY non franchie (dernier rapport vert : G1) — Draft → Implemented n'existe pas dans la machine à états
+FIX: /sdda-full {n} (démarre au bon endroit) ou /sdda-topology {n} puis --from-phase build
+```
+
+Un `Status:` écrit dans un fichier sans rapport correspondant → WARN
+`[STATUS_UNBACKED]`, écrasé, et le point de départ reste celui des rapports.
+
+Puis borner la cible des gardes (STEP 1.ter) : si `RESUME_TARGET` désigne une
+phase **postérieure** au point dérivé, `RESUME_TARGET` := la phase du point
+dérivé (`mission` · `caps` · `topology` · `eval_datasets` · `build_socle` ·
+`build_agents` · `build_orch` · `eval` · `review` · `acceptance`, l'ordre de
+`PIPELINE_PHASES`). Un run interrompu après une
+gate qu'un hash a depuis périmée ne reprend pas derrière elle.
+
+Émettre : `MISSION {n}-{Name} — pipeline démarré à la PHASE {p} (état dérivé : {State})`.
+
+---
+
+## STEP 3.0 — PHASE 0 : `/sdda-mission`
+
+Garde `should-skip-step mission`. Exécuter `/sdda-mission {Name|n}`.
+
+| Sortie | Action |
+|---|---|
+| G0 🟢 | continuer |
+| ERROR | propager + STOP (aucun bypass de G0) |
+
+C'est, avec la relecture des schémas du STEP 1.quater, la **seule** phase où un
+dialogue humain est nominal ; `/sdda-full` laisse `po-elicitor` poser ses questions.
+
+---
+
+## STEP 3 — PHASE 1 : `/sdda-caps {n}`
+
+Garde `should-skip-step caps`. Exécuter `/sdda-caps {n}`.
+
+| Sortie | Action |
+|---|---|
+| G1 🟢 | continuer |
+| ERROR `[CAP_GATE_FAILED]` | propager + STOP (aucun bypass de G1) |
+
+---
+
+## STEP 3.bis — Le roster, avant de payer l'architecte (0 token)
+
+Garde `should-skip-step topology` (même phase : le roster en est le pré-requis).
+
+```bash
+python .sdda/sdda.py roster validate --mission {n} --if-present
+```
+
+| Exit | Cas | Action |
+|:-:|---|---|
+| `0` | manifeste présent et complet | → STEP 4 |
+| `0` | **aucun** manifeste | émettre le WARN ci-dessous, puis → STEP 4 |
+| `1` | manifeste présent, incomplet (`[ARCH_SPEC_INCOMPLETE]`, `<à préciser>` résiduels) | **STOP humain** |
+
+`--if-present` est délibéré : le repli mono-agent — déclarer le roster dans la
+section `## 2. Roster déclaré` de la topologie — reste légitime, et cette
+section n'existe pas encore à ce STEP. On refuse donc une déclaration
+**incomplète**, jamais une déclaration **différée**.
+
+Aucun manifeste → WARN, pas STOP :
+```
+⚠ MISSION {n} — aucun manifeste de roster
+
+architect-topology matérialise un roster DÉCLARÉ, il n'en invente pas (P7). Sans
+manifeste, la déclaration doit vivre dans `## 2. Roster déclaré` de la topologie.
+Si elle n'y est pas non plus, le post-check rendra [ARCH_ROSTER_MISSING] — après
+avoir payé l'agent le plus cher du pipeline.
+
+  /sdda-roster {n}   écrit un gabarit pré-rempli depuis la MISSION et les CAPs
+```
+
+Manifeste incomplet → STOP :
+```
+⏸ /sdda-full {n} — arrêt sur une décision qui vous appartient
+
+Le roster est la décision d'architecture agentic : combien d'agents, lesquels,
+qui porte quelle CAP, avec quels outils et quel tier (P7). Le framework la
+vérifie, il ne la prend pas.
+
+  /sdda-roster {n} --validate   dit quels trous restent
+  /sdda-roster {n}              (ré)écrit un gabarit pré-rempli depuis la MISSION et les CAPs
+  /sdda-full {n} --resume       reprend ici une fois le manifeste complet
+```
+
+**Pourquoi ce STEP existe.** `architect-topology` matérialise un roster
+DÉCLARÉ ; il n'en invente pas. Sans ce contrôle, `/sdda-full` payait l'agent le
+plus cher du pipeline — tier `deep`, budget de contexte le plus large — pour
+qu'il échoue ensuite sur `[ARCH_ROSTER_MISSING]` au post-check, ou, pire, qu'il
+remplisse lui-même la section `## 2. Roster déclaré` et livre l'architecture que
+personne n'a décidée. Le contrôle coûte 0 token et se joue avant la dépense.
+
+---
+
+## STEP 4 — PHASE 2 : `/sdda-topology {n}`
+
+Garde `should-skip-step topology`. Exécuter `/sdda-topology {n}`.
+
+| Verdict G2 | `--force` | Action |
+|---|---|---|
+| 🟢 | — | continuer |
+| 🟡 (coût estimé > cible sous cap, ou agents > `MaxAgentsWarnAt`) | absent | **STOP** propre (format ci-dessous) |
+| 🟡 | présent | continuer + audit-log + WARN récap |
+| 🔴 | — | STOP (ERROR propagé) |
+
+### Format STOP sur gate jaune (générique, utilisé par 4, 6, 7)
+
+```
+🟡 /sdda-full {n} — arrêt sur gate {Gk} jaune ({raison courte})
+
+Rapport : workspace/.sys/.validation/G{k}-{n}-{MissionName}[.{part}].json   (G1/G5 : aussi un par CAP, G3 : un par outil)
+  {détail : coût estimé $0.07 > cible $0.05 (cap $0.25) | CAP 1-2 variance 18% > 15% | …}
+
+Le jaune est une information, pas une indécision : le prochain run peut ne pas passer.
+
+Pour continuer (au choix) :
+  - corriger ({fichier} ou couche indiquée) puis /sdda-full {n} --resume
+  - assumer : /sdda-full {n} --resume --force   (audit-loggué dans .sys/.audit/bypasses.jsonl)
+```
+
+---
+
+## STEP 4.5 — PHASE 6a : datasets d'abord (`/sdda-eval {n} --datasets-only`)
+
+Garde `should-skip-step eval_datasets`. **Ne pas l'exécuter seule** : la PHASE
+6a part avec la coquille, dans `/sdda-build {n} --with-datasets` (STEP 5,
+`/sdda-build` STEP 3.0c), qui envoie `qa-evals` et `dev-backend` dans le même
+message et referme les jeux avant le socle. Les deux ne peuvent pas se lire
+(`forbidden_reads`) ; les enchaîner faisait attendre la coquille 17 minutes au
+premier run réel. Garde « skip » (jeux déjà verts, reprise) → STEP 5 sans le
+flag. Sous `Profile: poc`, rien ici non plus : `/sdda-build` STEP P.2 les joue
+avec les prompts. Hors `/sdda-full`, `/sdda-eval {n} --datasets-only` reste la
+forme seule.
+
+Pourquoi ici et non en PHASE 6 : la RETRIEVAL GATE (G4) exige le golden de
+retrieval et l'AGENT GATE (G5) exige les goldens de CAP et les sets de
+calibration. Produire les jeux **avant** le code est aussi ce qui empêche le
+code d'influencer le jeu qui le jugera (ownership : jamais un `dev-*`).
+
+| Sortie | Action |
+|---|---|
+| succès | continuer |
+| ERROR `[AC_NOT_EVALUABLE]` (veto d'`qa-evals`) | STOP — FIX `/sdda-caps {n}` : le veto remonte d'un étage |
+| ERROR | propager + STOP |
+
+**Labels humains** : si des items de calibration restent à labelliser
+(`qa-evals` les signale), la commande **continue** — les juges concernés
+seront `advisory` en G5 et le récap le dira. Elle ne bloque pas sur une tâche
+humaine asynchrone ; elle la rend visible.
+
+---
+
+## STEP 5 — PHASES 3→5 : `/sdda-build {n}`
+
+Gardes `should-skip-step build_socle | build_agents | build_orch` (la
+sous-commande accepte `--layer` pour reprendre à la bonne couche).
+
+Exécuter `/sdda-build {n} --with-datasets` si la PHASE 6a n'est pas encore
+verte (STEP 4.5), `/sdda-build {n}` sinon, ou `--layer {couche}` en reprise.
+Sous `Profile: poc`, `/sdda-build {n}` sans flag : son STEP P joue la PHASE 6a
+lui-même, avec les prompts, et ses gates sont rapportées sans bloquer — la
+table ci-dessous ne s'applique pas.
+Les sorties de la PHASE 6a (table du STEP 4.5) s'appliquent à la jonction.
+
+À l'intérieur de la couche reprise, `/sdda-build` applique ses propres gardes
+**par item** (`should-skip-item`, STEP 3.1 et 4.2) : trois `dev-agent` verts
+ne sont pas repayés parce que le quatrième a échoué, et un agent dont le
+prompt a été réécrit depuis est rejoué même s'il était vert. `/sdda-full` n'a
+rien à faire pour cela : `SDDA_RUN_ID` propagé suffit, les items vivent dans
+le même run.
+
+| Gate | Verdict | `--force` | Action |
+|---|---|---|---|
+| G3 / G4 | 🔴 | — | STOP (bypass uniquement par env var, hors `--force`) |
+| G5 | 🟡 | absent | STOP jaune |
+| G5 | 🟡 | présent | continuer + audit |
+| G5 / G6 | 🔴 | — | STOP |
+| G6 | 🟢 | — | continuer |
+
+Le plafond de construction `MaxCostPerRun` s'applique au **cumul du run**
+(`SDDA_RUN_ID` propagé) : dépassé → `[COST_CAP_EXCEEDED]`, STOP, reprise par
+`--resume` après relèvement tracé.
+
+---
+
+## STEP 6 — PHASE 6 : `/sdda-eval {n}`
+
+Garde `should-skip-step eval`. Exécuter `/sdda-eval {n}` (agents + L0→L7) ;
+sous `Profile: poc`, `/sdda-eval {n} --run-only` (STEP 1.quinquies).
+
+`qa-tests` et `qa-evals` ont déjà tourné en partie (6a) :
+`/sdda-eval` est idempotent — `qa-evals` complète (suites, baselines),
+`qa-tests` écrit les tests L0→L2 s'ils manquent.
+
+| Verdict | `--force` | Action |
+|---|---|---|
+| 🟢 | — | continuer |
+| 🟡 | absent | STOP jaune |
+| 🟡 | présent | continuer + audit |
+| 🔴 | — | STOP + ERROR `[EVAL_RED]` propagé |
+
+---
+
+## STEP 7 — PHASE 7 : `/sdda-review {n}`
+
+Si `--no-review` → `⊘ PHASE 7 skipped (--no-review, dev local)` + audit-log +
+**aller à STEP 9** (PHASE 8 non exécutable sans G7).
+
+Si `Profile: poc` → `⊘ PHASE 7 skipped (Profile: poc)` + `⊘ PHASE 8 skipped
+(Profile: poc)` et **aller à STEP 9** : le récap porte `POC — non revu, non
+accepté` et l'état dérivé (`Tested` au mieux).
+
+Garde `should-skip-step review`. Exécuter `/sdda-review {n}`.
+
+| Verdict | `--force` | Action |
+|---|---|---|
+| A 🔴 | — | STOP (`[SPEC_COMPLIANCE_RED]`) — B et C non lancés |
+| G7 🟢 | — | continuer |
+| G7 🟡 | absent | STOP jaune |
+| G7 🟡 | présent | continuer + audit |
+| G7 🔴 | — | STOP (`[SAFETY_GATE_FAILED]`) — MISSION `Blocked` |
+
+---
+
+## STEP 8 — PHASE 8 : `/sdda-eval {n} --acceptance`
+
+Garde `should-skip-step acceptance`. Exécuter `/sdda-eval {n} --acceptance`.
+
+La ligne `Non-régression` du récap final se lit dans la part `regression`
+de G8 (`workspace/.sys/.validation/G8-{n}-{MissionName}.regression.json`), que
+`check-regression` écrit lui-même (tolérance **et** bande de bruit de la
+baseline : `regressions[]` bloque, `withinNoise[]` informe, `stale[]` =
+comparaison refusée). La part est **obligatoire** : sans elle, G8 n'est pas
+franchie. Ne jamais recalculer un delta à la main dans le récap.
+
+| G8 | Action |
+|---|---|
+| 🟢 | MISSION `Approved` ; proposer `promote_baseline.py` (action humaine tracée, jamais automatique) |
+| 🟡 | MISSION reste `Evaluated` ; récap |
+| 🔴 | STOP + ERROR `[ACCEPTANCE_GATE_FAILED]` ; **ne jamais** suggérer d'itérer contre le holdout. `check-regression` en exit 1 est un 🔴, même si l'objectif chiffré est atteint |
+
+---
+
+## STEP 9 — Récap consolidé
+
+```bash
+FINAL_STATUS={pass|partial|fail|aborted}  # pass = toutes gates 🟢 ; partial = ≥ 1 🟡 assumé, skip ou arrêt humain ; fail = STOP ; aborted = interrompu
+python .sdda/sdda.py state end-run --run-id $RUN_ID --status $FINAL_STATUS
+python .sdda/sdda.py compute-status --mission {n}
+```
+
+`end-run` **ferme aussi la trace de construction** : il écrit le span racine
+`sdda.run` de `workspace/.sys/traces/runs/$RUN_ID.jsonl`, sous lequel se rangent les
+spans `sdda.build.agent` et `sdda.gate` émis en cours de route. C'est le seul
+endroit qui connaît le début, la fin et le cumul du run. Sans cet appel, la
+trace n'a pas de racine et `postflight_trace_present` la refuse — un run de
+construction sans trace n'est pas plus débogable qu'un run de produit sans
+trace.
+
+Émettre **un seul bloc** :
+
+```
+{✅|🟡|🔴} /sdda-full {n}-{MissionName} — pipeline terminé · état dérivé : {Approved|Evaluated|Tested|Blocked}
+
+SPÉCIFICATION (phases 0-2)
+  MISSION          : Confidence {high|medium|low} · objectif {Metric} {Target}       G0 🟢
+  CAPs             : {C} ({K} critical) · {A} AC mesurables · {J} juges LLM          G1 🟢
+  Topologie        : {rootPattern} · {N} agents · {T} outils · {R} retrievers        G2 {🟢|🟡 assumé}
+  Budget estimé    : ${est}/run (cible ${target}, cap ${cap}) · p95 {ms} ms
+
+BUILD (phases 3-5)
+  Outils           : {T} · live {ok}/{T}                                             G3 {🟢|bypass}
+  Retrieval        : recall@{k} {x} · nDCG {y} · groundedness {z}                    G4 {🟢|🟡|bypass|n/a}
+  Agents           : {N} · isolés k={k}                                              G5 {🟢|🟡 assumé}
+  Orchestration    : coût p50 ${x} · max ${m} · p95 {ms} ms · hops p95 {h}          G6 🟢
+
+ÉVALUATION (phase 6)
+  L0-L2 · L5 · L6  : {pass}/{total} déterministes
+  L3 · L4 · L7     : {g} 🟢 · {y} 🟡 · {r} 🔴 (par AC)  · juges advisory {j}
+  Verdict          : {🟢|🟡|🔴}
+
+REVUE (phase 7)   {skipped (--no-review) |}
+  A spec-compliance: {V}/{T} AC verified                                              {🟢|🟡}
+  B safety/cost/orch/rag : {c} critical · {s} serious
+  C adversarial    : {A} attaques · {S} réussies · {P} items proposés                G7 {🟢|🟡 assumé}
+
+ACCEPTATION (phase 8)   {non exécutée (G7 absente) |}
+  Holdout          : {Metric} {mesuré} vs cible {Target} (k={k})                     G8 {🟢|🟡|🔴}
+  Non-régression   : {ok | -x.x% sur {metric} (tolérance {t}%, hors bande {s}σ) | bruit : -x.x% sous {s}σ de la baseline}
+  Baseline         : {inchangée — promouvoir : python .sdda/sdda.py promote-baseline --mission {n} --run {RUN_ID} --label "…"}
+
+Bypasses audités  : {aucun | G2 budget (raison : …) · G5 jaune assumé (--force) · …}  → workspace/.sys/.audit/bypasses.jsonl
+Coût de construction : ${build_usd} (cap MaxCostPerRun ${cap}) · {durée} · top : {agent} ${x}
+                       (déclaré par le harnais, jamais recalculé — nous ne voyons pas
+                        les tokens d'un sous-agent ; distinct du coût du produit ci-dessus)
+Run trace          : {RUN_ID} → workspace/.sys/traces/runs/{RUN_ID}.jsonl
+
+Prochaine étape :
+  - /sdda-status {n}   pour l'état complet dérivé des gates
+  - {Approved → livrer ; Evaluated 🟡 → lire les AC jaunes ; Blocked → corriger la classe portée puis /sdda-full {n} --resume}
+```
+
+Succès complet sans accroc :
+```
+✅ /sdda-full {n}-{MissionName} — Approved · {C} CAPs · {N} agents · ${cost}/run · holdout {Metric} {mesuré} ≥ {Target}
+```
+
+---
+
+## Règles de cette commande
+
+- **Délégation pure** : aucun agent invoqué directement, uniquement des
+  commandes et des scripts déterministes.
+- **Aucun saut d'état** : le point de départ est dérivé des rapports sur disque,
+  `--from-phase` ne peut qu'être ≤ ce point.
+- **Mode strict** : jaune = STOP sans `--force` ; rouge = STOP toujours.
+- **Bypass nominatif, borné, audité** ; cumul ≥ 2 refusé sans `SDDA_ALLOW_FORCE=1`.
+- **Un seul `RUN_ID`** propagé (`SDDA_RUN_ID`) : la facture de construction et
+  l'audit-trail sont ceux du run, pas de chaque sous-commande.
+- **Parallélisme borné par `MaxParallel`** dans chaque sous-commande
+  (`/sdda-topology` STEP 5, `/sdda-build` STEP 3-4, `/sdda-eval` STEP 3,
+  `/sdda-review` STEP 4) ; `/sdda-full` n'ouvre jamais de parallélisme propre.
+- **Aucun agent ne spawne un autre agent** : l'orchestration appartient aux
+  commandes, à tous les niveaux.
+- **Idempotente** : relancer rejoue les gates (0 token) et ne régénère que ce
+  dont le hash a bougé.
+- **Erreur isolée par phase** : un échec de revue ne remet pas en cause le build ;
+  le récap dit où on s'est arrêté.
+- **Datasets avant code**, toujours (STEP 4.5).
+
+### Référence détaillée
+- Pipeline et gates : ``.sdda/ARCHITECTURE.md` (Read ce fichier avant de poursuivre) §3-4`
+- Machine à états : ``.sdda/docs/LIFECYCLE.md` (Read ce fichier avant de poursuivre)`
+- Protocole d'évaluation : ``.sdda/rules/eval-protocol.md` (Read ce fichier avant de poursuivre)`, ``.sdda/docs/TESTING-AND-EVAL.md` (Read ce fichier avant de poursuivre)`
+- Bornes et budget : ``.sdda/rules/budget-and-loop.md` (Read ce fichier avant de poursuivre)`
+
+---
+
+## Chat Output Protocol
+
+Applique ``.sdda/rules/output-protocol.md` (Read ce fichier avant de poursuivre)` — SSoT non dupliqué ici. Plage
+`0-100%`, 1 update par phase orchestrée (10-12 updates pour une MISSION
+moyenne) ; chaque sous-commande émet dans sa sous-plage. Bypass verbeux :
+`SDDA_CHAT_VERBOSE=1`.

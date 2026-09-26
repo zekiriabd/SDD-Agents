@@ -103,6 +103,16 @@ Pour **chaque** critère d'acceptation, produire les cinq champs. Sans exception
 | Comportement | `trajectory_match`, `tool_selection_accuracy`, `abstention_rate`, `refusal_rate` |
 | Économie | `cost_usd`, `latency_ms`, `token_count` |
 
+**Une métrique qu'aucun grader ne sert n'est pas mesurable.** Avant d'écrire
+une AC notée par un grader, vérifie que sa métrique est servie, et par lequel :
+```bash
+python .sdda/sdda.py list-graders --metric {metric}   # exit 1 → [EVAL_METRIC_UNSERVED]
+```
+Les métriques de **récupération** (`recall@k`, `ndcg@k`, `citation_resolve_rate`)
+ne passent pas par un grader : elles sont mesurées au niveau L3 par
+`run-retrieval-eval`, contre le golden de retrieval — et G4 refuse un golden
+sous `RetrievalGoldenMinQueries` requêtes (`[EVAL_DATASET_TOO_SMALL]`).
+
 **Règles dures** :
 
 1. Un seuil est un **nombre**, jamais un adjectif.

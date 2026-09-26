@@ -24,7 +24,7 @@ Identique en esprit à SDD_Pro, adapté à l'agentic.
 | Couche | Emplacement | Nature | Qui la lit |
 |---|---|---|---|
 | **Framework** | `.sdda/` | Source neutre : agents, commandes, règles, stacks, templates, invariants | Compilée vers les façades harness |
-| **Façades harness** | `.claude/`, `.codex/`, `.gemini/` | Générées depuis `.sdda/` par `harness_build.py` | Le harnais actif |
+| **Façades harness** | `.claude/`, `.codex/`, `.gemini/`, `.agents/` | Générées depuis `.sdda/` par `harness_build.py` | Le harnais actif |
 | **Workspace** | `workspace/` | Le projet de l'utilisateur : spécifications, contrats, prompts, datasets, code généré | Les agents, au runtime |
 
 > `.sdda/` (et non `.sdd/`) : nom court volontaire — il est référencé des centaines
@@ -77,44 +77,51 @@ SDD-Agents/
 │   │                                  #   prompts (cf. §7, rules/ownership.md §2.2)
 │   ├── providers/                     # anthropic · openai · google · azure-openai · local-ollama
 │   │                                  #   tarifs, URL, variable de clé — lus par pricing et le juge
-│   ├── stacks/                        # ── LE CATALOGUE — 45 fiches sur disque ─
+│   ├── stacks/                        # ── LE CATALOGUE — 67 fiches sur disque ─
 │   │   │                    # Chaque fiche déclare `Languages:` (un langage,
 │   │   │                    # plusieurs, ou `*` si elle n'en suppose aucun).
 │   │   │                    # C'est la SSoT du couplage : preflight_stack_combo
 │   │   │                    # refuse une fiche d'un autre runtime que le
 │   │   │                    # langage actif -> [STACK_LANGUAGE_MISMATCH].
-│   │   ├── lang/            python.md · csharp.md · typescript.md · kotlin.md
-│   │   │                    # typescript et kotlin : fiches présentes, aucune combo
-│   │   │                    # de bootstrap (eval/ et observability/ sont [python])
+│   │   ├── lang/            python.md · csharp.md · typescript.md · kotlin.md · java.md
+│   │   │                    # une combo de bootstrap C1 par langage : C1 · C1-NET · C1-TS
+│   │   │                    # · C1-KT · C1-JAVA (RAG hybride pgvector jusqu'au bout)
 │   │   ├── archi/           mvc.md · ddd.md · microservice.md     [*]
 │   │   │                    # hérité de SDD_Pro : l'architecture de la COQUILLE
 │   │   │                    # (entrée, composition, config, Domaine) — le moteur
 │   │   │                    # garde son découpage par ownership
 │   │   ├── backend/         python-fastapi.md · node-express.md · nestjs.md
-│   │   │                    kotlin-spring-boot.md · dotnet-minimalapi.md
+│   │   │                    kotlin-spring-boot.md [kotlin, java] · dotnet-minimalapi.md
 │   │   │                    # hérité de SDD_Pro : la maison HTTP autour de la
-│   │   │                    # surface, active seulement si backend-api ; pins
-│   │   │                    # python/csharp dans serving/*.libs.json
+│   │   │                    # surface, active seulement si backend-api
 │   │   ├── framework/       langchain.md · langgraph.md · ms-agent-framework.md
-│   │   │                    langgraph-js.md [typescript] · spring-ai.md [kotlin]
+│   │   │                    langgraph-js.md [typescript] · spring-ai.md [kotlin, java]
 │   │   │                      (+ .libs.json chacun)
 │   │   ├── orchestration/   single-agent.md · router.md · sequential.md
-│   │   ├── rag/             none.md · hybrid.md            [python sauf none]
-│   │   ├── vectorstore/     pgvector.md (+ .libs.json)     [python]
+│   │   ├── rag/             none.md · hybrid.md [python] · hybrid-dotnet.md
+│   │   │                    hybrid-node.md · hybrid-jvm.md
+│   │   ├── vectorstore/     pgvector.md · pgvector-dotnet.md · pgvector-node.md
+│   │   │                    pgvector-jvm.md (+ .libs.json chacun)
 │   │   ├── embedding/       voyage.md · bge-local.md
 │   │   ├── rerank/          none.md · cohere-rerank.md
 │   │   │                    bge-reranker-local.md (+ .libs.json)
-│   │   ├── dataaccess/      view-per-agent.md · declared-sources.md · none.md
+│   │   ├── dataaccess/      view-per-agent.md [python] · -dotnet · -node · -jvm
+│   │   │                    declared-sources.md [python] · none.md
 │   │   ├── memory/          buffer.md
-│   │   ├── tools/           mcp.md
-│   │   ├── eval/            pytest-eval.md (+ .libs.json)
-│   │   ├── observability/   otel-genai.md (+ .libs.json)
+│   │   ├── tools/           mcp.md [python] · mcp-dotnet.md · mcp-node.md · mcp-jvm.md
+│   │   ├── eval/            pytest-eval.md · xunit-eval.md · vitest-eval.md
+│   │   │                    junit-eval.md (+ .libs.json chacun)
+│   │   ├── observability/   otel-genai.md · -dotnet · -node · -jvm (+ .libs.json)
+│   │   │                    # tous écrivent le MÊME fichier de trace JSONL
 │   │   ├── guardrails/      schema-validation.md · pii-redaction.md
-│   │   │                    injection-detection.md
+│   │   │                    injection-detection.md   [*] (code de référence Python)
 │   │   └── serving/         cli.md · cli-dotnet.md · cli-node.md · cli-kotlin.md
-│   │                        fastapi-sse.md · aspnet-minimal.md · batch.md
+│   │                        cli-java.md · fastapi-sse.md · aspnet-minimal.md
+│   │                        http-sse-node.md · spring-sse.md · batch.md
 │   │                        # surface = PAR OÙ L'ON ENTRE ; le LIVRABLE
-│   │                        # (DeliverableType) vit dans ## Project Config
+│   │                        # (DeliverableType) vit dans ## Project Config ;
+│   │                        # le contrat d'évaluation (§3.5 de cli.md) est
+│   │                        # le même dans les cinq langages
 │   ├── registry/                      # ── REGISTRES MACHINE ─────────────────
 │   │   ├── patterns.registry.json     # tout pattern : id, famille, critères, coût, risques
 │   │   ├── compatibility.matrix.json  # lang x framework x pattern x provider x store ; combos
@@ -293,7 +300,7 @@ de créer le nouvel arbre à côté de l'ancien.
 **Cet arbre décrit le disque, pas l'intention.** 🟡 marque le seul écart assumé :
 annoncé, pas encore écrit — `plugin.json` et `.sdda/skills/`, rien d'autre.
 La règle vaut surtout pour `stacks/` —
-45 fiches existent, quand le
+67 fiches existent, quand le
 catalogue visé en compte trois fois plus. Ce n'est pas un
 manque à combler avant d'annoncer : c'est la séquence de
 [docs/ROADMAP.fr.md](docs/ROADMAP.fr.md), qui livre **une combinaison validée de bout en
@@ -634,17 +641,18 @@ qui tourne sur GPT-4-mini est un cas nominal, pas une exception. Confondre les
 deux derniers est l'erreur la plus fréquente des frameworks concurrents : elle
 rend le budget d'exécution incalculable.
 
-**Un seul harnais est supporté : Claude Code.** C'est le seul où les hooks
-refusent l'appel d'outil au moment où il a lieu. Codex CLI et Gemini CLI sont
-**expérimentaux** : leurs façades se compilent, aucun run de conformance ne les
-a validées, et elles n'ont **aucune gate bloquante au runtime** — ce que les
-hooks appliquent est reporté au CI et aux scripts déterministes. Les fichiers
-racine `AGENTS.md` et `GEMINI.md` sont des pointeurs générés vers leur façade.
-Un quatrième harnais, `antigravity`, est déclaré `planned` dans
-`capability-matrix.yml` : il partage l'adaptateur et la façade `.gemini/` de
-Gemini CLI, ne se compile que sur demande explicite (`--harness antigravity`),
-et porte la même réserve — expérimental, aucune gate bloquante au runtime.
-Détail : [docs/MULTI-HARNESS.fr.md](docs/MULTI-HARNESS.fr.md).
+**Un seul harnais est supporté : Claude Code.** C'est le seul où tous les hooks
+refusent l'appel d'outil au moment où il a lieu. Codex CLI (`.codex/` et les
+skills `.agents/skills/`), Gemini CLI (`.gemini/`) et Antigravity (`.agents/`)
+sont **expérimentaux** : leurs façades se compilent dans les formats que leur
+documentation officielle décrit, aucun run de conformance ne les a validées, et
+leurs gates au runtime sont **partielles** (Codex, Gemini CLI :
+`runtime_hooks: partial`) ou **absentes** (Antigravity). Leur payload de hook ne
+nomme pas l'agent auteur d'un appel : seules les zones protégées y sont
+refusées au runtime (plus les gates de spawn sous Gemini CLI) ; la matrice
+d'ownership par agent est reportée au CI et aux scripts déterministes. Les
+fichiers racine `AGENTS.md` et `GEMINI.md` sont des pointeurs générés, communs
+aux trois. Détail : [docs/MULTI-HARNESS.fr.md](docs/MULTI-HARNESS.fr.md).
 
 **Les agents déclarent un tier** (`fast` / `balanced` / `deep`), jamais un nom de
 modèle. Deux résolutions, deux sources :
@@ -739,7 +747,12 @@ démarre pas rend un code que le harnais traite comme une autorisation. Et
 `python .sdda/sdda.py hooks-selfcheck` **exécute** chaque hook câblé, payload
 inoffensif et payload à refuser : la seule preuve qu'un hook tient est de le
 lancer. `preflight_stack_combo` ne juge que les agents du pipeline : un
-sous-agent hors pipeline n'est pas bloqué par un `STACK.md` rouge.
+sous-agent hors pipeline n'est pas bloqué par un `STACK.md` rouge. Il ne
+réécrit pas non plus ce qui applique la matrice — les hooks, `loader.yml`,
+`agent-bounds.yaml`, `INVARIANTS.yml`, les réglages de hooks des quatre
+harnais, `.git/hooks/` : c'était la porte par laquelle un `general-purpose` à
+qui l'on dit « tu es dev-agent » neutralisait tout. Développer le framework par
+sous-agents reste possible, déclaré : `SDDA_FRAMEWORK_DEV=1`.
 
 **Le cas des skills — deux owners, aucune autorité unique.** Une skill d'agent du
 produit traverse deux fichiers déjà possédés : `architect-topology` la **déclare**
@@ -804,7 +817,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **439**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **444**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Le chiffre ci-dessus est lui-même régénéré (`sync-counters`), pas recopié.

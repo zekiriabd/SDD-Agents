@@ -21,7 +21,6 @@ FIX: <l'action précise qui débloque>
 - `[DATA_ACCESS_ENVELOPE_MISSING]`
 - `[IR_NOT_FOUND]`
 - `[PROJECT_NOT_INIT]`
-- `[TEST_LLM_NOT_MOCKED]`
 - `[TOOL_CONTRACT_FAILED]`
 
 ## Classes universelles

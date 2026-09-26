@@ -1,5 +1,4 @@
 ---
-name: sdda-topology
 description: "/sdda-topology — PHASE 2 : topologie + contrats (parallèle) + compilation IR + TOPOLOGY GATE (G2)"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-topology.md.
@@ -101,7 +100,12 @@ python .sdda/sdda.py spawn-brief --agent architect-topology --mission {n} --prom
 un agent qui déborde ne rend pas une sortie plus courte, il rend une sortie
 tronquée et confiante.
 
-Si `--recompile-only` → STEP 4.bis (0 token, idempotent) puis STEP 6.
+Si `--recompile-only` → les trois post-checks de déclaration du STEP 4
+(`validate-packaging`, `validate-architecture`, `validate-adr --mission {n}`),
+puis STEP 4.bis (0 token, idempotent) puis STEP 6. Les parts `packaging`,
+`architecture` et `adr` de G2 sont épinglées sur STACK.md, la topologie, le
+roster et les ADR : après l'édition qui motive la recompilation, elles sont
+périmées tant qu'on ne les rejoue pas — et une part périmée n'est pas verte.
 
 ---
 
@@ -371,7 +375,7 @@ Les 11 contrôles de `AGENTIC-IR.md §4` + budget :
 
 ```
 ERROR: /sdda-topology {n} — TOPOLOGY GATE rouge
-CAUSE: [TOPOLOGY_GATE_FAILED] [UNBOUNDED_LOOP] cycle supervisor→billing→supervisor sans borne ; [BUDGET_EXCEEDED_ESTIMATE] $0.41 estimé > cap $0.25 — rapports workspace/.sys/.validation/G2-{n}-{MissionName}.{topology,ir,budget}.json
+CAUSE: [TOPOLOGY_GATE_FAILED] [UNBOUNDED_LOOP] cycle supervisor→billing→supervisor sans borne ; [BUDGET_EXCEEDED_ESTIMATE] \$0.41 estimé > cap \$0.25 — rapports workspace/.sys/.validation/G2-{n}-{MissionName}.{topology,ir,budget}.json
 FIX: corriger workspace/pipeline/topology/{n}-topology.md et/ou les contrats, puis /sdda-topology {n} --recompile-only
 ```
 

@@ -1,0 +1,16 @@
+{
+  "description": "GÉNÉRÉ par .sdda/python/sdda_admin/harness_build.py — ne pas éditer ici.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^apply_patch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SDDA_HARNESS=codex ${SDDA_PYTHON:-python} \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.sdda/python/sdda_hooks/preflight_ownership.py\"; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then echo \"[hook] preflight_ownership.py ne demarre pas (code $rc) - interpreteur: SDDA_PYTHON=${SDDA_PYTHON:-python}\" >&2; if [ \"${SDDA_HOOKS_STRICT:-0}\" = \"1\" ]; then exit 2; fi; fi; exit $rc"
+          }
+        ]
+      }
+    ]
+  }
+}

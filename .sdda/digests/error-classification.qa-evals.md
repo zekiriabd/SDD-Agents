@@ -18,8 +18,11 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[AC_NOT_EVALUABLE]`
+- `[DATASET_ITEM_INVALID]`
 - `[HOLDOUT_NOT_DISJOINT]`
 - `[JUDGE_UNCALIBRATED]`
+- `[OWNERSHIP_AGENT_UNKNOWN]`
+- `[SAFETY_SCAN_UNAVAILABLE]`
 - `[SECRET_READ_FORBIDDEN]`
 
 ## Classes universelles

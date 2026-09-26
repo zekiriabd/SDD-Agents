@@ -1,5 +1,4 @@
 ---
-name: sdda-bootstrap
 description: "/sdda-bootstrap — Initialisation d'un projet SDD_Agents (STACK.md + workspace/ + smoke)"
 ---
 <!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/commands/sdda-bootstrap.md.

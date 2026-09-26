@@ -40,11 +40,15 @@ Read **uniquement** :
   timeoutSec, contractTestsRef), `retrievers[].binding.chunk`, `agents[].bounds`,
   `orchestration` (maxHops, edges), `dataAccess[].envelope`.
 - `workspace/pipeline/contracts/tools/{n}-*.tool.md` §4 (erreurs) et §8 (checklist L2).
+- `workspace/pipeline/suites/tool-{n}-{outil}.yaml` de chaque outil câblé — écrites
+  par `qa-evals` : leur `id` et leurs `cases[].id` sont ce que la part `suites`
+  de G3 exige de voir EXERCÉ (STEP 5). Tu les lis, tu ne les écris jamais.
 - `workspace/src/{App}/{couche}/**` **hors** `tests/` — les interfaces de LA couche
   que tu testes, et les fichiers racine du projet (`src/{App}/*`, la config du
   runner). Tu es lancé **une fois par couche** : la première ligne de ton prompt
-  est `SDDA-LAYER: {couche}` (`tools`, `retrieval`, `data`, `agents`,
-  `orchestration`, `serving`, ou `tests` pour les tests transverses). Lire tout
+  est `SDDA-LAYER: {couche}` (`app` — le Domaine et ses règles métier —,
+  `tools`, `retrieval`, `data`, `agents`, `orchestration`, `serving`, ou `tests`
+  pour les tests transverses). Lire tout
   `src/**` d'un coup remplissait la fenêtre entière du modèle avant le premier
   tour — un contexte qui ne laisse pas la place de travailler produit des tests
   tronqués et confiants. Pour une interface d'une AUTRE couche dont tu as besoin,
@@ -53,7 +57,9 @@ Read **uniquement** :
   `### Active Language & Runtime`, `### Active Eval Stack`
   (runner de tests), `### Active Tools & Integrations` (endpoints pour `network`).
   Il remplace la lecture de `workspace/stack/STACK.md`. Absent → `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`) ; ne jamais l'éditer.
-- `.sdda/stacks/lang/{lang}.md ## Testing`, `.sdda/stacks/eval/pytest-eval.md` ou équivalent.
+- `.sdda/stacks/lang/{lang}.md ## Testing` — le runner, les marqueurs, le mock de
+  modèle du langage actif — et la fiche `.sdda/stacks/eval/*.md` active
+  (`### Active Eval Stack` ; `pytest-eval.md` en Python).
 
 IR absent → `[IR_NOT_FOUND]`, STOP.
 
@@ -73,8 +79,9 @@ un test qui appelle le script correspondant :
   inline (invariant `prompts-are-files`) ;
 - disjonction `golden ∩ holdout = ∅` (`validate_datasets.py`) ;
 - fraîcheur des baselines (tuple P10) ;
-- audit d'ownership : `src/agents/**` et `src/orchestration/**` ne contiennent
-  aucune écriture vers `datasets/` ni `prompts/` ;
+- audit d'ownership : `workspace/src/{App}/agents/**` et
+  `workspace/src/{App}/orchestration/**` ne contiennent aucune écriture vers
+  `datasets/` ni `prompts/` ;
 - scan de secrets sur `src/`, `prompts/`, `datasets/`, `traces/`.
 
 ## STEP 4 — L1 : unitaires sur les fonctions pures
@@ -83,6 +90,7 @@ Un fichier par module, dans son `tests/` :
 
 | Module | Ce qui est pur, donc testé |
 |---|---|
+| `app/domain` | chaque règle métier `BR-x` de la MISSION calculée par `dev-backend` : un test par règle **et par bord** (seuil, date limite, fenêtre), `as_of` passé en paramètre — jamais l'horloge |
 | `src/retrieval/*/ingest` | chunker : `texte + config → chunks` ; **la config testée est celle de l'IR**, à la valeur près ; métadonnées de citation et de tenant présentes ; `resolve_citation` retrouve chaque ancre |
 | `src/tools/*` | validation d'entrée, calcul de clé d'idempotence, troncature `max_response_bytes`, balisage `untrusted` |
 | `src/data/envelope` | parser AST : chaque statement de `forbidden` refusé, allowlist de schémas, réécriture `LIMIT` |
@@ -95,17 +103,23 @@ appels d'outils fixés). Le test qui prouve `maxIterations` fait tourner le mock
 `maxIterations + 1` fois et vérifie l'erreur nommée, le state partiel, le span
 `bound_exceeded`.
 
-```
-ERROR: agent qa-tests — LLM réel dans un test
-CAUSE: [TEST_LLM_NOT_MOCKED] tests/agents/billing/test_loop.py instancie le client provider
-FIX: injecter le mock scripté de la stack ; un appel modèle appartient aux evals (qa-evals)
-```
+Un test qui instancie le client du fournisseur est un **constat de revue** que
+tu rapportes (aucun script ne le détecte à ta place) : injecter le mock scripté
+de la stack ; un appel modèle appartient aux evals (`qa-evals`).
 
 ## STEP 5 — L2 : tests de contrat d'outil
 
-Pour chaque `tools[]`, `workspace/src/{App}/tools/{tool}/tests/test_contract.*`,
-référencé par `contractTestsRef`, contre un **serveur/mocks de transport**
-(pas le service réel) :
+Pour chaque `tools[]`, `workspace/src/{App}/tools/{tool}/tests/test_contract.*`
+(les outils de source de `declared-sources` : sous `data/tools/`), référencé par
+`contractTestsRef`, contre un **serveur/mocks de transport** (pas le service
+réel).
+
+**La suite de `qa-evals` est la liste des cas, pas une inspiration.** Le fichier
+de test cite en littéral l'`id` de sa suite `tool-{n}-{outil}.yaml`, et chaque
+`cases[].id` y est exercé — un test paramétré par cas (`test_contract[happy-1]`)
+ou un test qui nomme l'id. `run-tool-suites` rapproche les deux par ces
+littéraux : un cas déclaré que rien ne nomme rend la part `suites` de G3 rouge,
+un `xfail` aussi. Les cas couvrent au minimum :
 
 - happy path : sortie conforme à `outputSchema` ;
 - **chaque erreur du §4** provoquée et levée avec son nom exact ;
@@ -128,11 +142,17 @@ typé, l'enveloppe refuse chaque statement interdit.
 
 ## STEP 6 — Exécuter
 
+La commande de test de `.sdda/stacks/lang/{lang}.md ## Testing`, en deux passes :
+hors `network`, puis `network` seul (seconde moitié de la TOOL GATE). En Python :
+
 ```bash
-# commande de la stack, ex.
 pytest workspace/src -m "not network" -q
-pytest workspace/src -m network -q     # seconde moitié de la TOOL GATE
+pytest workspace/src -m network -q
 ```
+
+La part `suites` de G3 (`run-tool-suites`) n'outille aujourd'hui que pytest :
+hors Python, elle reste rouge quel que soit le résultat de tes tests — le dire
+dans ta sortie, ne pas le compenser.
 
 Un test rouge n'est pas ajusté : il est **rapporté** au `dev-*` owner avec la
 classe (`[TOOL_CONTRACT_FAILED]`, `[BOUND_NOT_MATERIALIZED]`,
@@ -144,10 +164,10 @@ propriété à tolérer par `retry`.
 ## STEP final — Anti-dérive
 
 - [ ] L0 câblé : schémas, lint prompts, IR, hash de prompt, prompt inline, disjonction, baselines, ownership, secrets
-- [ ] L1 sur chaque fonction pure listée ; **aucun client LLM réel** dans `tests/`
+- [ ] L1 sur chaque fonction pure listée, règles métier `BR-x` du Domaine comprises ; **aucun client LLM réel** dans `tests/`
 - [ ] Chaque borne de chaque agent a un test qui la déclenche et vérifie le comportement exact
 - [ ] `maxHops` → repli forcé, testé ; chaque cycle de l'IR a son test de coupure
-- [ ] L2 : happy + chaque erreur + timeout + auth + idempotence + rate limit + no-retry + sûreté, par outil
+- [ ] L2 : happy + chaque erreur + timeout + auth + idempotence + rate limit + no-retry + sûreté, par outil — chaque `cases[].id` de la suite nommé dans un test
 - [ ] Connectivité live séparée, marquée `network`, sans effet réel
 - [ ] Config de chunking testée = valeurs de l'IR
 - [ ] Rien écrit hors `workspace/src/**/tests/` ; aucun test rouge « ajusté »

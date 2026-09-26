@@ -42,17 +42,17 @@ MISSION            spécification métier versionnée (objectif chiffré, budget
 L'IR est conçue multi-langage et le vérifie : `validate_ir.py` refuse tout nom
 d'API de framework dans un contrat, y compris `spring-ai`, `langchain4j` et
 `vercel-ai-sdk`. Mais **un générateur n'existe que là où les fiches de stack
-existent**, et le catalogue en couvre <!--sdda:count stacks-->45<!--/sdda:count--> sur les 99 lignes que `STACK.md`
+existent**, et le catalogue en couvre <!--sdda:count stacks-->67<!--/sdda:count--> sur les 99 lignes que `STACK.md`
 propose. L'écart est annoncé ligne par ligne — `(fiche absente)` — plutôt que
 sous-entendu.
 
 | | Langage | Framework | RAG · vector · rerank | Serving | État |
 |---|---|---|---|---|---|
-| **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | utilisable — seul runtime doté d'un générateur de squelette |
-| **.NET** | ✅ | Microsoft Agent Framework | ❌ **aucune fiche** | cli-dotnet · aspnet-minimal | **sans RAG** |
-| **TypeScript** | ✅ fiche | LangGraph.js | ❌ | cli-node · express · nestjs (backend) | **fiches seulement** — aucune combo bootstrap (eval/observability sont `[python]`), pas de générateur de squelette |
-| **Kotlin** | ✅ fiche | Spring AI | ❌ | cli-kotlin · spring-boot (backend) | **fiches seulement** — même réserve ; pins Maven non vérifiés |
-| **Java** | ❌ | — | ❌ | ❌ | **non testé, fiche absente** — `lang/java.md` et `serving/cli-java.md` sont annoncées dans `STACK.md.template` sans exister sur disque ; la matrice dit `java: untested` |
+| **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | combo **C1** — seul runtime doté d'un générateur de squelette |
+| **.NET** | ✅ | Microsoft Agent Framework | ✅ hybrid-dotnet · pgvector-dotnet | cli-dotnet · aspnet-minimal | combo **C1-NET** — pins résolus et API compilées sur une sonde du SDK ; pas de générateur de squelette (dev-backend l'écrit) |
+| **TypeScript** | ✅ | LangGraph.js | ✅ hybrid-node · pgvector-node | cli-node · http-sse-node | combo **C1-TS** — pas de générateur de squelette |
+| **Kotlin** | ✅ | Spring AI | ✅ hybrid-jvm · pgvector-jvm | cli-kotlin · spring-sse | combo **C1-KT** — build de vérification seulement |
+| **Java** | ✅ | Spring AI (mêmes bibliothèques que Kotlin) | ✅ hybrid-jvm · pgvector-jvm | cli-java · spring-sse | combo **C1-JAVA** — build de vérification seulement |
 
 Deux familles du catalogue sont héritées de SDD_Pro depuis le 2026-09-23 :
 `archi/` (mvc · ddd · microservice — l'architecture de la **coquille**
@@ -62,13 +62,13 @@ applicative, sélectionnée par `## Active Architecture Pattern`) et `backend/`
 `DeliverableType: backend-api`). Réécrites pour l'agentic, pas copiées : pas
 d'ORM, pas d'entité, le « Model » est dérivé de l'IR.
 
-**.NET ne peut pas faire de RAG aujourd'hui.** Toute la chaîne de retrieval
-(`rag/hybrid.md`, `vectorstore/pgvector.md`, `dataaccess/*`) est écrite en
-Python et le déclare (`Languages: python`). Ce n'est pas une omission de
-documentation : `preflight_stack_combo` **refuse** la combinaison
-(`[STACK_LANGUAGE_MISMATCH]`) au lieu de laisser un générateur .NET recevoir du
-`psycopg` comme référence et improviser une traduction. Le RAG .NET est au
-Lot 7 de la [ROADMAP](.sdda/docs/ROADMAP.fr.md).
+**Cinq langages, un seul contrat d'évaluation.** Chaque langage a sa chaîne de
+RAG (`rag/hybrid-*`, `vectorstore/pgvector-*`, `dataaccess/view-per-agent-*`),
+sa fiche d'eval et sa fiche d'observabilité, et tous parlent le même contrat CLI
+(`stacks/serving/cli.md` §3.5) et écrivent la même trace JSONL : les runners du
+framework jugent l'application livrée par `--executor cli`, quel que soit son
+langage. Ce qui reste propre à Python est dit : le générateur de squelette, le
+code de référence des garde-fous, et les sources déclarées (`declared-sources`).
 
 Rien ici n'est *validé* : `frameworkStatus: design-phase`, et tous les
 composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
@@ -78,9 +78,9 @@ composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
 | Harnais | Statut | Gates bloquantes au runtime |
 |---|---|---|
 | **Claude Code** | **supporté** — le harnais de référence | oui — les hooks de `.claude/settings.json` refusent l'appel d'outil |
-| **Codex CLI** | **expérimental** — compilé vers `.codex/`, jamais validé par un run de conformance | **non** — reportées au CI et aux scripts déterministes |
-| **Gemini CLI** | **expérimental** — compilé vers `.gemini/`, même réserve | **non** — idem |
-| **Antigravity** | **planifié** — partage l'adaptateur et la façade `.gemini/` de Gemini CLI, compilé seulement sur demande explicite (`--harness antigravity`) | **non** — idem |
+| **Codex CLI** | **expérimental** — agents `.codex/agents/*.toml`, commandes en skills `.agents/skills/`, jamais validé par un run de conformance | **partiel** — `.codex/hooks.json` refuse les écritures en zones protégées (`apply_patch`) ; l'ownership par agent reste au CI (le payload ne porte pas l'identité de l'agent) |
+| **Gemini CLI** | **expérimental** — agents `.gemini/agents/`, commandes `.gemini/commands/*.toml` | **partiel** — hooks `BeforeTool` dans `.gemini/settings.json` (écritures, gates de spawn) ; aucun événement de fin de sous-agent |
+| **Antigravity** | **expérimental** — façade propre `.agents/` (règles ≤ 24 Ko, skills, agents), compilée par défaut | **non** — arguments des hooks non documentés ; CI et scripts déterministes |
 
 Sous Codex ou Gemini CLI, rien n'empêche au moment de l'action une écriture
 hors ownership ou un agent câblé avant sa TOOL GATE ; le CI la rattrape plus
@@ -397,11 +397,11 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 **Phase de conception.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commandes,
 <!--sdda:count invariants-->22<!--/sdda:count--> invariants,
-<!--sdda:count stacks-->45<!--/sdda:count--> fiches de stack,
-<!--sdda:count classes-->439<!--/sdda:count--> classes d'erreur,
+<!--sdda:count stacks-->67<!--/sdda:count--> fiches de stack,
+<!--sdda:count classes-->444<!--/sdda:count--> classes d'erreur,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks et
 <!--sdda:count subcommands-->80<!--/sdda:count--> sous-commandes déterministes existent sur
-disque et sont testés (<!--sdda:count tests-->1623<!--/sdda:count--> fonctions de test).
+disque et sont testés (<!--sdda:count tests-->1863<!--/sdda:count--> fonctions de test).
 Aucun script cité par un prompt ne manque
 ([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
 n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en
@@ -589,8 +589,8 @@ de contexte tranchés sur les fiches actives, et la migration du workspace.
 génération — huit agents `dev-*`, le squelette Python — et la couche de revue —
 six reviewers — sont écrites et câblées à leurs gates, et **n'ont jamais été
 exécutées de bout en bout**. Python est le seul runtime doté d'un générateur de
-squelette, .NET n'a pas de chaîne de retrieval, TypeScript et Kotlin ont des
-fiches mais aucun générateur, Java n'a rien.
+squelette ; .NET, TypeScript, Kotlin et Java ont leur chaîne C1 complète en
+fiches, écrite par les agents `dev-*`.
 
 **Aucune combinaison de stack n'est annoncée validée**, parce qu'aucune n'a
 encore été mesurée par un run réel. C1 est la cible du MVP, en `design-phase`.

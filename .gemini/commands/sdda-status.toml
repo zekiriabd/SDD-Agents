@@ -199,5 +199,4 @@ Applique ``.sdda/rules/output-protocol.md` (Read ce fichier avant de poursuivre)
 read-only). Sortie 1 passe. Le tree ASCII est le rendu final, sans préfixe.
 Erreurs : 1 ligne `🔴 [ANALYSIS/FAIL] {résumé}`. Bypass verbeux :
 `SDDA_CHAT_VERBOSE=1`.
-
 '''

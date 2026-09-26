@@ -56,7 +56,7 @@ fiches décident. Tu n'inventes ni couche, ni librairie, ni règle métier.
 - `skeleton` : PHASE 3.0b, **après** `project-init` et **avant** le socle — la
   composition doit exposer les points d'attache que `dev-tools`,
   `dev-retrieval` et `dev-data` honoreront ;
-- `packaging` : PHASE 5.3, **après** `dev-api` — l'exécutable ou l'image
+- `packaging` : PHASE 5.2bis de `/sdda-build`, **après** `dev-api` — l'exécutable ou l'image
   embarque une surface qui existe.
 
 ## STEP 2 — Charger le contexte
@@ -107,15 +107,19 @@ priment sur les noms ; les principes de `archi/*.md` priment sur tout.
 ### 3.1 Le projet est déjà initialisé
 
 `project-init` (/sdda-build STEP 3.0, lancé par la commande, 0 token) a déjà
-tourné avant toi : squelette Python (`gen-app-skeleton --write`), environnement
-installé (`uv sync`), `.env` copié, contexte projet écrit. **Tu ne relances pas
-le générateur** — tu le vérifies, et tu écris ce qui demande un jugement :
+tourné avant toi : contexte projet écrit, `.env` copié ; en Python aussi le
+squelette (`gen-app-skeleton --write --mission {n}`) et l'environnement (`uv sync`). **Tu ne
+relances pas le générateur** — en Python tu le vérifies, et tu écris ce qui
+demande un jugement :
 
 ```bash
-python .sdda/sdda.py gen-app-skeleton --check        # exit 0 : rien n'a dérivé depuis l'init
+python .sdda/sdda.py gen-app-skeleton --check --mission {n}   # Python seulement — exit 0 : rien n'a dérivé depuis l'init
 ```
 
-**Le `.env` du projet, c'est ce script qui l'a posé.** Il a copié
+Hors Python, ne le lance pas : il rend `[STACK_LANGUAGE_MISMATCH]` par
+construction, puisqu'aucun squelette n'existe pour ce langage.
+
+**Le `.env` du projet, c'est l'init qui l'a posé.** Elle a copié
 `workspace/assets/.env` (déposé par l'humain) vers `workspace/src/{App}/.env`.
 Tu ne l'ouvres pas, tu ne le recopies pas, tu ne lances pas `install-env` à la
 main : le lire est refusé (`[SECRET_READ_FORBIDDEN]`), le copier n'est pas ton
@@ -172,14 +176,23 @@ bornes), avec des points d'attache que `dev-agent`, `dev-tools` et
 absent doit le dire par une erreur nommée au démarrage, pas par une
 `ImportError` trois phases plus loin.
 
-**Le contrat que les autres couches attendent** (Python — l'équivalent dans
-les autres langages) :
+**Le contrat que les autres couches attendent** — écrit ici dans sa forme
+Python, celle du squelette généré ; dans un autre langage, la même forme avec
+les noms et l'idiome de `lang/{lang}.md` (la fiche fait foi sur les noms) :
 
-- `build_system(settings=None, *, client=None, toolset=None) -> RunService`.
-  `client` et `toolset` sont des SURCHARGES : l'exécuteur d'eval L4
-  (`evals/executor.py`) passe des outils mockés, un test passe un double de
-  modèle. Une composition qui les ignore fait évaluer à G5 un autre système
-  que celui qu'elle livre.
+- `build_system(settings=None, *, client=None, toolset=None, retriever=None, **kwargs) -> RunService`.
+  `client`, `toolset` et `retriever` sont des SURCHARGES : l'isolement L4
+  (`SDDA_EVAL_ISOLATION`, `serving/cli.md` §3.5, ou l'exécuteur en processus
+  `evals/executor.py`) passe des outils mockés et un retrieval figé, un test
+  passe un double de modèle. `composed_service` **refuse** une composition qui
+  n'accepte pas l'une d'elles (`CONFIG_INVALID`, code de sortie 8) : dès que la
+  suite fournit des fixtures `retrieval/`, un `build_system` sans `retriever`
+  arrêtait la L4. Une composition qui les ignore ferait évaluer à G5 un autre
+  système que celui qu'elle livre.
+- `build_retriever(settings)` — exposé par la composition dès que l'IR déclare
+  un `retrievers[]` : c'est ce que la sous-commande `retrieve` de la CLI
+  (`serving/cli.md` §3.1, G4 par `--executor cli`) appelle hors isolement. Sans
+  lui, `retrieve` rend « aucun retriever » et G4 n'a rien à mesurer.
 - l'`agent_factory` rendu à `RunService` construit l'agent **depuis son
   package** quand il existe — `agents/{agent_slug}/` exposant
   `build_agent(deps, bounds)` / `AgentDeps.from_ir(…)` (fiche de langage) —
@@ -198,9 +211,10 @@ Le mécanisme natif de l'écosystème (`pydantic-settings`, Zod sur `process.env
 lu une fois, `@ConfigurationProperties`, `IOptions<T>`), qui lit **les noms**
 de `## Active Secrets` et des stores déclarés ; **fail-fast** au démarrage
 avec le nom de la variable manquante, jamais sa valeur. Aucun accès direct à
-l'environnement pour une clé sensible hors de ce module
-(`[SEC_ENV_VAR_FORBIDDEN]`). Aucune valeur dans un log, une erreur, un fichier
-commité (`[SECRET_LEAK]`).
+l'environnement pour une clé sensible hors de ce module — un constat de revue
+(`review-safety` le relit ; aucun script ne le vérifie à ta place). Aucune
+valeur dans un log, une erreur, un fichier commité (`[SECRET_LEAK]`, que
+`scan-secrets` mesure).
 
 ### 3.5 Le Domaine
 
@@ -239,10 +253,10 @@ vert avant de rendre la main.
 ## STEP 5 — Vérifications, 0 token
 
 ```bash
-python .sdda/sdda.py gen-app-skeleton --check                  # Python : le squelette n'a pas dérivé
-python .sdda/sdda.py validate-packaging --json                 # le livrable est cohérent (G2, part packaging)
+python .sdda/sdda.py gen-app-skeleton --check --mission {n}   # Python seulement : le squelette n'a pas dérivé
+python .sdda/sdda.py validate-packaging --mission {n} --json    # le livrable est cohérent (G2, part packaging)
 python .sdda/sdda.py audit-ownership --agent dev-backend --wrote {chaque fichier écrit ou modifié}   # tu n'as écrit que chez toi
-<smoke de la fiche de langage / backend>
+<smoke de lang/{lang}.md §6 et de backend/{backend}.md §8>
 ```
 
 Un échec de build est classé : `[BUILD_CORRECTIBLE]` (import, typo, signature)

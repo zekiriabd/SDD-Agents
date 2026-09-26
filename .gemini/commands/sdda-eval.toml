@@ -19,7 +19,7 @@ qa-evals  ∥  qa-tests                 (parallèle, chemins disjoints)
         ↓ datasets FIGÉS (hash)
 eval_runner.py  L0 → L7                          (script, k runs, variance)
         ↓
-rapport trois couleurs  workspace/.sys/reports/{n}-{run-id}.md
+rapport trois couleurs  workspace/.sys/reports/{n}-{run-id}.json
 ```
 
 **Un test assert, une eval score** (TESTING-AND-EVAL.md). Les confondre produit
@@ -43,8 +43,12 @@ soit des tests instables qu'on désactive, soit des evals qui ne détectent rien
 `--run-only` ⊥ `--acceptance`. `--levels` ⊆ `{L0..L7}` (L8 appartient à
 `/sdda-review`, L9 à `--acceptance`). `--runs` entier ≥ 1.
 
-`--runs 1` → autorisé en local uniquement ; si `CI=true` ou `SDDA_ENV=ci` →
-ERROR :
+`--runs 1` → autorisé en local uniquement, et **pour déboguer seulement** :
+`eval-runner` n'écrit alors aucun rapport de gate (WARN
+`[EVAL_SINGLE_RUN_FORBIDDEN]`), pas plus qu'avec `--limit` (WARN
+`[EVAL_PARTIAL_RUN]`). Ni l'un ni l'autre ne fait avancer une gate — un run sur
+un sous-ensemble ou un tirage unique ne mesure pas ce que la gate juge. Si
+`CI=true` ou `SDDA_ENV=ci` → ERROR :
 ```
 ERROR: /sdda-eval {n} — k=1 refusé
 CAUSE: [EVAL_SINGLE_RUN_FORBIDDEN] EvalRuns=1 en CI viole non-determinism-k-runs (P3)
@@ -110,8 +114,10 @@ Prompt `qa-evals` :
 MISSION {n}-{MissionName}. Pour chaque AC de chaque CAP (workspace/pipeline/caps/{n}-*.md), produire :
 - golden/{dataset}.jsonl  (≥ {GoldenSetMinItems} items, schéma .sdda/templates/golden-set.schema.json)
 - holdout/mission-{n}-v{k}.jsonl  (≥ {HoldoutSetMinItems} items, DISJOINT du golden — vérifié par hash)
-- calibration/{grader}.jsonl  (≥ {JudgeCalibrationMinItems} items labellisés HUMAINEMENT — signaler
-  les items à faire labelliser, ne jamais les inventer)
+- datasets/calibration/{grader}-v{k}.jsonl  (≥ {JudgeCalibrationMinItems} items labellisés HUMAINEMENT —
+  signaler les items à faire labelliser, ne jamais les inventer) et la fiche d'entrée
+  workspace/pipeline/calibration/{grader}.json qui les pointe (`labelsRef`), celle que la suite
+  référence par `judgeCalibrationRef`
 - adversarial/{n}-*.jsonl  (≥ {AdversarialSetMinItems} : injection directe, indirecte via corpus
   empoisonné, via outil, abus d'outil, escalade, exfiltration, tenant, budget, persona)
 - workspace/pipeline/suites/{n}-*.yaml  (grader, seuil, runs, dataset, niveau L3..L7 — depuis les AC)
@@ -135,15 +141,16 @@ faisait produire à l'agent ce que la gate n'exigeait pas : `Profile: poc`
 abaisse le golden à 15 items, et `/sdda-build` STEP P.2 réemploie ce prompt.
 
 Les suites `tool-{n}-{outil}.yaml` sont ce que `run-tool-suites` cherche
-(`toolRef`, `level: L2`, `cases[].id`) et ce que `qa-tests` joue en `pytest`
-(`/sdda-build` 3.1 bis) : sans elles, la part `suites` de G3 n'a aucun
+(`toolRef`, `level: L2`, `cases[].id`) et ce que `qa-tests` joue avec le runner
+de tests du langage (`/sdda-build` 3.1 bis ; `run-tool-suites` n'outille
+aujourd'hui que pytest, donc Python) : sans elles, la part `suites` de G3 n'a aucun
 écrivain et reste rouge par construction. Les fixtures sont ce que
 l'exécuteur isolé de L4 sert à la place des outils et de l'index : un appel
 qu'aucune ligne ne couvre rend `TOOL_FIXTURE_MISSING`, pas une réponse vide.
 
 `qa-tests` part **une fois par couche présente** dans `workspace/src/{App}/`
-(`tools`, `retrieval`, `data`, `agents`, `orchestration`, `serving`, puis `tests`
-pour les transverses), en vagues ≤ `MaxParallel` : son budget est plafonné par
+(`app` — les règles métier du Domaine —, `tools`, `retrieval`, `data`, `agents`,
+`orchestration`, `serving`, puis `tests` pour les transverses), en vagues ≤ `MaxParallel` : son budget est plafonné par
 tier (`preflight_agent_budget`), et lire tout `src/**` d'un coup remplissait la
 fenêtre avant le premier tour. Les couches écrivent sous des `tests/` disjoints.
 
@@ -151,8 +158,10 @@ Prompt `qa-tests` — la première ligne désigne la couche (`{object}` de ses `
 ```
 SDDA-LAYER: {couche}
 MISSION {n}. Tests déterministes L0 (schémas, lint, IR, budget, disjonction, fraîcheur, ownership,
-secrets), L1 (fonctions pures, LLM mocké), L2 (contrats d'outils : happy, chaque erreur, timeout,
-auth KO, idempotence ; connectivité live marquée `network`). Stack : {lang}.md, {eval}.md.
+secrets), L1 (fonctions pures, règles métier BR-x du Domaine, LLM mocké), L2 (contrats d'outils :
+un test par `cases[].id` de workspace/pipeline/suites/tool-{n}-{outil}.yaml, l'`id` de la suite
+en littéral ; happy, chaque erreur, timeout, auth KO, idempotence ; connectivité live marquée
+`network`). Runner : la commande de test de .sdda/stacks/lang/{lang}.md ## Testing. Stack : {lang}.md, {eval}.md.
 Un test instable est un bug, pas une propriété. Aucune écriture hors src/**/tests/.
 ```
 
@@ -198,10 +207,11 @@ python .sdda/sdda.py calibrate-judge --mission {n} --grader {g} --json
 
 Le script écrit lui-même la part `calibration` de G5
 (`workspace/.sys/.validation/G5-{n}.calibration.json`, rattachée à chaque CAP de
-la MISSION) : rouge, elle bloque G5. La sortie `--json` n'est **jamais**
-redirigée vers `workspace/pipeline/calibration/{g}.json` — ce fichier est
-l'ENTRÉE du script (le `judgeCalibrationRef` de la suite, qui pointe les labels
-humains) ; l'écraser par le rapport effaçait la référence aux labels à la
+la MISSION) : rouge, elle bloque G5, et c'est ce rapport MESURÉ — lui seul — que
+la gate et le runner relisent. La sortie `--json` n'est **jamais** redirigée
+vers `workspace/pipeline/calibration/{g}.json` — ce fichier est l'ENTRÉE du
+script (le `judgeCalibrationRef` de la suite, qui pointe les labels humains par
+`labelsRef`) ; l'écraser par le rapport effaçait la référence aux labels à la
 première exécution.
 
 | Résultat | Effet |
@@ -217,11 +227,13 @@ mesure la complaisance d'un modèle envers un autre.
 ## STEP 5 — Exécution des suites L0 → L7 (script, k runs)
 
 ```bash
-# L2 (G3 part suites) : les tests de contrat pytest de qa-tests, pas des items notés
+# L2 (G3 part suites) : les tests de contrat de qa-tests, pas des items notés (pytest : Python seulement)
 python .sdda/sdda.py run-tool-suites --mission {n} --json
-uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" \
+# l'application livrée, par sa ligne de commande — tous langages ; L4 isolé par le bloc
+# `isolation:` de sa suite (SDDA_EVAL_ISOLATION / SDDA_EVAL_FIXTURES, stacks/serving/cli.md §3.5)
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" \
   --levels ${LEVELS:-L0,L1,L3,L4,L5,L6,L7} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
-  --executor {module}:{Executor} --json
+  --executor cli --json
 ```
 
 `--run-id "$RUN_ID"` est obligatoire : sans lui le rapport est nommé par
@@ -284,7 +296,7 @@ de ses AC.
 {🟢|🟡|🔴} /sdda-eval {n}-{MissionName} — PHASE 6 · k={k}
 
 DÉTERMINISTE (L0-L2, L5, L6) : {pass}/{total} tests  {🟢|🔴}
-RETRIEVAL   (L3)  {index}: recall@{k} {x} · nDCG {y} · groundedness {z} · citations {c}   {🟢|🔴}
+RETRIEVAL   (L3)  {index}: recall@ {k} {x} · nDCG {y} · groundedness {z} · citations {c}   {🟢|🔴}
 AGENTS      (L4, isolés)
   CAP {n}-1 {Name}     {metric}  {mean} ±{std}  pass {p}  (k={k})   {🟢}
   CAP {n}-2 {Name}     {metric}  {mean} ±{std}  pass {p}  (k={k})   {🟡}  variance > {EvalVarianceWarnPct}%
@@ -295,7 +307,7 @@ Coût par CAP : {n}-1 ${…} · {n}-2 ${…} · …   (où part l'argent)
 Abstention  : {rate} sur le golden  (un système qui ne dit jamais « je ne sais pas » ment mieux)
 Top outils en échec : {tool} ({e} erreurs) · …
 
-Rapport complet : workspace/.sys/reports/{n}-{RUN_ID}.md
+Rapport complet : workspace/.sys/reports/{n}-{RUN_ID}.json
 Run trace       : {RUN_ID}
 
 Prochaine étape :
@@ -319,16 +331,30 @@ Uniquement sur **holdout**, jamais sur le golden. Pré-requis : G6 et G7
 franchies (`--require-gate G7`) ; sinon ERROR `[SAFETY_GATE_NOT_PASSED]`.
 
 ```bash
+python .sdda/sdda.py check-ir-freshness --mission {n}          # exit ≠ 0 → [IR_STALE], STOP
 python .sdda/sdda.py check-baseline-freshness --mission {n} --strict
-uv run --project workspace/src/{App} python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L9 --dataset holdout \
-  --executor {module}:{Executor} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
+# l'application livrée, par sa ligne de commande — tous langages
+python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" --level L9 --dataset holdout \
+  --executor cli $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
   --baseline workspace/pipeline/baselines/{n}-system.json --json
-python .sdda/sdda.py check-regression --mission {n} --run "$RUN_ID" --json \
-  > workspace/.sys/.validation/regression-{n}.json
+python .sdda/sdda.py check-regression --mission {n} --run "$RUN_ID" --json
+# exit 1 → [REGRESSION] ou [EVAL_BASELINE_STALE] : STOP, fail — sans lire compute-status
 python .sdda/sdda.py compute-status --mission {n} --require-gate G8
 # exit 0 → G8 franchie ; sinon → fail
 python .sdda/sdda.py state set-phase --phase acceptance --status {pass|fail}
 ```
+
+`check-ir-freshness` d'abord : la suite L9 n'existe dans l'IR que si elle a été
+recompilée après l'arrivée du holdout (`/sdda-build` 3.0c) ; une IR périmée
+mesurerait autre chose que le verdict déclaré, ou rien. FIX :
+`/sdda-topology {n} --recompile-only`.
+
+`check-regression` écrit lui-même la part **`regression`** de G8, obligatoire :
+`compute-status --require-gate G8` ne rend donc pas « franchie » tant que la
+non-régression n'a pas été jugée. Sa sortie n'est **jamais** redirigée sous
+`.validation/` — un JSON de console déposé là ressemble à un rapport de gate
+sans en être un. Son exit 1 arrête la commande tout de suite : la gate le dirait
+aussi, mais plus tard et en moins clair.
 
 `check-regression --run "$RUN_ID"` lit **tous** les rapports du run
 (`{n}-{RUN_ID}.json`, `-2`, `-3`…), chaque suite à sa dernière mesure : un run
@@ -340,7 +366,7 @@ n'enregistrait la dernière phase canonique, `resume-target` ne rendait jamais
 `done`, et un `--resume` après une acceptation verte rejouait l'acceptation —
 c'est-à-dire relisait le holdout une fois de plus.
 
-> **Un seul appel, niveau L9.** Il y en avait deux : un `--level L7 --dataset
+> **Un seul appel d'`eval-runner`, niveau L9.** Il y en avait deux : un `--level L7 --dataset
 > holdout`, puis un `--level L9`, concaténés par `>>` dans le même fichier. Les
 > trois choses étaient fausses ensemble : `L7` est mappé sur **G6**, pas G8, donc
 > le premier appel écrasait un verdict d'orchestration en croyant mesurer
@@ -351,16 +377,25 @@ c'est-à-dire relisait le holdout une fois de plus.
 
 `--executor` est **obligatoire** : `eval_runner` n'appelle aucun LLM lui-même.
 Sans lui il sort `[EVAL_EXECUTOR_MISSING]` plutôt que de supposer une mesure.
-Le squelette généré expose `{AppName}.evals.executor:CliExecutor` (bout-en-bout,
-la surface console) et `:InProcessExecutor` (isolé, outils mockés).
+Trois formes, par ordre de préférence :
+- `--executor cli` — l'application livrée, lancée par sa ligne de commande
+  (`run --json --input-file -`, `retrieve` pour G4), **quel que soit le
+  langage** : la commande de lancement vient du langage actif. C'est la forme
+  par défaut de toutes les commandes ;
+- `--executor cmd:{commande}` — la même chose, commande imposée, quand le
+  lancement par défaut ne convient pas ;
+- `--executor {AppName}.evals.executor:InProcessExecutor` — **(Python)** l'eval
+  L4 en processus du squelette, sous `uv run --project workspace/src/{App}`.
+
+Contrat : `stacks/serving/cli.md` §3.1-3.5.
 
 `check_regression.py` rend le contrôle 3. Il lit la **tolérance** (`RegressionTolerancePct`)
 **et l'écart-type de la baseline** (`RegressionNoiseSigma`) : une baisse au-delà de
 la tolérance mais sous N σ de la baseline est `WARN [REGRESSION_WITHIN_NOISE]`,
 pas `[REGRESSION]` — bloquer sur un tirage apprend à relever la tolérance. Exit 1
-→ le contrôle 3 est KO. Sortie `data.regressions[]`, `data.withinNoise[]`,
-`data.stale[]` (comparaison **refusée** si le tuple d'épinglage a bougé :
-`[EVAL_BASELINE_STALE]`).
+→ le contrôle 3 est KO, et la part `regression` de G8 est rouge. Sortie
+`data.regressions[]`, `data.withinNoise[]`, `data.stale[]` (comparaison
+**refusée** si le tuple d'épinglage a bougé : `[EVAL_BASELINE_STALE]`).
 
 | # | Contrôle | Classe si KO |
 |---|---|---|
@@ -404,5 +439,4 @@ FIX: NE PAS itérer contre le holdout ; corriger sur le golden (/sdda-build, /sd
 Applique ``.sdda/rules/output-protocol.md` (Read ce fichier avant de poursuivre)`. Label `[EVAL]`, plage `0-100%`
 (agents 0-40 %, freeze + calibration 40-50 %, suites 50-95 %, rapport 95-100 %).
 Erreurs : bloc ERROR/CAUSE/FIX 3 lignes.
-
 '''

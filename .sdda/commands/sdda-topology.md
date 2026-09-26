@@ -97,7 +97,12 @@ python .sdda/sdda.py spawn-brief --agent architect-topology --mission {n} --prom
 un agent qui déborde ne rend pas une sortie plus courte, il rend une sortie
 tronquée et confiante.
 
-Si `--recompile-only` → STEP 4.bis (0 token, idempotent) puis STEP 6.
+Si `--recompile-only` → les trois post-checks de déclaration du STEP 4
+(`validate-packaging`, `validate-architecture`, `validate-adr --mission {n}`),
+puis STEP 4.bis (0 token, idempotent) puis STEP 6. Les parts `packaging`,
+`architecture` et `adr` de G2 sont épinglées sur STACK.md, la topologie, le
+roster et les ADR : après l'édition qui motive la recompilation, elles sont
+périmées tant qu'on ne les rejoue pas — et une part périmée n'est pas verte.
 
 ---
 

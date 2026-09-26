@@ -149,7 +149,10 @@ FIX: passer retry_policy=none, ou introduire natural-key:{message_id}
   erreur non déclarée en production est un trou de spec, pas un imprévu.
   `AUTH_FAILED` n'a jamais de contournement.
 - **Bornes** : `timeout_s`, `rate_limit_rpm`, `max_response_bytes` (une réponse
-  de 2 Mo est une facture de tokens, pas une donnée).
+  de 2 Mo est une facture de tokens, pas une donnée). L'IR les projette
+  (`toolMeta`) et le code les applique par le toolset de l'agent
+  (`ToolRegistry.to_toolset`, `settings.tool_meta`) : une borne que tu ne
+  déclares pas ici n'existe nulle part.
 - **Auth** : le **nom** de la variable d'environnement, jamais la valeur.
 - **Trust** : `untrusted` dès que la sortie contient du texte que le système ne
   maîtrise pas (page web, réponse d'un tiers, champ libre). Remplis alors le §9 :

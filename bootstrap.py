@@ -24,6 +24,7 @@ Il pose peu de questions, et chacune a une conséquence architecturale réelle.
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import re
 import shutil
@@ -285,6 +286,24 @@ def ask(prompt: str, default: str = "") -> str:
     return answer or default
 
 
+def ask_secret(prompt: str) -> str:
+    """Une valeur SECRÈTE : saisie sans écho.
+
+    `input()` affichait la clé d'API et le mot de passe en clair à l'écran —
+    donc dans l'historique du terminal, une capture, un partage d'écran.
+    """
+    try:
+        return getpass.getpass(f"  {prompt} (saisie masquée) : ").strip()
+    except (EOFError, KeyboardInterrupt):
+        say()
+        fail(
+            "saisie interrompue",
+            "[BOOTSTRAP_ABORTED] entrée fermée ou interruption clavier",
+            "relancer, ou utiliser --combo c1 --auto pour un mode non interactif",
+        )
+    return ""
+
+
 def ask_choice(prompt: str, options: dict[str, str], default: str) -> str:
     say()
     say(f"  {prompt}")
@@ -411,7 +430,6 @@ def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str], profile
         ) if line
     ) or "# (aucun : RAG Pattern = none)"
 
-    has_db = combo.database != "none"
     mapping = {
         "{{AppName}}": app_name,
         "{{Language}}": combo.language,
@@ -438,7 +456,7 @@ def build_stack_md(app_name: str, combo: Combo, secrets: dict[str, str], profile
         # Aucune VALEUR de secret ici : STACK.md ne porte que `${NOM}` (le gabarit
         # les écrit tel quel), et `write_env` range les valeurs dans `workspace/src/{App}/.env`.
     }
-    del secrets, has_db  # lus par write_env ; gardés dans la signature pour les appelants
+    del secrets  # lus par write_env ; gardés dans la signature pour les appelants
     for placeholder, value in mapping.items():
         text = text.replace(placeholder, value)
 
@@ -473,7 +491,6 @@ def build_context_packs() -> None:
     forme d'un `[PACK_UNUSABLE]` au milieu d'un pipeline — alors qu'il se
     construit en une seconde au moment où le workspace naît.
     """
-    sys.path.insert(0, str(SDDA / "python"))
     try:
         from sdda_lib.errors import Report
         from sdda_scripts import context_pack
@@ -540,10 +557,13 @@ def write_env(app_name: str, combo: Combo, secrets: dict[str, str]) -> Path:
     """
     from sdda_lib import paths  # import tardif : sys.path est complété après les constantes
 
+    from sdda_scripts.install_env import write_secret_file  # même écrivain que `install-env`
+
     env_path = paths.env_source_path(ROOT)
-    env_path.parent.mkdir(parents=True, exist_ok=True)
     existing = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
-    env_path.write_text(build_env(app_name, combo, secrets, existing), encoding="utf-8")
+    # 0600, atomique, en LF : `write_text` créait le fichier de secrets lisible
+    # par tous les comptes du poste (umask 0644) et en CRLF sous Windows.
+    write_secret_file(env_path, build_env(app_name, combo, secrets, existing).encode("utf-8"))
     return env_path
 
 
@@ -646,7 +666,7 @@ def interactive() -> tuple[str, Combo, dict[str, str]]:
     say("  workspace/src/{App}/.env pour l'application. STACK.md, versionné, n'en porte")
     say("  que les noms. Laisser vide pour compléter le .env plus tard.")
     say()
-    key = ask("Clé API du fournisseur de modèles (LLM_API_KEY)", "")
+    key = ask_secret("Clé API du fournisseur de modèles (LLM_API_KEY)")
     if key:
         secrets["LLM_API_KEY"] = key
 
@@ -657,7 +677,7 @@ def interactive() -> tuple[str, Combo, dict[str, str]]:
         secrets["DB_PORT"] = ask("Port", "5432")
         secrets["DB_NAME"] = ask("Base", f"{app_name.lower()}_db")
         secrets["DB_USER"] = ask("Utilisateur (rôle en LECTURE SEULE recommandé)", "")
-        secrets["DB_PASSWORD"] = ask("Mot de passe", "")
+        secrets["DB_PASSWORD"] = ask_secret("Mot de passe")
 
     return app_name, combo, secrets
 
@@ -737,7 +757,9 @@ def main() -> int:
         shutil.copy2(stack_path, backup)
         step(f"sauvegarde de l'ancien STACK.md -> {backup.name}")
 
-    stack_path.write_text(build_stack_md(app_name, combo, secrets, profile), encoding="utf-8")
+    # LF sur tous les postes : STACK.md est versionné, et un CRLF produit sous
+    # Windows faisait un diff de chaque ligne au premier commit Linux.
+    stack_path.write_text(build_stack_md(app_name, combo, secrets, profile), encoding="utf-8", newline="\n")
     step(f"workspace/stack/STACK.md  (versionné — noms de variables seulement ; Profile: {profile})")
 
     write_env(app_name, combo, secrets)

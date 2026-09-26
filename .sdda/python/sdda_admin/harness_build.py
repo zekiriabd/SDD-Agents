@@ -10,17 +10,26 @@ des prompts français — avec repli sur `ARCHITECTURE.md` (cf. `memory_source`)
 
     .sdda/  (source neutre, la seule chose qu'on écrit)
         │
-        ├─► .claude/   agents/ · commands/ · CLAUDE.md · settings.json
-        ├─► .codex/    prompts/ · AGENTS.md · config.toml
-        └─► .gemini/   commands/*.toml · GEMINI.md · settings.json
+        ├─► .claude/   agents/*.md · commands/*.md · CLAUDE.md · settings.json
+        ├─► .codex/    agents/*.toml · AGENTS.md · hooks.json
+        ├─► .gemini/   agents/*.md · commands/*.toml · GEMINI.md · settings.json
+        ├─► .agents/   rules/*.md · agents/*.md          (Antigravity)
+        │   └─ skills/{cmd}/SKILL.md                     (Codex ET Antigravity)
+        └─► AGENTS.md · GEMINI.md à la racine            (pointeurs)
+
+Chaque emplacement et chaque format ci-dessus vient de la documentation
+OFFICIELLE du harnais ; l'URL est citée à côté de la constante ou de
+l'adaptateur qui en dépend. Ce que la documentation ne dit pas n'est pas codé :
+c'est dit dans le rapport d'impact et dans `docs/MULTI-HARNESS.md` (« non
+vérifié »), jamais deviné ici.
 
 **Les façades sont générées, jamais éditées.** Une modification directe dans
 `.claude/` est écrasée au build suivant, et le test de parité la détecte.
 
-**Le rapport d'impact est obligatoire.** Un harnais sans hooks au runtime ne
-perd pas ses invariants : ils se DÉPLACENT vers le CI. Le prétendre appliqué
-au runtime serait exactement le doc-theater que `INVARIANTS.yml` existe pour
-empêcher — cf. `docs/MULTI-HARNESS.md` §3.
+**Le rapport d'impact est obligatoire.** Un harnais dont les hooks ne couvrent
+pas tout ne perd pas ses invariants : ils se DÉPLACENT vers le CI. Le prétendre
+appliqué au runtime serait exactement le doc-theater que `INVARIANTS.yml`
+existe pour empêcher — cf. `docs/MULTI-HARNESS.md` §3.
 
 Usage :
     python .sdda/sdda.py harness-build                 # tous
@@ -36,7 +45,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,7 +52,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, yaml_mini  # noqa: E402
+from sdda_lib import yaml_mini  # noqa: E402
 from sdda_lib.runtime_io import ensure_utf8_stdout  # noqa: E402
 
 ensure_utf8_stdout()
@@ -57,6 +65,55 @@ GENERATED_BANNER = (
     "     NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,\n"
     "     et le test de parité la signale. Éditer la source. -->\n"
 )
+
+#: Marqueur que porte TOUT fichier généré, bannière HTML ou commentaire TOML.
+#: Il sert à ne déclarer orphelin, dans un répertoire partagé avec l'humain
+#: (`.agents/skills/`, `.agents/rules/`), que ce que ce build a lui-même écrit :
+#: une skill écrite à la main n'est pas une façade périmée, et `--prune` ne
+#: doit jamais la supprimer.
+GENERATED_MARK = "GÉNÉRÉ"
+
+
+# ---------------------------------------------------------------------------
+# Limites et formats documentés — une constante par fait sourcé
+# ---------------------------------------------------------------------------
+#: Codex s'arrête d'ajouter des fichiers d'instructions à 32 KiB cumulés, en
+#: silence (`project_doc_max_bytes`) :
+#: https://developers.openai.com/codex/guides/agents-md (-> learn.chatgpt.com).
+#: Le pointeur racine doit tenir bien en dessous, sinon la fin — le statut — est
+#: tronquée sans que personne le voie.
+CODEX_PROJECT_DOC_MAX_BYTES = 32 * 1024
+
+#: Valeurs de `sandbox_mode` d'un agent Codex :
+#: https://developers.openai.com/codex/subagents (-> learn.chatgpt.com/docs/agent-configuration/subagents).
+CODEX_SANDBOX_MODES = ("read-only", "workspace-write")
+
+#: Antigravity : 24 000 octets par fichier de règle, includes développés
+#: (https://antigravity.google/docs/rules). Au-delà, la règle n'est pas chargée
+#: entière — un agent qui croit avoir lu l'architecture en a lu un morceau.
+ANTIGRAVITY_RULE_MAX_BYTES = 24_000
+
+#: Valeurs de `trigger` d'une règle Antigravity (même page).
+ANTIGRAVITY_RULE_TRIGGERS = ("always_on", "model_decision", "glob", "manual")
+
+#: Gemini CLI : le `name` d'un sous-agent est aussi le nom de l'outil qui le
+#: lance ; « Only lowercase letters, numbers, hyphens, and underscores »
+#: (https://geminicli.com/docs/core/subagents/).
+GEMINI_AGENT_NAME_RE = re.compile(r"^[a-z0-9_-]+$")
+
+#: Outils Claude -> outils Gemini CLI (https://geminicli.com/docs/reference/tools/).
+#: `Glob` couvre aussi le listage d'un répertoire côté Claude : il porte donc
+#: `list_directory` en plus de `glob`. `MultiEdit` et `NotebookEdit` n'ont pas
+#: d'équivalent, et un outil inexistant dans la liste d'un agent n'est pas
+#: une restriction — c'est une erreur de chargement.
+GEMINI_TOOLS: dict[str, tuple[str, ...]] = {
+    "Read": ("read_file",),
+    "Write": ("write_file",),
+    "Edit": ("replace",),
+    "Glob": ("glob", "list_directory"),
+    "Grep": ("grep_search",),
+    "Bash": ("run_shell_command",),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -106,19 +163,21 @@ def load_matrix() -> dict[str, Harness]:
 AT_REF_RE = re.compile(r"@(\.sdda/[\w\-./{}*]+)")
 
 
-def rewrite_refs(text: str, harness: Harness) -> str:
-    """Adapte les `@`-refs à ce que le harnais sait faire.
-
-    `at_include: native`   -> on laisse : le harnais charge le fichier à la demande.
-    sinon                  -> `@.sdda/x.md` devient « Read .sdda/x.md avant ce STEP ».
+def inline_refs(text: str) -> str:
+    """`@.sdda/x.md` devient « Read .sdda/x.md avant de poursuivre ».
 
     Le repli est verbeux à dessein : une référence muette sur un harnais qui ne
     la résout pas produirait un agent qui croit avoir lu une règle qu'il n'a
     jamais vue — un pack manquant à l'échelle d'une règle.
     """
+    return AT_REF_RE.sub(lambda m: f"`{m.group(1)}` (Read ce fichier avant de poursuivre)", text)
+
+
+def rewrite_refs(text: str, harness: Harness) -> str:
+    """Adapte les `@`-refs à ce que le harnais sait faire (`at_include`)."""
     if harness.supports("at_include"):
         return text
-    return AT_REF_RE.sub(lambda m: f"`{m.group(1)}` (Read ce fichier avant de poursuivre)", text)
+    return inline_refs(text)
 
 
 #: Marqueurs de `sync_counters.py` : la SOURCE porte `<!--sdda:count agents-->22<!--/sdda:count-->`
@@ -140,7 +199,7 @@ _FRONTMATTER_RE = re.compile(r"^---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n?(.*)\Z", 
 
 
 def yaml_scalar(value: Any) -> str:
-    """Une valeur de frontmatter que Claude Code relit en YAML strict.
+    """Une valeur de frontmatter que le harnais relit en YAML strict.
 
     `yaml_mini` relit la source avec tolérance ; Claude Code, non. Une
     description qui porte `Profile: poc` ou ` # ` écrite sans guillemets est un
@@ -151,12 +210,18 @@ def yaml_scalar(value: Any) -> str:
     guillemets doubles (JSON est du YAML valide, et `json.loads` suffit à le
     vérifier sans PyYAML — c'est ce que le test de parité relit).
     """
+    if isinstance(value, bool):
+        return "true" if value else "false"
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
     text = value if isinstance(value, str) else str(value)
     if YAML_PLAIN_RE.match(text) and text.lower() not in YAML_RETYPED:
         return text
     return json.dumps(text, ensure_ascii=False)
+
+
+def frontmatter(meta: dict[str, Any]) -> str:
+    return "---\n" + "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in meta.items()) + "\n---\n"
 
 
 def frontmatter_and_body(text: str) -> tuple[dict[str, Any], str]:
@@ -173,6 +238,43 @@ def frontmatter_and_body(text: str) -> tuple[dict[str, Any], str]:
 
 
 # ---------------------------------------------------------------------------
+# TOML — Codex (agents) et Gemini CLI (commandes)
+# ---------------------------------------------------------------------------
+# Un TOML invalide n'est pas une façade dégradée : c'est une façade absente, et
+# le harnais ne dit pas toujours pourquoi. Les deux fonctions ci-dessous
+# émettent un TOML que `tomllib` relit — le test et `framework-smoke` le font.
+_TOML_CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def toml_string(text: str) -> str:
+    """Chaîne TOML de base sur une ligne.
+
+    `json.dumps` produit les mêmes échappements que TOML (`\\"`, `\\\\`, `\\n`,
+    `\\uXXXX`), à une exception près : il laisse passer DEL (U+007F), que TOML
+    interdit en clair. L'ancienne forme n'échappait que `"` — un `\\` dans une
+    description suffisait à rendre la commande illisible.
+    """
+    return json.dumps(text, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
+def toml_multiline(text: str) -> str:
+    """Chaîne TOML multi-ligne, littérale quand c'est possible.
+
+    Le littéral `'''…'''` ne connaît AUCUN échappement : on ne peut pas y
+    « échapper » un `'''`, seulement changer de forme. L'ancienne version
+    écrivait `\\'\\'\\'`, qui arrivait tel quel — antislashs compris — dans le
+    prompt. Quand le texte contient `'''`, un caractère de contrôle ou finit
+    par `'`, on bascule donc sur la chaîne de base `\"\"\"…\"\"\"`, échappée.
+    """
+    body = text if text.endswith("\n") else text + "\n"
+    if "'''" not in body and not _TOML_CTRL_RE.search(body) and "\r" not in body:
+        return "'''\n" + body + "'''"
+    escaped = body.replace("\\", "\\\\").replace('"""', '""\\"').replace("\r", "\\r")
+    escaped = _TOML_CTRL_RE.sub(lambda m: f"\\u{ord(m.group(0)):04x}", escaped)
+    return '"""\n' + escaped + '"""'
+
+
+# ---------------------------------------------------------------------------
 # Adaptateurs
 # ---------------------------------------------------------------------------
 # Avertissements collectés pendant un build, par harnais. Rapportés par main
@@ -181,12 +283,13 @@ def frontmatter_and_body(text: str) -> tuple[dict[str, Any], str]:
 BUILD_NOTES: dict[str, list[str]] = {}
 
 #: Le fichier mémoire des harnais (`.claude/CLAUDE.md`, `.codex/AGENTS.md`,
-#: `.gemini/GEMINI.md`) est compilé depuis le jumeau FRANÇAIS de l'architecture.
-#: La documentation est en anglais par défaut (`ARCHITECTURE.md`), mais le
-#: fichier mémoire est lu par les Developer Agents avec leurs prompts, qui sont
-#: en français : leur servir l'architecture dans une autre langue que leurs
-#: fiches, c'est deux vocabulaires pour une même règle. Si le jumeau manque, on
-#: compile l'anglais plutôt que rien — et le build le dit.
+#: `.gemini/GEMINI.md`, `.agents/rules/`) est compilé depuis le jumeau FRANÇAIS
+#: de l'architecture. La documentation est en anglais par défaut
+#: (`ARCHITECTURE.md`), mais le fichier mémoire est lu par les Developer Agents
+#: avec leurs prompts, qui sont en français : leur servir l'architecture dans
+#: une autre langue que leurs fiches, c'est deux vocabulaires pour une même
+#: règle. Si le jumeau manque, on compile l'anglais plutôt que rien — et le
+#: build le dit.
 MEMORY_SOURCE_FR = "ARCHITECTURE.fr.md"
 MEMORY_SOURCE_FALLBACK = "ARCHITECTURE.md"
 
@@ -198,6 +301,35 @@ def memory_source(sdda: Path | None = None) -> Path:
     return preferred if preferred.is_file() else base / MEMORY_SOURCE_FALLBACK
 
 
+def tier_of(meta: dict[str, Any]) -> str:
+    """Le tier déclaré par un agent : `model_tier`, sinon `tier_default`.
+
+    Une seule lecture pour tous les adaptateurs : Claude lisait les deux clés,
+    Codex et Gemini seulement la première avec `balanced` en dur — un agent
+    qui ne déclarait que `tier_default: deep` tournait en `balanced` ailleurs.
+    """
+    return str(meta.get("model_tier") or meta.get("tier_default") or "balanced").strip()
+
+
+def tools_of(meta: dict[str, Any]) -> list[str]:
+    raw = meta.get("tools") or []
+    if isinstance(raw, str):
+        raw = [t.strip() for t in raw.split(",")]
+    return [str(t).strip() for t in raw if str(t).strip()]
+
+
+def writes_files(meta: dict[str, Any]) -> bool:
+    return bool({"Write", "Edit", "MultiEdit", "NotebookEdit"} & set(tools_of(meta)))
+
+
+@dataclass
+class HookPort:
+    """Le sort d'un hook sur un harnais : câblé, dégradé, ou absent — et pourquoi."""
+
+    status: str          # "native" | "degraded" | "absent"
+    note: str = ""
+
+
 @dataclass
 class BuildPlan:
     """Ce qu'un build produit : chemin -> contenu. Rien n'est écrit avant que
@@ -205,6 +337,8 @@ class BuildPlan:
     régénérée."""
 
     files: dict[Path, str] = field(default_factory=dict)
+    #: module de hook -> son sort sur ce harnais (lu par le rapport d'impact).
+    ported: dict[str, HookPort] = field(default_factory=dict)
 
     def add(self, path: Path, content: str) -> None:
         self.files[path] = content
@@ -214,18 +348,35 @@ class Adapter:
     """Socle commun. Une sous-classe ne redéfinit que ce qui diffère."""
 
     out_dir: str = ""
+    #: Fichiers mémoire que le harnais lit à la RACINE du dépôt, et qui
+    #: reçoivent donc un pointeur vers la façade.
+    root_pointers: tuple[str, ...] = ()
+    #: (répertoire relatif à ROOT, n'y compter que les fichiers générés ?) —
+    #: où chercher les orphelins. `True` pour un répertoire que l'humain peut
+    #: aussi garnir (`.agents/skills/`) : seul ce que le build a écrit y est
+    #: jugé.
+    managed: tuple[tuple[str, bool], ...] = ()
 
     def __init__(self, harness: Harness) -> None:
         self.harness = harness
+
+    def note(self, text: str) -> None:
+        BUILD_NOTES.setdefault(self.harness.name, []).append(text)
 
     # -- agents ------------------------------------------------------------
     def emit_agents(self, plan: BuildPlan, out: Path) -> int:
         count = 0
         for src in sorted((SDDA / "agents").glob("*.md")):
             meta, body = frontmatter_and_body(src.read_text(encoding="utf-8"))
-            plan.add(out / "agents" / src.name, self.render_agent(src, meta, strip_sync_markers(body)))
+            # Les marqueurs de compteurs sont retirés pour TOUS les harnais :
+            # Gemini les gardait, faute de passer par ce socle.
+            path, content = self.render_agent_file(out, src, meta, strip_sync_markers(body))
+            plan.add(path, content)
             count += 1
         return count
+
+    def render_agent_file(self, out: Path, src: Path, meta: dict[str, Any], body: str) -> tuple[Path, str]:
+        return out / "agents" / src.name, self.render_agent(src, meta, body)
 
     def render_agent(self, src: Path, meta: dict[str, Any], body: str) -> str:
         raise NotImplementedError
@@ -243,23 +394,28 @@ class Adapter:
         raise NotImplementedError
 
     # -- mémoire -----------------------------------------------------------
-    def emit_memory_file(self, plan: BuildPlan, out: Path) -> None:
-        # Le fichier mémoire de chaque harnais EST l'architecture : une seule
-        # source, pas de « corps d'entrée » optionnel qu'aucun dépôt n'a jamais eu.
+    def memory_text(self) -> tuple[Path, str]:
         source = memory_source()
         if source.name != MEMORY_SOURCE_FR:
-            BUILD_NOTES.setdefault(self.harness.name, []).append(
+            self.note(
                 f".sdda/{MEMORY_SOURCE_FR} absent — fichier mémoire compilé depuis "
                 f".sdda/{source.name} (anglais), alors que les prompts sont en français"
             )
-        text = rewrite_refs(strip_sync_markers(source.read_text(encoding="utf-8")), self.harness)
+        return source, rewrite_refs(strip_sync_markers(source.read_text(encoding="utf-8")), self.harness)
+
+    def emit_memory_file(self, plan: BuildPlan, out: Path) -> None:
+        # Le fichier mémoire de chaque harnais EST l'architecture : une seule
+        # source, pas de « corps d'entrée » optionnel qu'aucun dépôt n'a jamais eu.
+        source, text = self.memory_text()
         plan.add(
             out / self.harness.memory_file,
             GENERATED_BANNER.format(source=f".sdda/{source.name}") + "\n" + text,
         )
 
     def emit_settings(self, plan: BuildPlan, out: Path) -> None:
-        """Par défaut : rien. Seul Claude Code câble des hooks bloquants."""
+        """Par défaut : aucun hook câblé — et chaque hook est déclaré absent."""
+        for module, _wiring in discover_hook_wirings():
+            plan.ported[module] = HookPort("absent", "aucun câblage pour ce harnais")
 
     def build(self) -> tuple[BuildPlan, dict[str, int]]:
         out = ROOT / self.out_dir
@@ -322,6 +478,22 @@ def discover_hook_wirings() -> list[tuple[str, dict[str, str] | None]]:
     return out
 
 
+def wiring_kind(wiring: dict[str, str]) -> str:
+    """La famille d'un câblage Claude : `write`, `read`, `shell`, `spawn`, `stop`."""
+    if wiring["event"] == "SubagentStop":
+        return "stop"
+    tools = set(wiring["matcher"].split("|"))
+    if tools & {"Task", "Agent"}:
+        return "spawn"
+    if tools & {"Write", "Edit", "MultiEdit", "NotebookEdit"}:
+        return "write"
+    if tools & {"Bash", "PowerShell"}:
+        return "shell"
+    if tools & {"Read", "Glob", "Grep"}:
+        return "read"
+    return "other"
+
+
 #: Refus NATIFS de lecture des fichiers de secrets du workspace — un filet non
 #: lexical sous les hooks.
 #:
@@ -345,8 +517,19 @@ SECRET_READ_DENY = tuple(
     for name in (".env", ".env.local", ".env.production", ".env.development")
 )
 
+#: Ancres de la racine du projet dans la commande d'un hook, par harnais.
+#: - Claude Code pose `$CLAUDE_PROJECT_DIR` ;
+#: - Gemini CLI pose `$GEMINI_PROJECT_DIR` (https://geminicli.com/docs/hooks/) ;
+#: - Codex lance la commande dans le `cwd` de la session et ne documente AUCUNE
+#:   variable de racine ; ses propres exemples s'ancrent par
+#:   `$(git rev-parse --show-toplevel)` (https://developers.openai.com/codex/hooks
+#:   -> learn.chatgpt.com/docs/hooks). Le repli `pwd` couvre un dépôt sans git.
+ANCHOR_CLAUDE = "$CLAUDE_PROJECT_DIR"
+ANCHOR_GEMINI = "$GEMINI_PROJECT_DIR"
+ANCHOR_CODEX = "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-def hook_command(script: str) -> str:
+
+def hook_command(script: str, anchor: str = ANCHOR_CLAUDE, harness: str = "") -> str:
     """La commande shell d'un hook câblé — interpréteur configurable, échec de LANCEMENT visible.
 
     La forme d'avant, `python "<hook>"`, avait deux pannes silencieuses :
@@ -362,14 +545,20 @@ def hook_command(script: str) -> str:
       (`SDDA_HOOKS_STRICT=1`, la CI) — même règle que `_hook.degrade` pour une
       exception, étendue au cas où Python n'a jamais démarré.
 
-    Le shell est celui du harnais (Git Bash sous Windows, sh ailleurs) : la
-    syntaxe reste POSIX. Le chemin est ancré sur `$CLAUDE_PROJECT_DIR`, entre
-    guillemets (cf. `emit_settings`). `hooks-selfcheck` exécute chaque commande
-    ainsi générée avec un payload inoffensif et un payload à refuser.
+    `harness` (hors Claude) pose `SDDA_HARNESS` : c'est ce qui dit à `_hook.py`
+    de traduire le payload du harnais (`write_file`, `apply_patch`…) en la forme
+    que les hooks jugent. Sans lui, un hook reçoit un outil qu'il ne connaît
+    pas et AUTORISE — un enforcer câblé et muet.
+
+    Le shell est POSIX (Git Bash sous Windows pour Claude Code). Le chemin est
+    ancré sur la racine du projet, entre guillemets (cf. `emit_settings`).
+    `hooks-selfcheck` exécute chaque commande ainsi générée avec un payload
+    inoffensif et un payload à refuser.
     """
     name = script.rsplit("/", 1)[-1]
+    prefix = f"SDDA_HARNESS={harness} " if harness else ""
     return (
-        f'${{SDDA_PYTHON:-python}} "$CLAUDE_PROJECT_DIR/{script}"; rc=$?; '
+        f'{prefix}${{SDDA_PYTHON:-python}} "{anchor}/{script}"; rc=$?; '
         f'if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then '
         # Message ASCII : il traverse un shell dont l'encodage de stderr n'est
         # pas garanti, au moment précis où il doit être lu.
@@ -378,10 +567,24 @@ def hook_command(script: str) -> str:
     )
 
 
+def hook_rel(module: str) -> str:
+    return f".sdda/python/sdda_hooks/{module}.py"
+
+
+#: `$0`, `$1`… dans le corps d'une commande Claude Code sont des PLACEHOLDERS
+#: d'arguments (indexés à partir de 0) : https://code.claude.com/docs/en/skills.
+#: `coût $0.09` devenait `coût 1.09` pour `/sdda-full 1` — et, pire, un
+#: placeholder qui reçoit un argument supprime l'ajout de `ARGUMENTS: …` : tout
+#: argument au-delà du premier (`--resume`) n'arrivait jamais au modèle.
+#: L'échappement documenté est l'antislash (`\$1.00`).
+CLAUDE_INDEXED_ARG_RE = re.compile(r"(?<!\\)\$(?=\d)")
+
+
 class ClaudeAdapter(Adapter):
     """Harnais de référence (niveau A) : tout est natif."""
 
     out_dir = ".claude"
+    managed = ((".claude/agents", False), (".claude/commands", False))
 
     def render_agent(self, src, meta, body) -> str:
         # Claude Code lit le frontmatter tel quel ; on le conserve verbatim et
@@ -397,28 +600,28 @@ class ClaudeAdapter(Adapter):
         # de l'écart était la facture.
         meta = dict(meta)
         if "model" not in meta:
-            selector = self.harness.model_for(meta.get("model_tier", meta.get("tier_default", "")))
+            selector = self.harness.model_for(tier_of(meta))
             if selector:
                 meta["model"] = selector
-        front = "---\n" + "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in meta.items()) + "\n---\n"
-        return front + GENERATED_BANNER.format(source=f".sdda/agents/{src.name}") + "\n" + body
+        return frontmatter(meta) + GENERATED_BANNER.format(source=f".sdda/agents/{src.name}") + "\n" + body
 
     def render_command(self, plan, out, src, meta, body) -> None:
-        front = (
-            f"---\nname: {yaml_scalar(meta.get('name', src.stem))}\n"
-            f"description: {yaml_scalar(meta.get('description', ''))}\n---\n"
-        )
+        # Pas de `name:` : une commande `.claude/commands/` accepte les champs
+        # d'une skill « except `name` and `paths` » — son nom vient du fichier
+        # (https://code.claude.com/docs/en/slash-commands). La clé était ignorée.
+        front = f"---\ndescription: {yaml_scalar(meta.get('description', ''))}\n---\n"
         plan.add(
             out / "commands" / src.name,
-            front + GENERATED_BANNER.format(source=f".sdda/commands/{src.name}") + "\n" + body,
+            front + GENERATED_BANNER.format(source=f".sdda/commands/{src.name}") + "\n"
+            + CLAUDE_INDEXED_ARG_RE.sub(r"\\$", body),
         )
 
     def emit_settings(self, plan, out) -> None:
         """Les hooks bloquants — ce qui fait le niveau A.
 
         Ils s'exécutent AU MOMENT de l'action. Sur les autres harnais, les
-        mêmes invariants basculent en contrôles CI : plus tard, après que le
-        travail a été fait sur une base fausse.
+        mêmes invariants ne s'appliquent au runtime que pour la part que leur
+        payload permet de juger ; le reste bascule en contrôles CI.
 
         **Le câblage est dérivé, jamais listé ici.** Chaque hook déclare son
         `WIRING` (cf. `sdda_hooks/_hook.py`), et tout module présent sur le
@@ -436,35 +639,25 @@ class ClaudeAdapter(Adapter):
         by_slot: dict[tuple[str, str], list[str]] = {}
 
         for module, wiring in discover_hook_wirings():
-            rel = f".sdda/python/sdda_hooks/{module}.py"
             if wiring is None:
                 undeclared.append(module)
+                plan.ported[module] = HookPort("absent", "aucun WIRING déclaré")
                 continue
-            by_slot.setdefault((wiring["event"], wiring["matcher"]), []).append(rel)
+            by_slot.setdefault((wiring["event"], wiring["matcher"]), []).append(hook_rel(module))
+            plan.ported[module] = HookPort("native")
 
         # Ordre stable : l'événement, puis le matcher, puis le nom du script.
         # Un `settings.json` dont l'ordre bouge à chaque build ferait échouer
         # `--check` sans qu'aucune source ait changé.
+        #
         # Le chemin est ancré sur la RACINE DU PROJET, pas sur le répertoire
-        # courant.
-        #
-        # Un chemin de hook écrit en relatif se résout contre le cwd du
-        # harnais. Il suffit qu'une commande entre dans un sous-répertoire —
-        # une fixture, `workspace/src/`, n'importe quel `cd` — pour que le
-        # chemin ne désigne plus rien. Le hook ne s'exécute alors pas, et
-        # l'effet dépend du harnais : au mieux il laisse passer en silence,
-        # c'est-à-dire que les quatorze enforcers disparaissent sans un mot ;
-        # au pire il rend une erreur qui BLOQUE l'outil, et plus aucune
-        # commande ne passe tant que le cwd n'est pas revenu.
-        #
-        # Les deux comportements ont été observés. Le second est spectaculaire
-        # et se corrige tout seul ; le premier est celui qui coûte cher, parce
-        # qu'il ressemble exactement à un pipeline dont tous les contrôles sont
-        # verts.
-        #
+        # courant : un chemin relatif se résout contre le cwd du harnais, et il
+        # suffit d'un `cd workspace/src/` pour qu'il ne désigne plus rien. Le
+        # hook ne s'exécute alors pas — au mieux il laisse passer en silence
+        # (les enforcers disparaissent sans un mot), au pire il BLOQUE tout
+        # outil tant que le cwd n'est pas revenu. Les deux ont été observés.
         # `$CLAUDE_PROJECT_DIR` est la variable que le harnais pose pour cet
-        # usage précis. Les guillemets sont obligatoires : un chemin de projet
-        # sous Windows contient des espaces bien plus souvent qu'ailleurs.
+        # usage ; les guillemets tiennent les espaces des chemins Windows.
         for (event, matcher), scripts in sorted(by_slot.items()):
             hooks.setdefault(event, []).append({
                 "matcher": matcher,
@@ -472,116 +665,421 @@ class ClaudeAdapter(Adapter):
             })
 
         if undeclared:
-            BUILD_NOTES.setdefault(self.harness.name, []).append(
-                f"{len(undeclared)} hook(s) sans WIRING — non câblé(s) : " + ", ".join(sorted(undeclared))
-            )
+            self.note(f"{len(undeclared)} hook(s) sans WIRING — non câblé(s) : " + ", ".join(sorted(undeclared)))
         settings = {"permissions": {"deny": list(SECRET_READ_DENY)}, "hooks": hooks}
         plan.add(out / "settings.json", json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
 
+# ---------------------------------------------------------------------------
+# Skills partagées — Codex et Antigravity lisent le MÊME `.agents/skills/`
+# ---------------------------------------------------------------------------
+#: Codex : `.agents/skills/` de chaque répertoire du cwd jusqu'à la racine du
+#: dépôt, `SKILL.md` avec `name` et `description` ; invocation `$nom` ou
+#: `/skills` (https://developers.openai.com/codex/skills -> learn.chatgpt.com/docs/build-skills).
+#: Les custom prompts, que la façade écrivait sous `.codex/prompts/`, ne sont lus
+#: QUE sous `~/.codex/prompts` et sont dépréciés au profit des skills
+#: (https://developers.openai.com/codex/custom-prompts) : la façade n'était
+#: chargée par personne.
+#: Antigravity : `.agents/skills/<dossier>/SKILL.md`, `name` + `description`,
+#: invocation `/nom` (https://antigravity.google/docs/skills) ; les workflows
+#: sont retirés le 1er novembre 2026 (https://antigravity.google/docs/migration/workflows-to-skills/).
+#: Aucune limite de taille n'est documentée pour une skill : les commandes ne
+#: sont donc pas découpées (les 12 000 caractères valent pour les workflows).
+SKILLS_DIR = ".agents/skills"
+
+SKILL_PREAMBLE = (
+    "> **Invocation** — Codex CLI : `${name} {{arguments}}` · Antigravity : `/{name} {{arguments}}`.\n"
+    "> Les arguments sont le texte tapé après le nom de la skill : là où cette fiche\n"
+    "> parle d'arguments de la commande `/{name}`, ce sont eux.\n"
+    "> **Déléguer à un agent** veut dire lancer le sous-agent natif du même nom :\n"
+    "> `.codex/agents/{{agent}}.toml` sous Codex, `.agents/agents/{{agent}}.md` sous\n"
+    "> Antigravity. Les appels `python .sdda/sdda.py …` sont les mêmes partout.\n\n"
+)
+
+
+def emit_shared_skills(plan: BuildPlan) -> int:
+    """`.agents/skills/{cmd}/SKILL.md` — identique quel que soit l'adaptateur qui l'émet.
+
+    Codex et Antigravity partagent ce répertoire : si les deux adaptateurs en
+    produisaient des versions différentes, `--check` échouerait sur celui qui
+    n'a pas été construit en dernier. Le contenu ne dépend donc d'aucun
+    `Harness` — les deux ont `at_include` ≠ `native`, les `@`-refs sont inlinées.
+    """
+    count = 0
+    for src in sorted((SDDA / "commands").glob("*.md")):
+        meta, body = frontmatter_and_body(src.read_text(encoding="utf-8"))
+        name = str(meta.get("name") or src.stem)
+        front = frontmatter({"name": name, "description": str(meta.get("description", ""))})
+        plan.add(
+            ROOT / SKILLS_DIR / name / "SKILL.md",
+            front + GENERATED_BANNER.format(source=f".sdda/commands/{src.name}") + "\n"
+            + SKILL_PREAMBLE.format(name=name) + inline_refs(strip_sync_markers(body)),
+        )
+        count += 1
+    return count
+
+
+def ported_tool_header(meta: dict[str, Any], tier: str, tools: str) -> str:
+    return (
+        f"# Agent `{meta.get('name', '')}`\n\n"
+        f"- Tier : `{tier}` "
+        f"(plancher `{meta.get('tier_floor', '?')}`, plafond `{meta.get('tier_ceiling', '?')}`)\n"
+        f"- Outils autorisés : {tools}\n\n"
+    )
+
+
 class CodexAdapter(Adapter):
-    """Niveau B : sous-agents émulés, hooks reportés au CI."""
+    """Codex CLI : sous-agents TOML, skills, hooks `apply_patch` (zones protégées)."""
 
     out_dir = ".codex"
+    root_pointers = ("AGENTS.md",)
+    # `.codex/prompts/` : ancienne façade, jamais lue par Codex — ses fichiers
+    # générés sont des orphelins à purger.
+    managed = ((".codex/agents", False), (".codex/prompts", True), (SKILLS_DIR, True))
 
-    def render_agent(self, src, meta, body) -> str:
-        # Pas de frontmatter exploité : l'identité et le tier sont rappelés en
-        # tête du corps, sinon le wrapper ne saurait pas quel modèle employer.
-        header = (
-            f"# Agent `{meta.get('name', src.stem)}`\n\n"
-            f"- Tier : `{meta.get('model_tier', 'balanced')}` "
-            f"(plancher `{meta.get('tier_floor', '?')}`, plafond `{meta.get('tier_ceiling', '?')}`)\n"
-            f"- Outils autorisés : {meta.get('tools', '—')}\n\n"
+    def render_agent_file(self, out, src, meta, body):
+        # https://developers.openai.com/codex/subagents : un fichier TOML par
+        # agent sous `.codex/agents/`, `name`, `description` et
+        # `developer_instructions` obligatoires ; `model` et `sandbox_mode`
+        # optionnels. Le Markdown qu'on y déposait n'était pas un agent Codex.
+        name = str(meta.get("name") or src.stem)
+        tier = tier_of(meta)
+        tools = tools_of(meta)
+        instructions = (
+            GENERATED_BANNER.format(source=f".sdda/agents/{src.name}") + "\n"
+            + ported_tool_header(meta, tier, ", ".join(f"`{t}`" for t in tools) or "—")
+            + rewrite_refs(body, self.harness)
         )
-        return (
-            GENERATED_BANNER.format(source=f".sdda/agents/{src.name}")
-            + "\n" + header + rewrite_refs(body, self.harness)
-        )
+        lines = [
+            f"# GÉNÉRÉ depuis .sdda/agents/{src.name} — ne pas éditer ici.",
+            f"name = {toml_string(name)}",
+            f"description = {toml_string(str(meta.get('description', '')))}",
+        ]
+        model = self.harness.model_for(tier)
+        if model:
+            lines.append(f"model = {toml_string(model)}")
+        # Seule restriction d'écriture que Codex offre par agent : un reviewer
+        # sans Write/Edit est lancé en lecture seule, les autres dans le dépôt.
+        # La matrice d'ownership reste plus fine que le bac à sable, et c'est
+        # dit dans le rapport d'impact.
+        lines.append(f"sandbox_mode = {toml_string('workspace-write' if writes_files(meta) else 'read-only')}")
+        lines.append(f"developer_instructions = {toml_multiline(instructions)}")
+        return out / "agents" / f"{src.stem}.toml", "\n".join(lines) + "\n"
 
-    def render_command(self, plan, out, src, meta, body) -> None:
-        plan.add(
-            out / "prompts" / src.name,
-            GENERATED_BANNER.format(source=f".sdda/commands/{src.name}")
-            + f"\n# /{meta.get('name', src.stem)}\n\n"
-            + rewrite_refs(body, self.harness),
-        )
+    def emit_commands(self, plan, out) -> int:
+        return emit_shared_skills(plan)
+
+    def emit_settings(self, plan, out) -> None:
+        """`.codex/hooks.json` — seulement ce que le payload Codex permet de juger.
+
+        Documenté (https://developers.openai.com/codex/hooks -> learn.chatgpt.com/docs/hooks) :
+        `PreToolUse` intercepte `Bash` et `apply_patch` (`tool_input.command`),
+        code 2 = blocage, hooks activés par défaut, hooks de projet chargés
+        seulement si la couche `.codex/` est approuvée. NON documenté : un champ
+        qui nomme l'agent auteur de l'appel, ou celui que lance `spawn_agent`.
+        """
+        by_slot: dict[tuple[str, str], list[str]] = {}
+        for module, wiring in discover_hook_wirings():
+            if wiring is None:
+                plan.ported[module] = HookPort("absent", "aucun WIRING déclaré")
+                continue
+            kind = wiring_kind(wiring)
+            if kind == "write":
+                # Les zones protégées (rapports de gate, baselines, audit) sont
+                # refusées quel que soit l'auteur : ce jugement-là ne demande pas
+                # l'identité que Codex ne transmet pas.
+                by_slot.setdefault(("PreToolUse", "^apply_patch$"), []).append(hook_rel(module))
+                plan.ported[module] = HookPort(
+                    "degraded", "`apply_patch` : zones protégées refusées au runtime ; la matrice par agent "
+                                "exige l'identité de l'auteur, absente du payload Codex -> CI")
+            elif kind == "spawn":
+                plan.ported[module] = HookPort(
+                    "absent", "le champ de `spawn_agent` qui nomme l'agent lancé n'est pas documenté : "
+                              "une gate qui ne sait pas qui part jugerait tout spawn -> CI")
+            elif kind in ("read", "shell"):
+                plan.ported[module] = HookPort(
+                    "absent", "ce hook ne juge qu'un sous-agent nommé ; le payload Codex ne nomme pas l'auteur -> CI")
+            elif kind == "stop":
+                plan.ported[module] = HookPort(
+                    "absent", "`SubagentStop` existe, mais ni l'agent qui s'arrête ni l'effet du code 2 "
+                              "ne sont documentés -> CI")
+            else:
+                plan.ported[module] = HookPort("absent", f"matcher `{wiring['matcher']}` sans équivalent")
+        hooks: dict[str, list[dict[str, Any]]] = {}
+        for (event, matcher), scripts in sorted(by_slot.items()):
+            hooks.setdefault(event, []).append({
+                "matcher": matcher,
+                "hooks": [{"type": "command", "command": hook_command(s, ANCHOR_CODEX, "codex")}
+                          for s in sorted(scripts)],
+            })
+        document = {"description": "GÉNÉRÉ par .sdda/python/sdda_admin/harness_build.py — ne pas éditer ici.",
+                    "hooks": hooks}
+        plan.add(out / "hooks.json", json.dumps(document, indent=2, ensure_ascii=False) + "\n")
+
+
+#: Gemini CLI traite `@{chemin}` (injection de fichier) et `!{cmd}` (injection
+#: de shell) dans le prompt d'une commande (https://geminicli.com/docs/cli/custom-commands/).
+#: `recall@{k}` déclenchait donc une lecture du fichier `k` — et une erreur
+#: « Failed to inject content for '@{k}' » — à chaque `/sdda-build`. Aucun
+#: échappement n'est documenté : on insère une espace, qui garde le sens.
+GEMINI_INJECTION_RE = re.compile(r"([@!])\{")
 
 
 class GeminiAdapter(Adapter):
-    """Niveau B : commandes natives en TOML, hooks reportés au CI."""
+    """Gemini CLI : commandes TOML, sous-agents `.gemini/agents/`, hooks `BeforeTool`."""
 
     out_dir = ".gemini"
+    root_pointers = ("GEMINI.md",)
+    managed = ((".gemini/agents", False), (".gemini/agents-inline", True), (".gemini/commands", False))
 
-    def render_agent(self, src, meta, body) -> str:
-        return CodexAdapter.render_agent(self, src, meta, body)  # même dégradation
+    def render_agent_file(self, out, src, meta, body):
+        # https://geminicli.com/docs/core/subagents/ : `.gemini/agents/*.md`,
+        # frontmatter `name`, `description` (obligatoires), `tools`, `model`.
+        # Les agents étaient déposés sous `agents-inline/`, que Gemini ne lit pas.
+        name = str(meta.get("name") or src.stem)
+        if not GEMINI_AGENT_NAME_RE.match(name):
+            self.note(f"agent `{name}` : nom hors [a-z0-9_-], refusé par Gemini CLI")
+        tier = tier_of(meta)
+        claude_tools = tools_of(meta)
+        tools: list[str] = []
+        for tool in claude_tools:
+            for mapped in GEMINI_TOOLS.get(tool, ()):
+                if mapped not in tools:
+                    tools.append(mapped)
+        unmapped = [t for t in claude_tools if t not in GEMINI_TOOLS]
+        if unmapped:
+            self.note(f"agent `{name}` : outil(s) sans équivalent Gemini, omis : {', '.join(unmapped)}")
+        head: dict[str, Any] = {"name": name, "description": str(meta.get("description", ""))}
+        if tools:
+            head["tools"] = tools
+        model = self.harness.model_for(tier)
+        if model:
+            head["model"] = model
+        text = (
+            frontmatter(head) + GENERATED_BANNER.format(source=f".sdda/agents/{src.name}") + "\n"
+            + ported_tool_header(meta, tier, ", ".join(f"`{t}`" for t in tools) or "—")
+            + rewrite_refs(body, self.harness)
+        )
+        return out / "agents" / src.name, text
 
     def render_command(self, plan, out, src, meta, body) -> None:
-        # TOML : le corps va dans un littéral multi-ligne. On échappe la
-        # séquence fermante plutôt que de tronquer silencieusement.
-        prompt = rewrite_refs(body, self.harness).replace("'''", "\\'\\'\\'")
-        description = str(meta.get("description", "")).replace('"', '\\"')
+        prompt = GEMINI_INJECTION_RE.sub(r"\1 {", rewrite_refs(body, self.harness))
         plan.add(
             out / "commands" / f"{src.stem}.toml",
             f"# GÉNÉRÉ depuis .sdda/commands/{src.name} — ne pas éditer ici.\n"
-            f'description = "{description}"\n'
-            f"prompt = '''\n{prompt}\n'''\n",
+            f"description = {toml_string(str(meta.get('description', '')))}\n"
+            f"prompt = {toml_multiline(prompt)}\n",
         )
 
-    def emit_agents(self, plan, out) -> int:
-        # Gemini CLI n'a pas de répertoire d'agents : ils sont inlinés dans les
-        # prompts par le wrapper. On les dépose quand même pour que le wrapper
-        # les trouve, sous un nom qui dit qu'ils ne sont pas auto-chargés.
-        count = 0
-        for src in sorted((SDDA / "agents").glob("*.md")):
-            meta, body = frontmatter_and_body(src.read_text(encoding="utf-8"))
-            plan.add(out / "agents-inline" / src.name, self.render_agent(src, meta, body))
-            count += 1
-        return count
+    def emit_settings(self, plan, out) -> None:
+        """`.gemini/settings.json` — hooks `BeforeTool`, dans la mesure du payload.
+
+        Documenté (https://geminicli.com/docs/hooks/, …/hooks/reference/) :
+        `BeforeTool` avec matcher regex, `tool_name` + `tool_input`, code 2 =
+        blocage avec `stderr` pour raison, `$GEMINI_PROJECT_DIR`, empreinte des
+        hooks de projet (confirmation à chaque changement de commande). Un
+        sous-agent est « exposé à l'agent principal comme un outil du même nom »
+        (…/core/subagents/). NON documenté : un champ qui nomme l'agent auteur
+        d'un appel d'outil, un événement de fin de sous-agent, les paramètres de
+        l'outil d'un sous-agent.
+        """
+        # Pas de `re.escape` : il écrit `\-`, qu'une regex JavaScript en mode
+        # `u` refuse hors d'une classe. Les noms sont déjà bornés à
+        # [a-z0-9_-] (GEMINI_AGENT_NAME_RE), sans métacaractère.
+        agents = sorted(p.stem for p in (SDDA / "agents").glob("*.md") if GEMINI_AGENT_NAME_RE.match(p.stem))
+        spawn_matcher = "^(" + "|".join(agents) + ")$"
+        write_matcher = "^(write_file|replace)$"
+        by_slot: dict[tuple[str, str], list[str]] = {}
+        for module, wiring in discover_hook_wirings():
+            if wiring is None:
+                plan.ported[module] = HookPort("absent", "aucun WIRING déclaré")
+                continue
+            kind = wiring_kind(wiring)
+            if kind == "write":
+                by_slot.setdefault(("BeforeTool", write_matcher), []).append(hook_rel(module))
+                plan.ported[module] = HookPort(
+                    "degraded", "`write_file`/`replace` : zones protégées refusées au runtime ; la matrice par "
+                                "agent exige l'identité de l'auteur, absente du payload Gemini -> CI")
+            elif kind == "spawn":
+                by_slot.setdefault(("BeforeTool", spawn_matcher), []).append(hook_rel(module))
+                plan.ported[module] = HookPort(
+                    "degraded", "sur l'outil du sous-agent (même nom que l'agent) ; le déclenchement de "
+                                "`BeforeTool` sur cet outil et ses paramètres ne sont pas documentés — "
+                                "non vérifié par un run")
+            elif kind in ("read", "shell"):
+                plan.ported[module] = HookPort(
+                    "absent", "ce hook ne juge qu'un sous-agent nommé ; le payload Gemini ne nomme pas l'auteur -> CI")
+            elif kind == "stop":
+                plan.ported[module] = HookPort("absent", "aucun événement de fin de sous-agent -> CI")
+            else:
+                plan.ported[module] = HookPort("absent", f"matcher `{wiring['matcher']}` sans équivalent")
+        hooks: dict[str, list[dict[str, Any]]] = {}
+        for (event, matcher), scripts in sorted(by_slot.items()):
+            hooks.setdefault(event, []).append({
+                "matcher": matcher,
+                "hooks": [{"name": f"sdda-{Path(s).stem}", "type": "command",
+                           "command": hook_command(s, ANCHOR_GEMINI, "gemini-cli")} for s in sorted(scripts)],
+            })
+        plan.add(out / "settings.json", json.dumps({"hooks": hooks}, indent=2, ensure_ascii=False) + "\n")
+
+
+#: Modèles d'un sous-agent Antigravity : `inherit`, `flash` ou `pro`
+#: (https://antigravity.google/docs/subagents/).
+ANTIGRAVITY_MODELS = ("inherit", "flash", "pro")
+
+
+def split_markdown(text: str, budget: int) -> list[str]:
+    """Découpe un Markdown en morceaux de `budget` octets au plus, aux titres.
+
+    D'abord aux `## `, puis aux `### ` d'une section trop longue, puis aux
+    lignes vides : on ne coupe jamais une phrase. Les sections consécutives
+    sont regroupées tant qu'elles tiennent, pour que l'architecture reste en
+    peu de fichiers.
+    """
+    def pieces(block: str, level: int) -> list[str]:
+        if len(block.encode("utf-8")) <= budget:
+            return [block]
+        if level <= 3:
+            marker = "\n" + "#" * level + " "
+            parts = block.split(marker)
+            if len(parts) > 1:
+                chunks = [parts[0]] + [marker.lstrip("\n") + p for p in parts[1:]]
+                chunks = [c if i == 0 else "\n" + c for i, c in enumerate(chunks)]
+                out: list[str] = []
+                for chunk in chunks:
+                    out.extend(pieces(chunk, level + 1))
+                return out
+            return pieces(block, level + 1)
+        out = []
+        for para in block.split("\n\n"):
+            out.extend([para + "\n\n"] if len((para + "\n\n").encode("utf-8")) <= budget
+                       else [para[i:i + budget // 4] for i in range(0, len(para), budget // 4)])
+        return out
+
+    grouped: list[str] = []
+    for piece in pieces(text, 2):
+        if grouped and len((grouped[-1] + piece).encode("utf-8")) <= budget:
+            grouped[-1] += piece
+        else:
+            grouped.append(piece)
+    return [g.strip("\n") + "\n" for g in grouped if g.strip()]
+
+
+class AntigravityAdapter(Adapter):
+    """Antigravity : règles `.agents/rules/`, skills et sous-agents `.agents/`.
+
+    Il partageait l'adaptateur et le répertoire `.gemini/` de Gemini CLI, qu'il
+    ne lit pas : seuls les `AGENTS.md`/`GEMINI.md` racine l'atteignaient.
+    """
+
+    out_dir = ".agents"
+    root_pointers = ("AGENTS.md", "GEMINI.md")
+    managed = ((".agents/agents", True), (".agents/rules", True), (SKILLS_DIR, True))
+
+    def render_agent_file(self, out, src, meta, body):
+        # https://antigravity.google/docs/subagents/ : `.agents/agents/<nom>.md`,
+        # `name` et `description` obligatoires, `model` parmi inherit|flash|pro,
+        # `subagent: true` pour l'appel par `invoke_subagent`. `tools` n'est PAS
+        # émis : la doc ne publie pas la liste des noms d'outils, et signale
+        # qu'un nom mal orthographié peut bloquer l'agent. Les outils autorisés
+        # restent écrits dans le corps — une consigne, pas un verrou.
+        name = str(meta.get("name") or src.stem)
+        tier = tier_of(meta)
+        head: dict[str, Any] = {"name": name, "description": str(meta.get("description", ""))}
+        model = self.harness.model_for(tier)
+        if model:
+            if model not in ANTIGRAVITY_MODELS:
+                self.note(f"tier `{tier}` -> `{model}` : hors {ANTIGRAVITY_MODELS}")
+            head["model"] = model
+        head["subagent"] = True
+        text = (
+            frontmatter(head) + GENERATED_BANNER.format(source=f".sdda/agents/{src.name}") + "\n"
+            + ported_tool_header(meta, tier, ", ".join(f"`{t}`" for t in tools_of(meta)) or "—")
+            + rewrite_refs(body, self.harness)
+        )
+        return out / "agents" / src.name, text
+
+    def emit_commands(self, plan, out) -> int:
+        return emit_shared_skills(plan)
+
+    def emit_memory_file(self, plan, out) -> None:
+        """L'architecture en règles de 24 000 octets au plus, `model_decision`.
+
+        59 Ko d'un seul tenant dépassent la limite par fichier ; `always_on`
+        partout mangerait l'essentiel des 20 000 tokens du budget des règles
+        actives. Les pointeurs racine (toujours actifs) disent de les lire.
+        """
+        source, text = self.memory_text()
+        banner = GENERATED_BANNER.format(source=f".sdda/{source.name}")
+        heads: list[tuple[str, str]] = []
+        overhead = 400 + len(banner.encode("utf-8"))
+        chunks = split_markdown(text, ANTIGRAVITY_RULE_MAX_BYTES - overhead)
+        for index, chunk in enumerate(chunks, 1):
+            titles = re.findall(r"^## (.+)$", chunk, re.M)
+            label = titles[0] if titles else "préambule"
+            description = (f"Architecture SDD_Agents, partie {index}/{len(chunks)} ({label}) — "
+                           "lire avant toute action du pipeline SDD_Agents")
+            heads.append((f"sdda-architecture-{index:02d}.md",
+                          frontmatter({"trigger": "model_decision", "description": description})
+                          + banner + "\n" + chunk))
+        for filename, content in heads:
+            plan.add(out / "rules" / filename, content)
+
+    def emit_settings(self, plan, out) -> None:
+        # Antigravity a des hooks (`.agents/hooks.json`, `PreToolUse`), mais sa
+        # doc ne publie ni les noms des arguments de `toolCall.args`, ni l'effet
+        # d'un code de sortie : le refus passe par un JSON `decision` sur stdout
+        # (https://antigravity.google/docs/hooks?tab=ide). Câbler un hook qui ne
+        # sait pas lire le chemin visé produirait un enforcer muet — pire
+        # qu'absent. Rien n'est donc câblé, et c'est dit.
+        for module, _wiring in discover_hook_wirings():
+            plan.ported[module] = HookPort(
+                "absent", "arguments de `toolCall.args` et sémantique des codes de sortie non documentés -> CI")
 
 
 ADAPTERS: dict[str, type[Adapter]] = {
     "claude-code": ClaudeAdapter,
     "codex": CodexAdapter,
     "gemini-cli": GeminiAdapter,
-    "antigravity": GeminiAdapter,
+    "antigravity": AntigravityAdapter,
 }
 
 
 # ---------------------------------------------------------------------------
 # Rapport d'impact — obligatoire
 # ---------------------------------------------------------------------------
-def invariants_by_enforcer_kind() -> dict[str, list[str]]:
-    """Invariants dont TOUS les enforcers sont des hooks runtime.
+def invariant_hooks() -> list[tuple[str, list[str], bool]]:
+    """`[(invariant, hooks enforcers, a-t-il un enforcer déterministe ?)]`.
 
-    Ce sont eux qui basculent en CI sur un harnais sans hooks. Les nommer est
-    le cœur du rapport d'impact : dire « niveau B » sans dire lesquels ne
-    renseigne personne.
+    Lu par `yaml_mini`, comme `framework_smoke` et le test du manifeste : une
+    regex sur l'indentation cassait dès qu'un invariant ou un enforcer
+    changeait de forme, et le rapport d'impact disait alors « aucun invariant
+    déplacé » sur un manifeste qu'il n'avait pas lu.
     """
-    # Lu par `yaml_mini`, comme `framework_smoke` et le test du manifeste : une
-    # regex sur l'indentation cassait dès qu'un invariant ou un enforcer
-    # changeait de forme, et le rapport d'impact disait alors « aucun
-    # invariant déplacé » sur un manifeste qu'il n'avait pas lu.
     data = yaml_mini.parse((SDDA / "INVARIANTS.yml").read_text(encoding="utf-8"))
-    hook_only: list[str] = []
-    mixed: list[str] = []
+    out: list[tuple[str, list[str], bool]] = []
     for inv in (data.get("invariants") or []) if isinstance(data, dict) else []:
         if not isinstance(inv, dict):
             continue
         iid = str(inv.get("id") or "").strip()
         enforcers = [str(e) for e in (inv.get("enforcers") or []) if str(e).startswith(".sdda/python/")]
-        if not iid or not enforcers:
-            continue
-        hooks = [e for e in enforcers if "sdda_hooks/" in e]
-        if hooks and len(hooks) == len(enforcers):
-            hook_only.append(iid)
-        elif hooks:
-            mixed.append(iid)
-    return {"hook_only": hook_only, "mixed": mixed}
+        hooks = [Path(e).stem for e in enforcers if "sdda_hooks/" in e]
+        if iid and hooks:
+            out.append((iid, hooks, len(hooks) < len(enforcers)))
+    return out
 
 
-def impact_report(harness: Harness) -> str:
-    kinds = invariants_by_enforcer_kind()
+def invariants_by_enforcer_kind() -> dict[str, list[str]]:
+    """Invariants dont tous les enforcers sont des hooks (`hook_only`) ou une partie (`mixed`)."""
+    kinds: dict[str, list[str]] = {"hook_only": [], "mixed": []}
+    for iid, _hooks, mixed in invariant_hooks():
+        kinds["mixed" if mixed else "hook_only"].append(iid)
+    return kinds
+
+
+def impact_report(harness: Harness, ported: dict[str, HookPort] | None = None) -> str:
     runtime_hooks = harness.mechanisms.get("runtime_hooks", "unsupported")
+    ported = ported or {}
     lines = [
         f"# Rapport d'impact — {harness.name}",
         "",
@@ -597,31 +1095,44 @@ def impact_report(harness: Harness) -> str:
     ]
     consequences = {
         "native": "aucune",
-        "emulated": "dégradation contrôlée via wrapper",
+        "partial": "**en partie au runtime** — le reste reporté au CI (cf. hooks ci-dessous)",
+        "emulated": "dégradation contrôlée (consigne écrite, pas de mécanisme)",
         "ci_fallback": "**reporté au CI** — appliqué plus tard, pas au moment de l'action",
         "unsupported": "**absent** — repli documenté",
     }
     for mechanism, support in sorted(harness.mechanisms.items()):
         lines.append(f"| `{mechanism}` | {support} | {consequences.get(support, '?')} |")
 
+    if runtime_hooks != "native" and ported:
+        lines += ["", "## Hooks", "", "| Hook | Sort | Pourquoi |", "|---|---|---|"]
+        for module in sorted(ported):
+            port = ported[module]
+            lines.append(f"| `{module}` | {port.status} | {port.note or '—'} |")
+
     lines += ["", "## Invariants déplacés vers le CI", ""]
     if runtime_hooks == "native":
         lines.append("Aucun : tous les invariants s'appliquent **au moment de l'action**.")
     else:
         lines += [
-            f"`runtime_hooks: {runtime_hooks}` — les invariants suivants ne sont plus",
-            "appliqués au moment de l'action mais **en différé (CI)** :",
+            f"`runtime_hooks: {runtime_hooks}` — ce qui suit n'est pas, ou pas entièrement,",
+            "appliqué au moment de l'action :",
             "",
         ]
-        for iid in kinds["hook_only"]:
-            lines.append(f"- `{iid}` — **appliqué en différé (CI)**")
-        for iid in kinds["mixed"]:
-            lines.append(f"- `{iid}` — partiellement différé (un enforcer déterministe subsiste)")
+        for iid, hooks, mixed in invariant_hooks():
+            states = {ported.get(h, HookPort("absent")).status for h in hooks}
+            if states == {"native"}:
+                continue
+            if states <= {"absent"}:
+                verdict = ("partiellement différé (un enforcer déterministe subsiste)" if mixed
+                           else "**appliqué en différé (CI)**")
+            else:
+                verdict = "**en partie au runtime**, le reste appliqué en différé (CI)"
+            lines.append(f"- `{iid}` — {verdict}")
         lines += [
             "",
-            "> **À dire clairement** : entre deux exécutions du wrapper, rien n'empêche",
-            "> une écriture hors scope. Le CI la rattrape — après que le travail a été",
-            "> fait sur une base fausse.",
+            "> **À dire clairement** : ce qu'aucun hook ne juge ici n'est empêché par",
+            "> rien au moment de l'action. Le CI le rattrape — après que le travail a",
+            "> été fait sur une base fausse.",
         ]
 
     if harness.mechanisms.get("structured_output") not in (None, "native"):
@@ -643,39 +1154,49 @@ def impact_report(harness: Harness) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Pointeur racine — Codex CLI lit `AGENTS.md`, Gemini CLI `GEMINI.md`, à la
-# RACINE du dépôt, jamais dans `.codex/` ou `.gemini/`. Sans pointeur, la façade
-# compilée existe et aucun des deux harnais ne l'ouvre. Claude Code lit
-# `.claude/CLAUDE.md` nativement : pas de pointeur.
+# Pointeurs racine — Codex CLI lit `AGENTS.md`, Gemini CLI `GEMINI.md`,
+# Antigravity les deux, à la RACINE du dépôt. Claude Code lit `.claude/CLAUDE.md`
+# nativement : pas de pointeur.
 # ---------------------------------------------------------------------------
-ROOT_POINTER_DIRS = {".codex": "Codex CLI", ".gemini": "Gemini CLI"}
+def root_pointer(filename: str) -> str:
+    """Le fichier mémoire racine : un renvoi par harnais, pas une copie.
 
+    Le contenu ne dépend QUE du nom du fichier : Codex et Antigravity écrivent
+    tous deux `AGENTS.md`, Gemini CLI et Antigravity `GEMINI.md`. Un contenu
+    propre à chaque harnais ferait échouer `--check` sur celui qui n'a pas été
+    construit en dernier — et Antigravity, qui lit les deux fichiers, lisait
+    sinon un `AGENTS.md` qui se présentait comme « Codex CLI ».
 
-def root_pointer(harness: Harness, out_dir: str) -> str:
-    """Contenu du fichier mémoire racine : un renvoi, pas une copie.
-
-    Ne dépend que du répertoire de la façade, pas du harnais : `gemini-cli` et
-    `antigravity` partagent `.gemini/` et doivent produire le même pointeur,
-    sinon `--check` échoue sur celui qui n'a pas été construit en dernier.
+    `GEMINI.md` IMPORTE la façade (`@./.gemini/GEMINI.md`, syntaxe documentée :
+    https://geminicli.com/docs/cli/gemini-md/) : Gemini CLI la charge alors
+    nativement au lieu de compter sur une consigne « lire en entier ». Codex
+    n'a pas d'import, et sa façade (59 Ko) dépasserait `project_doc_max_bytes`
+    de toute façon : `AGENTS.md` reste un renvoi.
     """
-    label = ROOT_POINTER_DIRS[out_dir]
-    commands = "prompts/*.md" if out_dir == ".codex" else "commands/*.toml"
-    agents = "agents/" if out_dir == ".codex" else "agents-inline/"
-    return (
+    text = (
         GENERATED_BANNER.format(source=".sdda/capability-matrix.yml")
-        + f"\n# SDD_Agents — {label} (expérimental)\n\n"
-        f"Les instructions du framework sont dans `{out_dir}/{harness.memory_file}` :\n"
-        "**le lire en entier avant toute action.** Commandes :\n"
-        f"`{out_dir}/{commands}`. Agents : `{out_dir}/{agents}`.\n\n"
-        f"**Statut : expérimental.** La façade {label} est compilable, jamais\n"
-        "validée par un run de conformance, et n'a\n"
-        "**aucune gate bloquante au runtime** : les hooks d'ownership et de gates\n"
-        "n'existent que sous Claude Code. Ce qu'ils appliquent est reporté au CI\n"
-        "et aux scripts déterministes — une écriture hors scope n'est rattrapée\n"
-        "qu'après coup. Détail :\n"
-        f"`{out_dir}/harness-impact.md`, `.sdda/docs/MULTI-HARNESS.md`.\n\n"
+        + "\n# SDD_Agents — harnais expérimentaux (Codex CLI, Gemini CLI, Antigravity)\n\n"
+        "Les instructions du framework sont compilées par harnais ; **les lire avant\n"
+        "toute action** :\n\n"
+        "- **Codex CLI** : `.codex/AGENTS.md` (le lire en entier) ; commandes en skills\n"
+        "  `.agents/skills/` (`$sdda-…`) ; agents `.codex/agents/*.toml` ;\n"
+        "  hooks `.codex/hooks.json`.\n"
+        "- **Gemini CLI** : `.gemini/GEMINI.md` (importé ci-dessous) ; commandes\n"
+        "  `.gemini/commands/*.toml` ; agents `.gemini/agents/` ; hooks `.gemini/settings.json`.\n"
+        "- **Antigravity** : règles `.agents/rules/` (l'architecture, en parties) ;\n"
+        "  skills `.agents/skills/` (`/sdda-…`) ; agents `.agents/agents/`.\n\n"
+        "**Statut : expérimental.** Ces façades se compilent et sont vérifiées, mais\n"
+        "aucun run de conformance ne les a validées. Codex CLI et Antigravity n'ont\n"
+        "**aucune gate bloquante au runtime** ; sous Codex et Gemini CLI, seuls les\n"
+        "hooks que leur payload permet de juger sont câblés (zones protégées, et les\n"
+        "gates de spawn sous Gemini CLI). Le reste est reporté au CI et aux scripts\n"
+        "déterministes — une écriture hors ownership n'est rattrapée qu'après coup.\n"
+        "Détail : `{.codex,.gemini,.agents}/harness-impact.md`, `.sdda/docs/MULTI-HARNESS.md`.\n\n"
         "Avant de considérer un travail terminé : `python .sdda/sdda.py framework-smoke`.\n"
     )
+    if filename == "GEMINI.md":
+        text += "\n@./.gemini/GEMINI.md\n"
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -689,9 +1210,9 @@ def build_harness(name: str, harness: Harness) -> tuple[BuildPlan, dict[str, int
     plan, counts = adapter.build()
     # Le rapport d'impact fait partie du plan : on ne peut pas produire une
     # façade sans lui.
-    plan.add(ROOT / adapter.out_dir / "harness-impact.md", impact_report(harness))
-    if adapter.out_dir in ROOT_POINTER_DIRS:
-        plan.add(ROOT / harness.memory_file, root_pointer(harness, adapter.out_dir))
+    plan.add(ROOT / adapter.out_dir / "harness-impact.md", impact_report(harness, plan.ported))
+    for filename in adapter.root_pointers:
+        plan.add(ROOT / filename, root_pointer(filename))
     return plan, counts
 
 
@@ -717,40 +1238,42 @@ def drift(plan: BuildPlan) -> list[str]:
     return out
 
 
-def orphans(plan: BuildPlan, out_dir: Path) -> list[str]:
+def orphans(plan: BuildPlan, adapter: Adapter | type[Adapter]) -> list[str]:
     """Fichiers de la façade que la source ne produit plus.
 
     Un agent retiré de `.sdda/` qui survit dans `.claude/` reste invocable —
-    c'est une commande fantôme qui référence des fichiers disparus.
+    c'est une commande fantôme qui référence des fichiers disparus. Dans un
+    répertoire partagé avec l'humain (`managed` à `True`), seul un fichier qui
+    porte la marque de génération est jugé : `--prune` ne supprime jamais une
+    skill ou une règle écrite à la main.
     """
-    if not out_dir.is_dir():
-        return []
     expected = set(plan.files)
     found = []
-    for sub in ("agents", "commands", "prompts", "agents-inline"):
-        directory = out_dir / sub
+    for rel_dir, generated_only in adapter.managed:
+        directory = ROOT / rel_dir
         if not directory.is_dir():
             continue
-        for path in directory.iterdir():
-            if path.is_file() and path not in expected:
-                found.append(path.relative_to(ROOT).as_posix())
+        for path in directory.rglob("*"):
+            if not path.is_file() or path in expected or "__pycache__" in path.parts:
+                continue
+            if generated_only:
+                try:
+                    if GENERATED_MARK not in path.read_text(encoding="utf-8", errors="replace")[:600]:
+                        continue
+                except OSError:
+                    continue
+            found.append(path.relative_to(ROOT).as_posix())
     return sorted(found)
 
 
 def default_targets(matrix: dict[str, Harness]) -> list[str]:
     """Les harnais à construire quand aucun n'est nommé.
 
-    Deux harnais peuvent partager un `out_dir` — `antigravity` suit les
-    conventions de Gemini (`memory_file: GEMINI.md`, donc `.gemini/`). Les
-    construire tous deux fait que le second écrase le `harness-impact.md` du
-    premier, et `--check` échoue alors à tout coup sur celui qui a perdu : le
-    dispositif anti-dérive devient un faux rouge permanent, donc du bruit
-    qu'on apprend à ignorer.
-
-    On ne garde donc qu'un harnais par répertoire : celui qui n'est pas
-    `planned`, sinon celui dont le répertoire porte le nom — `.gemini/`
-    appartient à `gemini-cli`, `antigravity` n'y est qu'invité.
-    `--harness antigravity` reste possible, et explicite.
+    Un harnais par répertoire de façade : deux harnais qui partageraient un
+    `out_dir` écraseraient chacun le `harness-impact.md` de l'autre, et
+    `--check` échouerait à tout coup sur celui qui a perdu — un faux rouge
+    permanent, donc du bruit qu'on apprend à ignorer. Chaque adaptateur a
+    aujourd'hui son répertoire ; la règle reste pour le prochain.
     """
     def rank(name: str, out_dir: str) -> tuple[int, int]:
         owns_dir = name.startswith(out_dir.lstrip("."))
@@ -782,9 +1305,9 @@ def main() -> int:
     targets = [args.harness] if args.harness else default_targets(matrix)
     unknown = [t for t in targets if t not in matrix]
     if unknown:
-        print(f"ERROR: harness_build — harnais inconnu")
+        print("ERROR: harness_build — harnais inconnu")
         print(f"CAUSE: [HARNESS_UNKNOWN] {', '.join(unknown)} absent(s) de capability-matrix.yml")
-        print(f"FIX: déclarer le harnais dans .sdda/capability-matrix.yml")
+        print("FIX: déclarer le harnais dans .sdda/capability-matrix.yml")
         return 1
 
     failed = False
@@ -796,15 +1319,15 @@ def main() -> int:
             continue
 
         plan, counts = build_harness(name, harness)
-        out_dir = ROOT / ADAPTERS[name].out_dir
+        adapter = ADAPTERS[name]
 
         if args.impact_only:
-            print(impact_report(harness))
+            print(impact_report(harness, plan.ported))
             continue
 
         if args.check:
             diverged = drift(plan)
-            stale = orphans(plan, out_dir)
+            stale = orphans(plan, adapter)
             if diverged or stale:
                 failed = True
                 print(f"  [ FAIL ] {name:<14} {len(diverged)} fichier(s) divergent(s), {len(stale)} orphelin(s)")
@@ -816,14 +1339,21 @@ def main() -> int:
             continue
 
         written = write_plan(plan)
-        stale = orphans(plan, out_dir)
+        stale = orphans(plan, adapter)
         if stale and args.prune:
             for rel in stale:
                 (ROOT / rel).unlink()
+            # Un répertoire de façade vidé (`.codex/prompts/`, ancienne façade)
+            # disparaît avec son dernier fichier, pour ne pas laisser croire
+            # qu'un harnais y lit encore quelque chose.
+            for rel_dir, _generated_only in adapter.managed:
+                for directory in sorted((ROOT / rel_dir).glob("**/"), key=lambda p: len(p.parts), reverse=True):
+                    if directory.is_dir() and not any(directory.iterdir()):
+                        directory.rmdir()
         level = harness.protection_level
-        note = "" if harness.status == "reference" else "  (compilable, non validé)"
+        suffix = "" if harness.status == "reference" else "  (compilable, non validé)"
         print(f"  [ build ] {name:<14} {counts['agents']} agents · {counts['commands']} commandes "
-              f"· {written} fichier(s) écrit(s) · niveau {level}{note}")
+              f"· {written} fichier(s) écrit(s) · niveau {level}{suffix}")
         if stale:
             action = "supprimé(s)" if args.prune else "à supprimer (--prune)"
             print(f"            {len(stale)} orphelin(s) {action}")

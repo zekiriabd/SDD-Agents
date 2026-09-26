@@ -99,7 +99,12 @@ FIX: implémenter le compteur par run et l'erreur CAP_EXCEEDED avant la TOOL GAT
   déclarée, avec le nom exact : `dev-agent` et les tests L2 le cherchent tel quel.
   Une erreur non déclarée qui survient est remontée telle quelle, jamais avalée.
 - `timeout_s`, `rate_limit_rpm`, `max_response_bytes` appliqués côté client ; une
-  réponse tronquée est **marquée** tronquée dans la sortie.
+  réponse tronquée est **marquée** tronquée dans la sortie. Ils ne sont
+  appliqués que s'ils atteignent la boucle : les outils passent à l'agent par
+  `ToolRegistry.to_toolset(agent_id)` (Python : il porte ces trois bornes dans
+  les métadonnées que la boucle applique), ou la composition lit
+  `settings.tool_meta`, projeté de l'IR. Un outil câblé en appelable nu garde
+  ses bornes dans `tool_specs.json`, où personne ne les lit.
 - Auth : lecture de la variable d'env nommée ; échec → `AUTH_FAILED`, sans repli,
   sans mode dégradé, sans valeur par défaut.
 - `trust: untrusted` : la sortie est **balisée** comme donnée (délimiteurs déclarés

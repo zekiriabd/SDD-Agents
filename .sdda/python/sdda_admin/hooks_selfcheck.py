@@ -7,8 +7,10 @@ cassé, une commande mal citée, et le hook rend un code ≠ 2 — que le harnai
 traite comme une AUTORISATION. Les invariants disparaissent alors exactement
 comme s'ils étaient verts. La seule preuve qu'un hook tient est de le lancer.
 
-Pour chaque commande de `settings.json`, telle que le harnais la lancera (même
-shell POSIX, même `$CLAUDE_PROJECT_DIR`) :
+Pour chaque commande de `.claude/settings.json` — et de `.gemini/settings.json`
+et `.codex/hooks.json` quand ces façades existent, avec des payloads dans LEUR
+dialecte (`write_file`, `apply_patch`) —, telle que le harnais la lancera (même
+shell POSIX, même variable de racine) :
 
     payload inoffensif  -> doit répondre 0 (le hook démarre et laisse passer)
     payload à refuser   -> doit répondre 2 (le hook démarre ET juge), pour les
@@ -48,8 +50,54 @@ TIMEOUT_S = 30
 _NOT_STARTED = {126, 127, 9009}
 
 
-def _payloads(matcher: str, root: Path) -> tuple[dict, dict | None]:
+#: Les façades dont chaque commande de hook est exécutée, et le harnais dont
+#: elles parlent le payload. Gemini CLI et Codex câblent leurs hooks sous la même
+#: forme `{"hooks": {événement: [{matcher, hooks: [{command}]}]}}` que Claude
+#: Code ; seuls les noms d'outils et les champs diffèrent.
+FACADES = (
+    ("claude-code", Path(".claude") / "settings.json"),
+    ("gemini-cli", Path(".gemini") / "settings.json"),
+    ("codex", Path(".codex") / "hooks.json"),
+)
+
+#: Un rapport de gate : zone protégée, refusée quel que soit l'auteur. C'est la
+#: cible du payload à refuser sur les harnais qui ne nomment pas l'agent — la
+#: matrice par agent n'y est pas jugée, les zones protégées si.
+_GATE_REPORT = "workspace/.sys/.validation/G5-1-hooks-selfcheck.json"
+
+
+def harness_of(settings_path: Path) -> str:
+    parts = {p.lower() for p in settings_path.parts}
+    if ".gemini" in parts:
+        return "gemini-cli"
+    if ".codex" in parts:
+        return "codex"
+    return "claude-code"
+
+
+def _foreign_payloads(harness: str, matcher: str, root: Path) -> tuple[dict, dict | None]:
+    """(inoffensif, à refuser | None) dans le dialecte de Gemini CLI ou de Codex."""
+    base = {"cwd": str(root), "hook_event_name": "BeforeTool" if harness == "gemini-cli" else "PreToolUse"}
+    if harness == "gemini-cli":
+        if "write_file" in matcher:
+            return ({**base, "tool_name": "write_file",
+                     "tool_input": {"file_path": str(root / "README.md"), "content": ""}},
+                    {**base, "tool_name": "write_file",
+                     "tool_input": {"file_path": str(root / _GATE_REPORT), "content": "{}"}})
+        # Outil d'un sous-agent hors matrice : chaque hook de spawn démarre et laisse passer.
+        return ({**base, "tool_name": "hooks-selfcheck", "tool_input": {"objective": "noop"}}, None)
+    if "apply_patch" in matcher:
+        def patch(path: str) -> dict:
+            return {**base, "tool_name": "apply_patch", "tool_input": {
+                "command": f"*** Begin Patch\n*** Update File: {path}\n@@\n-x\n+x\n*** End Patch\n"}}
+        return patch("README.md"), patch(_GATE_REPORT)
+    return ({**base, "tool_name": "Bash", "tool_input": {"command": "echo hooks-selfcheck"}}, None)
+
+
+def _payloads(matcher: str, root: Path, harness: str = "claude-code") -> tuple[dict, dict | None]:
     """(payload inoffensif, payload à refuser | None) pour un matcher."""
+    if harness != "claude-code":
+        return _foreign_payloads(harness, matcher, root)
     tools = set(matcher.split("|"))
     golden = str(root / "workspace" / "pipeline" / "datasets" / "golden" / "hooks-selfcheck.jsonl")
     if tools & {"Bash", "PowerShell"}:
@@ -88,25 +136,29 @@ def _shell() -> list[str] | None:
     return None
 
 
-def run(root: Path, settings_path: Path) -> Report:
-    report = Report(name="HOOKS-SELFCHECK", target=str(root))
+def run(root: Path, settings_path: Path, harness: str | None = None, report: Report | None = None) -> Report:
+    harness = harness or harness_of(settings_path)
+    report = report or Report(name="HOOKS-SELFCHECK", target=str(root))
     try:
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         report.error("HOOK_SETTINGS_UNREADABLE", f"{settings_path} illisible : {exc}",
-                     fix="python .sdda/sdda.py harness-build --harness claude-code")
+                     fix=f"python .sdda/sdda.py harness-build --harness {harness}")
         return report
     shell = _shell()
     if shell is None:
         report.error("HOOK_SHELL_MISSING", "aucun shell POSIX (bash, sh) sur le PATH",
                      fix="le harnais lance les hooks dans un shell POSIX (Git Bash sous Windows) : l'installer")
         return report
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root))
-    results = []
+    # Chaque harnais pose sa propre variable de racine ; Codex n'en pose aucune
+    # (sa commande s'ancre par `git rev-parse`, depuis le cwd de la session).
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root), GEMINI_PROJECT_DIR=str(root))
+    results = report.data.setdefault("checks", [])
+    before = len(results)
     for event, entries in (settings.get("hooks") or {}).items():
         for entry in entries:
             matcher = str(entry.get("matcher") or "")
-            benign, hostile = _payloads(matcher, root)
+            benign, hostile = _payloads(matcher, root, harness)
             for hook in entry.get("hooks") or []:
                 command = str(hook.get("command") or "")
                 name = command.split("sdda_hooks/")[-1].split('"')[0] if "sdda_hooks/" in command else command
@@ -125,37 +177,45 @@ def run(root: Path, settings_path: Path) -> Report:
                         err = [next((ln for ln in lines if "ne demarre pas" in ln), lines[-1] if lines else "")]
                     except subprocess.TimeoutExpired:
                         code, err = -1, [f"aucune réponse en {TIMEOUT_S} s"]
-                    results.append({"event": event, "matcher": matcher, "hook": name, "payload": kind,
+                    results.append({"harness": harness, "event": event, "matcher": matcher, "hook": name, "payload": kind,
                                     "expected": expected, "code": code})
                     if code == expected:
                         continue
                     if code in _NOT_STARTED or "ne demarre pas" in "\n".join(err):
                         report.error("HOOK_INTERPRETER_MISSING",
-                                     f"{name} ({event} {matcher}) ne démarre pas : code {code} — {err[0]}",
+                                     f"[{harness}] {name} ({event} {matcher}) ne démarre pas : code {code} — {err[0]}",
                                      fix="le harnais AUTORISE un hook qui ne démarre pas. Installer Python, ou "
                                          "fixer `SDDA_PYTHON` (`py -3`, chemin absolu) dans l'environnement du harnais")
                     else:
                         report.error("HOOK_UNRESPONSIVE",
-                                     f"{name} ({event} {matcher}) : payload {kind}, code {code} attendu {expected} "
+                                     f"[{harness}] {name} ({event} {matcher}) : payload {kind}, code {code} attendu {expected} "
                                      f"— {err[0]}",
                                      fix="lancer la commande à la main avec le payload (cf. --json) ; un hook qui "
                                          "ne refuse pas ce qu'il doit refuser est un enforcer absent")
-    report.data["checks"] = results
-    if not results:
+    if len(results) == before:
         report.error("HOOK_SETTINGS_EMPTY", f"{settings_path} ne câble aucun hook",
-                     fix="python .sdda/sdda.py harness-build --harness claude-code")
+                     fix=f"python .sdda/sdda.py harness-build --harness {harness}")
     return report
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Exécute chaque hook câblé avec un payload inoffensif et un à refuser.")
     parser.add_argument("--root", default=str(ROOT), help="racine du projet (défaut : ce dépôt)")
-    parser.add_argument("--settings", default=None, help="settings.json à vérifier (défaut : <root>/.claude/settings.json)")
+    parser.add_argument("--settings", default=None,
+                        help="un seul fichier de hooks à vérifier (défaut : chaque façade présente — "
+                             ".claude/settings.json, .gemini/settings.json, .codex/hooks.json)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
-    settings = Path(args.settings) if args.settings else root / ".claude" / "settings.json"
-    report = run(root, settings)
+    if args.settings:
+        report = run(root, Path(args.settings))
+    else:
+        # La façade Claude est exigée (c'est le harnais de référence) ; celles des
+        # autres harnais sont jouées quand elles existent.
+        report = run(root, root / FACADES[0][1], FACADES[0][0])
+        for harness, rel in FACADES[1:]:
+            if (root / rel).is_file():
+                run(root, root / rel, harness, report)
     if args.json:
         print(json.dumps({"ok": report.ok, "errors": [e.__dict__ for e in report.errors], **report.data},
                          ensure_ascii=False, indent=2, default=str))

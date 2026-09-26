@@ -74,9 +74,11 @@ Read **uniquement** :
 
 Validation préalable, 0 token :
 ```bash
-python .sdda/sdda.py validate-ir workspace/.sys/.ir/{n}-system.ir.json
+python .sdda/sdda.py validate-ir --ir workspace/.sys/.ir/{n}-system.ir.json
 ```
 Rouge → tu ne construis pas sur un graphe invalide : `[IR_INVALID]`, STOP.
+Une sortie `usage:` d'argparse n'est pas un verdict sur l'IR : c'est une ligne
+de commande fausse, à rapporter telle quelle — jamais à lire comme « rouge ».
 
 ## STEP 2.bis — Mode pré-passe — `/sdda-build` STEP 4.0, AVANT les agents
 
@@ -121,6 +123,12 @@ topologie existe, donc valident la plomberie (surface, traces, bornes) à vide.
 est absent, le service câble la boucle de `base.py` ; fourni, il rend l'objet
 exécutable que tu construis.
 
+**Hors Python**, aucun squelette n'est généré : `dev-backend` a écrit la
+coquille depuis `lang/{lang}.md`, et le point d'extension porte le nom que la
+fiche de langage lui donne. Les noms de fichiers ci-dessus sont ceux du
+squelette Python ; la règle, elle, vaut pour tous les langages — un seul graphe,
+le tien, câblé par la composition.
+
 Ton graphe vit sous `workspace/src/{App}/orchestration/`, dans l'idiome du
 framework actif, et c'est lui que la composition passe en `agent_factory` —
 tu ne modifies pas `app/orchestration/`, tu n'y ajoutes rien. **Un seul
@@ -136,7 +144,7 @@ gate n'en juge qu'une.
 ## STEP 3 — Un nœud par nœud, une arête par arête
 
 `workspace/src/{App}/orchestration/` : chaque `nodes[]` devient un nœud (agent →
-appel du point d'entrée de `src/agents/{slug}/` ; `retriever` → appel du
+appel du point d'entrée de `workspace/src/{App}/agents/{slug}/` ; `retriever` → appel du
 retriever ; `function` → fonction déterministe). Chaque `edges[]` devient une
 transition avec **sa condition telle que l'IR l'écrit** ; `entryNode` et
 `terminalNodes` sont ceux de l'IR.
@@ -195,7 +203,8 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
   nomme (`CrossAgentSharedState: scoped`) ; politique PII appliquée À
   L'ÉCRITURE (`MemoryPIIPolicy: redact-before-write` : ce qui n'entre pas ne
   peut pas fuir) ; aucune persistance tant que `LongTermEnabled: false`. Le
-  squelette pose `memory/__init__.py` vide : un contrat sans implémentation
+  squelette Python pose `memory/__init__.py` vide (ailleurs : le module mémoire
+  vide de la fiche de langage) : un contrat sans implémentation
   n'existe pas, et c'est ici qu'il cesse de ne pas exister.
 - **Checkpointing / human-in-the-loop** : si déclarés, chaque interruption
   reprend depuis un état persisté, et le point d'interruption est un nœud de
@@ -258,7 +267,7 @@ verrait l'écart aux trajectoires observées — trop tard, après que tout l'av
 - [ ] Ownership de l'état partagé appliqué à l'exécution
 - [ ] Aucun prompt inline (un superviseur a un prompt : il vit dans `prompts/`, écrit par `dev-prompt`)
 - [ ] `graph.manifest.json` émis par `dump_graph()` depuis le graphe compilé — jamais recopié de l'IR
-- [ ] **Rien écrit hors `workspace/src/{App}/orchestration/`**
+- [ ] **Rien écrit hors `workspace/src/{App}/orchestration/`, `memory/` et — en pré-passe seulement — `shared/`**
 
 ---
 

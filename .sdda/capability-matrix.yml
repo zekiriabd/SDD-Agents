@@ -5,14 +5,20 @@
 # et pour imprimer le RAPPORT D'IMPACT obligatoire à chaque build : ce que
 # chaque harnais perd, et par quoi c'est remplacé.
 #
-# Valeurs : native | emulated | ci_fallback | unsupported
+# Valeurs : native | partial | emulated | ci_fallback | unsupported
 #   native      = fourni par le harnais lui-même
-#   emulated    = dégradation contrôlée via wrapper ou inline statique. Le
-#                 wrapper de spawn (`spawn_agent`) est PLANIFIÉ, pas encore
-#                 écrit : aujourd'hui, `emulated` sur `subagent_spawn` veut dire
-#                 « l'humain ou le harnais lance le sous-processus lui-même ».
+#   partial     = fourni par le harnais pour une PARTIE seulement : le rapport
+#                 d'impact nomme, hook par hook, ce qui est câblé et pourquoi le
+#                 reste ne l'est pas (runtime_hooks uniquement)
+#   emulated    = dégradation contrôlée : une consigne écrite remplace le
+#                 mécanisme (ex. `@`-ref réécrite en « Read ce fichier »)
 #   ci_fallback = reporté au CI-time / aux scripts déterministes
 #   unsupported = absent, aucune émulation prévue — DOIT être documenté dans le rapport
+#
+# Chaque valeur des harnais non-Claude est tirée de leur documentation
+# OFFICIELLE (URL en commentaire). Ce que la doc ne dit pas n'est pas déclaré
+# `native` : c'est dit dans `impact`, et marqué « non vérifié » dans
+# docs/MULTI-HARNESS.md.
 #
 # protection_level :
 #   A = référence (toutes les gates s'appliquent au runtime)
@@ -116,62 +122,118 @@ harnesses:
   codex:
     protection_level: B
     status: planned
+    # Sources (developers.openai.com/codex/*, qui redirige en 308 vers
+    # learn.chatgpt.com/docs/*) : agents-md, subagents, build-skills, hooks,
+    # custom-prompts, models ; grammaire apply_patch : github.com/openai/codex.
     mechanisms:
-      subagent_spawn: emulated        # sous-processus `codex exec` isolé
-      runtime_hooks: ci_fallback      # pas d'équivalent -> gates pre/post-exec du wrapper + CI
+      subagent_spawn: native          # .codex/agents/*.toml (name, description, developer_instructions)
+      runtime_hooks: partial          # .codex/hooks.json : PreToolUse apply_patch câblé (zones protégées)
       deterministic_python: native
-      slash_commands: emulated        # .codex/prompts/*.md
-      skills_autotrigger: emulated    # injection statique dans AGENTS.md
-      at_include: unsupported         # repli : inline, ou consigne « Read X avant STEP n »
+      slash_commands: native          # skills .agents/skills/*/SKILL.md, invoquées par `$nom` ou /skills
+      skills_autotrigger: native      # les skills se déclenchent aussi implicitement
+      at_include: unsupported         # repli : consigne « Read X avant de poursuivre »
       mcp: native
       structured_output: native
     memory_file: AGENTS.md
+    # Identifiants de la page officielle des modèles Codex (`codex -m …`).
+    tier_models:
+      deep: gpt-6-astra
+      balanced: gpt-6-sol
+      fast: gpt-6-luna
     impact: |
       EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
-      Codex CLI lit `AGENTS.md` à la racine : harness_build y écrit un pointeur
-      vers `.codex/AGENTS.md`.
-      PERD : l'application des gates AU MOMENT de l'action. Les invariants
-      tool-gate-before-agent-wiring et retrieval-gate-before-agent deviennent des
-      contrôles pre-exec du wrapper + un gate CI. Conséquence assumée et à dire
-      clairement : entre deux exécutions du wrapper, rien n'empêche une écriture
-      hors scope. Le CI la rattrape, plus tard.
+      Codex CLI lit `AGENTS.md` à la racine (32 KiB au plus, project_doc_max_bytes) :
+      harness_build y écrit un pointeur vers `.codex/AGENTS.md`. Les custom prompts
+      `.codex/prompts/` n'étaient lus par personne (Codex ne lit que ~/.codex/prompts,
+      et les déprécie) : les commandes sont des skills `.agents/skills/`.
+      HOOKS : seul `preflight_ownership` est câblé, sur `apply_patch` — il refuse au
+      runtime les écritures dans les zones protégées (rapports de gate, baselines,
+      audit), quel que soit l'auteur. Le payload Codex ne nomme ni l'agent auteur
+      d'un appel, ni l'agent que lance `spawn_agent` : la matrice d'ownership par
+      agent, les lectures interdites, le shell et les gates de spawn restent au CI.
+      `SubagentStop` existe, mais ni l'agent qui s'arrête ni l'effet du code 2 n'y
+      sont documentés. Les hooks de projet ne se chargent que si `.codex/` est
+      approuvé (/hooks). Commande POSIX : non vérifié sous Windows.
+      `sandbox_mode` (read-only | workspace-write) est la seule borne d'écriture par
+      agent ; elle est plus grossière que la matrice. Caractères permis dans le
+      `name` d'un agent : non documentés (les exemples officiels sont en snake_case).
       GARDE : tout le noyau déterministe, donc toute la validation réelle.
 
   gemini-cli:
     protection_level: B
     status: planned
+    # Sources : geminicli.com/docs (cli/custom-commands, cli/gemini-md, core/subagents,
+    # hooks, hooks/reference, reference/tools, cli/model) et github.com/google-gemini/gemini-cli.
     mechanisms:
-      subagent_spawn: emulated        # `gemini -p` non interactif via wrapper
-      runtime_hooks: ci_fallback
+      subagent_spawn: native          # .gemini/agents/*.md, exposés comme un outil du même nom
+      runtime_hooks: partial          # .gemini/settings.json : BeforeTool write_file|replace + outils d'agents
       deterministic_python: native
       slash_commands: native          # .gemini/commands/*.toml
       skills_autotrigger: emulated
-      at_include: emulated
+      at_include: emulated            # corps réécrits ; le fichier mémoire, lui, est importé (@./…)
       mcp: native
       structured_output: emulated     # à mesurer au premier run de conformance
     memory_file: GEMINI.md
+    # Modèles de la page officielle « Model selection » de Gemini CLI. Deux
+    # familles seulement (pro, flash) : `balanced` prend pro — descendre un agent
+    # balanced au tier rapide serait relâcher un plancher sans l'avoir mesuré.
+    tier_models:
+      deep: gemini-3-pro-preview
+      balanced: gemini-3-pro-preview
+      fast: gemini-3-flash-preview
     impact: |
       EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
-      Gemini CLI lit `GEMINI.md` à la racine : harness_build y écrit un
-      pointeur vers `.gemini/GEMINI.md`.
-      Idem codex pour les hooks. `structured_output: emulated` est le point à
-      surveiller : les rapports d'eval et les verdicts de gate sont du JSON, et
-      un parsing défensif est un coût réel. À requalifier après mesure — pas
-      avant.
+      Gemini CLI lit `GEMINI.md` à la racine : harness_build y écrit un pointeur
+      qui IMPORTE `.gemini/GEMINI.md` (@./.gemini/GEMINI.md).
+      HOOKS (BeforeTool, code 2 = blocage) : `preflight_ownership` sur
+      write_file|replace refuse au runtime les écritures dans les zones protégées,
+      quel que soit l'auteur ; les dix hooks de spawn sont câblés sur l'outil qui
+      porte le nom de chaque agent. Le déclenchement de BeforeTool sur l'outil d'un
+      sous-agent et les paramètres de cet outil ne sont PAS documentés : non
+      vérifié par un run. Le payload ne nomme pas l'agent auteur d'un appel : la
+      matrice par agent, les lectures interdites et le shell restent au CI. Aucun
+      événement de fin de sous-agent : `prompts-are-files` et
+      `trace-emitted-per-run` restent au CI. Les hooks de projet sont
+      empreintés : chaque changement de commande demande une confirmation.
+      Commande POSIX : non vérifié sous Windows.
+      `structured_output: emulated` est le point à surveiller : les rapports d'eval
+      et les verdicts de gate sont du JSON. À requalifier après mesure — pas avant.
 
   antigravity:
     protection_level: B
     status: planned
+    # Sources : antigravity.google/docs (rules, skills, subagents, hooks,
+    # ide/workflows, migration/workflows-to-skills).
     mechanisms:
-      subagent_spawn: emulated
-      runtime_hooks: ci_fallback
+      subagent_spawn: native          # .agents/agents/*.md, invoke_subagent
+      runtime_hooks: ci_fallback      # hooks.json existe, mais payload et codes de sortie non documentés
       deterministic_python: native
-      slash_commands: native
-      skills_autotrigger: emulated
+      slash_commands: native          # skills .agents/skills/*/SKILL.md, invoquées par /nom
+      skills_autotrigger: native
       at_include: emulated
       mcp: native
       structured_output: native
-    memory_file: GEMINI.md
+    memory_file: AGENTS.md
+    # `model` d'un sous-agent Antigravity : inherit | flash | pro.
+    tier_models:
+      deep: pro
+      balanced: pro
+      fast: flash
+    impact: |
+      EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
+      Façade propre `.agents/` (il partageait `.gemini/`, qu'il ne lit pas).
+      Antigravity lit `AGENTS.md` ET `GEMINI.md` à la racine (toujours actifs) et
+      `.agents/rules/` : l'architecture y est découpée en règles de 24 000 octets au
+      plus, `trigger: model_decision` (59 Ko en `always_on` dépasseraient la limite
+      par fichier et le budget de 20 000 tokens des règles actives). Commandes en
+      skills `.agents/skills/` — les workflows sont retirés le 1er novembre 2026.
+      Sous-agents sans `tools` : la doc ne publie pas les noms d'outils et signale
+      qu'un nom erroné peut bloquer l'agent ; les outils autorisés sont écrits dans
+      le corps, comme consigne.
+      HOOKS : aucun câblé. `.agents/hooks.json` et PreToolUse existent, mais la doc
+      ne publie ni les arguments de `toolCall.args` ni l'effet d'un code de sortie
+      (le refus passe par un JSON `decision` sur stdout) : un hook qui ne sait pas
+      lire le chemin visé serait un enforcer muet. Tout reste au CI.
 
 # ---------------------------------------------------------------------------
 # Règle du rapport d'impact
