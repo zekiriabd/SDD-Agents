@@ -1,0 +1,86 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "eval-vitest-eval",
+  "category": "eval",
+  "schemaVersion": 1,
+  "buildSystem": "pnpm",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/package.json",
+      "workspace/src/{AppName}/pnpm-lock.yaml",
+      "workspace/src/{AppName}/vitest.config.ts"
+    ]
+  },
+  "versions": {
+    "node": "22",
+    "vitest": "5.0.2",
+    "vite": "8.3.1",
+    "vitest-coverage-v8": "5.0.2",
+    "zod": "4.6.5"
+  },
+  "core": [
+    {
+      "module": "vitest",
+      "ref": "vitest",
+      "rationale": "Runner des tests L0–L2 de l'application (fonctions pures, contrats d'outils, connectivité). Rapport JUnit natif (`--reporter=junit --outputFile=…`) que parse le framework. Même pin que framework/langgraph-js.libs.json : un seul vitest par projet.",
+      "installCommand": "pnpm add -D --dir workspace/src/{AppName} vitest@5.0.2"
+    },
+    {
+      "module": "vite",
+      "ref": "vite",
+      "rationale": "Pair NON optionnel de vitest 5 (`vite ^6.4.0 || ^7.0.0 || ^8.0.0`) : épinglé explicitement pour que la résolution ne dépende pas du réglage auto-install-peers de pnpm.",
+      "installCommand": "pnpm add -D --dir workspace/src/{AppName} vite@8.3.1"
+    },
+    {
+      "module": "zod",
+      "ref": "zod",
+      "rationale": "Les tests de contrat parsent les sorties d'outils avec les MÊMES schémas que le runtime ; aucun schéma de test recopié."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "@vitest/coverage-v8",
+      "ref": "vitest-coverage-v8",
+      "capability": "coverage",
+      "rationale": "Couverture L1 si le Project Config fixe un plancher. Même version que vitest (pair exact 5.0.2).",
+      "triggers": [
+        "CoverageFloor",
+        "coverage"
+      ],
+      "installCommand": "pnpm add -D --dir workspace/src/{AppName} @vitest/coverage-v8@5.0.2"
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "vitest-evals",
+      "reason": "Les EVALS (L3–L9 : k runs, variance, verdict, épinglage, baseline, calibration) sont jouées par le runner du framework, `python .sdda/sdda.py eval-runner`, qui LANCE l'application par sa CLI. Un runner d'eval dans l'application ferait deux protocoles de verdict, dont un que les gates ne lisent pas."
+    },
+    {
+      "module": "jest",
+      "reason": "Un seul runner de tests par projet ; vitest exécute l'ESM et TypeScript sans transpileur séparé et produit le JUnit que parse run-tool-suites."
+    },
+    {
+      "module": "msw",
+      "reason": "Les outils HTTP reçoivent leur `fetch` par le ToolContext : un test L2 injecte un faux fetch, sans intercepteur global qui masquerait un appel réseau réel oublié."
+    }
+  ],
+  "runtimeRequirements": {
+    "node": ">=22.12 (engines de vitest 5.0.2 : ^22.12.0 || ^24.0.0 || >=26.0.0)"
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Toutes les dépendances sont de développement : l'application livrée n'embarque pas son runner de tests.",
+      "Les clés de versions{} sont des ALIAS internes (`vitest-coverage-v8` pour `@vitest/coverage-v8`) : le méta-schéma refuse un nom qui commence par `@`.",
+      "Les tags de test (`{ tags: [...] }`, `--tags-filter`) existent depuis vitest 4.1 (documentation vitest.dev/guide/test-tags) ; ils sont un confort local — la convention que lit le framework est le NOM du describe (eval/vitest-eval.md §5.1)."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création (design-phase) ; versions lues sur registry.npmjs.org."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "registry.npmjs.org (GET /{pkg}/latest, paquet par paquet ; pairs et engines lus dans les manifestes publiés — pas de résolution conjointe pnpm)"
+  }
+}

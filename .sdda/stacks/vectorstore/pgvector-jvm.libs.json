@@ -1,0 +1,120 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "vectorstore-pgvector-jvm",
+  "category": "vectorstore",
+  "schemaVersion": 1,
+  "buildSystem": "gradle",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/build.gradle.kts",
+      "workspace/src/{AppName}/gradle/libs.versions.toml"
+    ]
+  },
+  "versions": {
+    "jdk": "21",
+    "postgresql-server": "17",
+    "pgvector-extension": "0.8.1",
+    "spring-boot": "4.1.1",
+    "spring-ai": "2.0.1",
+    "postgresql-jdbc": "42.7.13",
+    "pgvector-java": "0.1.6",
+    "flyway": "12.4.0",
+    "testcontainers": "2.0.5"
+  },
+  "dbDrivers": {
+    "postgres": {
+      "module": "org.postgresql:postgresql",
+      "ref": "postgresql-jdbc",
+      "scope": "runtime"
+    }
+  },
+  "core": [
+    {
+      "module": "org.springframework.boot:spring-boot-starter-jdbc",
+      "ref": "spring-boot",
+      "rationale": "JdbcClient (Spring Framework 7) + HikariCP + TransactionTemplate : set_config('app.tenant_id', …, true) et set_config('hnsw.ef_search', …, true) par transaction. Version du BOM Spring Boot."
+    },
+    {
+      "module": "org.postgresql:postgresql",
+      "ref": "postgresql-jdbc",
+      "rationale": "Pilote JDBC ; même version que celle que spring-ai-pgvector-store 2.0.1 et le BOM Spring Boot 4.1.1 tirent (42.7.13)."
+    },
+    {
+      "module": "com.pgvector:pgvector",
+      "ref": "pgvector-java",
+      "rationale": "Type PGvector (sous-classe de PGobject) : un float[] passé en paramètre lié, jamais un littéral '[0.1,…]' concaténé. Version tirée par spring-ai-pgvector-store 2.0.1 (0.1.6)."
+    },
+    {
+      "module": "org.springframework.boot:spring-boot-starter-flyway",
+      "ref": "spring-boot",
+      "rationale": "Migrations du schéma rag (extension, tables, GIN, HNSW séparé, rôles) — le pendant d'Alembic dans vectorstore/pgvector.md. Starter Spring Boot 4 ; flyway-core à la version du BOM (12.4.0)."
+    },
+    {
+      "module": "org.flywaydb:flyway-database-postgresql",
+      "ref": "flyway",
+      "rationale": "Support PostgreSQL de Flyway, séparé de flyway-core depuis Flyway 10 : sans lui, Flyway refuse la base au démarrage."
+    }
+  ],
+  "dev": [
+    {
+      "module": "org.testcontainers:testcontainers-postgresql",
+      "ref": "testcontainers",
+      "rationale": "L2/L6 réseau : PostgreSQL + pgvector jetable (image pgvector/pgvector:pg17). Artefact renommé en 2.x — `org.testcontainers:postgresql` s'arrête à 1.21.4."
+    },
+    {
+      "module": "org.springframework.boot:spring-boot-testcontainers",
+      "ref": "spring-boot",
+      "rationale": "@ServiceConnection : la DataSource de test pointe sur le conteneur sans URL recopiée à la main."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "org.springframework.ai:spring-ai-starter-vector-store-pgvector",
+      "ref": "spring-ai",
+      "capability": "spring-ai-vectorstore",
+      "rationale": "PgVectorStore Spring AI — POC uniquement : son schéma (table vector_store : id, content, metadata json, embedding) ne porte ni colonne tsvector, ni tenant_id typé, ni content_hash, ni index_meta, et PgVectorStore n'a pas de recherche hybride (aucune occurrence tsvector/ts_rank dans PgVectorStore 2.0.1). Même verdict que langchain-postgres dans vectorstore/pgvector.libs.json.",
+      "triggers": [
+        "PgVectorStore",
+        "spring-ai-starter-vector-store-pgvector",
+        "poc.*pgvector"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "org.springframework.ai:spring-ai-advisors-vector-store",
+      "reason": "N'existe plus en Spring AI 2.x (dernière version 1.1.8) : renommé spring-ai-vector-store-advisor (QuestionAnswerAdvisor). Le pipeline RAG de rag/hybrid-jvm.md passe par spring-ai-rag (RetrievalAugmentationAdvisor), pas par cet advisor."
+    },
+    {
+      "module": "org.springframework.boot:spring-boot-starter-data-jpa",
+      "reason": "Un index vectoriel n'est pas un agrégat : JPA ne sait ni l'opérateur <=>, ni SET LOCAL, ni le plan HNSW. JdbcClient + SQL versionné, comme psycopg en Python."
+    },
+    {
+      "module": "dev.langchain4j:langchain4j-pgvector",
+      "reason": "Seule pile JVM avec hybride natif (SearchMode.HYBRID + RRF, vérifié dans le jar 1.20.1-beta30), mais publiée en -betaNN et porteuse d'une seconde abstraction de fournisseur à côté de Spring AI. Alternative documentée dans rag/hybrid-jvm.md §7, pas dépendance."
+    }
+  ],
+  "plugins": [],
+  "runtimeRequirements": {
+    "jdk": ">=21",
+    "postgresql": ">=16 (17 recommandé)",
+    "extension": "vector >= 0.8 (hnsw.iterative_scan, halfvec indexable jusqu'à 4000 dims) ; unaccent",
+    "notes": "`postgresql-server` et `pgvector-extension` sont des versions SERVEUR : elles pilotent le smoke (extversion >= 0.8), pas le build."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Partagé Kotlin et Java : les modules sont Java, aucune dépendance propre à un langage.",
+      "Versions alignées sur les BOM, pas « la dernière de chaque artefact » : spring-boot-dependencies 4.1.1 gère postgresql 42.7.13, flyway 12.4.0 et testcontainers 2.0.5 ; Maven Central publie flyway 13.8.0, que le BOM ne gère pas encore — le surclasser serait une résolution que personne n'a testée avec Boot 4.1.1.",
+      "spring-ai-pgvector-store 2.0.1 dépend de postgresql 42.7.13 et com.pgvector:pgvector 0.1.6 (POM lu le 2026-09-26) : mêmes pins ici, pour que l'activation du POC PgVectorStore ne change aucune version."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création ; pins résolus contre Maven Central."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "repo1.maven.org : maven-metadata.xml de chaque artefact + versions gérées lues dans spring-boot-dependencies-4.1.1.pom et dans les POM spring-ai-*-2.0.1 (dépendances effectives). Existence vérifiée artefact par artefact, pas par une résolution Gradle complète du catalogue."
+  }
+}

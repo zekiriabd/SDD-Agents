@@ -6,12 +6,13 @@
   "buildSystem": "dotnet",
   "manifest": {
     "files": [
-      "workspace/src/{AppName}.Serving.Http/{AppName}.Serving.Http.csproj"
+      "workspace/src/{AppName}/Directory.Packages.props",
+      "workspace/src/{AppName}/{AppName}.csproj"
     ]
   },
   "metadata": {
     "status": "design-phase",
-    "lastUpdated": "2026-09-22",
+    "lastUpdated": "2026-09-26",
     "versionsVerified": true,
     "notes": [
       "Versions portées de SDD_Pro .sdd/stacks/backend/dotnet-minimalapi.libs.json, qui les audite (CVE, LTS). Les paquets OpenTelemetry sont propres à l'agentic : unverified.",
@@ -20,11 +21,12 @@
     "verifiedAt": "2026-09-22",
     "verifiedAgainst": "nuget.org (index plat v3-flatcontainer), dernières stables, previews et rc exclus",
     "changeLog": [
-      "2026-09-22 — Résolution nuget.org (8) : jwt-bearer 10.0.11→10.0.12 · asp-openapi 10.0.11→10.0.12 · healthchecks 10.0.11→10.0.12 · http-resilience 10.9.0→10.10.0 · microsoft-identity-web 4.14.2→4.15.0 · opentelemetry-exporter-otlp 1.13.0→1.19.1 · opentelemetry-instrumentation-aspnetcore 1.13.0→1.19.0 · polly 8.7.0→8.8.0"
+      "2026-09-22 — Résolution nuget.org (8) : jwt-bearer 10.0.11→10.0.12 · asp-openapi 10.0.11→10.0.12 · healthchecks 10.0.11→10.0.12 · http-resilience 10.9.0→10.10.0 · microsoft-identity-web 4.14.2→4.15.0 · opentelemetry-exporter-otlp 1.13.0→1.19.1 · opentelemetry-instrumentation-aspnetcore 1.13.0→1.19.0 · polly 8.7.0→8.8.0",
+      "2026-09-26 — TFM aligné : dotnet 9.0 → 10.0 (versions{} et runtimeRequirements). Un même projet .NET portait deux TFM selon le catalogue lu — net9.0 ici, net10.0 dans framework/ms-agent-framework.libs.json et lang/csharp.md. Aucun pin de paquet modifié : les paquets Microsoft.AspNetCore.* 10.0.12 ciblent déjà net10.0. Manifeste : le projet séparé {AppName}.Serving.Http devient le projet unique workspace/src/{AppName}/{AppName}.csproj (surface HTTP = dossier serving/http/, framework partagé par <FrameworkReference Include=\"Microsoft.AspNetCore.App\" />) — disposition plate exigée par la matrice d'ownership, vérifiée sur une sonde."
     ]
   },
   "versions": {
-    "dotnet": "9.0",
+    "dotnet": "10.0",
     "asp-openapi": "10.0.12",
     "microsoft-openapi": "3.10.2",
     "serilog-aspnetcore": "10.0.0",
@@ -161,7 +163,8 @@
     }
   ],
   "runtimeRequirements": {
-    "dotnet": ">=9.0",
+    "dotnet": ">=10.0 — TargetFramework net10.0, le même que framework/ms-agent-framework.libs.json et lang/csharp.md",
+    "aspnetcore-shared-framework": "Microsoft.AspNetCore.App (runtime partagé, pas un paquet NuGet) — référencé par <FrameworkReference> dans le projet unique ; présent dans le SDK et dans les images mcr.microsoft.com/dotnet/aspnet",
     "notes": "PublishAot n'est PAS activé par défaut : le gain au démarrage est réel, le coût l'est aussi (toute réflexion non annotée casse à l'exécution, pas à la compilation). JsonSerializerContext source-generated est en revanche obligatoire pour le flux d'événements."
   }
 }

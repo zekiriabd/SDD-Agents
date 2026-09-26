@@ -6,63 +6,101 @@
   "buildSystem": "gradle",
   "manifest": {
     "files": [
+      "workspace/src/{AppName}/settings.gradle.kts",
       "workspace/src/{AppName}/build.gradle.kts",
-      "workspace/src/{AppName}/gradle/libs.versions.toml"
+      "workspace/src/{AppName}/gradle/libs.versions.toml",
+      "workspace/src/{AppName}/gradle/wrapper/gradle-wrapper.properties"
     ]
   },
   "versions": {
     "jdk": "21",
-    "kotlin": "2.2.0",
-    "spring-ai": "1.0.0",
-    "spring-boot": "3.5.3",
+    "gradle": "9.5.0",
+    "spring-ai": "2.0.1",
+    "spring-boot": "4.1.1",
+    "spring-framework": "7.0.9",
+    "kotlin": "2.3.21",
     "kotlinx-coroutines": "1.10.2",
-    "kotlin-logging": "7.0.7",
-    "resilience4j": "2.3.0",
-    "opentelemetry-spring-boot-starter": "2.16.0",
-    "clikt": "5.0.3",
-    "kotest": "6.0.0.M4"
+    "jackson": "3.1.5",
+    "kotlin-logging": "8.0.4",
+    "resilience4j": "2.4.0",
+    "clikt": "5.1.0",
+    "picocli": "4.7.7",
+    "jspecify": "1.0.1",
+    "errorprone-plugin": "5.1.1",
+    "error-prone": "2.50.0",
+    "nullaway": "0.14.2",
+    "spotless": "8.10.3",
+    "google-java-format": "1.36.1",
+    "ktlint-plugin": "14.2.0",
+    "detekt": "1.23.8"
   },
   "core": [
     { "module": "org.springframework.ai:spring-ai-bom", "ref": "spring-ai", "rationale": "Plateforme : toutes les versions Spring AI viennent du BOM, jamais épinglées une à une." },
-    { "module": "org.springframework.ai:spring-ai-client-chat", "ref": "spring-ai", "rationale": "ChatClient, outils typés, sorties structurées (.entity)." },
-    { "module": "org.springframework.boot:spring-boot-starter", "ref": "spring-boot", "rationale": "Conteneur, configuration typée, cycle de vie — même sans HTTP (cli-exe)." },
-    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-core", "ref": "kotlinx-coroutines" },
-    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-reactor", "ref": "kotlinx-coroutines", "rationale": "Pont coroutines <-> Reactor pour le streaming Spring AI." },
-    { "module": "tools.jackson.module:jackson-module-kotlin", "ref": "spring-boot" },
-    { "module": "io.github.oshai:kotlin-logging-jvm", "ref": "kotlin-logging" },
-    { "module": "io.github.resilience4j:resilience4j-kotlin", "ref": "resilience4j", "rationale": "Retry avec backoff sur TransientAiException seulement ; jamais sur un outil non idempotent." },
-    { "module": "io.kotest:kotest-runner-junit5", "ref": "kotest" },
-    { "module": "io.kotest:kotest-assertions-core", "ref": "kotest" }
+    { "module": "org.springframework.boot:spring-boot-dependencies", "ref": "spring-boot", "rationale": "Plateforme Spring Boot 4.1.1 — celle qu'exige Spring AI 2.0.1 (spring-ai-autoconfigure-model-anthropic 2.0.1 dépend de spring-boot-autoconfigure 4.1.1, Spring Framework 7.0.9). Fixe aussi Jackson 3, JUnit, OpenTelemetry, Kotlin et les coroutines." },
+    { "module": "org.springframework.ai:spring-ai-client-chat", "ref": "spring-ai", "rationale": "ChatClient, outils typés (@Tool, ToolCallback), sorties structurées (.entity), advisors." },
+    { "module": "org.springframework.boot:spring-boot-starter", "ref": "spring-boot", "rationale": "Conteneur, configuration typée, cycle de vie, ExitCodeGenerator — même sans HTTP (cli-exe)." },
+    { "module": "io.github.resilience4j:resilience4j-retry", "ref": "resilience4j", "rationale": "Retry avec backoff sur TransientAiException seulement ; jamais sur un outil non idempotent. Commun Java et Kotlin." }
+  ],
+  "dev": [
+    { "module": "org.springframework.boot:org.springframework.boot.gradle.plugin", "ref": "spring-boot", "rationale": "Plugin Gradle : bootJar (le jar exécutable build/libs/{AppName}.jar du contrat d'exécution) et alignement sur le BOM." }
   ],
   "onDemand": [
-    { "module": "org.springframework.ai:spring-ai-starter-model-anthropic", "ref": "spring-ai", "capability": "provider-anthropic", "triggers": ["RuntimeProvider:\\s*anthropic", "claude-"] },
+    { "module": "org.springframework.ai:spring-ai-starter-model-anthropic", "ref": "spring-ai", "capability": "provider-anthropic", "rationale": "Embarque anthropic-java-core 2.52.0 (POM spring-ai-anthropic 2.0.1).", "triggers": ["RuntimeProvider:\\s*anthropic", "claude-"] },
     { "module": "org.springframework.ai:spring-ai-starter-model-openai", "ref": "spring-ai", "capability": "provider-openai", "triggers": ["RuntimeProvider:\\s*openai", "gpt-"] },
-    { "module": "org.springframework.ai:spring-ai-starter-model-azure-openai", "ref": "spring-ai", "capability": "provider-azure-openai", "triggers": ["RuntimeProvider:\\s*azure"] },
-    { "module": "org.springframework.ai:spring-ai-starter-model-vertex-ai-gemini", "ref": "spring-ai", "capability": "provider-google", "triggers": ["RuntimeProvider:\\s*google", "gemini-"] },
-    { "module": "org.springframework.ai:spring-ai-starter-mcp-client", "ref": "spring-ai", "capability": "mcp", "rationale": "Outils MCP dans le conteneur Spring ; allowlist et schéma épinglés par tools/mcp.md.", "triggers": ["MCPServers", "mcp"] },
+    { "module": "org.springframework.ai:spring-ai-starter-model-google-genai", "ref": "spring-ai", "capability": "provider-google", "rationale": "Remplace spring-ai-starter-model-vertex-ai-gemini, qui s'arrête à 1.1.8 et n'est pas dans la BOM 2.0.1.", "triggers": ["RuntimeProvider:\\s*google", "gemini-"] },
+    { "module": "org.springframework.ai:spring-ai-starter-mcp-client", "ref": "spring-ai", "capability": "mcp", "rationale": "SDK MCP Java (io.modelcontextprotocol.sdk:mcp 2.0.0 tiré par spring-ai-mcp 2.0.1) et SyncMcpToolCallback ; auto-configuration coupée (spring.ai.mcp.client.enabled / toolcallback.enabled: false) — allowlist et hash épinglés par tools/mcp-jvm.md.", "triggers": ["MCPServers", "stacks/tools/mcp-jvm\\.md"] },
+    { "module": "org.springframework.ai:spring-ai-rag", "ref": "spring-ai", "capability": "rag", "rationale": "RetrievalAugmentationAdvisor, DocumentRetriever, DocumentJoiner, QueryExpander — la jambe hybride et la fusion RRF sont écrites par rag/hybrid-jvm.md.", "triggers": ["stacks/rag/hybrid-jvm\\.md"] },
+    { "module": "org.springframework.boot:spring-boot-starter-restclient", "ref": "spring-boot", "capability": "rest-client", "rationale": "RestClient pour le client d'embedding Voyage maison (aucun module Spring AI ni SDK Java officiel) et les outils REST.", "triggers": ["EmbeddingModel:\\s*voyage-", "stacks/embedding/voyage\\.md", "stacks/tools/(rest|openapi)"] },
     { "module": "org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc", "ref": "spring-ai", "capability": "memory-shared", "rationale": "ChatMemory partagée dès qu'il y a plus d'un processus.", "triggers": ["replicas", "workers", "memory-shared"] },
-    { "module": "com.github.ajalt.clikt:clikt", "ref": "clikt", "capability": "serving-cli", "rationale": "Analyse des arguments de la CLI (serving/cli-kotlin.md).", "triggers": ["serving/cli-kotlin"] },
-    { "module": "io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter", "ref": "opentelemetry-spring-boot-starter", "capability": "otel", "rationale": "Observations gen_ai.* re-nommées au format observability/otel-genai.md ; coût recalculé depuis Usage.", "triggers": ["otel", "opentelemetry"] }
+    { "module": "org.jetbrains.kotlin:kotlin-gradle-plugin", "ref": "kotlin", "capability": "lang-kotlin", "rationale": "Kotlin 2.3.21 = la version que gère le BOM Spring Boot 4.1.1 (kotlin.version) ; 2.4.20 est publiée, non retenue tant qu'aucun build ne la mesure sous Boot 4.1.1.", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "org.jetbrains.kotlin:kotlin-allopen", "ref": "kotlin", "capability": "lang-kotlin", "rationale": "Plugin kotlin(\"plugin.spring\") : ouvre les classes @Configuration / @Component, que Spring doit sous-classer.", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "org.jetbrains.kotlin:kotlin-reflect", "ref": "kotlin", "capability": "lang-kotlin", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-core", "ref": "kotlinx-coroutines", "capability": "lang-kotlin", "rationale": "Version du BOM Spring Boot 4.1.1 (1.10.2 ; 1.11.0 publiée).", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-reactor", "ref": "kotlinx-coroutines", "capability": "lang-kotlin", "rationale": "Pont coroutines <-> Reactor pour le streaming Spring AI (Flux).", "triggers": ["stacks/lang/kotlin\\.md", "StreamingEnabled:\\s*true"] },
+    { "module": "tools.jackson.module:jackson-module-kotlin", "ref": "jackson", "capability": "lang-kotlin", "rationale": "Jackson 3 (groupe tools.jackson), celui de Spring Boot 4 — version du BOM (jackson-bom 3.1.5). Le groupe com.fasterxml.jackson.module est Jackson 2 : incompatible avec Boot 4.", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "io.github.oshai:kotlin-logging-jvm", "ref": "kotlin-logging", "capability": "lang-kotlin", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "io.github.resilience4j:resilience4j-kotlin", "ref": "resilience4j", "capability": "lang-kotlin", "rationale": "Retry en fonctions suspend.", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "org.jlleitschuh.gradle.ktlint:org.jlleitschuh.gradle.ktlint.gradle.plugin", "ref": "ktlint-plugin", "capability": "lang-kotlin", "rationale": "Format L0 (plugin Gradle, portail des plugins Gradle).", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "io.gitlab.arturbosch.detekt:io.gitlab.arturbosch.detekt.gradle.plugin", "ref": "detekt", "capability": "lang-kotlin", "rationale": "Analyse statique L0 : !!, println, prompts littéraux. Règle InvalidPackageDeclaration désactivée (disposition à plat, lang/kotlin.md §4.2). detekt 2.x est en alpha.", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "com.github.ajalt.clikt:clikt", "ref": "clikt", "capability": "serving-cli", "rationale": "Analyse des arguments de la CLI Kotlin (serving/cli-kotlin.md).", "triggers": ["serving/cli-kotlin"] },
+    { "module": "info.picocli:picocli", "ref": "picocli", "capability": "serving-cli-java", "rationale": "Analyse des arguments de la CLI Java (serving/cli-java.md) ; ExitCode.USAGE = 2, la réservation de serving/cli.md §3.3 (vérifié sous Spring Boot 4.1.1).", "triggers": ["serving/cli-java"] },
+    { "module": "org.jspecify:jspecify", "ref": "jspecify", "capability": "lang-java", "rationale": "@NullMarked / @Nullable : la frontière de nullabilité que Java n'a pas dans ses types.", "triggers": ["stacks/lang/java\\.md"] },
+    { "module": "net.ltgt.errorprone:net.ltgt.errorprone.gradle.plugin", "ref": "errorprone-plugin", "capability": "lang-java", "rationale": "Branche Error Prone sur javac ; `import net.ltgt.gradle.errorprone.errorprone` requis dans build.gradle.kts (vérifié).", "triggers": ["stacks/lang/java\\.md"] },
+    { "module": "com.google.errorprone:error_prone_core", "ref": "error-prone", "capability": "lang-java", "rationale": "Configuration `errorprone` ; PackageLocation désactivée explicitement (disposition à plat, lang/java.md §4.2).", "triggers": ["stacks/lang/java\\.md"] },
+    { "module": "com.uber.nullaway:nullaway", "ref": "nullaway", "capability": "lang-java", "rationale": "NullAway en ERROR, option OnlyNullMarked : un null non déclaré échoue la compilation (vérifié avec Error Prone 2.50.0).", "triggers": ["stacks/lang/java\\.md"] },
+    { "module": "com.diffplug.spotless:com.diffplug.spotless.gradle.plugin", "ref": "spotless", "capability": "lang-java", "rationale": "Format L0 (spotlessCheck).", "triggers": ["stacks/lang/java\\.md"] },
+    { "module": "com.google.googlejavaformat:google-java-format", "ref": "google-java-format", "capability": "lang-java", "rationale": "Formateur appelé par Spotless.", "triggers": ["stacks/lang/java\\.md"] }
   ],
   "absentByDesign": [
-    { "module": "org.springframework.ai:spring-ai-advisors-vector-store", "reason": "Aucune fiche rag/ JVM mesurée : un VectorStore sans fiche est un retrieval que la RETRIEVAL GATE ne mesure pas." },
-    { "module": "dev.langchain4j:langchain4j", "reason": "Deux abstractions de fournisseur dans un même projet ; Spring AI retenu (ROADMAP)." }
+    { "module": "org.springframework.ai:spring-ai-advisors-vector-store", "reason": "N'existe plus en Spring AI 2.x (dernière version 1.1.8) ; renommé spring-ai-vector-store-advisor (QuestionAnswerAdvisor), lui aussi écarté : il suppose un VectorStore et un gabarit de contexte non balisé. Le RAG passe par spring-ai-rag (rag/hybrid-jvm.md)." },
+    { "module": "org.springframework.ai:spring-ai-vector-store-advisor", "reason": "QuestionAnswerAdvisor et VectorStoreChatMemoryAdvisor supposent un VectorStore Spring AI (PgVectorStore), dont le schéma n'a ni tenant typé ni tsvector (vectorstore/pgvector-jvm.md §1.1)." },
+    { "module": "org.springframework.ai:spring-ai-starter-model-azure-openai", "reason": "Aucune version 2.x publiée (dernière 1.1.8) et absent de la BOM 2.0.1 : RuntimeProvider azure-openai n'a pas de starter Spring AI 2 vérifié. Ne pas le mélanger à la BOM 2.0.1." },
+    { "module": "org.springframework.ai:spring-ai-starter-model-vertex-ai-gemini", "reason": "S'arrête à 1.1.8 ; la BOM 2.0.1 fournit spring-ai-starter-model-google-genai (capability provider-google)." },
+    { "module": "dev.langchain4j:langchain4j", "reason": "Deux abstractions de fournisseur dans un même projet ; Spring AI retenu. LangChain4j reste l'alternative documentée pour l'hybride natif (rag/hybrid-jvm.md §7.1), par ADR." },
+    { "module": "io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter", "reason": "Observabilité portée par observability/otel-genai-jvm.md (spring-boot-starter-opentelemetry de Spring Boot 4) : une seconde instrumentation dupliquerait les spans et les coûts." },
+    { "module": "com.fasterxml.jackson.module:jackson-module-kotlin", "reason": "Jackson 2. Spring Boot 4 est sur Jackson 3 (tools.jackson.*) : les deux dans un projet produisent deux formes du même RunEvent." }
   ],
   "runtimeRequirements": {
     "jdk": ">=21",
-    "notes": "Spring AI n'a pas de graphe borné natif : les patterns à cycle exigent une boucle écrite dans orchestration/, bornée par Bounds et persistée (architecture-requirements.yml : loop_bound)."
+    "notes": "Spring AI n'a pas de graphe borné natif : les patterns à cycle exigent une boucle écrite dans orchestration/, bornée par Bounds et persistée (architecture-requirements.yml : loop_bound). Disposition à plat : racines de sources = répertoires de couche (lang/kotlin.md, lang/java.md §4)."
   },
   "metadata": {
-    "lastUpdated": "2026-09-23",
+    "lastUpdated": "2026-09-26",
     "status": "design-phase",
     "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
     "notes": [
-      "VERSIONS NON VÉRIFIÉES au 2026-09-23 : search.maven.org a confirmé spring-ai-bom 1.0.0, spring-ai-starter-model-anthropic 1.0.0 et spring-ai-starter-mcp-client 1.0.0 comme `latestVersion` indexée, mais l'index paraît en retard sur la ligne 1.x publiée ; spring-boot-dependencies 3.5.3, kotlin 2.2.0, kotlin-logging 7.0.7, resilience4j 2.3.0, clikt 5.0.3 confirmés ; opentelemetry-spring-boot-starter et kotlinx-coroutines-reactor NON confirmés. Résoudre contre Maven Central avant le premier bootstrap réel, puis dater verifiedAt.",
-      "Retenu à la place de Semantic Kernel Java (portage non poussé par Microsoft) et de LangChain4j (même absence de graphe, écosystème plus étroit) — ROADMAP, note Java."
+      "Partagé Kotlin et Java : core commun ; dépendances et plugins propres à un langage en onDemand, capabilities lang-kotlin / lang-java, déclenchées par la fiche de langage active.",
+      "Spring AI 2.0.1 exige Spring Boot 4.1.1 / Spring Framework 7.0.9 (POM spring-ai-autoconfigure-model-anthropic 2.0.1 et spring-ai-client-chat 2.0.1). spring-ai-bom publie aussi 2.1.0-M1 (milestone, non retenu).",
+      "Versions alignées sur le BOM Spring Boot 4.1.1 et non sur « la dernière publiée » : kotlin 2.3.21 (2.4.20 publiée), kotlinx-coroutines 1.10.2 (1.11.0), jackson 3.1.5 (3.2.3), JUnit 6.0.3 (6.1.3), OpenTelemetry 1.62.0 (1.66.0). Surclasser une famille gérée par le BOM est une résolution que personne n'a mesurée.",
+      "Build de vérification exécuté le 2026-09-26 dans un répertoire temporaire (Gradle 9.5.0, JDK 21.0.11) : un projet Kotlin (kotlin 2.3.21, plugin.spring, Spring Boot 4.1.1, spring-ai-bom 2.0.1 + spring-ai-client-chat, jackson-module-kotlin 3, clikt 5.1.0) et un projet Java (Error Prone 2.50.0 + NullAway 0.14.2, picocli 4.7.7, JSpecify 1.0.1) en disposition à plat compilent, produisent build/libs/{AppName}.jar et démarrent. Gradle 9.8.0 est la version courante ; le wrapper est épinglé sur la version effectivement construite.",
+      "Non vérifiés par un build : les starters fournisseurs (anthropic, openai, google-genai), spring-ai-rag, spring-ai-starter-mcp-client, chat-memory-repository-jdbc, resilience4j, kotlin-logging, Spotless, ktlint, detekt — existence et version vérifiées sur Maven Central / portail Gradle, compatibilité mutuelle non mesurée."
     ],
     "changeLog": [
-      "2026-09-23 — Création ; pins provisoires."
+      "2026-09-23 — Création ; pins provisoires.",
+      "2026-09-26 — Languages: kotlin, java. Spring AI 1.0.0 → 2.0.1, Spring Boot 3.5.3 → 4.1.1, Kotlin 2.2.0 → 2.3.21 (BOM), kotlin-logging 7.0.7 → 8.0.4, resilience4j 2.3.0 → 2.4.0, clikt 5.0.3 → 5.1.0 ; jackson-module-kotlin passé sur la version Jackson 3 du BOM ; ajout picocli, JSpecify, Error Prone, NullAway, Spotless, spring-ai-rag, spring-boot-starter-restclient, google-genai ; retrait vertex-ai-gemini, azure-openai (aucun starter 2.x), opentelemetry-spring-boot-starter (→ otel-genai-jvm), kotest (→ eval/junit-eval)."
     ],
-    "versionsVerified": false
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "repo1.maven.org (maven-metadata.xml de chaque artefact ; POM spring-ai-bom / spring-ai-*-2.0.1 ; versions gérées de spring-boot-dependencies-4.1.1.pom) et plugins.gradle.org pour les plugins ; build Gradle de vérification sur un sous-ensemble (voir notes)"
   }
 }

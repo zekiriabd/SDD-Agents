@@ -1,0 +1,126 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "observability-otel-genai-node",
+  "category": "observability",
+  "schemaVersion": 1,
+  "buildSystem": "pnpm",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/package.json",
+      "workspace/src/{AppName}/pnpm-lock.yaml"
+    ]
+  },
+  "versions": {
+    "node": "22",
+    "opentelemetry-api": "1.9.1",
+    "opentelemetry-sdk-trace-node": "2.11.0",
+    "opentelemetry-sdk-trace-base": "2.11.0",
+    "opentelemetry-resources": "2.11.0",
+    "opentelemetry-core": "2.11.0",
+    "opentelemetry-exporter-trace-otlp-http": "0.222.0",
+    "opentelemetry-semantic-conventions": "1.43.0",
+    "opentelemetry-instrumentation-pg": "0.74.0",
+    "ulid": "3.0.2",
+    "zod": "4.6.5",
+    "pino": "10.3.1"
+  },
+  "core": [
+    {
+      "module": "@opentelemetry/api",
+      "ref": "opentelemetry-api",
+      "rationale": "trace.getTracer, context, propagation. Pairs `>=1.3.0 <1.10.0` de toute la famille 2.11.0 : 1.9.1 est dans la plage."
+    },
+    {
+      "module": "@opentelemetry/sdk-trace-node",
+      "ref": "opentelemetry-sdk-trace-node",
+      "rationale": "NodeTracerProvider({ resource, spanProcessors }) + AsyncLocalStorageContextManager (via context-async-hooks 2.11.0) : le parent d'un span survit aux `await`."
+    },
+    {
+      "module": "@opentelemetry/sdk-trace-base",
+      "ref": "opentelemetry-sdk-trace-base",
+      "rationale": "SimpleSpanProcessor (JSONL, écriture immédiate), BatchSpanProcessor (OTLP), types SpanExporter / ReadableSpan (`parentSpanContext`), InMemorySpanExporter pour les tests L1. En 2.11 c'est une façade sur `@opentelemetry/sdk-trace` (même version) : les imports restent ceux de sdk-trace-base."
+    },
+    {
+      "module": "@opentelemetry/resources",
+      "ref": "opentelemetry-resources",
+      "rationale": "resourceFromAttributes({ service.name, service.version })."
+    },
+    {
+      "module": "@opentelemetry/core",
+      "ref": "opentelemetry-core",
+      "rationale": "hrTimeToMilliseconds / ExportResultCode pour le JsonlSpanExporter."
+    },
+    {
+      "module": "@opentelemetry/exporter-trace-otlp-http",
+      "ref": "opentelemetry-exporter-trace-otlp-http",
+      "rationale": "Export OTLP/HTTP vers le Collector, désactivé avec avertissement si OTEL_EXPORTER_OTLP_ENDPOINT est absent. Le JSONL, lui, n'est jamais désactivable."
+    },
+    {
+      "module": "@opentelemetry/semantic-conventions",
+      "ref": "opentelemetry-semantic-conventions",
+      "rationale": "Constantes stables (service.*, db.*). Les attributs gen_ai.* sont en statut Development : leurs noms vivent dans app/tracing/semconv.ts, en littéraux épinglés, et chaque ligne JSONL porte semconv_version."
+    },
+    {
+      "module": "ulid",
+      "ref": "ulid",
+      "rationale": "run_id (ULID) = nom du fichier de trace = sdda.run.id du span racine, triable par date."
+    },
+    {
+      "module": "zod",
+      "ref": "zod",
+      "rationale": "TraceEvent : chaque ligne JSONL est validée avant écriture (même schéma que la fiche Python)."
+    },
+    {
+      "module": "pino",
+      "ref": "pino",
+      "rationale": "Logs corrélés (trace_id, span_id injectés par mixin) sur stderr."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "@opentelemetry/instrumentation-pg",
+      "ref": "opentelemetry-instrumentation-pg",
+      "capability": "instrument-pg",
+      "rationale": "Spans SQL de pgvector-node et view-per-agent-node. db.query.text doit rester paramétré ($1) : vérification L1 qu'aucun littéral long n'y apparaît.",
+      "triggers": [
+        "stacks/dataaccess/view-per-agent-node\\.md",
+        "stacks/vectorstore/pgvector-node\\.md"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "@opentelemetry/sdk-node",
+      "reason": "NodeSDK enregistre des instrumentations et des processeurs par défaut pilotés par variables d'environnement : l'ordre RedactionProcessor → JSONL → OTLP, qui est l'invariant de cette fiche, ne se lit plus dans le code. NodeTracerProvider rend la chaîne explicite."
+    },
+    {
+      "module": "@arizeai/openinference-instrumentation-langchain",
+      "reason": "Émet la convention OpenInference, pas gen_ai.* : les scripts du framework ne liraient ni opération, ni tokens, ni outil."
+    },
+    {
+      "module": "@traceloop/instrumentation-langchain",
+      "reason": "Instrumentation tierce dont les noms d'attributs ne sont pas ceux que relit sdda_lib/tracing.py ; une seconde source de spans LLM doublerait le coût mesuré."
+    },
+    {
+      "module": "langsmith",
+      "reason": "Tracing managé : jamais la couche d'observabilité runtime (le coût est recalculé par le framework depuis la trace JSONL). Reste une capability optionnelle de framework/langgraph-js.libs.json, en complément."
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Règle de cohérence : sdk-trace-node, sdk-trace-base, resources et core partagent EXACTEMENT la même version (2.NN.0) ; les paquets expérimentaux (exporter-trace-otlp-http, instrumentation-*) suivent la leur (0.NNN.0) ; @opentelemetry/api reste en 1.x.",
+      "LangChain.js n'émet PAS de spans OTel gen_ai.* : les spans sont écrits à la main par les helpers de app/tracing/spans.ts (et un BaseCallbackHandler pour les appels de modèle), au format de observability/otel-genai.md.",
+      "Les clés de versions{} sont des ALIAS internes : le méta-schéma refuse un nom qui commence par `@`.",
+      "Versions vérifiées paquet par paquet ; pairs lus dans les manifestes publiés (famille 2.11.0 : api >=1.3.0 <1.10.0). Pas de résolution conjointe pnpm."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création (design-phase) ; versions lues sur registry.npmjs.org."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "registry.npmjs.org (GET /{pkg}/latest, paquet par paquet ; pairs lus dans les manifestes publiés — pas de résolution conjointe pnpm)"
+  }
+}

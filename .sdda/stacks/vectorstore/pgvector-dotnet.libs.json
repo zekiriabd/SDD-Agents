@@ -1,0 +1,115 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "vectorstore-pgvector-dotnet",
+  "category": "vectorstore",
+  "schemaVersion": 1,
+  "buildSystem": "dotnet",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/Directory.Packages.props",
+      "workspace/src/{AppName}/{AppName}.csproj"
+    ]
+  },
+  "versions": {
+    "dotnet": "10.0",
+    "postgresql": "17",
+    "pgvector-extension": "0.8.1",
+    "Npgsql": "10.0.3",
+    "Pgvector": "0.3.2",
+    "dbup-postgresql": "7.0.1",
+    "CommunityToolkit.VectorData.PgVector": "1.0.1",
+    "Microsoft.Extensions.VectorData.Abstractions": "10.10.0"
+  },
+  "dbDrivers": {
+    "postgres": {
+      "module": "Npgsql",
+      "ref": "Npgsql",
+      "scope": "runtime"
+    }
+  },
+  "core": [
+    {
+      "module": "Npgsql",
+      "ref": "Npgsql",
+      "rationale": "Driver ADO.NET async + NpgsqlDataSource (pool). Paramètres liés (@nom), transactions explicites : c'est ce qui permet `set_config('app.tenant_id', @tenant, true)` et `SET LOCAL` par transaction — la même mécanique d'enveloppe que psycopg côté Python.",
+      "installCommand": "dotnet add workspace/src/{AppName} package Npgsql --version 10.0.3"
+    },
+    {
+      "module": "Pgvector",
+      "ref": "Pgvector",
+      "rationale": "Types Vector / HalfVector / SparseVector et `UseVector()` sur le type mapper de Npgsql (NpgsqlDataSourceBuilder). Sans lui, un vecteur voyage en texte et le planificateur ne voit plus l'opérateur de la classe d'index.",
+      "installCommand": "dotnet add workspace/src/{AppName} package Pgvector --version 0.3.2"
+    },
+    {
+      "module": "dbup-postgresql",
+      "ref": "dbup-postgresql",
+      "rationale": "Migrations en SQL BRUT, scripts embarqués et journalisés dans une table de version : l'équivalent d'Alembic en `op.execute(...)`. Le schéma de l'index reste un artefact SQL diffable et rejouable (P1), pas un modèle C# dont on déduit le SQL.",
+      "installCommand": "dotnet add workspace/src/{AppName} package dbup-postgresql --version 7.0.1"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "CommunityToolkit.VectorData.PgVector",
+      "ref": "CommunityToolkit.VectorData.PgVector",
+      "capability": "vectordata-abstraction",
+      "requiredBy": "retrieval-contract qui exige l'abstraction Microsoft.Extensions.VectorData (ADR)",
+      "rationale": "PostgresCollection implémente la recherche hybride (HybridSearchAsync : tsvector + vecteur + RRF en SQL). Déconseillé par défaut : la fusion vit dans le SQL du paquet, donc elle n'est plus testable en L1 comme fonction pure (rag/hybrid-dotnet.md §3.1), et le schéma est celui du paquet, pas rag.chunks.",
+      "triggers": [
+        "VectorData",
+        "PostgresCollection",
+        "HybridSearchAsync"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName} package CommunityToolkit.VectorData.PgVector --version 1.0.1"
+    },
+    {
+      "module": "Microsoft.Extensions.VectorData.Abstractions",
+      "ref": "Microsoft.Extensions.VectorData.Abstractions",
+      "capability": "vectordata-abstraction",
+      "requiredBy": "CommunityToolkit.VectorData.PgVector (qui en dépend en 10.8.2 : épinglé ici à la dernière stable pour Central Package Management)",
+      "triggers": [
+        "VectorData"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Extensions.VectorData.Abstractions --version 10.10.0"
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "Microsoft.SemanticKernel.Connectors.PgVector",
+      "reason": "Publié en preview seulement (1.74.0-preview) ; son code a été déplacé vers CommunityToolkit.VectorData.PgVector. Épingler une preview dans un catalogue vérifié ferait installer un comportement qui peut changer sans montée de version majeure — et SemanticKernel est absentByDesign dans ms-agent-framework.libs.json."
+    },
+    {
+      "module": "Npgsql.EntityFrameworkCore.PostgreSQL",
+      "reason": "Un DbContext pour l'index ajouterait un second modèle du schéma (C#) face au SQL des migrations : deux sources de vérité pour rag.chunks. La requête hybride est un CTE écrit à la main (rag/hybrid-dotnet.md §3.2) ; EF n'y apporterait qu'une traduction de plus à relire."
+    },
+    {
+      "module": "Pgvector.EntityFrameworkCore",
+      "reason": "Même raison qu'EF Core : sans DbContext, l'adaptateur EF n'a rien à adapter. Un agent qui trouve Pgvector sans lui ne doit pas l'ajouter en croyant réparer un oubli."
+    },
+    {
+      "module": "Dapper",
+      "reason": "Le mapping ligne → RetrievedChunk est explicite (lecture par colonne, `Untrusted` sur `content`). Un mapper par convention rend invisible la colonne qu'on n'a pas voulu servir au modèle."
+    }
+  ],
+  "runtimeRequirements": {
+    "postgresql": ">= 16 (17 recommandé) — serveur, non installé par dotnet",
+    "pgvector-extension": ">= 0.8.0 — extension serveur : hnsw.iterative_scan et halfvec indexable jusqu'à 4000 dims",
+    "unaccent": "extension serveur `unaccent` (contrib), enveloppée par rag.immutable_unaccent"
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur libs-catalog.schema.json",
+    "notes": [
+      "Pins relevés contre l'API de nuget.org le 2026-09-26 (index plat v3-flatcontainer), dernière stable de chaque paquet, previews exclues. Relevé paquet par paquet, PAS une résolution conjointe : la compatibilité mutuelle est établie par les dépendances déclarées (CommunityToolkit.VectorData.PgVector 1.0.1 → Npgsql 10.0.3 + Pgvector 0.3.2 ; dbup-postgresql 7.0.1 → Npgsql >= 10.0.1 en net10) et par un `dotnet restore` de sonde, pas par un projet généré.",
+      "Pgvector 0.3.2 déclare Npgsql >= 8.0.5 : compatible avec Npgsql 10.0.3 par la règle de version minimale de NuGet.",
+      "`postgresql` et `pgvector-extension` sont des versions SERVEUR recopiées de vectorstore/pgvector.libs.json : elles pilotent le smoke (extversion >= 0.8), pas l'installCommand, et ne sont pas des paquets NuGet.",
+      "Le schéma SQL (rag.documents, rag.chunks, rag.index_meta) est IDENTIQUE à vectorstore/pgvector.md §3.1 : les deux langages lisent le même index, et le rapport L3 est comparable."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création (design-phase). Versions vérifiées contre nuget.org."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "nuget.org (API v3-flatcontainer), dernières stables, previews et rc exclus — relevé paquet par paquet, dépendances lues dans les nuspec"
+  }
+}

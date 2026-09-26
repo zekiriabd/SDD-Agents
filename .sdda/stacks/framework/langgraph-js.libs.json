@@ -12,7 +12,7 @@
   },
   "versions": {
     "node": "22",
-    "langchain-langgraph": "1.4.17",
+    "langchain-langgraph": "1.4.18",
     "langchain-core": "1.2.12",
     "langchain-anthropic": "1.5.11",
     "langchain-openai": "1.5.13",
@@ -20,19 +20,17 @@
     "langchain-langgraph-checkpoint-sqlite": "1.0.4",
     "langchain-langgraph-checkpoint-postgres": "1.0.5",
     "langchain-mcp-adapters": "1.1.4",
+    "modelcontextprotocol-sdk": "1.30.1",
     "langsmith": "0.10.5",
     "zod": "4.6.5",
     "pino": "10.3.1",
     "commander": "15.0.0",
-    "opentelemetry-sdk-node": "0.222.0",
-    "opentelemetry-api": "1.9.1",
-    "opentelemetry-exporter-trace-otlp-http": "0.222.0",
     "typescript": "6.0.3",
     "tsx": "4.23.15",
-    "types-node": "26.6.2",
+    "types-node": "26.6.3",
     "eslint": "10.11.0",
     "typescript-eslint": "8.70.1",
-    "vitest": "5.0.1"
+    "vitest": "5.0.2"
   },
   "core": [
     {
@@ -136,7 +134,17 @@
       "module": "@langchain/mcp-adapters",
       "ref": "langchain-mcp-adapters",
       "capability": "mcp",
-      "rationale": "Outils MCP exposés comme tool() ; allowlist et schéma épinglés par tools/mcp.md.",
+      "rationale": "Outils MCP convertis en tool() ; toléré sous condition par tools/mcp-node.md §5.6 (Client déjà vérifié, liste filtrée par l'allowlist, description du contrat, enveloppe untrusted). Dépend de @modelcontextprotocol/sdk ^1.30.0.",
+      "triggers": [
+        "MCPServers",
+        "mcp"
+      ]
+    },
+    {
+      "module": "@modelcontextprotocol/sdk",
+      "ref": "modelcontextprotocol-sdk",
+      "capability": "mcp",
+      "rationale": "SDK MCP officiel, en dépendance DIRECTE : l'application importe Client et les transports elle-même (tools/mcp-node.md §3.1) ; une dépendance transitive importée directement casse sous pnpm. Même pin que celui que résout @langchain/mcp-adapters 1.1.4.",
       "triggers": [
         "MCPServers",
         "mcp"
@@ -149,33 +157,6 @@
       "rationale": "Analyse des arguments de la CLI (serving/cli-node.md).",
       "triggers": [
         "serving/cli-node"
-      ]
-    },
-    {
-      "module": "@opentelemetry/sdk-node",
-      "ref": "opentelemetry-sdk-node",
-      "capability": "otel",
-      "rationale": "Spans sdda.agent.turn / sdda.tool.call / sdda.llm.call au format observability/otel-genai.md.",
-      "triggers": [
-        "otel",
-        "opentelemetry"
-      ]
-    },
-    {
-      "module": "@opentelemetry/api",
-      "ref": "opentelemetry-api",
-      "capability": "otel",
-      "triggers": [
-        "otel",
-        "opentelemetry"
-      ]
-    },
-    {
-      "module": "@opentelemetry/exporter-trace-otlp-http",
-      "ref": "opentelemetry-exporter-trace-otlp-http",
-      "capability": "otel",
-      "triggers": [
-        "otlp"
       ]
     },
     {
@@ -196,27 +177,30 @@
     },
     {
       "module": "@langchain/community",
-      "reason": "Surface trop large, pins instables ; un connecteur s'ajoute par son propre paquet ou par MCP."
+      "reason": "Surface trop large, pins instables ; un connecteur s'ajoute par son propre paquet ou par MCP. Seule exception déclarée : la capability `langchain-vectorstore` de vectorstore/pgvector-node.libs.json (PGVectorStore, POC uniquement)."
     }
   ],
   "runtimeRequirements": {
     "node": ">=22",
-    "notes": "MemorySaver en développement seulement ; un checkpointer partagé dès qu'il y a plus d'un processus. Aucune fiche rag/ TypeScript : un projet LangGraph.js est rag/none.md."
+    "notes": "MemorySaver en développement seulement ; un checkpointer partagé dès qu'il y a plus d'un processus. RAG : rag/hybrid-node.md sur vectorstore/pgvector-node.md. Observabilité : les paquets OpenTelemetry sont portés par observability/otel-genai-node.libs.json."
   },
   "metadata": {
-    "lastUpdated": "2026-09-23",
+    "lastUpdated": "2026-09-26",
     "status": "design-phase",
     "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
     "notes": [
       "Cible TypeScript retenue par la ROADMAP à la place de LangChain.js seul : LCEL ne borne pas les boucles et ne persiste pas l'état.",
-      "Aucune combo de bootstrap ne l'active : eval/ et observability/ n'ont pas de fiche TypeScript, et gen_app_skeleton est Python.",
+      "Fiches TypeScript du cœur C1 : eval/vitest-eval (tests L0–L2 ; les evals restent au runner du framework), observability/otel-genai-node, rag/hybrid-node, vectorstore/pgvector-node, dataaccess/view-per-agent-node, tools/mcp-node. gen_app_skeleton reste Python : dev-backend écrit le squelette depuis lang/typescript.md.",
+      "Les paquets OpenTelemetry ont quitté ce catalogue le 2026-09-26 pour observability/otel-genai-node.libs.json : deux catalogues qui épinglent le même paquet finissent par l'épingler à deux versions. L'ancienne justification annonçait des spans `sdda.agent.turn` / `sdda.llm.call` que sdda_lib/tracing.py ne reconnaît pas.",
+      "vitest est épinglé ici ET dans eval/vitest-eval.libs.json, à la même version ; son pair `vite` n'est épinglé que dans vitest-eval.",
       "Les clés de versions{} sont des ALIAS internes (`langchain-core` pour `@langchain/core`) : le méta-schéma refuse un nom qui commence par `@`. Le `module` porte l'identifiant npm exact."
     ],
     "changeLog": [
-      "2026-09-23 — Création ; résolution registry.npmjs.org via `npm view <pkg> version`."
+      "2026-09-23 — Création ; résolution registry.npmjs.org via `npm view <pkg> version`.",
+      "2026-09-26 — Repin : @langchain/langgraph 1.4.17→1.4.18 · vitest 5.0.1→5.0.2 · @types/node 26.6.2→26.6.3 ; ajout @modelcontextprotocol/sdk 1.30.1 (capability mcp) ; entrées OpenTelemetry déplacées vers observability/otel-genai-node.libs.json. Revérifiés inchangés : @langchain/core 1.2.12, @langchain/anthropic 1.5.11, @langchain/openai 1.5.13, @langchain/google-genai 2.3.2, checkpoint-sqlite 1.0.4, checkpoint-postgres 1.0.5, @langchain/mcp-adapters 1.1.4, langsmith 0.10.5, zod 4.6.5, pino 10.3.1, commander 15.0.0, tsx 4.23.15, eslint 10.11.0, typescript-eslint 8.70.1 (pair typescript >=4.8.4 <6.1.0, compatible avec le plafond). typescript 7.0.2 est publié ; plafond 6.0.3 maintenu."
     ],
     "versionsVerified": true,
-    "verifiedAt": "2026-09-23",
-    "verifiedAgainst": "registry.npmjs.org via `npm view <pkg> version` (dernière stable ; typescript@6 plafonné)"
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "registry.npmjs.org (GET /{pkg}/latest paquet par paquet, pairs lus dans les manifestes publiés ; typescript@6 plafonné — pas de résolution conjointe pnpm)"
   }
 }

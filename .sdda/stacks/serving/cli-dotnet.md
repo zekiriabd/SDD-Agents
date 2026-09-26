@@ -47,8 +47,8 @@ transport change.
 |---|---|
 | **Stack ID** | `serving-cli-dotnet` |
 | **Langage** | C# / .NET 10 (`lang/csharp.md`, TFM `net10.0`) |
-| **Librairies** | `System.CommandLine` 2.x (analyse des commandes) · `Spectre.Console` 0.51.x (rendu TTY **uniquement**) · `System.Text.Json` source-generated — capability `serving-cli-dotnet` du `.libs.json` du framework actif |
-| **Point d'entrée** | `{AppName}.Serving.Cli/Program.cs` → `dotnet run` ou binaire publié |
+| **Librairies** | `System.CommandLine` 2.0.x (analyse des commandes) · `Spectre.Console` 0.57.x (rendu TTY **uniquement**) · `System.Text.Json` source-generated — capability `serving-cli-dotnet` du `.libs.json` du framework actif |
+| **Point d'entrée** | `serving/Program.cs` du projet unique `workspace/src/{AppName}/{AppName}.csproj` → `dotnet run --project workspace/src/{AppName} --` ou binaire publié ; **aucun projet `{AppName}.Serving.*` séparé** (§4) |
 | **Paramètres STACK.md** | `DeliverableType: cli-exe`, `StreamingEnabled`, `HumanInTheLoopEnabled` (active `resume`), `TraceLevel` |
 | **Contrat machine** | `--json` : une ligne NDJSON par événement, schéma `RunEvent`, `event_schema: "1"` — **identique à `cli.md` §3.2** |
 | **Codes de sortie** | table `cli.md` §3.3, **sans écart** — stables, documentés dans `--help`, testés en L1 |
@@ -67,6 +67,7 @@ contre l'une fonctionne contre l'autre, et c'est le but.
 |---|---|---|
 | `{AppName} run` | `Command` racine ; `IAsyncEnumerable<RunEvent>` consommé avec `await foreach` | oui |
 | `{AppName} resume` | enregistrée **seulement** si l'IR déclare `humanInTheLoop` | oui |
+| `{AppName} retrieve` | `serving/cli.md` §3.5 : `--json --index ID --query-file - [--k N]` → événement `retrieval` puis `run_finished` ; appelle le `Retriever` de l'agent, aucun `IChatClient` (`rag/hybrid-dotnet.md` §8) | embedding de la requête seulement |
 | `{AppName} health` | `IHealthCheck` réutilisés hors ASP.NET, exécutés en direct | **non** |
 | `{AppName} inspect` | lecture de l'IR embarqué ; `--graph` imprime le Mermaid | non |
 | `{AppName} trace` | relecture de `workspace/.sys/traces/runs/{run-id}.jsonl` | non |
@@ -103,24 +104,39 @@ Identique à `cli.md` §3.4, avec ces correspondances :
 
 ## 4. Structure de fichiers générée
 
-```
-workspace/src/{AppName}.Serving.Cli/
-├── Program.cs              # RootCommand + sous-commandes ; aucun métier
-├── RunService.cs           # .RunAsync(input, ctx) / .ResumeAsync(threadId, decision, ctx)
-│                           #   -> IAsyncEnumerable<RunEvent> — PARTAGÉ avec Serving.Http
-├── Events/RunEvent.cs      # records scellés, discriminés par `event`, event_schema = "1"
-├── Events/RunEventJson.cs  # JsonSerializerContext source-generated (snake_case)
-├── ExitCodes.cs            # enum + table [CLASS] -> code + Resolve(Exception)
-├── Render.cs               # TTY (Spectre, avec Escape) vs NDJSON vs texte brut
-├── Signals.cs              # SIGINT/SIGTERM -> annulation coopérative, flush des traces, 130
-└── ToolContext.cs          # tenant, runId, threadId, caller — ne traverse jamais le modèle
+Un **seul projet**, `workspace/src/{AppName}/{AppName}.csproj` : la surface est
+le **répertoire** `serving/` de ce projet, pas un projet à part
+(`lang/csharp.md` §4). La matrice d'ownership donne `serving/**` à `dev-api` ;
+un `workspace/src/{AppName}.Serving.Cli/` hors du répertoire de l'application
+ne correspond à aucune zone et serait refusé, et un second projet ne répondrait
+pas à `dotnet run --project workspace/src/{AppName}`.
 
-workspace/src/{AppName}/tests/{AppName}.Serving.Cli.Tests/
-├── ExitCodesTests.cs       # L1 : table exhaustive [CLASS] -> code ; classe inconnue -> 1
-├── RunEventJsonTests.cs    # L1 : sérialisation snake_case ; args d'outil redigés ; aller-retour
-├── CliJsonTests.cs         # L1 : stdout = NDJSON valide uniquement ; stderr porte les logs
-└── HealthTests.cs          # L1 : health sans --live est 0 token et < 5 s
 ```
+workspace/src/{AppName}/
+├── {AppName}.csproj        # OutputType Exe — l'exécutable livré (dev-backend)
+├── shared/
+│   └── ToolContext.cs      # tenant, runId, threadId, caller — ne traverse jamais le modèle (pré-passe, gelé)
+├── serving/                # dev-api
+│   ├── Program.cs          # Main : RootCommand + sous-commandes ; délègue la composition à app/ ; aucun métier
+│   ├── RunService.cs       # .RunAsync(input, ctx) / .ResumeAsync(threadId, decision, ctx)
+│   │                       #   -> IAsyncEnumerable<RunEvent> — PARTAGÉ avec serving/http/ si aspnet-minimal est actif
+│   ├── RetrieveCommand.cs  # §3.5 de cli.md — retrieval sans agent
+│   ├── Events/RunEvent.cs      # records scellés, discriminés par `event`, event_schema = "1"
+│   ├── Events/RunEventJson.cs  # JsonSerializerContext source-generated (snake_case)
+│   ├── ExitCodes.cs        # enum + table [CLASS] -> code + Resolve(Exception)
+│   ├── Render.cs           # TTY (Spectre, avec Escape) vs NDJSON vs texte brut
+│   └── Signals.cs          # SIGINT/SIGTERM -> annulation coopérative, flush des traces, 130
+└── tests/
+    └── serving/
+        ├── ExitCodesTests.cs       # L1 : table exhaustive [CLASS] -> code ; classe inconnue -> 1
+        ├── RunEventJsonTests.cs    # L1 : sérialisation snake_case ; args d'outil redigés ; aller-retour
+        ├── CliJsonTests.cs         # L1 : stdin via --input-file - ; stdout = NDJSON valide uniquement ; stderr porte les logs
+        ├── RetrieveCommandTests.cs # L1 : un `retrieval` puis `run_finished` ; aucun IChatClient résolu
+        └── HealthTests.cs          # L1 : health sans --live est 0 token et < 5 s
+```
+
+Les tests vivent dans le projet de test unique `tests/{AppName}.Tests.csproj`
+(`eval/xunit-eval.md`), sous-dossier `serving/`.
 
 ---
 
@@ -162,22 +178,27 @@ Déterministe, 0 token :
 ```bash
 cd workspace/src/{AppName}
 dotnet build -warnaserror
-dotnet run --project src/{AppName}.Serving.Cli -- --help          # exit 0
-dotnet run --project src/{AppName}.Serving.Cli -- version --json  # NDJSON valide
-dotnet run --project src/{AppName}.Serving.Cli -- health --json   # exit 0, sinon 8 + [CLASS]
-dotnet test --filter "Category!=Network"
+dotnet run --project . -- --help          # exit 0
+dotnet run --project . -- version --json  # NDJSON valide
+dotnet run --project . -- health --json   # exit 0, sinon 8 + [CLASS]
+dotnet test --filter "Category!=network"  # projet de test en VSTest (IsTestingPlatformApplication=false)
 ```
 
 Publication du livrable `cli-exe` (auto-contenu, sans .NET installé sur la cible) :
 
 ```bash
-dotnet publish src/{AppName}.Serving.Cli -c Release -r linux-x64 \
+dotnet publish workspace/src/{AppName} -c Release -r linux-x64 \
   -p:PublishSingleFile=true -p:SelfContained=true
+#   → workspace/src/{AppName}/bin/Release/net10.0/linux-x64/publish/{AppName}
 ```
 
 Le premier `run` réel coûte des tokens et n'est pas dans le smoke : il appartient
-à la L7 (ORCH GATE), via le runner d'eval qui invoque exactement
-`{AppName} run --json --tenant … --input-file …` et lit le code de sortie.
+à la L7 (ORCH GATE), via le runner d'eval qui invoque
+`{AppName} run --json --tenant … --input-file -` (entrée sur stdin,
+`serving/cli.md` §3.5) et lit le code de sortie. Il lance l'application par
+`--executor cli` (commande dérivée du langage : `dotnet run --project workspace/src/{AppName} --`)
+ou `--executor cmd:<chemin de l'exécutable publié>` — le contrat complet est dans
+`lang/csharp.md` §8.
 
 ---
 

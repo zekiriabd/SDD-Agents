@@ -90,6 +90,13 @@ superviseur, soit `maxHops` reste à 2.
 Le classifieur est `kind: "router"` et non `kind: "agent"` : `validate_ir.py`
 exige alors au moins une arête `isFallback: true`.
 
+L'arête `isFallback` est la branche **par défaut** : elle reçoit tout ce
+qu'aucune route ne prend — confiance sous le seuil **et** intention hors des
+classes déclarées. Sa condition est prise **telle que l'IR l'écrit**
+(`fallback_condition` du routeur généré ; `confidence<{seuil}` à défaut) :
+réécrire la condition dans le code, même équivalente, fait diverger le
+manifeste du graphe et `diff-code-vs-ir` le refuse.
+
 ---
 
 ## 7. Le classifieur

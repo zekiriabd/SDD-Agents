@@ -1,0 +1,112 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "observability-otel-genai-jvm",
+  "category": "observability",
+  "schemaVersion": 1,
+  "buildSystem": "gradle",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/build.gradle.kts",
+      "workspace/src/{AppName}/gradle/libs.versions.toml"
+    ]
+  },
+  "versions": {
+    "jdk": "21",
+    "spring-boot": "4.1.1",
+    "opentelemetry": "1.62.0",
+    "micrometer-tracing": "1.7.1",
+    "logstash-logback-encoder": "9.0",
+    "ulid-creator": "5.2.4"
+  },
+  "core": [
+    {
+      "module": "org.springframework.boot:spring-boot-starter-opentelemetry",
+      "ref": "spring-boot",
+      "rationale": "Starter Spring Boot 4 : micrometer-tracing-bridge-otel 1.7.1 + SDK OpenTelemetry 1.62.0 + exporteur OTLP. Les observations Micrometer de Spring AI (gen_ai.client.operation, spring.ai.tool, …) deviennent des spans OTel ; les beans SpanProcessor sont ajoutés au SdkTracerProvider (vérifié dans OpenTelemetryTracingAutoConfiguration 4.1.1) — c'est par là que passe l'exporteur JSONL."
+    },
+    {
+      "module": "io.opentelemetry:opentelemetry-api",
+      "ref": "opentelemetry",
+      "rationale": "API tracer pour les helpers imposés (invoke_agent, execute_tool, sdda.retrieve, sdda.run). Version gérée par le BOM Spring Boot (opentelemetry.version 1.62.0)."
+    },
+    {
+      "module": "io.opentelemetry:opentelemetry-sdk",
+      "ref": "opentelemetry",
+      "rationale": "SpanExporter / SimpleSpanProcessor / ReadableSpan : base de JsonlSpanExporter. Même version que l'API, toujours."
+    },
+    {
+      "module": "net.logstash.logback:logstash-logback-encoder",
+      "ref": "logstash-logback-encoder",
+      "rationale": "Journal JSON sur stderr, trace_id / span_id en MDC. La ligne 9.x est sur Jackson 3 (tools.jackson, POM lu) — celle de Spring Boot 4 ; la ligne 8.x est sur Jackson 2."
+    },
+    {
+      "module": "com.github.f4b6a3:ulid-creator",
+      "ref": "ulid-creator",
+      "rationale": "run_id en ULID, comme le runtime Python : c'est aussi le nom du fichier de trace, et l'ordre lexical des fichiers suit l'ordre des runs."
+    }
+  ],
+  "dev": [
+    {
+      "module": "io.opentelemetry:opentelemetry-sdk-testing",
+      "ref": "opentelemetry",
+      "rationale": "InMemorySpanExporter : TraceShapeTest (L1) vérifie l'arbre sdda.run > invoke_agent > chat + execute_tool et les attributs obligatoires sans Collector."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "io.opentelemetry:opentelemetry-extension-kotlin",
+      "ref": "opentelemetry",
+      "capability": "otel-kotlin",
+      "rationale": "Kotlin seulement : Context.asContextElement() — le contexte de trace suit la coroutine ; sans lui, les spans des jambes de retrieval lancées en async sont orphelins.",
+      "triggers": [
+        "lang/kotlin\\.md",
+        "kotlinx-coroutines"
+      ]
+    },
+    {
+      "module": "io.opentelemetry:opentelemetry-exporter-otlp",
+      "ref": "opentelemetry",
+      "capability": "exporter-otlp",
+      "rationale": "Déjà tiré par spring-boot-starter-opentelemetry ; nommé ici pour qu'un Collector gRPC (4317) se configure sans ajouter d'artefact (management.opentelemetry.tracing.export.otlp.transport: grpc).",
+      "triggers": [
+        "OTEL_EXPORTER_OTLP_PROTOCOL\\s*=\\s*grpc",
+        ":4317"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter",
+      "reason": "Seconde instrumentation à côté de celle de Spring Boot 4 (spring-boot-starter-opentelemetry) : deux TracerProvider, spans dupliqués, coûts comptés deux fois par cost-report. Sa compatibilité avec Spring Boot 4.1.1 n'est en outre pas vérifiée (2.31.1 publiée)."
+    },
+    {
+      "module": "io.opentelemetry.javaagent:opentelemetry-javaagent",
+      "reason": "L'agent Java instrumente à l'insu du code : spans JDBC avec db.query.text non maîtrisé, et un livrable cli-exe qui exige un -javaagent n'est plus lancé par la commande du contrat d'exécution."
+    },
+    {
+      "module": "io.opentelemetry.semconv:opentelemetry-semconv-incubating",
+      "reason": "Publiée en -alpha ; les noms gen_ai.* et sdda.* sont des CONSTANTES du module app/tracing/Semconv, recopiées de .sdda/python/sdda_lib/tracing.py — la liste que les scripts du framework relisent, pas celle d'une bibliothèque qui bouge."
+    }
+  ],
+  "plugins": [],
+  "runtimeRequirements": {
+    "jdk": ">=21",
+    "notes": "Le fichier workspace/.sys/traces/runs/{run_id}.jsonl est écrit dans tous les cas (invariant trace-emitted-per-run) ; l'export OTLP n'existe que si un endpoint est configuré."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Partagé Kotlin et Java.",
+      "Versions OpenTelemetry et Micrometer Tracing alignées sur le BOM Spring Boot 4.1.1 (opentelemetry 1.62.0, micrometer-tracing 1.7.1) et non sur les dernières publiées (1.66.0, 1.8.0-M2) : l'API, le SDK et le pont doivent partager une version, et c'est le BOM qui la fixe.",
+      "Spring AI 2.0.1 émet des observations aux noms relevés dans ses conventions par défaut (jars 2.0.1) : gen_ai.client.operation (chat, embedding), spring.ai.tool, spring.ai.chat.client, spring.ai.advisor, db.vector.client.operation ; attributs gen_ai.system (et non gen_ai.provider.name), gen_ai.operation.name = chat | embedding (le framework attend embeddings), gen_ai.usage.cache_read.input_tokens / cache_creation.input_tokens. La normalisation vers les noms du framework est décrite dans otel-genai-jvm.md §3.2."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création ; pins résolus contre Maven Central, auto-configuration Spring Boot 4.1.1 lue dans le jar."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "repo1.maven.org (maven-metadata.xml ; versions gérées de spring-boot-dependencies-4.1.1.pom ; POM de spring-boot-starter-opentelemetry 4.1.1 et logstash-logback-encoder 9.0) ; classes et métadonnées de configuration lues dans les jars spring-boot-micrometer-tracing(-opentelemetry) 4.1.1 et spring-ai-model 2.0.1"
+  }
+}

@@ -6,7 +6,7 @@ Stack ID: framework-langgraph-js
 Status: Draft
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: typescript
-Scope: LangGraph.js — graphe d'état, cycles **bornés**, checkpointing, reprise après interruption (HITL), avec `@langchain/core` pour les outils, les messages et les sorties structurées. Suppose `lang/typescript.md`. C'est la cible TypeScript retenue par la ROADMAP **à la place** de LangChain.js seul : LCEL ne borne pas les boucles et ne persiste pas l'état, or P12 et la reprise sont structurants. Sans générateur de squelette TypeScript ni fiche `eval/` / `observability/` dans ce langage, aucune combo de bootstrap ne l'active encore (cf. `lang/typescript.md`).
+Scope: LangGraph.js — graphe d'état, cycles **bornés**, checkpointing, reprise après interruption (HITL), avec `@langchain/core` pour les outils, les messages et les sorties structurées. Suppose `lang/typescript.md`. C'est la cible TypeScript retenue par la ROADMAP **à la place** de LangChain.js seul : LCEL ne borne pas les boucles et ne persiste pas l'état, or P12 et la reprise sont structurants. Les fiches TypeScript du cœur C1 existent (`eval/vitest-eval.md`, `observability/otel-genai-node.md`, `rag/hybrid-node.md`, `vectorstore/pgvector-node.md`, `dataaccess/view-per-agent-node.md`, `tools/mcp-node.md`) ; il n'existe toujours pas de générateur de squelette TypeScript (cf. `lang/typescript.md`), et aucune combinaison TypeScript n'a été exécutée.
 
 ---
 
@@ -26,8 +26,9 @@ Ce qui compte pour SDD_Agents, et que la fiche impose :
 | outils typés | `tool()` de `@langchain/core` + Zod | schéma Zod **généré** depuis le contrat d'outil ; sortie `untrusted` enveloppée au parsing |
 
 Hors périmètre : la surface (`serving/cli-node.md`), la maison HTTP
-(`backend/*`), le retrieval (aucune fiche `rag/` TypeScript : un projet
-LangGraph.js est aujourd'hui `rag/none.md`, et c'est dit).
+(`backend/*`), le retrieval (`rag/hybrid-node.md` sur
+`vectorstore/pgvector-node.md`, ou `rag/none.md`), l'observabilité
+(`observability/otel-genai-node.md`).
 
 ---
 
@@ -69,8 +70,11 @@ Source de vérité : `langgraph-js.libs.json`.
 `@langchain/openai` (`provider-openai`), `@langchain/google-genai`
 (`provider-google`), `@langchain/langgraph-checkpoint-sqlite` (`checkpoint-sqlite`),
 `@langchain/langgraph-checkpoint-postgres` (`checkpoint-postgres`),
-`@langchain/mcp-adapters` (`mcp`), `@opentelemetry/sdk-node` + `@opentelemetry/api`
-+ `@opentelemetry/exporter-trace-otlp-http` (`otel`), `langsmith` (`tracing-langsmith`).
+`@langchain/mcp-adapters` + `@modelcontextprotocol/sdk` (`mcp`), `langsmith`
+(`tracing-langsmith`). Les paquets OpenTelemetry ne sont **plus** dans ce
+catalogue : ils vivent dans `observability/otel-genai-node.libs.json` (un seul
+pin par paquet), qui déclare aussi `@opentelemetry/sdk-node` absent par
+conception.
 
 **Absents par conception** : `langchain` (le méta-paquet : `createReactAgent`
 et les agents pré-câblés cachent un graphe non borné), `@langchain/community`
@@ -122,10 +126,24 @@ l'appelant vient de `config.configurable`, jamais des arguments du modèle.
 
 ### 3.5 Traces
 
-`streamEvents(..., { version: "v2" })` alimente un exporteur qui émet un span
-`sdda.agent.turn`, `sdda.tool.call`, `sdda.llm.call` par événement, avec
-`run_id`, `trace_id`, `parent_span_id` — le format de
-`observability/otel-genai.md`. Le coût est recalculé depuis
+LangGraph.js n'émet pas de spans `gen_ai.*` : ils sont écrits à la main selon
+`observability/otel-genai-node.md`, avec **les noms canoniques de
+`observability/otel-genai.md` §3.1** — les seuls que relit
+`.sdda/python/sdda_lib/tracing.py` :
+
+| Événement | Span | Émis par |
+|---|---|---|
+| run | `sdda.run {mission_id}` (racine, sans `parent_span_id`) | `runRoot` (surface) |
+| tour d'agent | `invoke_agent {agent_name}` (`gen_ai.operation.name = invoke_agent`) | `agentTurn`, autour de chaque nœud d'agent |
+| appel de modèle | `chat {model}` (tokens depuis `usage_metadata`) | `SddaLlmSpans`, `BaseCallbackHandler` passé dans `callbacks` du nœud |
+| outil | `execute_tool {tool}` | `toolCall`, dans le wrapper généré de l'outil |
+| retrieval | `sdda.retrieve {index_id}` | `retrieval`, dans `retrieval/{index}/` |
+
+Chaque ligne du JSONL porte `run_id`, `trace_id`, `span_id` et
+`parent_span_id` (sauf la racine). Un nom « maison » (`sdda.agent.turn`,
+`sdda.tool.call`, `sdda.llm.call`) serait lu puis ignoré : aucun outil vu, coût
+nul, gates vertes à tort. `streamEvents` n'est pas la source des spans ; il
+peut alimenter le flux `RunEvent` de la surface. Le coût est recalculé depuis
 `usage_metadata`, jamais relu depuis un attribut déclaré.
 
 ---
@@ -167,5 +185,7 @@ python .sdda/sdda.py diff-code-vs-ir --mission {n} --json     # le graphe compil
    de paquets non épinglés.
 4. **L'identité dans les arguments d'outil.** Le modèle peut la fournir ; elle
    vient de `configurable`.
-5. **Pas de RAG.** Aucune fiche `rag/` TypeScript : activer `rag/hybrid.md`
-   ([python]) sur cette stack est refusé par `preflight_stack_combo`.
+5. **La mauvaise fiche RAG.** Le RAG TypeScript est `rag/hybrid-node.md` (sur
+   `vectorstore/pgvector-node.md`) : même SQL, même RRF que la fiche Python.
+   Activer `rag/hybrid.md` ([python]) sur cette stack reste refusé par
+   `preflight_stack_combo` (`[STACK_LANGUAGE_MISMATCH]`).

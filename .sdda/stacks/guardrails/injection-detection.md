@@ -5,6 +5,8 @@ Status: Stable
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: *
 
+> **Hors Python** : le code de référence n'existe qu'en Python (`.sdda/templates/runtime/python/app/guardrails/`). En C#, TypeScript, Kotlin et Java, `dev-backend` l'écrit d'après cette fiche, et c'est le COMPORTEMENT décrit ici qui fait foi — mêmes règles, mêmes seuils, même événement `guardrail` (`serving/cli.md` §3.2). Rien ne le vérifie avant la revue (`review-safety`) et le jeu adversarial joué en live (G7) : c'est dit, pas supposé.
+
 > **Obligatoire** dès qu'une source non maîtrisée existe (`STACK.md` →
 > `Trust Boundaries` de la MISSION non vide).
 

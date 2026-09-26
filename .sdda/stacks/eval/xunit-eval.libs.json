@@ -1,0 +1,148 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "eval-xunit-eval",
+  "category": "eval",
+  "schemaVersion": 1,
+  "buildSystem": "dotnet",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/Directory.Packages.props",
+      "workspace/src/{AppName}/tests/{AppName}.Tests.csproj"
+    ]
+  },
+  "versions": {
+    "dotnet": "10.0",
+    "xunit.v3": "4.0.1",
+    "xunit.runner.visualstudio": "4.0.0",
+    "Microsoft.NET.Test.Sdk": "18.10.1",
+    "JunitXml.TestLogger": "8.0.0",
+    "NSubstitute": "6.2.0",
+    "Testcontainers.PostgreSql": "4.15.0",
+    "Microsoft.Extensions.AI.Evaluation": "10.10.0",
+    "Microsoft.Extensions.AI.Evaluation.Quality": "10.10.0",
+    "Microsoft.Extensions.AI.Evaluation.Reporting": "10.10.0"
+  },
+  "core": [],
+  "dev": [
+    {
+      "module": "xunit.v3",
+      "ref": "xunit.v3",
+      "rationale": "Framework de test L0→L2. La 4.x dépend de xunit.v3.mtp-v2 (Microsoft Testing Platform v2) : le projet de test DOIT poser <IsTestingPlatformApplication>false</IsTestingPlatformApplication>, sinon `dotnet test` sur le SDK .NET 10 refuse le mode VSTest et le logger JUnit ne tourne jamais (vérifié).",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package xunit.v3 --version 4.0.1"
+    },
+    {
+      "module": "xunit.runner.visualstudio",
+      "ref": "xunit.runner.visualstudio",
+      "rationale": "Adaptateur VSTest de xunit (v1, v2 et v3). C'est lui qui rend les tests visibles à `dotnet test` en mode VSTest, donc au logger JUnit.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package xunit.runner.visualstudio --version 4.0.0"
+    },
+    {
+      "module": "Microsoft.NET.Test.Sdk",
+      "ref": "Microsoft.NET.Test.Sdk",
+      "rationale": "Hôte VSTest. Sans lui, `dotnet test` compile le projet et n'exécute rien.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package Microsoft.NET.Test.Sdk --version 18.10.1"
+    },
+    {
+      "module": "JunitXml.TestLogger",
+      "ref": "JunitXml.TestLogger",
+      "rationale": "Logger VSTest de nom `junit` (dépôt spekt/junit.testlogger) : `dotnet test --logger \"junit;LogFilePath=<fichier>\"` écrit le rapport JUnit que parse la TOOL GATE. Vérifié : classname = nom complet de la classe, name = méthode + arguments du [Theory], traits en <property>.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package JunitXml.TestLogger --version 8.0.0"
+    },
+    {
+      "module": "NSubstitute",
+      "ref": "NSubstitute",
+      "rationale": "Doubles de IChatClient, des outils et des clients HTTP en L1/L2. Même pin que ms-agent-framework.libs.json (dev) : les deux catalogues d'un même projet doivent porter la même version.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package NSubstitute --version 6.2.0"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "Testcontainers.PostgreSql",
+      "ref": "Testcontainers.PostgreSql",
+      "capability": "db-network-tests",
+      "requiredBy": "vectorstore/pgvector-dotnet.md, dataaccess/view-per-agent-dotnet.md — tests L2/L6 marqués network",
+      "rationale": "PostgreSQL jetable pour les tests `network` (vues, enveloppe, SQL hybride). Exige Docker : c'est une raison de plus pour que ces tests soient dans une classe *NetworkTests et exclus du smoke.",
+      "triggers": [
+        "stacks/vectorstore/pgvector-dotnet\\.md",
+        "stacks/dataaccess/view-per-agent-dotnet\\.md"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package Testcontainers.PostgreSql --version 4.15.0"
+    },
+    {
+      "module": "Microsoft.Extensions.AI.Evaluation",
+      "ref": "Microsoft.Extensions.AI.Evaluation",
+      "capability": "meai-graders",
+      "requiredBy": "ADR — graders LLM exploratoires hors gate",
+      "rationale": "IEvaluator / EvaluationResult / NumericMetric. GRADERS optionnels, jamais runner : le runner d'eval du framework est `python .sdda/sdda.py eval-runner`, et sa liste de graders est close. Un score produit ici est ADVISORY tant qu'il n'est ni calibré par le protocole du framework ni câblé comme grader.",
+      "triggers": [
+        "Microsoft\\.Extensions\\.AI\\.Evaluation",
+        "meai.?evaluation"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package Microsoft.Extensions.AI.Evaluation --version 10.10.0"
+    },
+    {
+      "module": "Microsoft.Extensions.AI.Evaluation.Quality",
+      "ref": "Microsoft.Extensions.AI.Evaluation.Quality",
+      "capability": "meai-graders",
+      "requiredBy": "ADR — graders LLM exploratoires hors gate",
+      "rationale": "Évaluateurs LLM (GroundednessEvaluator, RelevanceEvaluator, RetrievalEvaluator, ToolCallAccuracyEvaluator…). Juges LLM NON calibrés : advisory par construction (P9).",
+      "triggers": [
+        "GroundednessEvaluator",
+        "RelevanceEvaluator",
+        "meai.?evaluation"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package Microsoft.Extensions.AI.Evaluation.Quality --version 10.10.0"
+    },
+    {
+      "module": "Microsoft.Extensions.AI.Evaluation.Reporting",
+      "ref": "Microsoft.Extensions.AI.Evaluation.Reporting",
+      "capability": "meai-graders",
+      "requiredBy": "ADR — graders LLM exploratoires hors gate",
+      "rationale": "Cache et rapports des évaluateurs MEAI. Son cache de réponses est INTERDIT sur une mesure : il transforme k runs en un run copié k fois (pytest-eval.md §7.3).",
+      "triggers": [
+        "meai.?evaluation.*report"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package Microsoft.Extensions.AI.Evaluation.Reporting --version 10.10.0"
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "xunit.v3.mtp-v1",
+      "reason": "MTP v1 n'est plus supporté par xunit à partir de la 4.0.0 ; l'épingler figerait le projet en 3.x. Le framework passe par VSTest + JunitXml.TestLogger, pas par MTP."
+    },
+    {
+      "module": "Xunit.SkippableFact",
+      "reason": "Sauter un test à l'exécution selon l'environnement rend le rapport JUnit vert sur un test qui n'a rien vérifié. Un test réseau se DÉSÉLECTIONNE par son trait (`Category!=network`), il ne se saute pas."
+    },
+    {
+      "module": "Moq",
+      "reason": "NSubstitute est le seul framework de doubles : deux bibliothèques de mocks donnent deux façons de simuler IChatClient, et le test qui passe dépend de celle qu'on a choisie."
+    },
+    {
+      "module": "coverlet.collector",
+      "reason": "La couverture n'est pas un critère d'une gate de SDD_Agents ; l'ajouter par défaut ralentit chaque `dotnet test` de la TOOL GATE pour une mesure que personne ne lit. À ajouter sur décision, pas par habitude."
+    }
+  ],
+  "runtimeRequirements": {
+    "dotnet-sdk": ">= 10.0.100 — TargetFramework net10.0 ; vérifié avec le SDK 10.0.301",
+    "global.json": "AUCUNE clé `test.runner` : `\"runner\": \"Microsoft.Testing.Platform\"` fait passer `dotnet test` en mode MTP, où `--logger` n'existe pas",
+    "docker": "seulement pour les tests `network` qui utilisent Testcontainers"
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur libs-catalog.schema.json",
+    "notes": [
+      "Pins relevés contre l'API de nuget.org le 2026-09-26, dernière stable de chaque paquet, previews exclues ; puis restaurés ENSEMBLE, avec tous les pins .NET des catalogues framework/ms-agent-framework, vectorstore/pgvector-dotnet et observability/otel-genai-dotnet, dans un projet de sonde net10.0 compilé avec TreatWarningsAsErrors : aucun conflit NU1xxx.",
+      "Vérifié par exécution (SDK 10.0.301) : sans <IsTestingPlatformApplication>false</IsTestingPlatformApplication>, `dotnet test` échoue avec « Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later ». Avec, `dotnet test --logger \"junit;LogFilePath=…\"` lancé depuis la racine du projet (qui porte {AppName}.csproj ET {AppName}.slnx) exécute les tests et écrit le rapport ; `--filter \"Category!=network\"` exclut les tests du trait.",
+      "Alternative NON retenue : opter pour MTP (global.json) et utiliser le rapport natif de xunit `--report-junit --report-junit-filename <fichier>`. Le runner de la TOOL GATE appelle `--logger junit` ; mélanger les deux ferait dépendre la gate d'un réglage de global.json.",
+      "Microsoft.Extensions.AI.Evaluation.* : graders LLM optionnels et advisory. Aucun ne peut aujourd'hui rendre un verdict de gate : sdda_lib/graders a une liste close, sans grader externe."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création (design-phase). Versions vérifiées contre nuget.org, restauration conjointe et exécution de `dotnet test --logger junit` sur une sonde."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "nuget.org (API v3-flatcontainer) + `dotnet restore`/`dotnet test` conjoints sur une sonde net10.0 (SDK 10.0.301) portant tous les pins .NET des catalogues"
+  }
+}

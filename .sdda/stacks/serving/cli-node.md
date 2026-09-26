@@ -34,7 +34,7 @@ qui réutilise le même `RunService`.
 | **Stack ID** | `serving-cli-node` |
 | **Langage** | TypeScript 6.0.x, Node 22 (`lang/typescript.md`) |
 | **Librairies** | `commander` 15.x — ajouté au `.libs.json` du framework actif, capability `serving-cli` |
-| **Point d'entrée** | `"bin": { "{AppName}": "./dist/serving/cli/main.js" }` → `pnpm exec {AppName} …` ou `node dist/serving/cli/main.js` |
+| **Point d'entrée** | `"bin": { "{AppName}": "./dist/cli.js" }` → `pnpm exec {AppName} …` ou `node dist/cli.js`. `dist/cli.js` est le point d'entrée du **contrat** (`serving/cli.md` §3.5, `lang/typescript.md` §4.1) : les runners le lancent par `--executor cli`. Il est produit par `cli.ts` à la racine (une ligne, `import "./serving/cli/main.js";`) ; la CLI elle-même vit dans `serving/cli/main.ts` |
 | **Paramètres STACK.md** | `StreamingEnabled`, `HumanInTheLoopEnabled` (active `resume`), `TraceLevel` |
 | **Contrat machine** | `--json` : une ligne NDJSON par événement, schéma `RunEvent` (Zod, `event_schema: "1"`) |
 | **Codes de sortie** | table `serving/cli.md` §3.3 — stables, dans `--help`, testés en L1 |
@@ -45,11 +45,16 @@ qui réutilise le même `RunService`.
 
 | Commande | Rôle | Coûte des tokens |
 |---|---|:-:|
-| `{AppName} run [--json] [--tenant ID] [--as-of DATE] [--input FILE | -]` | une exécution ; `stdin` si `-` | oui |
+| `{AppName} run [--json] [--tenant ID] [--as-of DATE] [--input TEXT \| --input-file PATH]` | une exécution ; `--input-file -` lit l'entrée sur stdin (`serving/cli.md` §3.5) | oui |
+| `{AppName} retrieve --json --index ID --query-file - [--k N]` | retrieval seul (G4) : événement `retrieval` puis `run_finished`, aucun appel au modèle | non (embedding de la requête seulement) |
 | `{AppName} resume RUN_ID [--json]` | reprise depuis un checkpoint (si `HumanInTheLoopEnabled`) | oui |
 | `{AppName} health [--json]` | Settings OK, prompts hashés, outils == contrats, IR à jour | non |
 | `{AppName} version [--json]` | version, hash de l'IR, `event_schema` | non |
 | `{AppName} inspect --graph` | le graphe compilé en Mermaid, à comparer à la topologie | non |
+
+Contrat d'évaluation : les trois points de `serving/cli.md` §3.5 (stdin,
+isolement `SDDA_EVAL_ISOLATION=mocked` servi depuis `SDDA_EVAL_FIXTURES`,
+`retrieve`) sont honorés à l'identique — détail dans `lang/typescript.md` §8.
 
 Identité : `--tenant` (ou la variable d'environnement de l'opérateur) — jamais
 un champ de l'entrée. Date de référence : `--as-of`, défaut horloge ; sans elle
@@ -79,11 +84,11 @@ les evals ne sont pas rejouables.
 ```bash
 cd workspace/src/{AppName}
 pnpm build
-node dist/serving/cli/main.js --help
-node dist/serving/cli/main.js version --json | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))'
-node dist/serving/cli/main.js health --json
-node dist/serving/cli/main.js inspect --graph > /tmp/graph.mmd   # comparé au bloc mermaid de la topologie (diff-code-vs-ir)
-pnpm vitest run tests/serving
+node dist/cli.js --help
+node dist/cli.js version --json | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))'
+node dist/cli.js health --json
+node dist/cli.js inspect --graph > /tmp/graph.mmd   # comparé au bloc mermaid de la topologie (diff-code-vs-ir)
+npx --no-install vitest run serving
 ```
 
 ---
@@ -96,3 +101,6 @@ pnpm vitest run tests/serving
 3. **La couleur en `--json`.** Les codes ANSI entrent dans le flux machine.
 4. **`readline` sur stdin sans fin de flux.** Lire `-` avec
    `for await (const chunk of process.stdin)`.
+5. **Un `bin` qui pointe ailleurs que `dist/cli.js`.** L'humain lance la CLI,
+   le runner ne la trouve pas : `--executor cli` dérive `node …/dist/cli.js` du
+   langage actif. Le smoke appelle `dist/cli.js`, jamais `dist/serving/cli/main.js`.

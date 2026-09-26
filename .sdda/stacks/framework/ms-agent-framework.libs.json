@@ -23,7 +23,9 @@
     "OpenTelemetry.Extensions.Hosting": "1.19.1",
     "OpenTelemetry.Exporter.OpenTelemetryProtocol": "1.19.1",
     "ModelContextProtocol": "2.2.0",
-    "Anthropic.SDK": "5.10.0",
+    "Anthropic": "12.50.0",
+    "System.CommandLine": "2.0.12",
+    "Spectre.Console": "0.57.2",
     "xunit.v3": "4.0.1",
     "NSubstitute": "6.2.0"
   },
@@ -98,16 +100,17 @@
       "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Agents.AI.OpenAI --version 1.22.0"
     },
     {
-      "module": "Anthropic.SDK",
-      "ref": "Anthropic.SDK",
+      "module": "Anthropic",
+      "ref": "Anthropic",
       "capability": "provider-anthropic",
       "requiredBy": "STACK.md ## Runtime Models — RuntimeProvider: anthropic",
       "triggers": [
         "RuntimeProvider:\\s*anthropic",
         "claude-"
       ],
-      "note": "Il n'existe PAS de Microsoft.Agents.AI.Anthropic : le provider passe par l'implémentation IChatClient de ce paquet communautaire. C'est le point de couplage le plus fragile de cette stack — à réévaluer dès qu'un paquet officiel existe.",
-      "installCommand": "dotnet add workspace/src/{AppName} package Anthropic.SDK --version 5.10.0"
+      "rationale": "SDK C# OFFICIEL d'Anthropic (auteur et propriétaire NuGet : Anthropic, compte vérifié ; dépôt anthropics/anthropic-sdk-csharp). Il dépend de Microsoft.Extensions.AI.Abstractions et fournit l'IChatClient par `AnthropicClient.AsIChatClient(modelId, maxTokens)` — le provider se branche donc derrière la même abstraction que les autres, sans paquet communautaire.",
+      "note": "Microsoft.Agents.AI.Anthropic n'existe qu'en preview (1.22.0-preview.260918.1) : non retenu. La clé se passe par la propriété `ApiKey`, lue dans IOptions — jamais par un défaut du SDK.",
+      "installCommand": "dotnet add workspace/src/{AppName} package Anthropic --version 12.50.0"
     },
     {
       "module": "ModelContextProtocol",
@@ -119,6 +122,29 @@
         "stacks/tools/mcp\\.md"
       ],
       "installCommand": "dotnet add workspace/src/{AppName} package ModelContextProtocol --version 2.2.0"
+    },
+    {
+      "module": "System.CommandLine",
+      "ref": "System.CommandLine",
+      "capability": "serving-cli-dotnet",
+      "requiredBy": "serving/cli-dotnet.md — DeliverableType: cli-exe (défaut)",
+      "triggers": [
+        "stacks/serving/cli-dotnet\\.md",
+        "DeliverableType:\\s*cli-exe"
+      ],
+      "rationale": "Analyse des commandes du contrat serving/cli.md (run, resume, retrieve, health, inspect, trace, version). 2.0.12 = dernière stable ; 3.0.0 n'existe qu'en rc.",
+      "installCommand": "dotnet add workspace/src/{AppName} package System.CommandLine --version 2.0.12"
+    },
+    {
+      "module": "Spectre.Console",
+      "ref": "Spectre.Console",
+      "capability": "serving-cli-dotnet",
+      "requiredBy": "serving/cli-dotnet.md — rendu TTY uniquement",
+      "triggers": [
+        "stacks/serving/cli-dotnet\\.md"
+      ],
+      "rationale": "Rendu TTY seulement, jamais en --json (stdout = NDJSON). Tout texte du modèle ou d'un outil passe par Markup.Escape (serving/cli-dotnet.md §5.5).",
+      "installCommand": "dotnet add workspace/src/{AppName} package Spectre.Console --version 0.57.2"
     },
     {
       "module": "Microsoft.Agents.AI.Workflows",
@@ -147,6 +173,14 @@
       "reason": "Workflows décrits en YAML. Le graphe de SDD_Agents est décidé par la TOPOLOGY et compilé dans l'IR : un second format déclaratif créerait deux sources de vérité pour la même chose, et c'est celle que personne ne relit qui gagnerait."
     },
     {
+      "module": "Anthropic.SDK",
+      "reason": "Paquet COMMUNAUTAIRE, épinglé ici jusqu'au 2026-09-25 faute d'alternative. Le SDK officiel `Anthropic` fournit désormais l'IChatClient : garder les deux ferait coexister deux mappings de `Usage` — donc deux calculs de budget — pour le même provider. Un agent qui trouve l'ancien nom dans une fiche ne doit pas le réintroduire."
+    },
+    {
+      "module": "Microsoft.Agents.AI.Anthropic",
+      "reason": "Publié en preview seulement (1.22.0-preview.260918.1). Une preview dans un catalogue vérifié installe un comportement qui peut changer sans montée de version majeure ; le SDK officiel `Anthropic` couvre le besoin via IChatClient."
+    },
+    {
       "module": "Newtonsoft.Json",
       "reason": "System.Text.Json est dans le BCL et c'est ce que Microsoft.Extensions.AI utilise pour les sorties structurées. Deux sérialiseurs dans un même processus produisent deux interprétations du même schéma — exactement le drift que le schéma figé existe pour empêcher."
     },
@@ -161,22 +195,24 @@
     "nuget-feed": "nuget.org, ou un miroir interne portant les mêmes versions — un miroir en retard installe silencieusement un autre comportement"
   },
   "metadata": {
-    "lastUpdated": "2026-09-21",
-    "lastRebased": "2026-09-21",
+    "lastUpdated": "2026-09-26",
+    "lastRebased": "2026-09-26",
     "status": "design-phase",
     "versionsVerified": true,
     "format": "compact (v2) — aligné sur libs-catalog.schema.json",
     "notes": [
       "Versions relevées contre l'API de nuget.org le 2026-09-21 : dernière stable publiée de chaque paquet, previews et rc exclus. `versionsVerified: true` porte sur CE relevé, pas sur un bootstrap réel — aucun projet .NET n'a encore été généré avec cette stack.",
       "La famille Microsoft.Agents.AI.* est versionnée solidairement (1.22.0) sauf Foundry (1.5.0), écarté. Monter un seul paquet de la famille sans les autres est un mélange de versions non testé.",
-      "Aucun paquet Anthropic officiel dans la famille Microsoft.Agents.AI : provider-anthropic passe par Anthropic.SDK (communautaire) via IChatClient. C'est le point de couplage à réévaluer en premier.",
+      "provider-anthropic passe par le SDK OFFICIEL `Anthropic` 12.50.0 (propriétaire NuGet Anthropic, vérifié), qui fournit IChatClient via AsIChatClient ; Anthropic.SDK (communautaire) et Microsoft.Agents.AI.Anthropic (preview) sont absentByDesign.",
+      "Résolution CONJOINTE le 2026-09-26 : tous les pins de ce catalogue, de vectorstore/pgvector-dotnet, eval/xunit-eval et observability/otel-genai-dotnet (30 paquets) restaurés ensemble dans une sonde net10.0 et compilés avec TreatWarningsAsErrors (SDK 10.0.301) : aucun conflit NU1xxx. Les noms d'API cités par les fiches .NET (AsIChatClient, UseOpenTelemetry, McpClient, UseVector, DelegatingAIFunction…) ont été compilés sur cette sonde. Toujours aucun projet .NET GÉNÉRÉ par le pipeline.",
       "Pas d'équivalent pydantic : la validation des entrées d'outil passe par System.Text.Json + des records avec required members, et les bornes de schéma sont portées par le tool-contract, pas par des attributs de validation."
     ],
     "changeLog": [
       "2026-09-21 — Création (design-phase). Versions vérifiées contre nuget.org.",
-      "2026-09-22 — Re-contrôle nuget.org : 13/13 pins confirmés exacts, aucun changement."
+      "2026-09-22 — Re-contrôle nuget.org : 13/13 pins confirmés exacts, aucun changement.",
+      "2026-09-26 — provider-anthropic : Anthropic.SDK 5.10.0 (communautaire) → Anthropic 12.50.0 (SDK officiel, IChatClient natif) ; Anthropic.SDK et Microsoft.Agents.AI.Anthropic passés en absentByDesign. Re-contrôle nuget.org des 12 autres pins : inchangés. Résolution conjointe avec les catalogues .NET transverses. Ajout de la capability serving-cli-dotnet (System.CommandLine 2.0.12, Spectre.Console 0.57.2), que serving/cli-dotnet.md réclamait sans qu'aucun catalogue la définisse."
     ],
-    "verifiedAt": "2026-09-21",
-    "verifiedAgainst": "nuget.org (API), dernières stables publiées, previews et rc exclus"
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "nuget.org (API v3-flatcontainer), dernières stables, previews et rc exclus ; puis `dotnet restore`/`dotnet build` conjoints sur une sonde net10.0 (SDK 10.0.301) avec les catalogues .NET transverses"
   }
 }

@@ -6,7 +6,7 @@ Stack ID: backend-node-express
 Status: Draft
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: typescript
-Scope: la **maison HTTP** en Express 4 + TypeScript quand `DeliverableType: backend-api` et `ApiFramework: express` — projet `pnpm`, composition, configuration validée par Zod, middlewares transverses, sécurité, journalisation `pino`, packaging. Hérité de SDD_Pro `backend/node-express.md`, transposé : aucun ORM (Prisma retiré), aucune entité, le contrat OpenAPI est **généré depuis l'IR** et non annoté à la main. Suppose `lang/typescript.md`. Il n'existe pas encore de fiche `serving/*-sse` TypeScript : les routes du §3 sont la transposition de `serving/fastapi-sse.md` §3, mêmes chemins, même `RunEvent`.
+Scope: la **maison HTTP** en Express 4 + TypeScript quand `DeliverableType: backend-api` et `ApiFramework: express` — projet `pnpm`, composition, configuration validée par Zod, middlewares transverses, sécurité, journalisation `pino`, packaging. Hérité de SDD_Pro `backend/node-express.md`, transposé : aucun ORM (Prisma retiré), aucune entité, le contrat OpenAPI est **généré depuis l'IR** et non annoté à la main. Suppose `lang/typescript.md`. La surface HTTP/SSE montée sur cette maison est `serving/http-sse-node.md` (routes, flux SSE, identité, statuts, API GATE) : les routes du §3 en sont le résumé, mêmes chemins et même `RunEvent` que `serving/fastapi-sse.md` §3, et c'est la fiche serving qui fait foi en cas d'écart.
 
 ---
 
@@ -61,7 +61,7 @@ Racine `workspace/src/{AppName}/src/` (cf. `lang/typescript.md` §4) :
 | Tests | `workspace/src/{AppName}/tests/` (vitest) |
 | Projet | `package.json` · `tsconfig.json` · `README.md` · `Dockerfile` |
 
-Routes (transposition de `serving/fastapi-sse.md` §3.1) : `POST /v1/runs`
+Routes (détaillées dans `serving/http-sse-node.md` §3.1, transposition de `serving/fastapi-sse.md` §3.1) : `POST /v1/runs`
 (JSON ou SSE selon `Accept`), `GET /v1/runs/{id}`, `POST /v1/runs/{id}/resume`
 (si `HumanInTheLoopEnabled`), `GET /healthz`, `GET /readyz`, `GET /openapi.json`.
 
@@ -84,8 +84,9 @@ Routes (transposition de `serving/fastapi-sse.md` §3.1) : `POST /v1/runs`
   vers la table `[CLASS] → statut` ; aucun `try/catch` de formatage dans une
   route ; les rejets de promesses remontent via `express-async-errors` ou un
   wrapper `asyncHandler`.
-- SSE : `res.flushHeaders()`, keepalive périodique, `req.on("close")` →
-  `AbortController.abort()` propagé au run.
+- SSE : écrit par `serving/http/sse.ts` (`serving/http-sse-node.md` §3.2) —
+  `res.flushHeaders()`, keepalive périodique, `req.on("close")` →
+  `AbortController.abort()` propagé au run ; Express ne fait que monter la route.
 - Sécurité : `helmet()` en premier middleware ; `cors({ origin: config.corsOrigins })`
   explicite ; `express-rate-limit` par appelant ; `compression()` sauf sur
   `text/event-stream`.

@@ -66,23 +66,109 @@
     "coverage": {
       "description": "Fiches par langage, telles que leur en-tête `Languages:` les déclare. LISTES et non compteurs en prose : `tests/test_stack_governance.py` les recalcule depuis le disque et échoue au moindre écart. La version en prose annonçait 13 fiches Python et 4 C# quand le disque en portait 15 et 5 — un compteur qu'aucun test ne relit dérive dès la première fiche ajoutée.",
       "python": {
-        "fiches": ["backend/python-fastapi", "dataaccess/declared-sources", "dataaccess/view-per-agent", "eval/pytest-eval", "framework/langchain", "framework/langgraph", "lang/python", "observability/otel-genai", "rag/hybrid", "rerank/bge-reranker-local", "serving/batch", "serving/cli", "serving/fastapi-sse", "tools/mcp", "vectorstore/pgvector"],
+        "fiches": [
+          "backend/python-fastapi",
+          "dataaccess/declared-sources",
+          "dataaccess/view-per-agent",
+          "eval/pytest-eval",
+          "framework/langchain",
+          "framework/langgraph",
+          "lang/python",
+          "observability/otel-genai",
+          "rag/hybrid",
+          "rerank/bge-reranker-local",
+          "serving/batch",
+          "serving/cli",
+          "serving/fastapi-sse",
+          "tools/mcp",
+          "vectorstore/pgvector"
+        ],
         "note": "Seul langage qui couvre toute la chaîne : RAG, accès données, eval, observabilité."
       },
       "csharp": {
-        "fiches": ["backend/dotnet-minimalapi", "framework/ms-agent-framework", "lang/csharp", "serving/aspnet-minimal", "serving/cli-dotnet"],
-        "note": "AUCUNE fiche rag, vectorstore, rerank, dataaccess, eval ni observability : .NET ne peut pas faire de RAG aujourd'hui, et le hook le dit au lieu de le laisser inventer (ROADMAP Lot 7). `serving/cli-dotnet` rend le DÉFAUT `DeliverableType: cli-exe` atteignable en C#, mais un projet .NET complet reste bloqué tant que `eval/` et `observability/` n'ont pas de fiche .NET."
+        "fiches": [
+          "backend/dotnet-minimalapi",
+          "dataaccess/view-per-agent-dotnet",
+          "eval/xunit-eval",
+          "framework/ms-agent-framework",
+          "lang/csharp",
+          "observability/otel-genai-dotnet",
+          "rag/hybrid-dotnet",
+          "serving/aspnet-minimal",
+          "serving/cli-dotnet",
+          "tools/mcp-dotnet",
+          "vectorstore/pgvector-dotnet"
+        ],
+        "note": "Pile C1 complète en .NET 10 : RAG hybride (rag/hybrid-dotnet + vectorstore/pgvector-dotnet), accès base par vues (dataaccess/view-per-agent-dotnet), MCP, eval xUnit v3 (JUnit pour G3), OTel GenAI écrivant le JSONL du framework, CLI et HTTP en un seul projet plat. Combo C1-NET. Aucun générateur de squelette C# : dev-backend l'écrit depuis les fiches ; les guardrails n'ont de code de référence qu'en Python."
       },
       "typescript": {
-        "fiches": ["backend/nestjs", "backend/node-express", "framework/langgraph-js", "lang/typescript", "serving/cli-node"],
-        "note": "Même réserve que csharp : ni eval/ ni observability/ en TypeScript, donc aucune combo de bootstrap."
+        "fiches": [
+          "backend/nestjs",
+          "backend/node-express",
+          "dataaccess/view-per-agent-node",
+          "eval/vitest-eval",
+          "framework/langgraph-js",
+          "lang/typescript",
+          "observability/otel-genai-node",
+          "rag/hybrid-node",
+          "serving/cli-node",
+          "serving/http-sse-node",
+          "tools/mcp-node",
+          "vectorstore/pgvector-node"
+        ],
+        "note": "Pile C1 complète en Node 22 : RAG hybride (rag/hybrid-node + vectorstore/pgvector-node), view-per-agent-node, MCP, eval vitest (JUnit pour G3), OTel GenAI JSONL, CLI (dist/cli.js) et HTTP/SSE. Combo C1-TS. Aucun générateur de squelette TypeScript ; guardrails : code de référence Python seul."
       },
       "kotlin": {
-        "fiches": ["backend/kotlin-spring-boot", "framework/spring-ai", "lang/kotlin", "serving/cli-kotlin"],
-        "note": "Même réserve que csharp ; pins Maven encore `versionsVerified: false`."
+        "fiches": [
+          "backend/kotlin-spring-boot",
+          "dataaccess/view-per-agent-jvm",
+          "eval/junit-eval",
+          "framework/spring-ai",
+          "lang/kotlin",
+          "observability/otel-genai-jvm",
+          "rag/hybrid-jvm",
+          "serving/cli-kotlin",
+          "serving/spring-sse",
+          "tools/mcp-jvm",
+          "vectorstore/pgvector-jvm"
+        ],
+        "note": "Pile C1 complète sur la JVM (Spring AI 2.0.1 / Boot 4.1.1), fiches partagées avec Java : rag/hybrid-jvm, vectorstore/pgvector-jvm, view-per-agent-jvm, mcp-jvm, junit-eval, otel-genai-jvm, spring-sse. CLI clikt. Combo C1-KT. Pas de graphe borné natif (boucle écrite dans orchestration/)."
+      },
+      "java": {
+        "fiches": [
+          "backend/kotlin-spring-boot",
+          "dataaccess/view-per-agent-jvm",
+          "eval/junit-eval",
+          "framework/spring-ai",
+          "lang/java",
+          "observability/otel-genai-jvm",
+          "rag/hybrid-jvm",
+          "serving/cli-java",
+          "serving/spring-sse",
+          "tools/mcp-jvm",
+          "vectorstore/pgvector-jvm"
+        ],
+        "note": "Mêmes bibliothèques et mêmes fiches partagées que Kotlin ; lang/java.md (JSpecify + NullAway) et serving/cli-java.md (picocli). Combo C1-JAVA."
       },
       "neutral": {
-        "fiches": ["archi/ddd", "archi/microservice", "archi/mvc", "dataaccess/none", "embedding/bge-local", "embedding/voyage", "guardrails/injection-detection", "guardrails/pii-redaction", "guardrails/schema-validation", "memory/buffer", "orchestration/router", "orchestration/sequential", "orchestration/single-agent", "rag/none", "rerank/cohere-rerank", "rerank/none"],
+        "fiches": [
+          "archi/ddd",
+          "archi/microservice",
+          "archi/mvc",
+          "dataaccess/none",
+          "embedding/bge-local",
+          "embedding/voyage",
+          "guardrails/injection-detection",
+          "guardrails/pii-redaction",
+          "guardrails/schema-validation",
+          "memory/buffer",
+          "orchestration/router",
+          "orchestration/sequential",
+          "orchestration/single-agent",
+          "rag/none",
+          "rerank/cohere-rerank",
+          "rerank/none"
+        ],
         "note": "`Languages: *` — patterns, garde-fous, modèles servis par API : aucun runtime supposé."
       }
     }
@@ -95,15 +181,23 @@
       "bootstrapId": "c1",
       "label": "Python + LangGraph + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
       "language": "python",
-      "framework": ["langchain", "langgraph"],
-      "orchestration": ["router", "sequential"],
+      "framework": [
+        "langchain",
+        "langgraph"
+      ],
+      "orchestration": [
+        "router",
+        "sequential"
+      ],
       "rag": "hybrid",
       "vectorstore": "pgvector",
       "embedding": "voyage",
       "rerank": "none",
       "dataaccess": "view-per-agent",
       "database": "PostgreSql",
-      "tools": ["mcp"],
+      "tools": [
+        "mcp"
+      ],
       "memory": "buffer",
       "eval": "pytest-eval",
       "observability": "otel-genai",
@@ -115,7 +209,10 @@
       "deliverable": "cli-exe",
       "apiFramework": "none",
       "apiAuth": "none",
-      "guardrails": ["injection-detection", "schema-validation"],
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
       "status": "design-phase",
       "slaCommitment": false,
       "validatedAt": null,
@@ -127,15 +224,23 @@
       "bootstrapId": "c1-api",
       "label": "Idem C1, exposé en API FastAPI + SSE",
       "language": "python",
-      "framework": ["langchain", "langgraph"],
-      "orchestration": ["router", "sequential"],
+      "framework": [
+        "langchain",
+        "langgraph"
+      ],
+      "orchestration": [
+        "router",
+        "sequential"
+      ],
       "rag": "hybrid",
       "vectorstore": "pgvector",
       "embedding": "voyage",
       "rerank": "none",
       "dataaccess": "view-per-agent",
       "database": "PostgreSql",
-      "tools": ["mcp"],
+      "tools": [
+        "mcp"
+      ],
       "memory": "buffer",
       "eval": "pytest-eval",
       "observability": "otel-genai",
@@ -146,7 +251,10 @@
       "deliverable": "backend-api",
       "apiFramework": "fastapi",
       "apiAuth": "oauth2",
-      "guardrails": ["injection-detection", "schema-validation"],
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
       "status": "untested",
       "validatedAt": null,
       "benchReportRef": null,
@@ -157,26 +265,41 @@
       "bootstrapId": "sources",
       "label": "Python + LangGraph, sources déclarées (fichiers + API + MCP), sans base",
       "language": "python",
-      "framework": ["langchain", "langgraph"],
-      "orchestration": ["router", "single-agent", "sequential"],
+      "framework": [
+        "langchain",
+        "langgraph"
+      ],
+      "orchestration": [
+        "router",
+        "single-agent",
+        "sequential"
+      ],
       "rag": "none",
       "vectorstore": "none",
       "embedding": "none",
       "rerank": "none",
       "dataaccess": "declared-sources",
       "database": "none",
-      "tools": ["mcp"],
+      "tools": [
+        "mcp"
+      ],
       "memory": "buffer",
       "eval": "pytest-eval",
       "observability": "otel-genai",
       "serving": "cli",
-      "provider": ["anthropic", "google"],
+      "provider": [
+        "anthropic",
+        "google"
+      ],
       "archi": "mvc",
       "backend": "none",
       "deliverable": "cli-exe",
       "apiFramework": "none",
       "apiAuth": "none",
-      "guardrails": ["injection-detection", "schema-validation"],
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
       "status": "untested",
       "validatedAt": null,
       "benchReportRef": null
@@ -186,15 +309,22 @@
       "bootstrapId": "batch",
       "label": "Python + LangGraph, traitement par lot (N entrées, reprise, budget par item)",
       "language": "python",
-      "framework": ["langchain", "langgraph"],
-      "orchestration": ["sequential"],
+      "framework": [
+        "langchain",
+        "langgraph"
+      ],
+      "orchestration": [
+        "sequential"
+      ],
       "rag": "none",
       "vectorstore": "none",
       "embedding": "none",
       "rerank": "none",
       "dataaccess": "declared-sources",
       "database": "none",
-      "tools": ["mcp"],
+      "tools": [
+        "mcp"
+      ],
       "memory": "buffer",
       "eval": "pytest-eval",
       "observability": "otel-genai",
@@ -205,7 +335,10 @@
       "deliverable": "batch-job",
       "apiFramework": "none",
       "apiAuth": "none",
-      "guardrails": ["injection-detection", "schema-validation"],
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
       "status": "untested",
       "validatedAt": null,
       "benchReportRef": null
@@ -215,8 +348,14 @@
       "bootstrapId": "minimal",
       "label": "Python + LangChain, agent unique, sans RAG ni base",
       "language": "python",
-      "framework": ["langchain"],
-      "orchestration": ["single-agent", "router", "sequential"],
+      "framework": [
+        "langchain"
+      ],
+      "orchestration": [
+        "single-agent",
+        "router",
+        "sequential"
+      ],
       "rag": "none",
       "vectorstore": "none",
       "embedding": "none",
@@ -234,11 +373,182 @@
       "deliverable": "cli-exe",
       "apiFramework": "none",
       "apiAuth": "none",
-      "guardrails": ["injection-detection", "schema-validation"],
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
       "status": "untested",
       "validatedAt": null,
       "benchReportRef": null,
       "notes": "LangChain SANS LangGraph : la fiche langchain.md n'admet que des patterns sans cycle (single-agent, sequential, router)."
+    },
+    {
+      "id": "C1-NET",
+      "bootstrapId": "c1-net",
+      "label": "C# / .NET 10 + Microsoft Agent Framework + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
+      "language": "csharp",
+      "framework": [
+        "ms-agent-framework"
+      ],
+      "orchestration": [
+        "router",
+        "sequential"
+      ],
+      "rag": "hybrid-dotnet",
+      "vectorstore": "pgvector-dotnet",
+      "embedding": "voyage",
+      "rerank": "none",
+      "dataaccess": "view-per-agent-dotnet",
+      "database": "PostgreSql",
+      "tools": [
+        "mcp-dotnet"
+      ],
+      "memory": "buffer",
+      "eval": "xunit-eval",
+      "observability": "otel-genai-dotnet",
+      "serving": "cli-dotnet",
+      "servingNext": "aspnet-minimal",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
+      "status": "untested",
+      "slaCommitment": false,
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "Pendant .NET de C1 : même schéma d'index, même CTE hybride, même contrat CLI (serving/cli.md §3.1-3.5) et même trace JSONL, pour que les runners jugent l'application par sa CLI (`--executor cli` = `dotnet run --project workspace/src/{AppName} --`). SDK officiel `Anthropic` (IChatClient) ; Voyage par client REST maison. Pins résolus conjointement et API compilées sur une sonde le 2026-09-26 — aucune application générée par le pipeline. Réserves : pas de générateur de squelette C# (dev-backend l'écrit), guardrails de référence en Python seulement, tests en VSTest (IsTestingPlatformApplication=false) sur le SDK .NET 10."
+    },
+    {
+      "id": "C1-TS",
+      "bootstrapId": "c1-ts",
+      "label": "TypeScript + LangGraph.js + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
+      "language": "typescript",
+      "framework": [
+        "langgraph-js"
+      ],
+      "orchestration": [
+        "router",
+        "sequential"
+      ],
+      "rag": "hybrid-node",
+      "vectorstore": "pgvector-node",
+      "embedding": "voyage",
+      "rerank": "none",
+      "dataaccess": "view-per-agent-node",
+      "database": "PostgreSql",
+      "tools": [
+        "mcp-node"
+      ],
+      "memory": "buffer",
+      "eval": "vitest-eval",
+      "observability": "otel-genai-node",
+      "serving": "cli-node",
+      "servingNext": "http-sse-node",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
+      "status": "untested",
+      "slaCommitment": false,
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "Pendant TypeScript de C1 : même SQL hybride, même RRF (fonction pure TS testée L1), même trace JSONL, même contrat CLI ; point d'entrée `node workspace/src/{AppName}/dist/cli.js`. Voyage par le SDK officiel `voyageai` (input_type rendu obligatoire). vitest ne porte que L0-L2 (JUnit pour G3) ; L3-L9 sont jouées par les runners du framework, qui lancent la CLI. Réserves : pas de générateur de squelette TypeScript, guardrails de référence en Python seulement. RIEN n'a été exécuté."
+    },
+    {
+      "id": "C1-KT",
+      "bootstrapId": "c1-kt",
+      "label": "Kotlin + Spring AI + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
+      "language": "kotlin",
+      "framework": [
+        "spring-ai"
+      ],
+      "orchestration": [
+        "router",
+        "sequential"
+      ],
+      "rag": "hybrid-jvm",
+      "vectorstore": "pgvector-jvm",
+      "embedding": "voyage",
+      "rerank": "none",
+      "dataaccess": "view-per-agent-jvm",
+      "database": "PostgreSql",
+      "tools": [
+        "mcp-jvm"
+      ],
+      "memory": "buffer",
+      "eval": "junit-eval",
+      "observability": "otel-genai-jvm",
+      "serving": "cli-kotlin",
+      "servingNext": "spring-sse",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
+      "status": "untested",
+      "slaCommitment": false,
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "Pendant JVM de C1. Spring AI 2.0.1 / Spring Boot 4.1.1, JDK 21, Kotlin 2.3.21 (BOM). Pas de graphe borné natif : router/sequential par boucle écrite dans orchestration/. Hybride écrit (JdbcClient + tsvector + RRF pure), Voyage REST maison. Évaluations jouées par `--executor cli` (`java -jar workspace/src/{AppName}/build/libs/{AppName}.jar`). Guardrails de référence en Python seulement. Seul un build de vérification des fiches a tourné."
+    },
+    {
+      "id": "C1-JAVA",
+      "bootstrapId": "c1-java",
+      "label": "Java + Spring AI + RAG hybride (pgvector) + PostgreSQL + MCP + CLI",
+      "language": "java",
+      "framework": [
+        "spring-ai"
+      ],
+      "orchestration": [
+        "router",
+        "sequential"
+      ],
+      "rag": "hybrid-jvm",
+      "vectorstore": "pgvector-jvm",
+      "embedding": "voyage",
+      "rerank": "none",
+      "dataaccess": "view-per-agent-jvm",
+      "database": "PostgreSql",
+      "tools": [
+        "mcp-jvm"
+      ],
+      "memory": "buffer",
+      "eval": "junit-eval",
+      "observability": "otel-genai-jvm",
+      "serving": "cli-java",
+      "servingNext": "spring-sse",
+      "provider": "anthropic",
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
+      "status": "untested",
+      "slaCommitment": false,
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "Mêmes bibliothèques et mêmes fiches partagées que C1-KT ; lang/java.md (JSpecify + NullAway, threads virtuels) et serving/cli-java.md (picocli). Même lancement (`java -jar workspace/src/{AppName}/build/libs/{AppName}.jar`). Guardrails de référence en Python seulement. Seul un build de vérification des fiches a tourné."
     }
   ],
   "componentLevels": {
@@ -305,7 +615,10 @@
       "self-rag": "untested",
       "corrective-rag": "untested",
       "graph-rag": "untested",
-      "raptor": "untested"
+      "raptor": "untested",
+      "hybrid-dotnet": "untested",
+      "hybrid-node": "untested",
+      "hybrid-jvm": "untested"
     },
     "vectorstore": {
       "pgvector": "untested",
@@ -315,7 +628,10 @@
       "pinecone": "untested",
       "weaviate": "untested",
       "elasticsearch": "untested",
-      "faiss": "untested"
+      "faiss": "untested",
+      "pgvector-dotnet": "untested",
+      "pgvector-node": "untested",
+      "pgvector-jvm": "untested"
     },
     "embedding": {
       "openai": "untested",
@@ -335,7 +651,10 @@
       "repository-tools": "untested",
       "semantic-layer": "untested",
       "text-to-sql": "untested",
-      "graphql": "untested"
+      "graphql": "untested",
+      "view-per-agent-dotnet": "untested",
+      "view-per-agent-node": "untested",
+      "view-per-agent-jvm": "untested"
     },
     "database": {
       "none": "untested",
@@ -360,20 +679,29 @@
       "sql": "untested",
       "filesystem": "untested",
       "web-search": "untested",
-      "code-exec": "untested"
+      "code-exec": "untested",
+      "mcp-dotnet": "untested",
+      "mcp-node": "untested",
+      "mcp-jvm": "untested"
     },
     "eval": {
       "pytest-eval": "untested",
       "ragas": "untested",
       "deepeval": "untested",
       "promptfoo": "untested",
-      "langsmith": "untested"
+      "langsmith": "untested",
+      "xunit-eval": "untested",
+      "vitest-eval": "untested",
+      "junit-eval": "untested"
     },
     "observability": {
       "otel-genai": "untested",
       "langsmith": "untested",
       "langfuse": "untested",
-      "none": "untested"
+      "none": "untested",
+      "otel-genai-dotnet": "untested",
+      "otel-genai-node": "untested",
+      "otel-genai-jvm": "untested"
     },
     "guardrails": {
       "schema-validation": "untested",
@@ -393,7 +721,9 @@
       "slack-bot": "untested",
       "chainlit": "untested",
       "aspnet-minimal": "untested",
-      "batch": "untested"
+      "batch": "untested",
+      "http-sse-node": "untested",
+      "spring-sse": "untested"
     },
     "provider": {
       "anthropic": "untested",

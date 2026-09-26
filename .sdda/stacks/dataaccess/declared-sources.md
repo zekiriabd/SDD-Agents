@@ -43,7 +43,8 @@ Ce que la stack impose, par construction et non par bonne volonté :
 - **Le schéma est inféré une fois puis figé.** Ni un CSV, ni un XLSX, ni une
   réponse d'API n'ont de schéma. Sans épinglage, une colonne qui change de type
   change le comportement de l'agent en silence. Le drift devient
-  `[DATA_SOURCE_SCHEMA_DRIFT]` au démarrage, pas une hallucination en production.
+  `[DATA_SOURCE_SCHEMA_DRIFT]` à la construction de l'index (première lecture
+  de la source), pas une hallucination en production.
 - **La description de la source est la description de l'outil.** Un seul
   artefact porte l'intention métier — l'analogue exact du `COMMENT ON VIEW`.
 - **Les frontières sont vérifiées, pas conventionnelles.** Un chemin hors de la
@@ -434,13 +435,20 @@ Ce que l'inférence doit faire de plus selon le format :
 | `http-api` | `records_path` désigne les enregistrements ; l'enveloppe de pagination n'entre pas dans le schéma |
 | `mcp` | l'`outputSchema` annoncé par le serveur est une **proposition** : il est figé côté client, et son drift est détecté (cf. `tools/mcp.md`) |
 
-Au démarrage, chaque source est revalidée contre son schéma figé sur un
-échantillon borné (`SourceSchemaCheckSample`, défaut 500 enregistrements) :
+À la construction de son index — la première lecture de la source, pas le
+démarrage du processus —, chaque source est revalidée contre son schéma figé
+sur un échantillon borné (`SourceSchemaCheckSample`, défaut 500
+enregistrements). Les cellules CSV sont d'abord **retypées** selon le schéma
+figé (`"12"` lu comme chaîne devient `12` si le champ est `integer`) : comparer
+la chaîne brute au type déclaré signalait un drift sur chaque colonne
+numérique. Un drift lève `SchemaDrift` (`[DATA_SOURCE_SCHEMA_DRIFT]`) : l'outil
+de source refuse de servir, l'erreur nommée remonte à l'agent, rien n'est
+retourné.
 
 | Écart | Classe | Effet |
 |---|---|---|
-| champ `required` absent | `[DATA_SOURCE_SCHEMA_DRIFT]` | fail-fast, l'application ne démarre pas |
-| type changé (`str` → `int`) | `[DATA_SOURCE_SCHEMA_DRIFT]` | fail-fast |
+| champ `required` absent | `[DATA_SOURCE_SCHEMA_DRIFT]` | fail-fast : `SchemaDrift` à la construction de l'index, la source n'est pas servie |
+| type changé (`str` → `int`), après retypage | `[DATA_SOURCE_SCHEMA_DRIFT]` | fail-fast, idem |
 | valeur hors `enum` | `[DATA_SOURCE_ENUM_UNKNOWN]` | warning + trace ; l'enregistrement est retourné, la valeur telle quelle |
 | champ nouveau non déclaré | `[DATA_SOURCE_FIELD_UNDECLARED]` | warning ; le champ est **omis** de la sortie (allowlist, pas denylist) |
 
@@ -702,7 +710,8 @@ uv run python -m {AppName}.data.envelope --ping
 #   2. pour chaque store distant : credentials présents dans l'environnement (présence, pas valeur),
 #      hôte dans l'allowlist, handshake TLS — 1 requête HEAD, aucune donnée lue
 #   3. pour chaque source allowlistée : localisation -> n objets, index construit, as_of calculé
-#   4. validation d'un échantillon contre le schéma figé        sinon exit 3 [DATA_SOURCE_SCHEMA_DRIFT]
+#   4. validation d'un échantillon contre le schéma figé, à la construction de l'index
+#      (cellules CSV retypées d'abord)                         sinon SchemaDrift [DATA_SOURCE_SCHEMA_DRIFT]
 #   5. tentative de lecture de ../../STACK.md                   -> doit échouer [DATA_SOURCE_PATH_ESCAPE]
 #   6. tentative d'appel d'un hôte hors allowlist               -> doit échouer [DATA_EGRESS_UNDECLARED]
 #   7. tentative d'ouverture en écriture d'un fichier source    -> doit échouer

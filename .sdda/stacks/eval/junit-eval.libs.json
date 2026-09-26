@@ -1,0 +1,125 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "eval-junit-eval",
+  "category": "eval",
+  "schemaVersion": 1,
+  "buildSystem": "gradle",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/build.gradle.kts",
+      "workspace/src/{AppName}/gradle/libs.versions.toml"
+    ]
+  },
+  "versions": {
+    "jdk": "21",
+    "spring-boot": "4.1.1",
+    "junit": "6.0.3",
+    "assertj": "3.27.7",
+    "testcontainers": "2.0.5",
+    "json-schema-validator": "3.0.7",
+    "kotest": "6.2.5",
+    "mockk": "1.14.11"
+  },
+  "core": [
+    {
+      "module": "org.springframework.boot:spring-boot-starter-test",
+      "ref": "spring-boot",
+      "rationale": "JUnit Jupiter, AssertJ, Mockito, MockRestServiceServer (L2 du client Voyage et des outils REST) — versions du BOM Spring Boot 4.1.1. Configuration testImplementation : le livrable n'embarque pas ses tests."
+    },
+    {
+      "module": "org.junit.jupiter:junit-jupiter-params",
+      "ref": "junit",
+      "rationale": "@ParameterizedTest(name = \"{0}\", quoteTextArguments = false) : l'identifiant du cas de contrat dans le nom d'affichage, donc dans le rapport XML que G3 lit. Version gérée par le BOM Spring Boot (junit-jupiter 6.0.3)."
+    },
+    {
+      "module": "org.junit.platform:junit-platform-launcher",
+      "ref": "junit",
+      "rationale": "testRuntimeOnly : Gradle 9 ne fournit plus le lanceur JUnit Platform ; sans lui `./gradlew test` échoue avant le premier test."
+    },
+    {
+      "module": "org.assertj:assertj-core",
+      "ref": "assertj",
+      "rationale": "Assertions lisibles dans le rapport d'échec (c'est lui qu'un humain lit quand G3 est rouge). Tiré par spring-boot-starter-test ; épinglé ici pour être nommé."
+    },
+    {
+      "module": "com.networknt:json-schema-validator",
+      "ref": "json-schema-validator",
+      "rationale": "L1/L2 : chaque sortie d'outil et chaque RunEvent validés contre leur schéma (généré de l'IR, additionalProperties: false). Hors BOM Spring Boot."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "org.testcontainers:testcontainers-junit-jupiter",
+      "ref": "testcontainers",
+      "capability": "testcontainers",
+      "rationale": "@Testcontainers / @Container pour les classes *NetworkTest (@Tag(\"network\")) : PostgreSQL + pgvector, serveur MCP en conteneur. Version du BOM Spring Boot.",
+      "triggers": [
+        "stacks/vectorstore/pgvector-jvm\\.md",
+        "stacks/dataaccess/view-per-agent-jvm\\.md",
+        "DatabaseType:\\s*PostgreSql"
+      ]
+    },
+    {
+      "module": "io.kotest:kotest-runner-junit5",
+      "ref": "kotest",
+      "capability": "kotest",
+      "rationale": "Kotlin seulement, optionnel : specs Kotest exécutées sur la plateforme JUnit. Vérifié le 2026-09-26 : kotest 6.2.5 (compilé contre JUnit Platform 1.13.4) s'exécute sous la plateforme 6.0.3 de Spring Boot 4.1.1 et écrit son rapport XML au même endroit.",
+      "triggers": [
+        "lang/kotlin\\.md.*kotest",
+        "kotest"
+      ]
+    },
+    {
+      "module": "io.kotest:kotest-assertions-core",
+      "ref": "kotest",
+      "capability": "kotest",
+      "rationale": "Assertions Kotest (shouldBe…) — va avec le runner, jamais seul."
+    },
+    {
+      "module": "io.mockk:mockk",
+      "ref": "mockk",
+      "capability": "kotlin-mocks",
+      "rationale": "Kotlin seulement : doublures de classes finales Kotlin (Mockito ne les ouvre pas sans configuration). Le LLM est TOUJOURS simulé en L0-L2.",
+      "triggers": [
+        "lang/kotlin\\.md",
+        "mockk"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "org.junit-pioneer:junit-pioneer",
+      "reason": "Son @RetryingTest relance un test qui échoue : sur une évaluation, c'est masquer la variance que P3 mesure (même interdit que pytest-rerunfailures dans eval/pytest-eval.libs.json)."
+    },
+    {
+      "module": "org.springframework.ai:spring-ai-client-chat (RelevancyEvaluator, FactCheckingEvaluator)",
+      "reason": "Ces évaluateurs existent dans spring-ai-client-chat 2.0.1, mais ce sont des juges LLM NON calibrés : le juge du framework est unique (sdda_lib/graders, calibré par calibrate-judge, advisory sinon). Un second juge dans l'application noterait avec une autre grille et sans kappa."
+    },
+    {
+      "module": "io.github.cdimascio:dotenv-java",
+      "reason": "Les tests ne lisent jamais le .env de l'application : une clé réelle dans un test L0-L2 est un appel facturé déguisé en test unitaire."
+    }
+  ],
+  "plugins": [],
+  "runtimeRequirements": {
+    "jdk": ">=21",
+    "docker": "requis pour les classes *NetworkTest qui utilisent Testcontainers ; absentes du run par défaut (excludeTags network)",
+    "notes": "Les évaluations scorées (L3-L8 : k runs, verdict, baseline, calibration) ne tournent PAS dans JUnit : elles sont jouées par `python .sdda/sdda.py eval-runner --executor cli`, qui lance le jar."
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "Partagé Kotlin et Java ; kotest et mockk sont on-demand, Kotlin seulement.",
+      "JUnit épinglé à la version du BOM Spring Boot 4.1.1 (junit-jupiter 6.0.3) et non à la dernière publiée (6.1.3) : surclasser la plateforme de test sous Spring Boot est une résolution que le BOM n'a pas testée.",
+      "Build de vérification exécuté le 2026-09-26 (Gradle 9.5.0, JDK 21.0.11, Spring Boot 4.1.1, disposition à plat) : tests JUnit et Kotest découverts sous tests/, rapports build/test-results/test/TEST-*.xml, classe @Tag(\"network\") exclue et absente du rapport, noms paramétrés sans guillemets avec quoteTextArguments = false."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création ; pins résolus contre Maven Central, build de vérification local."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "repo1.maven.org (maven-metadata.xml, versions gérées de spring-boot-dependencies-4.1.1.pom) + build Gradle 9.5.0 de vérification (JUnit 6.0.3 et kotest 6.2.5 exécutés sous Spring Boot 4.1.1)"
+  }
+}

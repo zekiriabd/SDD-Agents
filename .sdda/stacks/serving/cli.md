@@ -50,8 +50,9 @@ le même schéma d'événements (§3.2) ; seul le transport change.
 
 | Commande | Rôle | Options principales | Coûte des tokens |
 |---|---|---|---|
-| `{AppName} run` | une exécution de la MISSION | `--input TEXT` \| `--input-file PATH` \| stdin ; `--thread-id ULID` (nouveau si absent) ; `--json` ; `--no-stream` ; `--tenant ID` (**identité de l'appelant**, cf. §5.6) ; `--max-budget-usd X` (≤ `CostPerRunHardCapUsd`, **jamais au-dessus**) ; `--trace-out PATH` | oui |
+| `{AppName} run` | une exécution de la MISSION | `--input TEXT` \| `--input-file PATH` \| `--input-file -` (stdin, la forme des exécuteurs d'eval, §3.5) ; `--thread-id ULID` (nouveau si absent) ; `--json` ; `--no-stream` ; `--tenant ID` (**identité de l'appelant**, cf. §5.6) ; `--max-budget-usd X` (≤ `CostPerRunHardCapUsd`, **jamais au-dessus**) ; `--trace-out PATH` | oui |
 | `{AppName} resume` | reprend un run interrompu (`escalate-human`, `interrupt`) | `--thread-id ULID` (**obligatoire**) ; `--decision TEXT` \| `--decision-file PATH` ; `--json` | oui |
+| `{AppName} retrieve` | retrieval **sans agent** : les documents d'un index pour une requête — ce que G4 mesure (§3.5) ; appelle `build_retriever(settings)` de la composition, ou le retrieval figé sous isolement | `--index ID` ; `--query TEXT` \| `--query-file PATH` \| `--query-file -` ; `--k N` (défaut : `topK` du contrat) ; `--json` | non (sauf embedding distant de la requête) |
 | `{AppName} health` | vérifications déterministes : config chargée, prompts présents et hashés, outils enregistrés = contrats, IR compilé à jour, checkpointer joignable (`--live`), serveurs MCP joignables (`--live`) | `--live` (ajoute les tests `network`) ; `--json` | **non** |
 | `{AppName} inspect` | affiche l'IR résumé : agents, outils par agent, bornes, pattern, budget estimé ; `--graph` imprime le Mermaid généré | `--graph` ; `--json` | non |
 | `{AppName} trace` | relit `workspace/.sys/traces/runs/{run-id}.jsonl` : arbre des spans, coût total, hops, outils appelés, bornes atteintes | `--run-id` ; `--json` | non |
@@ -74,7 +75,7 @@ Une ligne par événement, `stdout` **exclusivement** ; logs et diagnostics sur
 | `token` | streaming du modèle (`StreamingEnabled`) | `agent_id`, `text` |
 | `tool_call` | avant exécution | `agent_id`, `tool`, `call_id`, `args` (**redigés**) |
 | `tool_result` | après | `call_id`, `ok`, `error_code?`, `bytes`, `truncated` |
-| `retrieval` | après retrieve | `index_id`, `result_ids[]`, `scores[]` |
+| `retrieval` | après retrieve | `index_id`, `result_ids[]` (documents), `scores[]`, `chunk_ids[]?` |
 | `guardrail` | déclenchement | `id`, `stage`, `passed`, `on_trip` |
 | `bound_exceeded` | borne atteinte | `agent_id`, `bound`, `limit`, `observed`, `policy` |
 | `interrupted` | `interrupt()` / `escalate-human` | `thread_id`, `reason`, `payload` — **le run s'arrête ici, code 10** |
@@ -124,6 +125,48 @@ inconnue → `1`).
 | **onBoundExceeded** | `fail-explicit` → code 3 + `final` d'échec structuré ; `degrade` → code 7 ; `escalate-human` → code 10 + `interrupted` |
 | **TRACE** | `workspace/.sys/traces/runs/{run_id}.jsonl` toujours écrit ; chemin dans `run_finished.trace_path` et sur `stderr` |
 | **Secrets** | jamais en argument (`ps` les voit) — `Settings`/`.env` uniquement ; une option `--api-key` est `[SEC_SECRET_IN_ARGV]` en L0 |
+
+### 3.5 Contrat d'évaluation — le même dans les cinq langages
+
+Les runners du framework (`eval-runner`, `run-retrieval-eval`,
+`run-adversarial-suite`) ne chargent pas l'application : ils la **lancent**, par
+sa CLI, avec l'exécuteur générique `sdda_lib.executors` (sous-processus, NDJSON
+sur `stdout`). C'est ce qui rend les gates G4 à G8 mesurables quel que soit le
+langage — Python, C#, TypeScript, Kotlin ou Java : ce qu'on mesure est ce
+qu'on livre. Toute application générée honore ces trois points, en plus de
+§3.1-3.3 :
+
+1. **Entrée par `stdin`** — `run --json --input-file -` lit l'entrée entière sur
+   l'entrée standard. Pas en argument : la ligne de commande est limitée
+   (32 767 caractères sous Windows), visible de `ps`, et une entrée qui
+   commence par `-` y est lue comme une option.
+2. **Isolement L4** — si la variable `SDDA_EVAL_ISOLATION=mocked` est posée,
+   l'application sert chaque outil depuis `SDDA_EVAL_FIXTURES/tools/{outil}.jsonl`
+   (une réponse enregistrée par ligne) et le retrieval figé depuis
+   `SDDA_EVAL_FIXTURES/retrieval/{index}.jsonl`, **sans aucun appel réseau
+   d'outil ni d'index**. Un agent évalué isolé qui touche le vrai monde n'est
+   pas isolé : l'application refuse de démarrer (code `8`, `[CONFIG_INVALID]`)
+   si l'isolement est demandé et qu'un outil n'a pas de fixture.
+3. **Retrieval sans agent (G4)** — `retrieve --json --index ID --query-file -
+   [--k N]` lit la requête sur `stdin` et émet un événement `retrieval`
+   (`index_id`, `result_ids[]`, `scores[]`, facultativement `chunk_ids[]`)
+   puis `run_finished`. `result_ids[]` porte les identifiants de **documents**,
+   dans l'ordre des chunks servis (un document répété ne compte qu'une fois) :
+   la gate mesure recall@k au niveau document, et des identifiants de chunk
+   (`doc-7#2`) y rendaient un recall nul sur un index correct. `--k` est
+   facultatif (défaut : le `topK` du contrat de retrieval) : le runner le passe
+   pour mesurer recall@k au k de l'AC. Aucun appel au modèle : la RETRIEVAL
+   GATE juge l'index, pas l'agent.
+
+`--executor cli` choisit la commande depuis le langage actif ;
+`--executor cmd:<commande>` l'impose. `module:attr` reste accepté pour l'eval
+L4 en processus du squelette Python.
+
+La commande qui lance l'application est dite par la fiche de langage
+(`lang/{langage}.md`, section « Contrat d'exécution ») et recopiée dans le
+contexte projet par `gen-app-context` : `uv run --project workspace/src/{AppName}
+{AppName}` en Python, l'exécutable publié ou `dotnet run --project … --` en C#,
+`node …/dist/cli.js` en TypeScript, `java -jar …` en Kotlin et Java.
 
 ---
 

@@ -12,9 +12,21 @@ Scope: la **maison HTTP** en ASP.NET Core Minimal API autour de la surface `serv
 
 `serving/aspnet-minimal.md` dit par où l'on entre — les `MapGroup`, le flux
 SSE, `Identity` dérivée du `ClaimsPrincipal`, le contrat OpenAPI natif confronté
-à l'IR. Cette fiche dit dans quelle maison : la solution `.slnx`, le projet
-`{AppName}.Serving.Http`, la composition dans `Program.cs`, la configuration
+à l'IR. Cette fiche dit dans quelle maison : le **projet unique**
+`workspace/src/{AppName}/{AppName}.csproj` (disposition plate, couches en
+minuscules — `lang/csharp.md` §4), la composition dans `app/`, la configuration
 `IOptions<T>`, les middlewares, la publication.
+
+> **Pas de projet `{AppName}.Serving.Http`, pas de `src/` imbriqué.** La
+> matrice d'ownership attribue les zones d'écriture par répertoire de couche
+> directement sous `workspace/src/{AppName}/` (`app/`, `serving/`, `data/`…),
+> sensible à la casse sous Linux : un projet séparé ou un `src/{AppName}.*/`
+> ne correspond à aucune zone et l'écriture est refusée aux `dev-*`. Et les
+> runners d'eval lancent l'application par `dotnet run --project workspace/src/{AppName} --` :
+> un second projet serait une autre application que celle qu'on mesure. La
+> surface HTTP est le dossier `serving/http/` du projet unique, qui ajoute
+> `<FrameworkReference Include="Microsoft.AspNetCore.App" />`
+> (`serving/aspnet-minimal.md` §4) ; la CLI reste générée dans `serving/`.
 
 Ce que la fiche garde de SDD_Pro : constructeur primaire, `record` immuables,
 `FluentValidation` au bord, `ProblemDetails` RFC 9457 en middleware global,
@@ -45,22 +57,31 @@ Swashbuckle (`Microsoft.AspNetCore.OpenApi` est natif).
 
 ## 3. Mapping couche → répertoire
 
-Racine `workspace/src/{AppName}/` (solution) :
+Racine `workspace/src/{AppName}/` — **ce répertoire est le projet** ; chemins
+relatifs à lui, couches en minuscules, espaces de noms en PascalCase
+(`namespace {AppName}.App;` dans `app/`) :
 
-| Couche | Emplacement |
-|---|---|
-| Bootstrap | `src/{AppName}.Serving.Http/Program.cs` — builder, `AddSystem()`, middlewares, `MapRuns()`, `Run()` |
-| Entrée HTTP | `src/{AppName}.Serving.Http/Endpoints/RunsEndpoints.cs` (`MapGroup("/v1/runs")`), `HealthEndpoints.cs`, `OpenApi/` |
-| Service | `src/{AppName}/App/RunService.cs` · `App/UseCases/` |
-| Domaine | `src/{AppName}/App/Domain/{Contexte}/` — `Values.cs`, `Rules.cs`, `Ports.cs` (`interface`) — aucune dépendance |
-| Composition | `src/{AppName}/App/Composition.cs` — `IServiceCollection.AddSystem(IConfiguration)` : la seule méthode qui enregistre le moteur |
-| Config | `src/{AppName}/App/Config/AppOptions.cs` (`IOptions<T>`) · `appsettings.json` · `app_config.json` |
-| Modèle | `src/{AppName}/App/Models.cs` (généré) · `Data/Schemas/` (ressources embarquées) |
-| Transverse | `src/{AppName}.Serving.Http/Middleware/{ProblemDetails,Identity,SecurityHeaders,Correlation}Middleware.cs` |
-| Sécurité | `src/{AppName}.Serving.Http/Security/IdentityFactory.cs` (`ClaimsPrincipal` → `Identity`) |
-| Résilience | `src/{AppName}/App/Resilience.cs` — `AddStandardResilienceHandler` par client nommé |
-| Tests | `tests/{AppName}.Tests/` (xunit.v3) — `OpenApiMatchesIrTests` compris |
-| Projet | `{AppName}.slnx` · `Directory.Packages.props` · `Directory.Build.props` · `README.md` · `Dockerfile` |
+| Couche | Emplacement | Owner |
+|---|---|---|
+| Projet | `{AppName}.csproj` (`OutputType Exe`, `FrameworkReference Microsoft.AspNetCore.App`, `DefaultItemExcludes tests/**`) · `{AppName}.slnx` · `Directory.Packages.props` · `Directory.Build.props` · `README.md` · `Dockerfile` · `appsettings.json` | `dev-backend` |
+| Point d'entrée | `serving/Program.cs` — `Main` : commandes CLI, et `serve` → `serving/http/HttpHost.cs` (builder, `AddSystem()`, middlewares, `MapRuns()`, `Run()`) | `dev-api` |
+| Entrée HTTP | `serving/http/RunsEndpoints.cs` (`MapGroup("/v1/runs")`), `HealthEndpoints.cs`, `OpenApi/` | `dev-api` |
+| Service | `serving/RunService.cs` — **partagé** par la CLI et le HTTP (`serving/aspnet-minimal.md` §4) | `dev-api` |
+| Transverse HTTP | `serving/http/Middleware/{ProblemDetails,Identity,SecurityHeaders,Correlation}Middleware.cs` | `dev-api` |
+| Sécurité | `serving/http/IdentityFactory.cs` (`ClaimsPrincipal` → `Identity`) | `dev-api` |
+| Composition | `app/Composition.cs` — `IServiceCollection.AddSystem(IConfiguration)` : la seule méthode qui enregistre le moteur | `dev-backend` |
+| Cas d'usage | `app/UseCases/` | `dev-backend` |
+| Domaine | `app/domain/{contexte}/` — `Values.cs`, `Rules.cs`, `Ports.cs` (`interface`) — aucune dépendance | `dev-backend` |
+| Config | `app/AppOptions.cs` (`IOptions<T>`) · `appsettings.json` · `app_config.json` | `dev-backend` |
+| Modèles d'échange | `serving/http/Contracts/` — **générés** depuis l'IR (§6 de `serving/aspnet-minimal.md`) | `dev-api` |
+| Schémas des sources | `data/schemas/` (ressources embarquées) | `dev-data` |
+| Résilience | `app/Resilience.cs` — `AddStandardResilienceHandler` par client nommé | `dev-backend` |
+| Tests | `tests/{AppName}.Tests.csproj` (xunit.v3, VSTest : `IsTestingPlatformApplication=false`) — `tests/serving/http/OpenApiMatchesIrTests.cs` compris | `qa-tests` |
+
+Règle de frontière qui remplace l'ancien projet séparé : **aucun
+`using Microsoft.AspNetCore` hors de `serving/http/`** (recherche L0). `app/`,
+le Domaine, les agents et les outils ne voient ni `HttpContext` ni
+`IResult` — c'est ce qui garde la CLI des evals indépendante du transport.
 
 ---
 
@@ -113,7 +134,10 @@ aucune dépendance.
 - secret, clé d'API, chaîne de connexion en dur ; `Environment.GetEnvironmentVariable`
   sur une clé sensible (lecture par `IConfiguration` seule) ;
 - logique métier dans un endpoint ou un middleware ; appel de modèle hors
-  `Agents/` ;
+  `agents/` ;
+- un second projet (`{AppName}.Serving.Http`, `{AppName}.Core`…) ou un
+  répertoire de couche en PascalCase (`App/`, `Serving/`) : hors des zones de la
+  matrice d'ownership ;
 - `DbContext`, entité, migration : aucune base possédée ;
 - exception brute au client ; `Console.WriteLine` ;
 - `.Result`, `.Wait()`, `async void` ;
@@ -143,6 +167,11 @@ aucune dépendance.
    l'exécution ; hors périmètre tant que rien ne le mesure.
 5. **HSTS en développement sans TLS.** Le navigateur mémorise ; poser HSTS
    uniquement quand `IsProduction()`.
+6. **Le projet séparé « pour isoler le web ».** Réflexe hérité de SDD_Pro
+   (`{AppName}.Serving.Http`). Ici il sort de la zone `serving/**` de `dev-api`,
+   et `dotnet run --project workspace/src/{AppName}` lance alors une application
+   sans surface HTTP — ou une autre que celle qu'on livre. L'isolement se
+   vérifie par la règle `using Microsoft.AspNetCore` de §3.
 
 ---
 
@@ -153,9 +182,10 @@ cd workspace/src/{AppName}
 dotnet restore --locked-mode
 dotnet format --verify-no-changes
 dotnet build --no-restore --nologo -warnaserror
-dotnet run --project src/{AppName}.Serving.Http --no-build --urls http://localhost:8080 & PID=$!; sleep 4
+dotnet test --no-build --filter "Category!=network"    # projet de test unique, VSTest
+dotnet run --project . --no-build -- serve --urls http://localhost:8080 & PID=$!; sleep 4
 curl -sf http://localhost:8080/healthz -o /dev/null
-curl -sf http://localhost:8080/openapi.json > /tmp/openapi.json
+curl -sf http://localhost:8080/openapi/v1.json > /tmp/openapi.json   # chemin par défaut de Microsoft.AspNetCore.OpenApi, comme serving/aspnet-minimal.md §8
 kill $PID
 python .sdda/sdda.py validate-api-contract --mission {n} --json
 ```

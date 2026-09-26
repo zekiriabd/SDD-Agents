@@ -13,69 +13,64 @@
   },
   "versions": {
     "jdk": "21",
-    "kotlin": "2.2.0",
-    "spring-boot": "3.5.3",
-    "spring-dependency-management": "1.1.7",
-    "springdoc": "2.8.6",
-    "kotlin-logging": "7.0.7",
-    "logstash-logback-encoder": "8.0",
-    "kotlinx-coroutines": "1.10.2",
-    "resilience4j": "2.3.0",
-    "micrometer-prometheus": "1.15.0",
-    "opentelemetry-spring-boot-starter": "2.16.0",
-    "kotest": "6.0.0.M4",
-    "kotest-extensions-spring": "1.3.0",
-    "ktlint-plugin": "12.1.1",
-    "detekt": "1.23.8"
+    "spring-boot": "4.1.1",
+    "kotlin": "2.3.21",
+    "jackson": "3.1.5",
+    "springdoc": "3.1.1",
+    "logstash-logback-encoder": "9.0",
+    "resilience4j": "2.4.0",
+    "micrometer": "1.17.1",
+    "kotest": "6.2.5"
   },
   "core": [
-    { "module": "org.springframework.boot:spring-boot-starter-web", "ref": "spring-boot", "rationale": "Routage, MVC ; -webflux à la place si l'application est en coroutines de bout en bout." },
+    { "module": "org.springframework.boot:spring-boot-starter-webmvc", "ref": "spring-boot", "rationale": "Spring MVC + Tomcat : SseEmitter sur threads virtuels (serving/spring-sse.md §1.1). Nom Spring Boot 4 ; spring-boot-starter-web existe aussi dans le BOM 4.1.1." },
     { "module": "org.springframework.boot:spring-boot-starter-actuator", "ref": "spring-boot", "rationale": "Sondes liveness/readiness mappées sur /healthz et /readyz, métriques Micrometer." },
-    { "module": "org.springframework.boot:spring-boot-starter-validation", "ref": "spring-boot", "rationale": "Bean Validation sur les data classes GÉNÉRÉES depuis l'IR." },
-    { "module": "org.springframework.boot:spring-boot-starter-security", "ref": "spring-boot", "rationale": "L'identité de l'appelant est établie au transport avant le code applicatif." },
-    { "module": "org.springframework.boot:spring-boot-starter-oauth2-resource-server", "ref": "spring-boot", "rationale": "ApiAuthMode: oauth2 | azure-ad — validation des jetons." },
-    { "module": "tools.jackson.module:jackson-module-kotlin", "ref": "spring-boot", "rationale": "Data classes Kotlin en JSON ; version du BOM Spring Boot." },
-    { "module": "org.jetbrains.kotlin:kotlin-reflect", "ref": "kotlin" },
-    { "module": "org.jetbrains.kotlinx:kotlinx-coroutines-core", "ref": "kotlinx-coroutines", "rationale": "I/O asynchrone ; runBlocking réservé aux tests." },
-    { "module": "io.github.oshai:kotlin-logging-jvm", "ref": "kotlin-logging", "rationale": "Logs structurés sur SLF4J ; jamais println." },
-    { "module": "net.logstash.logback:logstash-logback-encoder", "ref": "logstash-logback-encoder", "rationale": "Encodeur JSON pour Logback : run_id, trace_id, tenant haché en MDC." },
-    { "module": "org.springdoc:springdoc-openapi-starter-webmvc-ui", "ref": "springdoc", "rationale": "PUBLIE le document OpenAPI ; le contrat de référence est celui de l'IR (validate-api-contract). >= 2.7 requis avec Spring Security." },
-    { "module": "io.github.resilience4j:resilience4j-spring-boot3", "ref": "resilience4j", "rationale": "Timeout, backoff, disjoncteur sur le fournisseur de modèles et les serveurs MCP — jamais sur un outil non idempotent." },
-    { "module": "org.springframework.boot:spring-boot-starter-test", "ref": "spring-boot" },
-    { "module": "io.kotest:kotest-runner-junit5", "ref": "kotest" },
-    { "module": "io.kotest:kotest-assertions-core", "ref": "kotest" },
-    { "module": "io.kotest.extensions:kotest-extensions-spring", "ref": "kotest-extensions-spring" }
+    { "module": "org.springframework.boot:spring-boot-starter-validation", "ref": "spring-boot", "rationale": "Bean Validation sur les modèles GÉNÉRÉS depuis l'IR." },
+    { "module": "org.springframework.boot:spring-boot-starter-security", "ref": "spring-boot", "rationale": "Spring Security 7 : l'identité de l'appelant est établie au transport avant le code applicatif." },
+    { "module": "org.springframework.boot:spring-boot-starter-security-oauth2-resource-server", "ref": "spring-boot", "rationale": "ApiAuthMode: oauth2 | azure-ad — validation des jetons JWT. Nom Spring Boot 4 (spring-boot-starter-oauth2-resource-server reste présent dans le BOM 4.1.1)." },
+    { "module": "net.logstash.logback:logstash-logback-encoder", "ref": "logstash-logback-encoder", "rationale": "Encodeur JSON pour Logback, sur stderr : run_id, trace_id, tenant haché en MDC. Ligne 9.x = Jackson 3 (celle de Boot 4) ; la 8.x était sur Jackson 2." },
+    { "module": "io.github.resilience4j:resilience4j-spring-boot4", "ref": "resilience4j", "rationale": "Timeout, backoff, disjoncteur sur le fournisseur de modèles et les serveurs MCP — jamais sur un outil non idempotent. Module Spring Boot 4 (resilience4j-spring-boot3 vise Boot 3)." },
+    { "module": "org.springframework.boot:spring-boot-starter-test", "ref": "spring-boot", "rationale": "testImplementation — JUnit 6, AssertJ, Mockito (eval/junit-eval.md)." },
+    { "module": "org.springframework.boot:spring-boot-starter-webmvc-test", "ref": "spring-boot", "rationale": "testImplementation — MockMvc pour les tests L1 de la surface (identité, SSE, statuts)." },
+    { "module": "org.springframework.boot:spring-boot-starter-security-test", "ref": "spring-boot", "rationale": "testImplementation — jetons et utilisateurs simulés pour IdentityTest." }
   ],
-  "dev": [
-    { "module": "org.jlleitschuh.gradle.ktlint", "ref": "ktlint-plugin", "rationale": "Format L0 (plugin Gradle)." },
-    { "module": "io.gitlab.arturbosch.detekt", "ref": "detekt", "rationale": "Analyse statique L0 : `!!`, prompts littéraux, println." }
-  ],
+  "dev": [],
   "onDemand": [
-    { "module": "io.micrometer:micrometer-registry-prometheus", "ref": "micrometer-prometheus", "capability": "metrics", "rationale": "Exposition /metrics : tokens, coût, bornes atteintes (archi/microservice.md).", "triggers": ["prometheus", "/metrics", "microservice"] },
-    { "module": "io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter", "ref": "opentelemetry-spring-boot-starter", "capability": "otel-http", "rationale": "Propagation du traceparent W3C ; export OTLP vers la stack d'observabilité.", "triggers": ["otel", "opentelemetry", "traceparent"] }
+    { "module": "org.springdoc:springdoc-openapi-starter-webmvc-ui", "ref": "springdoc", "capability": "openapi-ui", "rationale": "Interface /docs SEULEMENT, pointée sur /openapi.json (le fichier dérivé de l'IR) ; génération désactivée (springdoc.api-docs.enabled: false) — le contrat de référence est celui de l'IR (validate-api-contract). Ligne 3.x = Spring Boot 4 (POM 3.1.1 construit contre Boot 4.1.0).", "triggers": ["/docs", "swagger"] },
+    { "module": "io.micrometer:micrometer-registry-prometheus", "ref": "micrometer", "capability": "metrics", "rationale": "Exposition /metrics : tokens, coût, bornes atteintes (archi/microservice.md). Version du BOM Spring Boot 4.1.1.", "triggers": ["prometheus", "/metrics", "microservice"] },
+    { "module": "tools.jackson.module:jackson-module-kotlin", "ref": "jackson", "capability": "lang-kotlin", "rationale": "Kotlin seulement : data classes en JSON, Jackson 3 (groupe tools.jackson), version du BOM Spring Boot.", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "org.jetbrains.kotlin:kotlin-reflect", "ref": "kotlin", "capability": "lang-kotlin", "triggers": ["stacks/lang/kotlin\\.md"] },
+    { "module": "io.kotest:kotest-extensions-spring", "ref": "kotest", "capability": "kotest", "rationale": "Kotlin + Kotest seulement. Coordonnées Kotest 6 (io.kotest:kotest-extensions-spring) ; l'ancien io.kotest.extensions:kotest-extensions-spring 1.3.0 vise Kotest 5.", "triggers": ["kotest"] }
   ],
   "absentByDesign": [
-    { "module": "org.springframework.boot:spring-boot-starter-data-jpa", "reason": "Aucune base possédée : l'accès aux données appartient à dev-data derrière l'enveloppe de ## Active Data Access. Une entité JPA dans la coquille est une règle métier hors du chemin que les evals parcourent." },
-    { "module": "org.flywaydb:flyway-core", "reason": "Pas de schéma possédé, donc pas de migration." },
-    { "module": "org.projectlombok:lombok", "reason": "Kotlin a déjà data class, val, lateinit ; Lombok sur Kotlin est une source d'erreurs de compilation." },
-    { "module": "org.mapstruct:mapstruct", "reason": "Les contrats HTTP sont GÉNÉRÉS depuis l'IR : rien à mapper à la main." }
+    { "module": "org.springframework.boot:spring-boot-starter-data-jpa", "reason": "Aucune base possédée par la coquille : l'accès aux données appartient à dev-data derrière l'enveloppe de ## Active Data Access. Une entité JPA dans la coquille est une règle métier hors du chemin que les evals parcourent." },
+    { "module": "org.flywaydb:flyway-core", "reason": "Pas de schéma MÉTIER possédé par la coquille. Les seules migrations sont celles du schéma rag (vectorstore/pgvector-jvm.md) et des vues d'agent (dataaccess/view-per-agent-jvm.md), portées par leurs fiches et exécutées par une tâche d'opérateur." },
+    { "module": "org.springframework.boot:spring-boot-starter-webflux", "reason": "Le RunService est synchrone (ChatClient.call, JdbcClient, SDK MCP synchrone) : WebFlux imposerait des appels bloquants sur la boucle Netty ou une réécriture réactive. Spring MVC + threads virtuels (serving/spring-sse.md §1.1)." },
+    { "module": "org.projectlombok:lombok", "reason": "Kotlin a déjà data class, Java a record ; Lombok masque aux analyseurs (Error Prone, NullAway) ce que le compilateur voit." },
+    { "module": "org.mapstruct:mapstruct", "reason": "Les contrats HTTP sont GÉNÉRÉS depuis l'IR : rien à mapper à la main." },
+    { "module": "io.github.resilience4j:resilience4j-spring-boot3", "reason": "Vise Spring Boot 3 ; resilience4j-spring-boot4 2.4.0 est le module de Boot 4." },
+    { "module": "com.fasterxml.jackson.module:jackson-module-kotlin", "reason": "Jackson 2 — incompatible avec Spring Boot 4 (Jackson 3, tools.jackson). C'était l'incohérence du catalogue précédent : groupe Jackson 3 épinglé avec Boot 3.5.3." }
   ],
   "runtimeRequirements": {
     "jdk": ">=21",
-    "notes": "Temps de démarrage JVM : /readyz attend un HealthIndicator qui vérifie le RunService (prompts chargés, schémas figés, checkpointer partagé). Spring Boot 4 et Spring Security 7 sont publiés : la montée est une tâche dédiée."
+    "notes": "Temps de démarrage JVM : /readyz attend un HealthIndicator qui vérifie le RunService (prompts chargés, schémas figés, checkpointer partagé). Un seul jar pour la CLI et le serveur (serving/spring-sse.md §3.5)."
   },
   "metadata": {
-    "lastUpdated": "2026-09-23",
+    "lastUpdated": "2026-09-26",
     "status": "design-phase",
     "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
     "notes": [
-      "Hérité de SDD_Pro .sdd/stacks/backend/kotlin-spring-boot.libs.json (audit du 2026-09-02), RÉÉCRIT pour l'agentic : JPA, Flyway, pilotes JDBC, Lombok, MapStruct retirés ; Resilience4j, kotlin-logging, logstash-logback-encoder, OpenTelemetry ajoutés.",
-      "VERSIONS NON VÉRIFIÉES au 2026-09-23 : search.maven.org ne répondait que partiellement (spring-boot-dependencies 3.5.3, kotlin-stdlib 2.2.0, springdoc 2.8.6, kotlin-logging 7.0.7, resilience4j 2.3.0, kotest 6.0.0.M4 confirmés ; logstash-logback-encoder, micrometer, opentelemetry-spring-boot-starter et les plugins Gradle NON confirmés). Résoudre contre Maven Central avant le premier bootstrap réel, puis dater verifiedAt. Le smoke du framework le dit en WARN (libs.unverified) tant que ce n'est pas fait.",
-      "kotest 6.0.0.M4 est une préversion : la seule stable confirmée est la ligne 5.9 (SDD_Pro épingle 5.9.1). À trancher à la vérification."
+      "Hérité de SDD_Pro .sdd/stacks/backend/kotlin-spring-boot.libs.json (audit du 2026-09-02), RÉÉCRIT pour l'agentic : JPA, Flyway, pilotes JDBC, Lombok, MapStruct retirés.",
+      "Partagé Kotlin et Java depuis le 2026-09-26 (validate_packaging admettait déjà spring-boot pour java) : dépendances propres à Kotlin en onDemand (capability lang-kotlin) ; ktlint et detekt sont dans framework/spring-ai.libs.json (capability lang-kotlin), Error Prone / NullAway / Spotless pour Java aussi.",
+      "Monté sur Spring Boot 4.1.1 : c'est la version qu'exige Spring AI 2.0.1, et le catalogue précédent combinait Boot 3.5.3 avec le groupe Jackson 3 (tools.jackson.module), qui n'est géré que par Boot 4 — la résolution Gradle aurait échoué.",
+      "Existence et versions vérifiées sur Maven Central le 2026-09-26 ; seul spring-boot-starter (et non webmvc/security) a été construit dans le build de vérification."
     ],
     "changeLog": [
-      "2026-09-23 — Création depuis SDD_Pro ; pins provisoires."
+      "2026-09-23 — Création depuis SDD_Pro ; pins provisoires.",
+      "2026-09-26 — Languages: kotlin, java. Spring Boot 3.5.3 → 4.1.1 ; starter-web → starter-webmvc ; oauth2-resource-server → security-oauth2-resource-server ; springdoc 2.8.6 → 3.1.1 (onDemand, UI seulement) ; logstash-logback-encoder 8.0 → 9.0 (Jackson 3) ; resilience4j-spring-boot3 2.3.0 → resilience4j-spring-boot4 2.4.0 ; micrometer-prometheus 1.15.0 → 1.17.1 (BOM) ; kotest 6.0.0.M4 → 6.2.5 et kotest-extensions-spring → io.kotest 6.2.5 ; kotlin-logging, coroutines et plugins Kotlin déplacés vers framework/spring-ai.libs.json ; opentelemetry-spring-boot-starter retiré (observability/otel-genai-jvm.md)."
     ],
-    "versionsVerified": false
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "repo1.maven.org (maven-metadata.xml, POM 4.1.1 de chaque starter, versions gérées de spring-boot-dependencies-4.1.1.pom, POM springdoc-openapi 3.1.1 et logstash-logback-encoder 9.0)"
   }
 }

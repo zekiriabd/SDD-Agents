@@ -1,0 +1,132 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "vectorstore-pgvector-node",
+  "category": "vectorstore",
+  "schemaVersion": 1,
+  "buildSystem": "pnpm",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/package.json",
+      "workspace/src/{AppName}/pnpm-lock.yaml"
+    ]
+  },
+  "versions": {
+    "node": "22",
+    "postgresql": "17",
+    "pgvector-extension": "0.8.1",
+    "pg": "8.23.0",
+    "types-pg": "8.23.1",
+    "pgvector": "0.3.0",
+    "node-pg-migrate": "9.0.0",
+    "zod": "4.6.5",
+    "pino": "10.3.1",
+    "voyageai": "0.4.0",
+    "langchain-community": "1.1.29"
+  },
+  "dbDrivers": {
+    "postgres": {
+      "module": "pg",
+      "ref": "pg",
+      "scope": "runtime"
+    }
+  },
+  "core": [
+    {
+      "module": "pg",
+      "ref": "pg",
+      "rationale": "node-postgres : Pool (option `onConnect` attendue par pg-pool 3.14, vérifiée dans le source) ; transaction explicite BEGIN/COMMIT par requête pour `set_config(..., true)` et `SET LOCAL` (tenant, hnsw.ef_search, statement_timeout)."
+    },
+    {
+      "module": "pgvector",
+      "ref": "pgvector",
+      "rationale": "Adaptateur de types officiel (pgvector/pgvector-node) : `import pgvector from 'pgvector/pg'`, `registerTypes(client)`, `toSql(number[])`. Ne fait QUE les types — la requête reste du SQL écrit à la main."
+    },
+    {
+      "module": "node-pg-migrate",
+      "ref": "node-pg-migrate",
+      "rationale": "Migrations versionnées (extension, schéma rag, GIN, HNSW séparé, rôles) : le pendant d'Alembic. Peer `pg >=4.3.0 <9.0.0` compatible avec pg 8.23."
+    },
+    {
+      "module": "zod",
+      "ref": "zod",
+      "rationale": "RetrievedChunk, Citation et la ligne SQL parsée au bord : le contenu retourné est marqué Untrusted au parsing, pas par un type effacé à l'exécution."
+    },
+    {
+      "module": "pino",
+      "ref": "pino",
+      "rationale": "Journal des requêtes (`DbQueryLogging: full`) sur stderr, paramètres jamais interpolés."
+    }
+  ],
+  "dev": [
+    {
+      "module": "@types/pg",
+      "ref": "types-pg",
+      "rationale": "Types de pg ; peer `@types/pg >=6.0.0 <9.0.0` de node-pg-migrate."
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "voyageai",
+      "ref": "voyageai",
+      "capability": "embedding-voyage",
+      "rationale": "SDK TypeScript OFFICIEL de Voyage (mainteneur npm voyage-ai, dépôt voyage-ai/typescript-sdk) : VoyageAIClient.embed({ input, model, inputType, outputDimension }). `inputType` est optionnel dans le SDK ; rag/hybrid-node.md §2.1 le rend obligatoire dans la signature du seul module qui l'appelle. Pairs optionnels (onnxruntime-node, @huggingface/transformers) inutiles pour l'API distante : non installés.",
+      "triggers": [
+        "EmbeddingModel:\\s*voyage-",
+        "stacks/embedding/voyage\\.md"
+      ]
+    },
+    {
+      "module": "@langchain/community",
+      "ref": "langchain-community",
+      "capability": "langchain-vectorstore",
+      "rationale": "PGVectorStore (`@langchain/community/vectorstores/pgvector`) — POC seulement : son schéma ne porte ni tsvector, ni tenant_id, ni content_hash, ni index_meta, et il ne fait pas de recherche hybride. Tire un large arbre de peers optionnels ; `framework/langgraph-js.libs.json` le déclare absent par conception hors de cette capability.",
+      "triggers": [
+        "PGVectorStore",
+        "@langchain/community/vectorstores/pgvector",
+        "poc.*pgvector"
+      ]
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "@langchain/classic",
+      "reason": "Porte EnsembleRetriever (retrievers/ensemble), qui a quitté le paquet `langchain`. La fusion RRF reste une fonction pure TypeScript testée en L1 (rag/hybrid-node.md §3.1), pas un retriever composite dont les rangs ne sont pas observables."
+    },
+    {
+      "module": "prisma",
+      "reason": "Un ORM ne sait ni `SET LOCAL` par transaction ni l'opérateur `<=>` dans l'ORDER BY sans SQL brut ; il ajouterait une seconde source de vérité du schéma à côté des migrations."
+    },
+    {
+      "module": "postgres",
+      "reason": "Postgres.js est une alternative valable, mais deux pilotes dans un projet font deux pools, deux façons de poser le tenant. pg est retenu parce que @langchain/langgraph-checkpoint-postgres et PGVectorStore l'utilisent aussi."
+    }
+  ],
+  "plugins": [
+    {
+      "module": "vector",
+      "ref": "pgvector-extension",
+      "rationale": "Extension serveur PostgreSQL (CREATE EXTENSION vector) : 0.8.x pour hnsw.iterative_scan et halfvec indexable jusqu'à 4000 dimensions."
+    }
+  ],
+  "runtimeRequirements": {
+    "postgresql": ">=16 (17 recommandé)",
+    "pgvector-extension": ">=0.8.0",
+    "unaccent": "extension contrib `unaccent` disponible sur le serveur"
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur SDD_Pro libs-catalog.schema.json",
+    "notes": [
+      "`postgresql` et `pgvector-extension` sont des versions SERVEUR : elles pilotent le smoke (extversion >= 0.8) et la doc, pas `pnpm add`.",
+      "Les clés de versions{} sont des ALIAS internes (`types-pg` pour `@types/pg`) : le méta-schéma refuse un nom qui commence par `@`.",
+      "Versions vérifiées paquet par paquet (dist-tags.latest) ; les pairs croisés ont été lus dans les manifestes publiés : node-pg-migrate 9.0.0 accepte pg <9 et @types/pg <9, @langchain/community 1.1.29 déclare pg ^8.11.0. Ce n'est PAS une résolution conjointe par pnpm : le premier `pnpm install` du projet fait foi."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création (design-phase) ; versions lues sur registry.npmjs.org."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "registry.npmjs.org (GET /{pkg}/latest, paquet par paquet, pairs lus dans les manifestes publiés — pas de résolution conjointe pnpm)"
+  }
+}

@@ -4,7 +4,7 @@ Stack ID: framework-ms-agent-framework
 Status: Draft
 Validation: 🟡 design-phase — non encore validé par un run mesuré
 Languages: csharp
-Scope: framework agentic **.NET** — `AIAgent` et `AgentThread` pour un agent et son fil de conversation, `Microsoft.Extensions.AI` (`IChatClient`, `AIFunction`) pour l'abstraction provider et les outils, `Microsoft.Agents.AI.Workflows` pour les patterns à graphe (cycles, reprise, human-in-the-loop). Le langage et l'outillage sont hors périmètre → `lang/csharp.md`. Catalogue de versions : `ms-agent-framework.libs.json` (versions **vérifiées** contre nuget.org le 2026-09-21).
+Scope: framework agentic **.NET** — `AIAgent` et `AgentThread` pour un agent et son fil de conversation, `Microsoft.Extensions.AI` (`IChatClient`, `AIFunction`) pour l'abstraction provider et les outils, `Microsoft.Agents.AI.Workflows` pour les patterns à graphe (cycles, reprise, human-in-the-loop). Le langage et l'outillage sont hors périmètre → `lang/csharp.md`. Catalogue de versions : `ms-agent-framework.libs.json` (versions **vérifiées** contre nuget.org et résolues conjointement avec les catalogues .NET transverses le 2026-09-26).
 
 ---
 
@@ -46,8 +46,8 @@ ADR, pas une dépendance ajoutée (cf. `absentByDesign` du catalogue).
 | **Langage** | C# 14 / `net10.0` (`lang/csharp.md`) |
 | **Paquets pivots** | `Microsoft.Agents.AI` 1.22.0 · `Microsoft.Extensions.AI` 10.10.0 |
 | **Graphe** | `Microsoft.Agents.AI.Workflows` 1.22.0 — **onDemand**, capability `orchestration-graph` |
-| **Providers** | `provider-openai` → `Microsoft.Agents.AI.OpenAI` · `provider-anthropic` → `Anthropic.SDK` (communautaire, §7.9) |
-| **MCP** | `ModelContextProtocol` 2.2.0 — capability `mcp-tools`, cf. `tools/mcp.md` |
+| **Providers** | `provider-openai` → `Microsoft.Agents.AI.OpenAI` · `provider-anthropic` → `Anthropic` 12.50.0, **SDK officiel** d'Anthropic, `IChatClient` par `AnthropicClient.AsIChatClient(modelId, maxTokens)` (§7.9) |
+| **MCP** | `ModelContextProtocol` 2.2.0 — capability `mcp-tools`, cf. `tools/mcp-dotnet.md` |
 | **Déclaration** | `STACK.md ## Active Agent Framework` → ` - .sdda/stacks/framework/ms-agent-framework.md` |
 | **Catalogue** | `ms-agent-framework.libs.json` — seul fichier qui fasse foi sur les versions |
 
@@ -63,7 +63,7 @@ ADR, pas une dépendance ajoutée (cf. `absentByDesign` du catalogue).
 | **Bornes** (`maxIterations`, `maxToolCalls`, `budgetUsd`) | **non** | §3.3 — c'est du C#, pas de la configuration |
 | **Politique de dépassement** (`onBoundExceeded`) | **non** | §3.3 |
 | **Frontière de confiance** (P8) | **non** | `lang/csharp.md` §5.3 — le type `Untrusted` |
-| **Journal rejouable** | partiel | `observability/otel-genai.md` — spans GenAI explicites |
+| **Journal rejouable** | partiel | `observability/otel-genai-dotnet.md` — spans GenAI + JSONL au format du framework |
 
 La colonne « non » est la raison d'être de cette fiche. Un framework qui ne
 porte pas les bornes et qu'on croit les porter produit exactement la boucle non
@@ -77,7 +77,7 @@ bornée que P12 existe pour empêcher.
 
 | IR (`system.ir.json`) | Microsoft Agent Framework | Notes |
 |---|---|---|
-| `agents[]` | un `AIAgent` construit par `Agents/{Slug}/Agent.cs : Build(deps, bounds)` | jamais instancié ailleurs |
+| `agents[]` | un `AIAgent` construit par `agents/{agent}/Agent.cs : Build(deps, bounds)` | jamais instancié ailleurs |
 | `agents[].promptRef` / `promptHash` | `Prompts.LoadSystemPrompt(slug)` au **build**, passé en instructions ; hash émis dans le span | P1 — jamais de littéral |
 | `agents[].modelTier` | `Models.Resolve(tier)` → `IChatClient` | jamais un nom de modèle hors `AppOptions` |
 | `agents[].tools[]` | liste **close** d'`AIFunction` passée aux options de l'agent | exactement les outils du contrat, sinon `[TOOL_SCOPE_EXCESS]` |
@@ -91,13 +91,13 @@ bornée que P12 existe pour empêcher.
 | `orchestration.maxHops` | compteur `Hops` de l'état + garde **dans chaque routeur** | §3.3 |
 | `orchestration.checkpointing` | persistance de l'état du `Workflow` + du `AgentThread` sérialisé | obligatoire si `humanInTheLoop` ou reprise |
 | `orchestration.humanInTheLoop` | point d'interruption du `Workflow` ; reprise par ré-entrée avec la réponse | §3.6 |
-| `tools[]` MCP | client MCP → `AIFunction` par outil **allowlisté** | cf. `tools/mcp.md` : le serveur propose, le contrat dispose |
-| `dataAccess[]` | outils générés sous `Data/` | cf. `dataaccess/*.md` |
+| `tools[]` MCP | client MCP → `AIFunction` par outil **allowlisté** | cf. `tools/mcp-dotnet.md` : le serveur propose, le contrat dispose |
+| `dataAccess[]` | outils de vue sous `data/` | cf. `dataaccess/view-per-agent-dotnet.md` |
 
 ### 3.2 L'état d'orchestration
 
 ```csharp
-// src/{AppName}/Orchestration/OrchestrationState.cs
+// orchestration/OrchestrationState.cs
 namespace {AppName}.Orchestration;
 
 /// <summary>État d'un run. Persisté par le checkpointing : aucun secret, aucun texte de prompt.</summary>
@@ -132,7 +132,7 @@ L'état ne porte **aucun secret** et **aucun texte de prompt** : il est persist�
 ### 3.3 Matérialiser les bornes — c'est du C#, pas de la configuration
 
 ```csharp
-// src/{AppName}/Agents/BoundedAgentRunner.cs
+// orchestration/BoundedAgentRunner.cs — PARTAGÉ par tous les agents, donc hors de agents/{agent}/
 namespace {AppName}.Agents;
 
 public sealed class BoundedAgentRunner(AIAgent agent, Bounds bounds, IPricing pricing)
@@ -198,7 +198,7 @@ Trois points qui se paient cher s'ils sautent :
 ### 3.4 Outils : du contrat à l'`AIFunction`
 
 ```csharp
-// src/{AppName}/Tools/ToolRegistry.cs — extrait
+// tools/ToolRegistry.cs — extrait
 public AIFunction Bind(ToolSpec spec, Delegate implementation) =>
     AIFunctionFactory.Create(
         implementation,
@@ -258,36 +258,49 @@ lié au timeout : un token ignoré fait du timeout un compteur (cf.
 
 ## 4. Structure de fichiers générée
 
+Disposition **plate, un seul projet, couches en minuscules** (`lang/csharp.md`
+§4) : la matrice d'ownership reconnaît ces répertoires, et eux seuls.
+
 ```
 workspace/src/{AppName}/
-├── Models.cs                      # Resolve(tier) -> IChatClient
-├── Agents/
-│   ├── BoundedAgentRunner.cs      # bornes + politique de dépassement — PARTAGÉ
-│   ├── AgentOutcome.cs            # Completed | Failed | Partial | Escalated
-│   └── {AgentSlug}/
+├── {AppName}.csproj               # LE projet (OutputType Exe) — dev-backend
+├── app/
+│   └── Models.cs                  # Resolve(tier) -> IChatClient (pipeline : observability/otel-genai-dotnet.md §3.2)
+├── shared/
+│   └── AgentOutcome.cs            # Completed | Failed | Partial | Escalated — pré-passe 4.0, gelé
+├── agents/
+│   └── {agent}/                   # un répertoire par instance dev-agent
 │       ├── Agent.cs               # Build(deps, bounds) -> AIAgent
 │       ├── Schemas.cs             # records d'entrée / sortie
 │       └── Deps.cs                # AgentDeps — injection explicite
-├── Tools/
+├── tools/
 │   ├── ToolSpec.cs  ToolRegistry.cs
-│   └── Mcp/                       # cf. tools/mcp.md
-└── Orchestration/                 # SEUL endroit nommant Microsoft.Agents.AI
+│   └── mcp/                       # cf. tools/mcp-dotnet.md
+└── orchestration/                 # SEUL endroit nommant Microsoft.Agents.AI (avec agents/{agent}/Agent.cs)
+    ├── BoundedAgentRunner.cs      # bornes + politique de dépassement + span invoke_agent — PARTAGÉ
     ├── OrchestrationState.cs
     ├── Routers.cs                 # fonctions PURES, testées en L1
     └── Graph.cs                   # Workflow — présent seulement si §3.5 l'exige
 
-workspace/src/{AppName}/tests/{AppName}.Tests/
-├── BoundedAgentRunnerTests.cs     # L1 : les 5 bornes, les 3 politiques, l'annulation appelant
-├── RoutersTests.cs                # L1 : table de cas exhaustive, fallback compris
-└── Orchestration/ResumeTests.cs   # L2 : la reprise ne remet aucun compteur à zéro
+workspace/src/{AppName}/tests/
+├── {AppName}.Tests.csproj
+└── orchestration/
+    ├── BoundedAgentRunnerTests.cs # L1 : les 5 bornes, les 3 politiques, l'annulation appelant
+    ├── RoutersTests.cs            # L1 : table de cas exhaustive, fallback compris
+    └── ResumeTests.cs             # L2 : la reprise ne remet aucun compteur à zéro
 ```
+
+`BoundedAgentRunner` est dans `orchestration/` et non dans `agents/` : il est
+partagé par tous les agents, et `agents/{agent}/` est une zone **disjointe par
+instance** — un fichier commun y serait écrit par N instances de `dev-agent` en
+parallèle.
 
 ---
 
 ## 5. Conventions imposées
 
-1. **`Microsoft.Agents.AI` n'apparaît que dans `Orchestration/` et
-   `Agents/{Slug}/Agent.cs`.** Partout ailleurs, y compris dans les contrats,
+1. **`Microsoft.Agents.AI` n'apparaît que dans `orchestration/` et
+   `agents/{agent}/Agent.cs`.** Partout ailleurs, y compris dans les contrats,
    c'est `[FRAMEWORK_LEAK_IN_CONTRACT]` — `validate_ir.py` connaît `AIAgent`,
    `ChatClientAgent` et `AgentThread`.
 2. **Les bornes sont dans `BoundedAgentRunner`, pas dans chaque agent.** Un
@@ -318,7 +331,7 @@ Aucun modèle, aucun réseau, 0 token :
 cd workspace/src/{AppName}
 dotnet restore
 dotnet build -warnaserror
-dotnet test --filter "Category!=Network"
+dotnet test --filter "Category!=network"   # projet de test en VSTest : IsTestingPlatformApplication=false (eval/xunit-eval.md §2.1)
 #   -> BoundedAgentRunnerTests : chaque borne déclenche, chaque politique s'applique,
 #      une annulation de l'appelant n'est PAS comptée comme un dépassement
 #   -> RoutersTests            : table de cas exhaustive + fallback
@@ -354,12 +367,16 @@ Smoke Timeout : 180 s.
 8. **Le streaming agrégé avant vérification.** Attendre la fin de
    `RunStreamingAsync` pour compter les itérations, c'est constater le
    dépassement après l'avoir payé.
-9. **`provider-anthropic` sans paquet officiel.** Il n'existe pas de
-   `Microsoft.Agents.AI.Anthropic` : le provider passe par `Anthropic.SDK`
-   (communautaire) derrière `IChatClient`. C'est le point de couplage le plus
-   fragile de cette stack — une montée de version du SDK peut changer le mapping
-   des `Usage`, donc le calcul de budget de §3.3. À réévaluer dès qu'un paquet
-   officiel existe.
+9. **`provider-anthropic` par le mauvais paquet.** Le provider passe par le SDK
+   **officiel** `Anthropic` (12.50.0, propriétaire NuGet Anthropic), qui dépend
+   de `Microsoft.Extensions.AI.Abstractions` et rend un `IChatClient` par
+   `new AnthropicClient { ApiKey = … }.AsIChatClient(modelId, maxTokens)` —
+   compilé contre les pins du catalogue. Deux pièges voisins : `Anthropic.SDK`
+   (communautaire, épinglé ici jusqu'au 2026-09-25) et `Microsoft.Agents.AI.Anthropic`
+   (preview seulement) sont `absentByDesign` ; les réintroduire ferait
+   coexister deux mappings de `Usage`, donc deux calculs du budget de §3.3. Et
+   une montée de version du SDK officiel peut toujours changer ce mapping : le
+   test L1 de coût (`observability/otel-genai-dotnet.md`) est ce qui le verrait.
 10. **Mélanger les versions de la famille `Microsoft.Agents.AI.*`.** Elle est
     versionnée solidairement (1.22.0). Monter un seul paquet produit une
     combinaison non testée, et Central Package Management est ce qui l'empêche —

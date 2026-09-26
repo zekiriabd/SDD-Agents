@@ -123,9 +123,9 @@ lignes de Python pur dans `sdda_eval.stats`, testées en L1.
 | **BASELINE** (P10) | `workspace/pipeline/baselines/{suite}.json` : `{pin: PinTuple, score_mean, score_stddev, pass_rate, recorded_at, run_id}` | écrit **uniquement** par `sdda_scripts.baseline_promote` (action tracée) ; jamais par un test |
 | **Tuple d'épinglage** | `PinTuple(prompt_hash, model_id, retrieval_index_hash, tool_schema_hash, dataset_hash)` calculé par la fixture `pin` au début de session | dans chaque rapport ; `pin != baseline.pin` → `[EVAL_BASELINE_STALE]` : la comparaison de régression est **refusée**, pas approximée |
 | **Verdict** | `sdda_eval.verdict(mean, stddev, pass_rate, threshold, variance_warn_pct)` → `green \| yellow \| red` | table §3.4 ; rouge = `pytest.fail` ; jaune = pass + propriété ; le **verdict de session** est le pire des items |
-| **Calibration** (P9) | fixture `calibrated_judge(grader_id)` : lit `workspace/pipeline/calibration/{grader}.json`, vérifie `n ≥ JudgeCalibrationMinItems` et `kappa ≥ JudgeCalibrationMinKappa` ; sinon le juge passe en **`advisory`** (score rapporté, **verdict non bloquant**) et l'item est marqué `xfail(strict=False)` avec `[JUDGE_NOT_CALIBRATED]` | un juge non calibré ne bloque pas et ne valide pas |
+| **Calibration** (P9) | fixture `calibrated_judge(grader_id)` : lit le rapport MESURÉ `workspace/.sys/.validation/G5-{n}.calibration.json` (écrit par `calibrate-judge` ; `pipeline/calibration/{grader}.json` n'en est que l'entrée), vérifie `n ≥ JudgeCalibrationMinItems` et `kappa ≥ JudgeCalibrationMinKappa` ; sinon le juge passe en **`advisory`** (score rapporté, **verdict non bloquant**) et l'item est marqué `xfail(strict=False)` avec `[JUDGE_NOT_CALIBRATED]` | un juge non calibré ne bloque pas et ne valide pas |
 | **Holdout disjoint** | test L0 `test_datasets_disjoint.py` : `set(hash(item.input)) golden ∩ holdout == ∅` | `strict` → échec de collection ; `warn` → propriété |
-| **Isolement L4** | fixtures `mocked_tools` (réponses depuis `workspace/pipeline/fixtures/tools/**/*.jsonl`, choisies par `args`, erreurs déclarées rejouées par `error`) et `frozen_retrieval` (résultats figés par `query_hash`) | l'agent seul ; la variation est attribuable |
+| **Isolement L4** | fixtures `mocked_tools` (réponses depuis `workspace/pipeline/fixtures/tools/{tool}.jsonl`, **un fichier par outil**, choisies par `args`, erreurs déclarées rejouées par `error`) et `frozen_retrieval` (`fixtures/retrieval/{index}.jsonl`, **un fichier par index**, résultats figés par `query_hash`) — et, pour l'application lancée par sa CLI (`--executor cli`), les mêmes fichiers passés par l'environnement : `SDDA_EVAL_ISOLATION=mocked` et `SDDA_EVAL_FIXTURES={répertoire}` (contrat : `serving/cli.md` §3.5) | l'agent seul ; la variation est attribuable |
 | **L7 bout-en-bout** | invocation de la surface CLI (`serving/cli.md`) : `uv run {AppName} run --json …` via `subprocess`, lecture des `RunEvent` et du code de sortie | ce qu'on mesure est ce qu'on livre |
 | **L8 adversarial** | suite avec `expected.outcome ∈ {refused, unchanged_behavior, tool_not_called}` et grader `trajectory` ; **exit code 4 attendu** | toute attaque réussie devient un item permanent |
 | **Coût de l'eval** | fixture `eval_budget` : somme `sdda.cost.usd` des traces ; `--eval-max-cost-usd` → arrêt de session `[EVAL_BUDGET_EXCEEDED]` | l'eval elle-même a un budget |
@@ -242,7 +242,8 @@ session :
 
 ```
 workspace/pipeline/
-├── conftest.py                 # plugin local : options --eval-*, fixtures pin / eval_runner / report / eval_budget / calibrated_judge / mocked_tools / frozen_retrieval,
+├── conftest.py                 # plugin local : options --eval-*, fixtures pin / eval_runner / report / eval_budget / calibrated_judge / mocked_tools / frozen_retrieval
+│                               #   (mocked_tools / frozen_retrieval exportent aussi SDDA_EVAL_ISOLATION / SDDA_EVAL_FIXTURES pour la CLI, serving/cli.md §3.5),
 │                               #   hooks : collection (schema suites, disjonction golden/holdout, interdiction rerun sur eval), sessionfinish (rapport, verdict)
 ├── pytest.ini                  # markers, asyncio_mode=auto, timeout, -p no:randomly, addopts = -p no:cacheprovider pour eval
 ├── test_suites.py              # runner générique (§3.2)

@@ -1,0 +1,124 @@
+{
+  "$schema": "../../templates/libs-catalog.schema.json",
+  "stackId": "observability-otel-genai-dotnet",
+  "category": "observability",
+  "schemaVersion": 1,
+  "buildSystem": "dotnet",
+  "manifest": {
+    "files": [
+      "workspace/src/{AppName}/Directory.Packages.props",
+      "workspace/src/{AppName}/{AppName}.csproj"
+    ]
+  },
+  "versions": {
+    "dotnet": "10.0",
+    "OpenTelemetry": "1.19.1",
+    "OpenTelemetry.Extensions.Hosting": "1.19.1",
+    "OpenTelemetry.Exporter.OpenTelemetryProtocol": "1.19.1",
+    "OpenTelemetry.Exporter.InMemory": "1.19.1",
+    "OpenTelemetry.Instrumentation.Http": "1.19.0",
+    "Npgsql.OpenTelemetry": "10.0.3",
+    "Microsoft.Extensions.AI": "10.10.0"
+  },
+  "core": [
+    {
+      "module": "OpenTelemetry",
+      "ref": "OpenTelemetry",
+      "rationale": "SDK : TracerProvider, BaseExporter<Activity> (base du JsonlActivityExporter), SimpleActivityExportProcessor (JSONL, écriture immédiate), BatchActivityExportProcessor (OTLP), BaseProcessor<Activity> (redaction avant tout export).",
+      "installCommand": "dotnet add workspace/src/{AppName} package OpenTelemetry --version 1.19.1"
+    },
+    {
+      "module": "OpenTelemetry.Extensions.Hosting",
+      "ref": "OpenTelemetry.Extensions.Hosting",
+      "rationale": "Câblage dans l'hôte (AddOpenTelemetry().WithTracing(...)) et arrêt propre : le TracerProvider est disposé — donc flushé — à l'arrêt de l'hôte. Même pin que ms-agent-framework.libs.json.",
+      "installCommand": "dotnet add workspace/src/{AppName} package OpenTelemetry.Extensions.Hosting --version 1.19.1"
+    },
+    {
+      "module": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
+      "ref": "OpenTelemetry.Exporter.OpenTelemetryProtocol",
+      "rationale": "Export OTLP vers le Collector (OTEL_EXPORTER_OTLP_ENDPOINT). Désactivé avec un avertissement si l'endpoint est absent ; le JSONL, lui, ne l'est jamais. Même pin que ms-agent-framework.libs.json.",
+      "installCommand": "dotnet add workspace/src/{AppName} package OpenTelemetry.Exporter.OpenTelemetryProtocol --version 1.19.1"
+    }
+  ],
+  "dev": [
+    {
+      "module": "OpenTelemetry.Exporter.InMemory",
+      "ref": "OpenTelemetry.Exporter.InMemory",
+      "rationale": "Tests L1 de forme des spans (invoke_agent > chat + execute_tool) sans Collector ni fichier.",
+      "installCommand": "dotnet add workspace/src/{AppName}/tests/{AppName}.Tests.csproj package OpenTelemetry.Exporter.InMemory --version 1.19.1"
+    }
+  ],
+  "onDemand": [
+    {
+      "module": "Npgsql.OpenTelemetry",
+      "ref": "Npgsql.OpenTelemetry",
+      "capability": "instrument-npgsql",
+      "requiredBy": "vectorstore/pgvector-dotnet.md, dataaccess/view-per-agent-dotnet.md",
+      "rationale": "`TracerProviderBuilder.AddNpgsql()` : spans SQL de l'index et des vues. Le texte SQL émis doit rester PARAMÉTRÉ (@nom) — vérifié en L1 par le test de redaction, comme pour psycopg côté Python.",
+      "triggers": [
+        "stacks/vectorstore/pgvector-dotnet\\.md",
+        "stacks/dataaccess/view-per-agent-dotnet\\.md",
+        "Npgsql"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName} package Npgsql.OpenTelemetry --version 10.0.3"
+    },
+    {
+      "module": "OpenTelemetry.Instrumentation.Http",
+      "ref": "OpenTelemetry.Instrumentation.Http",
+      "capability": "instrument-http",
+      "requiredBy": "outils REST et client d'embedding Voyage",
+      "rationale": "Spans HTTP sortants (outils REST, Voyage, serveurs MCP http). Les en-têtes Authorization ne sont jamais capturés.",
+      "triggers": [
+        "stacks/tools/(rest|openapi)\\.md",
+        "HttpClient"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName} package OpenTelemetry.Instrumentation.Http --version 1.19.0"
+    },
+    {
+      "module": "Microsoft.Extensions.AI",
+      "ref": "Microsoft.Extensions.AI",
+      "capability": "genai-spans",
+      "requiredBy": "framework/ms-agent-framework.md (déjà core là-bas)",
+      "rationale": "`ChatClientBuilder.UseOpenTelemetry(...)` et `EmbeddingGeneratorBuilder.UseOpenTelemetry(...)` : spans `chat` / `embeddings` selon les conventions GenAI (v1.41 d'après la doc du paquet), et spans `execute_tool` émis par FunctionInvokingChatClient. Référencé ici pour mémoire : la version fait foi dans ms-agent-framework.libs.json.",
+      "triggers": [
+        "UseOpenTelemetry"
+      ],
+      "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Extensions.AI --version 10.10.0"
+    }
+  ],
+  "absentByDesign": [
+    {
+      "module": "OpenTelemetry.Exporter.Console",
+      "reason": "Il écrit sur stdout : en `--json`, stdout est le canal NDJSON du contrat CLI. Un exporteur console mélange des spans aux RunEvent et le runner d'eval lit un flux invalide."
+    },
+    {
+      "module": "Azure.Monitor.OpenTelemetry.Exporter",
+      "reason": "Exporteur propriétaire d'un backend. Le backend reçoit l'OTLP (Collector) : un second exporteur par fournisseur double le coût et la cardinalité, et lie la trace à un hébergement que STACK.md n'a pas déclaré."
+    },
+    {
+      "module": "Serilog.Sinks.OpenTelemetry",
+      "reason": "Les spans sont la trace ; les logs sont corrélés par trace_id/span_id, pas convertis en spans. Deux chemins vers le même backend produisent deux vérités sur le même run."
+    }
+  ],
+  "runtimeRequirements": {
+    "otel-collector": "un endpoint OTLP joignable (OTEL_EXPORTER_OTLP_ENDPOINT) — facultatif : sans lui, seul le JSONL est écrit",
+    "traces-dir": "workspace/.sys/traces/runs/ accessible en écriture — le JSONL n'est pas désactivable (trace-emitted-per-run)"
+  },
+  "metadata": {
+    "lastUpdated": "2026-09-26",
+    "status": "design-phase",
+    "format": "compact (v2) — aligné sur libs-catalog.schema.json",
+    "notes": [
+      "Pins relevés contre l'API de nuget.org le 2026-09-26, dernière stable de chaque paquet, previews exclues, puis restaurés ENSEMBLE avec les autres catalogues .NET dans une sonde net10.0 (TreatWarningsAsErrors) : aucun conflit.",
+      "Règle de cohérence : OpenTelemetry, OpenTelemetry.Api, .Extensions.Hosting et .Exporter.* partagent la même version (1.19.1) ; OpenTelemetry.Instrumentation.Http a sa propre ligne (1.19.0, dernière stable). Npgsql.OpenTelemetry suit la version de Npgsql (10.0.3) et dépend d'OpenTelemetry.API >= 1.15.3.",
+      "Les noms d'API vérifiés par compilation sur la sonde : ChatClientBuilder.UseOpenTelemetry(loggerFactory, sourceName, configure) avec OpenTelemetryChatClient.EnableSensitiveData ; EmbeddingGeneratorBuilder.UseOpenTelemetry(...) ; AIAgentBuilder.UseOpenTelemetry(sourceName, configure) (Microsoft.Agents.AI, espace de noms Microsoft.Agents.AI) ; TracerProviderBuilder.AddNpgsql().",
+      "Le format du fichier JSONL est un CONTRAT relu par les scripts du framework (sdda_lib/tracing.py) : il est défini par observability/otel-genai.md §4 et reproduit à l'identique par la fiche .NET, pas par un paquet."
+    ],
+    "changeLog": [
+      "2026-09-26 — Création (design-phase). Versions vérifiées contre nuget.org, restauration conjointe sur sonde."
+    ],
+    "versionsVerified": true,
+    "verifiedAt": "2026-09-26",
+    "verifiedAgainst": "nuget.org (API v3-flatcontainer) + `dotnet restore`/`dotnet build` conjoints sur une sonde net10.0 (SDK 10.0.301) portant tous les pins .NET des catalogues"
+  }
+}

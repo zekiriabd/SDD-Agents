@@ -55,6 +55,26 @@ points.** C'est une erreur silencieuse : rien ne la signale, les résultats sont
 simplement un peu moins bons. Le code généré doit la rendre impossible — un
 paramètre obligatoire, pas un défaut.
 
+### 3.1 Le client, langage par langage
+
+Voyage ne publie de SDK officiel qu'en **Python** (`voyageai`) et en
+**TypeScript** (`voyageai` sur npm). En C#, Kotlin et Java, les bibliothèques
+existantes sont communautaires, et aucun module Spring AI ne couvre Voyage :
+le code généré appelle l'API REST (`POST /v1/embeddings`) par un client
+maison d'une soixantaine de lignes. Pas par un client « compatible OpenAI » :
+il omettrait `input_type` sans rien dire, c'est-à-dire exactement l'erreur que
+cette section interdit.
+
+| Langage | Client | Fiche qui le décrit |
+|---|---|---|
+| Python | SDK officiel `voyageai` | `vectorstore/pgvector.md`, `rag/hybrid.md` |
+| TypeScript | SDK officiel `voyageai` (npm) | `rag/hybrid-node.md` |
+| C# | `IEmbeddingGenerator` REST maison (`HttpClient`) | `rag/hybrid-dotnet.md` |
+| Kotlin, Java | `EmbeddingModel` Spring AI REST maison (`RestClient`) | `rag/hybrid-jvm.md` |
+
+Dans les cinq, la signature porte `input_type` sans valeur par défaut, et un
+test L1 vérifie que l'indexation envoie `document` et la recherche `query`.
+
 ---
 
 ## 4. Dimensions et quantification — ce qu'on achète
