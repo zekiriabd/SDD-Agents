@@ -73,6 +73,13 @@ d'agents il faut :
    ```bash
    python .sdda/sdda.py gen-source-tools --write --scope code --mission {n}
    ```
+   En C#, il émet aussi `data/*.cs` et `tools/*.cs` (`ToolContext`, `ToolSpec`,
+   `ToolRegistry`, `RegisteredTool`, `ToolResult`) : tu ne les réécris pas, tu
+   les câbles — `{Outil}.Definition.Bind(() => new ToolContext(racineDépôt) { … Identity … })`,
+   `ToolRegistry.Grant`, puis un `AIFunction` par outil dont `Name`,
+   `Description` et `JsonSchema` viennent de `RegisteredTool`
+   (`dataaccess/declared-sources.md` §3.11). Le `.csproj` copie
+   `data/**/*.json` dans la sortie, sinon l'exécutable ne trouve aucune source.
    Autres outils de `tools[]` : `workspace/src/{App}/tools/`, depuis leur
    contrat (schéma, erreurs déclarées, timeout, classe d'effet de bord).
    Retrieval si `retrievers[]` non vide : `retrieval/`.
@@ -87,14 +94,18 @@ d'agents il faut :
 `## Active Agent Framework` (§6 du contexte) nomme la fiche, et c'est elle qui
 dit OÙ l'importer — la boucle d'agent sous `agents/`, le graphe sous
 `orchestration/` (un graphe à un nœud pour un `single-agent`, si la fiche
-d'orchestration du framework en porte un). Le squelette généré (Python) appelle le SDK du fournisseur sans
-framework : c'est la plomberie de repli, pas l'implémentation attendue — le
-remplacer par le framework derrière le même point d'extension (`agent_factory`
-de `run_service.py` ; hors Python, le point d'extension que nomme la fiche de
-langage). `validate-framework` (G6, part `framework`) refuse un
-`agents/` ou un `orchestration/` qui n'importe pas le framework déclaré
-(`[FRAMEWORK_DRIFT]`) : au premier run poc, la boucle écrite à la main contre le
-SDK a rendu G6 rouge alors que tout le reste marchait.
+d'orchestration du framework en porte un). Le squelette généré (Python) suit
+déjà la stack déclarée : sous `langchain.md`, `models.provider_client` rend un
+`BaseChatModel` (`agents/chat_model.py`) ; sous `langgraph.md`, la boucle bornée
+tourne dans un graphe à un nœud (`orchestration/single_agent.py`). C'est le
+repli d'un `single-agent`, pas l'implémentation d'une topologie : ton graphe et
+tes agents s'écrivent dans l'idiome de la fiche, derrière le même point
+d'extension (`agent_factory` de `run_service.py` ; hors Python, celui que nomme
+la fiche de langage), et appellent le modèle par `provider_client` — jamais par
+le SDK. `validate-framework` (G6, part `framework`) refuse un `agents/` ou un
+`orchestration/` qui n'importe pas le framework déclaré, ou qui importe le SDK
+d'un fournisseur (`[FRAMEWORK_DRIFT]`) : au premier run poc, la boucle écrite à
+la main contre le SDK a rendu G6 rouge alors que tout le reste marchait.
 4. **Surface.** `serving/` depuis `### Active Serving Surface` (console par défaut).
 5. **Coquille.** `app/composition` : le seul endroit qui instancie et câble tout ;
    configuration par NOMS de variables ; règles métier calculables (`BR-x`) en

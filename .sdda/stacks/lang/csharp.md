@@ -69,6 +69,7 @@ store vectoriel, la surface d'exposition. Ces choix sont déclarés dans
 | vectorstore | `vectorstore/pgvector-dotnet.md` | schéma `rag`, Npgsql + Pgvector, migrations DbUp |
 | rag | `rag/hybrid-dotnet.md` | deux jambes, `Rrf.Fuse` pure, client Voyage REST, commande `retrieve` |
 | dataaccess | `dataaccess/view-per-agent-dotnet.md` | vues par agent, enveloppe Npgsql paramétrée |
+| dataaccess (sans base) | `dataaccess/declared-sources.md` §3.11 | fichiers déclarés ; `data/` et `tools/` GÉNÉRÉS par `gen-source-tools` (combo SOURCES-NET) |
 | tools | `tools/mcp-dotnet.md` | SDK `ModelContextProtocol`, allowlist, `AIFunction` sous contrat |
 | eval | `eval/xunit-eval.md` | tests L0–L2, rapport JUnit, conventions lues par G3 |
 | observability | `observability/otel-genai-dotnet.md` | spans GenAI, JSONL de trace au format du framework |
@@ -112,6 +113,7 @@ obligatoires :
 <ItemGroup>
   <None Include="prompts/**" CopyToOutputDirectory="PreserveNewest" />          <!-- les prompts partent avec l'exécutable -->
   <None Include="skills/**;rules/**" CopyToOutputDirectory="PreserveNewest" />
+  <None Include="data/**/*.json" CopyToOutputDirectory="PreserveNewest" />      <!-- declared-sources : sources.json, tool_specs.json, schemas/ -->
 </ItemGroup>
 ```
 
@@ -155,7 +157,7 @@ couche sont en **minuscules** (§4), les espaces de noms restent en PascalCase
 | **BOUNDS** (P12) | `record Bounds` : `MaxIterations`, `MaxToolCalls`, `MaxDelegationDepth`, `TimeoutSeconds`, `BudgetUsd` ; hiérarchie `BoundExceededException` → `IterationsExceeded`, `ToolCallsExceeded`, `DelegationDepthExceeded`, `TimeoutExceeded`, `BudgetExceeded` | `shared/Bounds.cs` (pré-passe 4.0, gelé) |
 | **MODEL BINDING** (tier) | `AppOptions.RuntimeTierMap : IReadOnlyDictionary<Tier, string>` — le code manipule `Tier`, jamais un nom de modèle ; la résolution se fait dans `Models.Resolve(tier) -> IChatClient` (pipeline : `observability/otel-genai-dotnet.md` §3.2) | `app/AppOptions.cs`, `app/Models.cs` |
 | **RETRIEVER / INDEX** | `retrieval/{index_slug}/` exposant `RetrieveAsync(query, topK, ctx, ct) -> IReadOnlyList<RetrievedChunk>` ; `RetrievedChunk` porte `DocId`, `ChunkId`, `Score`, `Content` (`Untrusted`), `Citation`, `Provenance` | `retrieval/` — `rag/hybrid-dotnet.md`, `vectorstore/pgvector-dotnet.md` |
-| **DATA ACCESS** | vues, enveloppe et outils de vue | `data/` — `dataaccess/view-per-agent-dotnet.md` |
+| **DATA ACCESS** | vues, enveloppe et outils de vue — ou, sans base, sources déclarées générées | `data/` — `dataaccess/view-per-agent-dotnet.md` ; `dataaccess/declared-sources.md` §3.11 |
 | **MCP** | client MCP → `AIFunction` allowlistées sous contrat | `tools/mcp/` — `tools/mcp-dotnet.md` |
 | **ORCHESTRATION PATTERN** | `orchestration/Graph.cs` (ou `Pipeline.cs`) — **seul endroit où le framework apparaît nommément** | `orchestration/` |
 | **GUARDRAIL** | `{Id}.cs` : `Check(payload) -> GuardrailVerdict(bool Passed, string Reason, OnTrip OnTrip)` | `app/guardrails/` |
@@ -191,6 +193,46 @@ public static class Prompts
 Un prompt système écrit en littéral dans le code est `[PROMPT_INLINE_FORBIDDEN]`,
 détecté en L0 (§5.2). La raison n'est pas esthétique : un prompt qui n'est pas
 un fichier n'a pas de hash, donc pas d'épinglage, donc aucune eval rejouable.
+
+### 3.1 bis Configuration et `.env` du livrable
+
+Même règle que le runtime Python (`templates/runtime/python/app/config.py`) :
+**l'environnement du processus fait foi, le `.env` du livrable le complète,
+jamais ne l'écrase.** `install-env` (appelé par `project-init`) dépose
+`workspace/src/{AppName}/.env` ; c'est de là que l'application part. Sans ce
+chargement, `dotnet run` depuis la racine du dépôt — la commande des runners
+(§8) — ne voit aucune clé, et chaque évaluation échoue en `[CONFIG_INVALID]`
+(premier projet C#).
+
+```xml
+<!-- {AppName}.csproj — le .env part avec l'exécutable (gitignoré : workspace/**/.env) -->
+<None Include=".env" CopyToOutputDirectory="PreserveNewest" Condition="Exists('.env')" />
+```
+
+```csharp
+// app/AppOptions.cs (ou la composition) — SEUL endroit qui ouvre l'environnement
+static IReadOnlyDictionary<string, string> Environment()
+{
+    var merged = System.Environment.GetEnvironmentVariables().Cast<DictionaryEntry>()
+        .ToDictionary(e => (string)e.Key, e => (string?)e.Value ?? "", StringComparer.Ordinal);
+    var file = Path.Combine(AppContext.BaseDirectory, ".env");
+    if (File.Exists(file))
+        foreach (var line in File.ReadLines(file))
+        {
+            var text = line.Trim();
+            if (text.Length == 0 || text[0] == '#' || text.IndexOf('=') is var i && i <= 0) continue;
+            var key = text[..i].Trim();
+            var value = text[(i + 1)..].Trim().Trim('"', ''');
+            merged.TryAdd(key, value);            // l'hôte (CI, conteneur) garde la main
+        }
+    return merged;
+}
+```
+
+Aucune valeur n'est journalisée, tracée ni rendue dans une erreur : le
+message d'une clé absente nomme la VARIABLE (`GEMINI_API_KEY`), jamais le
+contenu. Aucun agent de construction ne lit ce fichier (`[SECRET_READ_FORBIDDEN]`) :
+c'est l'application, à l'exécution, qui le lit.
 
 ### 3.2 Bornes
 
@@ -430,7 +472,17 @@ Smoke Timeout : 180 s (la première restauration NuGet domine).
 9. **Les analyseurs désactivés « temporairement ».** `AnalysisLevel` abaissé
    pour faire passer un build pressé ne remonte jamais. Si une règle doit
    sauter, elle saute **nommément** dans `.editorconfig`, avec la raison — pas
-   par abaissement global du niveau.
+   par abaissement global du niveau. Une seule exemption est prévue, et elle
+   est bornée aux tests : la convention de nommage xUnit
+   (`Methode_Etat_Attendu`) viole CA1707, et `latest-all` la rend bloquante —
+   au premier projet C#, 21 des 27 erreurs de build étaient celle-là.
+   ```ini
+   # .editorconfig (dev-backend) — section tests UNIQUEMENT
+   [tests/**.cs]
+   dotnet_diagnostic.CA1707.severity = none   # noms de tests xUnit Methode_Etat_Attendu : lisibles dans le rapport JUnit
+   ```
+   Rien d'autre n'y est relâché : CA2000 (dispose), CA1305 (culture) et la
+   nullabilité s'appliquent aux tests comme au code.
 10. **Le projet de test qui référence l'implémentation du framework.** Il rend
     les tests L1 dépendants du framework agentic, donc lents et non
     déterministes. Les tests référencent `{AppName}` et les abstractions, jamais

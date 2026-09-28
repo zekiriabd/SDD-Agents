@@ -139,14 +139,31 @@ qu'on livre. Toute application générée honore ces trois points, en plus de
 1. **Entrée par `stdin`** — `run --json --input-file -` lit l'entrée entière sur
    l'entrée standard. Pas en argument : la ligne de commande est limitée
    (32 767 caractères sous Windows), visible de `ps`, et une entrée qui
-   commence par `-` y est lue comme une option.
+   commence par `-` y est lue comme une option. **Deux formes, toutes deux
+   acceptées** : un objet JSON conforme à l'`inputSchema` de l'agent d'entrée
+   (`{"question": "…"}`), OU le texte brut de son unique champ texte requis.
+   L'exécuteur `cli` (`sdda_lib/executors._item_input`) envoie le TEXTE quand
+   l'`input` d'un item porte `text`, `query`, `question` ou `prompt`, et l'objet
+   sinon ; une application qui n'accepte que l'objet répond `[CLI_USAGE]` à
+   chaque item — premier projet C#, 0.000 sur toutes les suites de G5. Règle :
+   si stdin se lit comme un objet JSON, c'est l'entrée structurée ; sinon, c'est
+   le texte du champ.
 2. **Isolement L4** — si la variable `SDDA_EVAL_ISOLATION=mocked` est posée,
    l'application sert chaque outil depuis `SDDA_EVAL_FIXTURES/tools/{outil}.jsonl`
    (une réponse enregistrée par ligne) et le retrieval figé depuis
    `SDDA_EVAL_FIXTURES/retrieval/{index}.jsonl`, **sans aucun appel réseau
    d'outil ni d'index**. Un agent évalué isolé qui touche le vrai monde n'est
    pas isolé : l'application refuse de démarrer (code `8`, `[CONFIG_INVALID]`)
-   si l'isolement est demandé et qu'un outil n'a pas de fixture.
+   si l'isolement est demandé et qu'un outil n'a pas de fixture. **Format d'une
+   ligne** (le même que `templates/runtime/python/app/isolation.py`, pour tous
+   les langages) : `{"tool", "args": {…}, "result": …}` est rendue quand l'appel
+   porte CES arguments (chaque argument nommé égal, les autres libres) ;
+   `{"tool", "args", "error": {"code", "message"}}` rejoue une erreur déclarée
+   (`ok=false`) ; une ligne sans `args` est la réponse par défaut de l'outil (la
+   dernière l'emporte). Un appel qu'aucune ligne ne couvre rend l'erreur
+   `TOOL_FIXTURE_MISSING`, jamais une réponse vide ni « la première ligne » —
+   premier projet C# : la première ligne était l'erreur `SOURCE_UNAVAILABLE`
+   d'un cas de panne, servie à tous les appels.
 3. **Retrieval sans agent (G4)** — `retrieve --json --index ID --query-file -
    [--k N]` lit la requête sur `stdin` et émet un événement `retrieval`
    (`index_id`, `result_ids[]`, `scores[]`, facultativement `chunk_ids[]`)

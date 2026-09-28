@@ -401,6 +401,10 @@ dev-prompt:
     - workspace/.sys/.ir/views/{n}-dev-prompt.ir.json   # semi — SA vue de l'IR (ir-view) : outils câblés, postures, bornes
     - workspace/pipeline/contracts/agents/{n}-*.agent.md      # volatile — 1 par invocation
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — les CAPs servies
+    - workspace/pipeline/missions/{n}-*.md                    # volatile — `## Business Rules` et `## Failure Policy`,
+                                                           # que le prompt transcrit : une CAP n'en porte que les
+                                                           # IDENTIFIANTS (`Covers: BR-3`), pas le texte — au premier
+                                                           # run C#, BR-3 est restée hors du prompt faute de source
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile — descriptions d'outils
     - workspace/src/*/prompts/{agent}.system.md            # volatile — SON prompt, pour l'éditer (Edit exige un Read)
     - workspace/src/*/skills/*.md                          # volatile — les fragments de compétences

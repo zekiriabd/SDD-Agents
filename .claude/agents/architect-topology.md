@@ -292,7 +292,12 @@ spécifie serait implémenté depuis une intention.
 
 Déclarer les contrats à produire par les agents de la phase 2 en parallèle :
 `architect-tools`, `architect-rag`, `architect-data`, `architect-memory`.
-**Tu ne les écris pas toi-même** — tu fixes le périmètre.
+**Tu ne les écris pas toi-même** — tu fixes le périmètre. N'annonce au §6
+que les contrats qui seront produits : `validate-topology` exige chaque
+fichier listé. Pas de ligne `memory` pour une mémoire courte seule
+(`sliding-window` / `none`, sans long terme ni état partagé entre agents) —
+`/sdda-topology` ne lance alors pas `architect-memory`, et `ir.memory` porte
+la fenêtre depuis STACK.md ; pas de ligne `retrieval` sans RAG.
 
 ---
 

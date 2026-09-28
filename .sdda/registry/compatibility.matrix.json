@@ -88,6 +88,7 @@
       "csharp": {
         "fiches": [
           "backend/dotnet-minimalapi",
+          "dataaccess/declared-sources",
           "dataaccess/view-per-agent-dotnet",
           "eval/xunit-eval",
           "framework/ms-agent-framework",
@@ -99,7 +100,7 @@
           "tools/mcp-dotnet",
           "vectorstore/pgvector-dotnet"
         ],
-        "note": "Pile C1 complète en .NET 10 : RAG hybride (rag/hybrid-dotnet + vectorstore/pgvector-dotnet), accès base par vues (dataaccess/view-per-agent-dotnet), MCP, eval xUnit v3 (JUnit pour G3), OTel GenAI écrivant le JSONL du framework, CLI et HTTP en un seul projet plat. Combo C1-NET. Aucun générateur de squelette C# : dev-backend l'écrit depuis les fiches ; les guardrails n'ont de code de référence qu'en Python."
+        "note": "Pile C1 complète en .NET 10 : RAG hybride (rag/hybrid-dotnet + vectorstore/pgvector-dotnet), accès base par vues (dataaccess/view-per-agent-dotnet), MCP, eval xUnit v3 (JUnit pour G3), OTel GenAI écrivant le JSONL du framework, CLI et HTTP en un seul projet plat. Combo C1-NET. Accès aux sources déclarées (fichiers) par le runtime C# que génère gen-source-tools (dataaccess/declared-sources §3.11), combo SOURCES-NET. Aucun générateur de squelette C# : dev-backend l'écrit depuis les fiches ; les guardrails n'ont de code de référence qu'en Python."
       },
       "typescript": {
         "fiches": [
@@ -423,6 +424,50 @@
       "validatedAt": null,
       "benchReportRef": null,
       "notes": "Pendant .NET de C1 : même schéma d'index, même CTE hybride, même contrat CLI (serving/cli.md §3.1-3.5) et même trace JSONL, pour que les runners jugent l'application par sa CLI (`--executor cli` = `dotnet run --project workspace/src/{AppName} --`). SDK officiel `Anthropic` (IChatClient) ; Voyage par client REST maison. Pins résolus conjointement et API compilées sur une sonde le 2026-09-26 — aucune application générée par le pipeline. Réserves : pas de générateur de squelette C# (dev-backend l'écrit), guardrails de référence en Python seulement, tests en VSTest (IsTestingPlatformApplication=false) sur le SDK .NET 10."
+    },
+    {
+      "id": "SOURCES-NET",
+      "label": "C# / .NET 10 + Microsoft Agent Framework, sources déclarées (fichiers), sans base, CLI",
+      "language": "csharp",
+      "framework": [
+        "ms-agent-framework"
+      ],
+      "orchestration": [
+        "single-agent",
+        "router",
+        "sequential"
+      ],
+      "rag": "none",
+      "vectorstore": "none",
+      "embedding": "none",
+      "rerank": "none",
+      "dataaccess": "declared-sources",
+      "database": "none",
+      "tools": [
+        "mcp-dotnet"
+      ],
+      "memory": "buffer",
+      "eval": "xunit-eval",
+      "observability": "otel-genai-dotnet",
+      "serving": "cli-dotnet",
+      "provider": [
+        "anthropic",
+        "google"
+      ],
+      "archi": "mvc",
+      "backend": "none",
+      "deliverable": "cli-exe",
+      "apiFramework": "none",
+      "apiAuth": "none",
+      "guardrails": [
+        "injection-detection",
+        "schema-validation"
+      ],
+      "status": "untested",
+      "slaCommitment": false,
+      "validatedAt": null,
+      "benchReportRef": null,
+      "notes": "Pendant .NET de SOURCES : même registre résolu (sources.json), mêmes schémas figés, mêmes contrats. Le code d'accès (data/, tools/) est généré par gen-source-tools depuis .sdda/templates/runtime/csharp/, compilé et exercé sur une sonde (SDK 10.0.301, AnalysisLevel latest-all) le 2026-09-28 — aucune application générée par le pipeline encore. Formats object/array/jsonl/csv/tsv ; xlsx et parquet refusés au générateur. Google via son API compatible OpenAI (Microsoft.Agents.AI.OpenAI)."
     },
     {
       "id": "C1-TS",

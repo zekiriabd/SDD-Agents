@@ -608,3 +608,15 @@ def test_the_cli_accepts_the_scope(sources_project: Path) -> None:
     code, out = run_main(gst.main, ["--root", str(sources_project), "--write", "--scope", "contracts", "--json"])
     assert code == 0, out
     assert json.loads(out)["data"]["scope"] == "contracts"
+
+
+def test_search_contract_never_points_to_a_count_tool_that_is_not_generated(sources_project: Path) -> None:
+    """Premier run C# : le roster ne câblait pas `count`, et le contrat de `search` y renvoyait."""
+    ctx = gst.Context(sources_project, mission="1")
+    src = ctx.registry.sources["order_tracking"]
+    schema = json.loads((sources_project / SCHEMAS / "order_tracking.schema.json").read_text(encoding="utf-8"))
+    ctx.planned_kinds = {"order_tracking": {"lookup", "search"}}
+    without = gst.render_contract(ctx, "order_tracking", src, schema, "search")
+    assert "outil `count`" not in without and "page tronquée" in without
+    ctx.planned_kinds = {"order_tracking": {"lookup", "search", "count"}}
+    assert "outil `count`" in gst.render_contract(ctx, "order_tracking", src, schema, "search")

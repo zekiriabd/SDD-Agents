@@ -175,6 +175,12 @@ flowchart TD
 | retrieval | `workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md` |
 | memory | `workspace/pipeline/contracts/memory/{n}-memory.md` |
 
+> Une ligne par contrat qui SERA produit, et elle seule : `validate-topology` exige
+> chaque fichier listé. `retrieval` n'existe que si `## Active RAG Pattern` ≠ none ;
+> `memory` que si `/sdda-topology` STEP 5 lance `architect-memory` (`LongTermEnabled: true`,
+> `ShortTermPolicy` ∈ {summarize-over, hybrid}, ou état partagé entre ≥ 2 agents). Une
+> fenêtre glissante seule n'a pas de contrat : `ir.memory` la porte depuis STACK.md.
+
 ---
 
 ## 7. Handoffs

@@ -382,9 +382,17 @@ def validate_traceability(mission: MissionSpec, caps: list[CapSpec], config: Lay
 
     # L'objectif chiffré se mesure sur la sortie du système : un `exact` y
     # compare aussi le texte libre qu'une CAP exige.
+    # `Fields:` (gabarit de MISSION) restreint la comparaison, et c'est ce que
+    # lit `ir_compiler` pour le grader d'acceptation : l'ignorer ici rendait
+    # rouge un objectif que G8 mesure correctement. Seul un champ texte libre
+    # NOMMÉ dans `Fields:` (ou l'absence de `Fields:`) reste un 0.0 assuré.
     goal_grader = ((mission.goal.get("Grader") or "").split() or [""])[0].strip("`*,;:.").lower()
     if goal_grader == "exact":
         free = sorted({f for cap in caps for f in free_text_required(output_schema(cap))})
+        declared_fields = str(mission.goal.get("Fields") or "")
+        if declared_fields.strip() and not markdown_io.is_placeholder(declared_fields):
+            named = {f.strip("`*. ") for f in re.split(r"[,\s]+", declared_fields) if f.strip("`*. ")}
+            free = [f for f in free if f in named]
         if free:
             report.error("AC_NOT_EVALUABLE",
                          f"MISSION {mission.id} : Quantified Goal `Grader: exact` compare la sortie ENTIÈRE, dont le "

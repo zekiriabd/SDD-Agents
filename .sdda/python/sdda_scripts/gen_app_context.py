@@ -280,7 +280,7 @@ def render_tree(root: Path, ctx: gas.Context) -> str:
 RULES = """\
 - **L'IR est la source close.** Un agent, un outil ou une borne absent de l'IR n'existe pas : le signaler, ne pas l'ajouter.
 - **Aucun prompt inline.** Un prompt vit dans `prompts/{agent}.system.md`, chargé par hash.
-- **Aucune lecture de `.env`** (`[SECRET_READ_FORBIDDEN]`) : le code lit des NOMS de variables, via `config.py`.
+- **Aucune lecture de `.env`** (`[SECRET_READ_FORBIDDEN]`) : le code lit des NOMS de variables, via la configuration de la coquille (`app/config.py` en Python, `AppOptions` en C#).
 - **Ce qui juge est hors d'atteinte** : `workspace/pipeline/{datasets,suites,baselines,calibration,fixtures}/` et `prompts/`, `skills/`, `rules/` ne s'écrivent par aucun `dev-*`.
 - **Écrire dans SA couche seulement** (tableau §2) ; un besoin chez le voisin se dit dans la sortie, il ne s'écrit pas.
 - **Toute borne est en code** (itérations, appels d'outil, délai, budget) — jamais dans le prompt seul."""

@@ -15,7 +15,8 @@ Trois modes, trois moments :
                           écrit un brouillon de schéma que l'on RELIT.
                           N'écrase jamais un schéma existant sans --force.
     --write               à chaque changement de déclaration : réécrit les
-                          wrappers Python, crée les contrats manquants.
+                          wrappers (Python ou C#, selon la stack de langage)
+                          et leur runtime, crée les contrats manquants.
                           Ne touche jamais à un contrat existant (il est
                           complété par architect-tools et dev-prompt).
     --check               en CI, le défaut : régénère en mémoire et compare.
@@ -64,6 +65,19 @@ from sdda_scripts._common import add_common_args, ensure_utf8_stdout, finish, re
 DECLARED = "declared-sources"
 BANNER = "GÉNÉRÉ par gen_source_tools.py — NE PAS ÉDITER."
 
+#: Les langages dont ce générateur écrit le CODE (wrappers + runtime `data/` et
+#: `tools/`) : langage -> suffixe des fichiers émis. Les CONTRATS, le registre
+#: résolu et les schémas figés ne dépendent d'aucun langage — `--scope contracts`
+#: et `--infer` servent tous les projets.
+CODE_LANGUAGES: dict[str, str] = {"python": ".py", "csharp": ".cs"}
+
+#: Formats sans lecteur dans le runtime d'un langage. Refusés AVANT le build :
+#: sinon la source passerait G2 et échouerait au premier appel, en production.
+UNREADABLE_FORMATS: dict[str, frozenset[str]] = {"csharp": frozenset({"xlsx", "parquet"})}
+
+#: Le jeton que le runtime C# porte à la place de l'espace de noms racine.
+APP_TOKEN = "{AppName}"
+
 #: JSON Schema -> annotation Python du modèle généré.
 PY_TYPES = {
     "string": "str", "integer": "int", "number": "float", "boolean": "bool",
@@ -106,6 +120,22 @@ SIGNALED_STATES: dict[str, dict[str, tuple[str, str]]] = {
 }
 
 
+def signaled_states(ctx: Any, source_id: str, kind: str) -> dict[str, tuple[str, str]]:
+    """Les états rendus de `kind`, sans renvoyer vers un outil que la génération ne produit pas.
+
+    Premier run C# : le roster ne câblait que `lookup` et `search`, et le contrat
+    de `search` disait « compter avec l'outil `count` » — un outil absent de
+    l'IR, que `dev-prompt` a dû refuser de citer.
+    """
+    states = dict(SIGNALED_STATES[kind])
+    kinds = getattr(ctx, "planned_kinds", {}).get(source_id)
+    if kind == "search" and kinds is not None and "count" not in kinds:
+        when, _ = states["truncated: true"]
+        states["truncated: true"] = (when, "affiner les filtres avant de conclure ; ne jamais annoncer un total "
+                                           "depuis une page tronquée")
+    return states
+
+
 def declared_errors(kind: str, src: dict[str, Any]) -> dict[str, tuple[str, str]]:
     """Une lecture par clé ne lève `INVALID_FILTER` que si la source exige une identité."""
     errors = dict(DECLARED_ERRORS[kind])
@@ -128,6 +158,8 @@ class Context:
         self.mission = mission or self._detect_mission()
         self.mission_name = self._mission_name()
         self.src_root = src_root or paths.app_src_root(root, self.app)
+        languages = active_stacks(root, "Active Language & Runtime")
+        self.language = languages[0] if languages else "python"
 
     def _detect_mission(self) -> str:
         found = sorted(p.name.split("-", 1)[0] for p in paths.missions_dir(self.root).glob("*-*.md"))
@@ -151,7 +183,13 @@ class Context:
         return f"{self.mission}-{source_id.replace('_', '-')}-{kind}"
 
     def wrapper_path(self, source_id: str, kind: str) -> Path:
+        if self.language == "csharp":
+            return self.tools_dir() / f"{csharp_class_name(source_id, kind)}.cs"
         return self.tools_dir() / f"{source_id}_{kind}.py"
+
+    @property
+    def suffix(self) -> str:
+        return CODE_LANGUAGES.get(self.language, ".py")
 
     def schema_path(self, source_id: str) -> Path:
         # À côté des wrappers, dans le paquet : c'est là que `schema_guard`
@@ -672,6 +710,107 @@ def _docstring(src: dict[str, Any], kind: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Rendu — wrappers C#
+# ---------------------------------------------------------------------------
+def csharp_class_name(source_id: str, kind: str) -> str:
+    """`order_tracking` + `lookup` -> `OrderTrackingLookup` (le nom du fichier ET de la classe)."""
+    parts = [p for p in re.split(r"[^0-9A-Za-z]+", f"{source_id}_{kind}") if p]
+    return "".join(p[:1].upper() + p[1:] for p in parts)
+
+
+def _cs_string(value: str) -> str:
+    """Littéral C# régulier : `\\` et `"` échappés, contrôles en `\\uXXXX`."""
+    out = []
+    for ch in value:
+        if ch in ('"', "\\"):
+            out.append("\\" + ch)
+        elif ord(ch) < 0x20:
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
+
+
+def _cs_raw(text: str, indent: str) -> str:
+    """Littéral brut multiligne : délimiteur plus long que la plus longue suite de `"` du texte."""
+    longest = max((len(m) for m in re.findall(r'"+', text)), default=0)
+    fence = '"' * max(3, longest + 1)
+    body = "\n".join(indent + line if line else line for line in text.split("\n"))
+    return f"{fence}\n{body}\n{indent}{fence}"
+
+
+def _cs_set(values: list[str]) -> str:
+    inner = ", ".join(_cs_string(v) for v in values)
+    return f"new HashSet<string>(StringComparer.Ordinal) {{ {inner} }}" if values \
+        else "new HashSet<string>(StringComparer.Ordinal)"
+
+
+def _xml_text(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def render_wrapper_csharp(ctx: Context, source_id: str, src: dict[str, Any], schema: dict[str, Any],
+                          kind: str) -> str:
+    """Le wrapper C# d'UN outil : sa définition (depuis le contrat) et sa porte d'appel.
+
+    Pas de record d'entrée typé : le schéma d'entrée est celui du § 2 du contrat,
+    rendu tel quel, et `InputValidator` l'applique à l'appel. Un record C# en
+    aurait dérivé un SECOND schéma — celui que `AIFunctionFactory` aurait
+    montré au modèle — sans `pattern`, sans `enum`, et divergent au premier
+    renommage. Ici le modèle voit le contrat, octet pour octet.
+    """
+    max_rows = ctx.envelope_int("SourceMaxRecordsReturned", 200)
+    input_schema, _ = _tool_schemas(src, schema, kind, max_rows)
+    name = csharp_class_name(source_id, kind)
+    store_id = str(src.get("store") or "")
+    connector = str(src.get("connector") or "")
+    pii = sorted(str(f) for f in (src.get("pii") or []))
+    untrusted = sorted(str(f) for f in (src.get("free_text") or []))
+    summary = _xml_text(_docstring(src, kind).replace("\\\\", "\\"))
+    schema_json = json.dumps(input_schema, ensure_ascii=False, indent=2, sort_keys=True)
+    lines = [
+        "// <auto-generated>",
+        f"// {BANNER}",
+        f"// Source `{source_id}` ({connector} · store `{store_id}`) · confiance : {sr.source_trust(src)}.",
+        f"// Schéma figé : {paths.rel(ctx.root, ctx.schema_path(source_id))}",
+        "// Éditer ce fichier est [DATA_TOOL_HAND_EDITED] : corriger la DÉCLARATION de la",
+        "// source, puis `gen_source_tools.py --write`. Le code et la déclaration ne peuvent",
+        "// pas diverger sans que quelqu'un s'en aperçoive — c'est tout l'intérêt.",
+        "// </auto-generated>",
+        "#nullable enable",
+        "",
+        "using System.Text.Json;",
+        f"using {ctx.app}.Tools;",
+        "",
+        f"namespace {ctx.app}.Data.Tools;",
+        "",
+        f"/// <summary>{summary}</summary>",
+        f"public static class {name}",
+        "{",
+        "    /// <summary>Classe d'effet de bord de CE code — confrontée au contrat par la TOOL GATE.",
+        "    /// Une source déclarée est en lecture seule par construction (declared-sources).</summary>",
+        '    public const string SideEffectClass = "read-only";',
+        "",
+        "    public static DataToolDefinition Definition { get; } = new()",
+        "    {",
+        f"        ContractId = {_cs_string(ctx.contract_id(source_id, kind))},",
+        f"        Name = {_cs_string(f'{source_id}_{kind}')},",
+        f"        SourceId = {_cs_string(source_id)},",
+        f"        Kind = {_cs_string(kind)},",
+        "        SideEffectClass = SideEffectClass,",
+        f"        InputSchemaJson = {_cs_raw(schema_json, '            ')},",
+        f"        PiiFields = {_cs_set(pii)},",
+        f"        UntrustedFields = {_cs_set(untrusted)},",
+        "    };",
+        "",
+        "    public static Task<ToolResult> InvokeAsync(JsonElement arguments, ToolContext context, CancellationToken cancellationToken) =>",
+        "        DataTool.InvokeAsync(Definition, arguments, context, cancellationToken);",
+        "}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # Rendu — squelettes de tool-contract
 # ---------------------------------------------------------------------------
 def _tool_schemas(src: dict[str, Any], schema: dict[str, Any], kind: str,
@@ -757,7 +896,7 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
     )
     states = "\n".join(
         f"| `{field}` | {when} | {behavior} |"
-        for field, (when, behavior) in SIGNALED_STATES[kind].items()
+        for field, (when, behavior) in signaled_states(ctx, source_id, kind).items()
     )
     body = [
         f"# TOOL CONTRACT: {contract_id}",
@@ -1095,11 +1234,16 @@ def render_tool_specs(ctx: Context, report: Report, only: str | None) -> dict[st
 
 def emit_runtime(ctx: Context, report: Report, *, write: bool,
                  only: str | None = None) -> tuple[list[str], list[str]]:
-    """Copie le runtime et écrit `sources.json`. Rend `(écrits, divergents)`."""
-    source_dir = runtime_dir(ctx.root, "python")
+    """Copie le runtime et écrit `sources.json`. Rend `(écrits, divergents)`.
+
+    Le runtime C# porte `{AppName}` à la place de l'espace de noms racine : il
+    est substitué ici, et c'est la seule différence entre le gabarit et le
+    fichier émis — `--check` compare donc au gabarit substitué.
+    """
+    source_dir = runtime_dir(ctx.root, ctx.language)
     if not source_dir.is_dir():
         report.error("DATA_RUNTIME_MISSING", f"runtime introuvable ({source_dir})",
-                     fix="restaurer `.sdda/templates/runtime/python/`")
+                     fix=f"restaurer `.sdda/templates/runtime/{ctx.language}/`")
         return [], []
 
     written: list[str] = []
@@ -1114,9 +1258,12 @@ def emit_runtime(ctx: Context, report: Report, *, write: bool,
     # que ses outils de données, et `--check` la réclamerait ensuite à chaque
     # passage.
     for subtree in RUNTIME_SUBTREES:
-        for path in sorted((source_dir / subtree).rglob("*.py")):
+        for path in sorted((source_dir / subtree).rglob(f"*{ctx.suffix}")):
             relative = path.relative_to(source_dir)
-            targets.append((ctx.src_root / relative, markdown_io.read_text(path)))
+            text = markdown_io.read_text(path)
+            if ctx.language == "csharp":
+                text = text.replace(APP_TOKEN, ctx.app)
+            targets.append((ctx.src_root / relative, text))
 
     registry_json = json.dumps(render_registry(ctx, report), ensure_ascii=False,
                                indent=2, sort_keys=True) + "\n"
@@ -1161,13 +1308,26 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
     do_contracts = scope in ("all", "contracts")
 
     planned_items = planned(ctx, report, only)
+    ctx.planned_kinds = {}
+    for source_id, _, kind in planned_items:
+        ctx.planned_kinds.setdefault(source_id, set()).add(kind)
     for source_id, src, kind in planned_items:
         schema = load_frozen(ctx, source_id, report)
         if schema is None:
             continue
         names = list((schema.get("properties") or {}).keys()) + [str(src.get("key") or "")] + \
             [str(f) for f in (src.get("filters") or [])] + [str(f) for f in (src.get("ranges") or [])]
-        bad = invalid_field_names(n for n in names if n)
+        # Les champs deviennent des identifiants en PYTHON (modèles pydantic) ;
+        # le wrapper C# les garde en clés JSON, qui acceptent tout nom.
+        bad = invalid_field_names(n for n in names if n) if ctx.language == "python" else []
+        fmt = str(src.get("format") or "").strip().lower()
+        if do_code and fmt in UNREADABLE_FORMATS.get(ctx.language, frozenset()):
+            report.error(
+                "STACK_VALUE_UNIMPLEMENTED",
+                f"source `{source_id}` : `format: {fmt}` n'a pas de lecteur dans le runtime `{ctx.language}`",
+                fix="exporter la source en csv, json ou jsonl à l'ingestion, puis ré-inférer le schéma figé",
+                location="workspace/stack/STACK.md ## Active Data Sources")
+            continue
         if bad:
             # Refusé, jamais « corrigé » en silence : un champ `1st` ou
             # `Order ID` produisait un wrapper qui ne compilait pas — et on le
@@ -1180,7 +1340,8 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
                 location=paths.rel(ctx.root, ctx.schema_path(source_id)))
             continue
         if do_code:
-            wrapper = render_wrapper(ctx, source_id, src, schema, kind)
+            wrapper = (render_wrapper_csharp if ctx.language == "csharp" else render_wrapper)(
+                ctx, source_id, src, schema, kind)
             wpath = ctx.wrapper_path(source_id, kind)
             rel = paths.rel(ctx.root, wpath)
 
@@ -1277,11 +1438,12 @@ def _orphan_wrappers(ctx: Context, planned_items: list[tuple[str, dict[str, Any]
         return []
     expected = {ctx.wrapper_path(s, k).name for s, _, k in planned_items}
     out: list[Path] = []
-    for path in sorted(directory.glob("*.py")):
+    for path in sorted(directory.glob(f"*{ctx.suffix}")):
         if path.name in expected or path.name == "__init__.py":
             continue
         try:
-            head = path.read_text(encoding="utf-8", errors="replace").split("\n", 1)[0]
+            # Première ligne en Python, deuxième en C# (sous `// <auto-generated>`).
+            head = "\n".join(path.read_text(encoding="utf-8", errors="replace").split("\n", 2)[:2])
         except OSError:
             continue
         if BANNER in head:
@@ -1369,18 +1531,20 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
         report.error("STACK_MISSING", "STACK.md introuvable", fix="lancer `python bootstrap.py`")
         return report
 
-    # Le code généré (wrappers pydantic, runtime `data/` et `tools/`) est du
-    # PYTHON. Sans ce garde, un projet C# en `declared-sources` recevait des
+    # Le CODE généré (wrappers, runtime `data/` et `tools/`) n'existe qu'en
+    # Python et en C#. Sans ce garde, un projet d'un autre langage recevait des
     # `.py` dans `src/{App}/data/` à la PHASE 3, et l'échec n'apparaissait qu'à
-    # la compilation — ou jamais, si rien ne les importait.
+    # la compilation — ou jamais, si rien ne les importait. Les contrats et le
+    # schéma figé, eux, ne dépendent d'aucun langage.
     languages = active_stacks(root, "Active Language & Runtime")
-    if mode != "infer" and (not languages or languages[0] != "python"):
+    language = languages[0] if languages else "<aucune>"
+    if mode != "infer" and scope != "contracts" and language not in CODE_LANGUAGES:
         report.error(
             "STACK_LANGUAGE_MISMATCH",
-            f"`## Active Language & Runtime` active `{languages[0] if languages else '<aucune>'}` : "
-            "ce générateur n'écrit que du Python",
-            fix="le schéma figé (`--infer`) reste utilisable ; les outils d'accès du langage actif sont "
-                "écrits par `dev-data` depuis les contrats, en attendant un générateur de ce langage",
+            f"`## Active Language & Runtime` active `{language}` : ce générateur écrit le code en "
+            f"{' et '.join(sorted(CODE_LANGUAGES))} seulement",
+            fix="`--infer` et `--scope contracts` restent utilisables ; les outils d'accès du langage actif sont "
+                "écrits par `dev-data` depuis les contrats, en attendant un runtime de ce langage",
             location="workspace/stack/STACK.md ## Active Language & Runtime")
         return report
     if mission is not None and not re.fullmatch(r"\d+", str(mission).strip()):

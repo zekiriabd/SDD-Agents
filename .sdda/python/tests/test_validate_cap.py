@@ -76,6 +76,28 @@ def test_the_goal_graded_exact_on_free_text_is_rejected(project: Path) -> None:
     assert code == 1 and "Quantified Goal `Grader: exact`" in out
 
 
+def test_the_goal_fields_line_projects_the_exact_comparison(project: Path) -> None:
+    """`Fields:` (gabarit de MISSION, lu par `ir_compiler` pour G8) lève le renvoi — sauf s'il nomme le texte libre.
+
+    Premier run C# : l'objectif portait `Fields:` et G1 restait rouge, parce que
+    le contrôle ne lisait que `Grader:` — alors que G8 compare bien les seuls
+    champs listés.
+    """
+    cap = project / "workspace/pipeline/caps/1-1-ClassifyIntent.md"
+    text = cap.read_text(encoding="utf-8")
+    cap.write_text(text.replace(ENUM_OUTPUT, FREE_TEXT_OUTPUT)
+                   .replace("  - runs: 5\n", "  - runs: 5\n  - fields: intent\n", 1), encoding="utf-8")
+    mission = project / "workspace/pipeline/missions/1-SupportAssistant.md"
+    original = mission.read_text(encoding="utf-8")
+    mission.write_text(original.replace("- Grader: exact\n", "- Grader: exact\n- Fields: intent\n", 1), encoding="utf-8")
+    code, out = _gate(project)
+    assert "Quantified Goal `Grader: exact`" not in out, out
+    mission.write_text(original.replace("- Grader: exact\n", "- Grader: exact\n- Fields: intent, message\n", 1),
+                       encoding="utf-8")
+    code, out = _gate(project)
+    assert code == 1 and "Quantified Goal `Grader: exact`" in out and "['message']" in out
+
+
 def test_one_dataset_read_with_incompatible_expected_shapes_is_rejected(project: Path) -> None:
     """Premier run réel : `schema` (objet) et `regex` (motif) sur le même fichier."""
     cap = project / "workspace/pipeline/caps/1-2-ExplainInvoiceLine.md"

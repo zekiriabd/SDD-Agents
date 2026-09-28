@@ -144,8 +144,9 @@ def test_minor_a_description_ending_with_a_backslash_still_compiles() -> None:
     ast.parse(code)
 
 
-def test_minor_gen_source_tools_refuses_a_non_python_project(runtime: Runtime) -> None:
-    patch(runtime.project, "workspace/stack/STACK.md", ".sdda/stacks/lang/python.md", ".sdda/stacks/lang/csharp.md")
+def test_minor_gen_source_tools_refuses_a_language_without_runtime(runtime: Runtime) -> None:
+    # Python et C# ont leur runtime (tests/test_gen_source_tools_csharp.py) ; Kotlin non.
+    patch(runtime.project, "workspace/stack/STACK.md", ".sdda/stacks/lang/python.md", ".sdda/stacks/lang/kotlin.md")
     report = gst.run(runtime.project, mode="write")
     assert any(f.cls == "STACK_LANGUAGE_MISMATCH" for f in report.findings), report.render_text()
 

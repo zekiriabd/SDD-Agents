@@ -97,6 +97,24 @@ _NATIVE_INTERPOLATION_RE: dict[str, re.Pattern[str]] = {
     "java": re.compile(r'"[^"\n]*\b(?:select|insert|update|delete|with|merge)\b[^"\n]*"\s*\+\s*[A-Za-z_(]'
                        r'|String\.format\(\s*"[^"\n]*\b(?:select|insert|update|delete)\b', re.I),
 }
+#: Déclarations de fonction ou de méthode, par langage — ce que `facts.functions`
+#: porte pour Python (`def`). Sans elles, l'enveloppe unique d'un runtime C#
+#: (`LookupRecord`, `SearchRecords`, `CountRecords`) passait pour absente.
+_NATIVE_FUNCTION_RE: dict[str, re.Pattern[str]] = {
+    "csharp": re.compile(r"^\s*(?:(?:public|private|internal|protected|static|async|sealed|override|virtual)\s+)+"
+                         r"[\w<>\[\](),.?\s]+?\s([A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\(", re.M),
+    "typescript": re.compile(r"\bfunction\s+([A-Za-z_$][\w$]*)|^\s*(?:export\s+)?(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*[:{]", re.M),
+    "kotlin": re.compile(r"\bfun\s+(?:<[^>]*>\s*)?([A-Za-z_]\w*)\s*\("),
+    "java": re.compile(r"^\s*(?:(?:public|private|protected|static|final)\s+)+[\w<>\[\],.?\s]+?\s([A-Za-z_]\w*)\s*\(", re.M),
+}
+#: Écritures sur disque hors Python : ouvertures en écriture, suppressions, déplacements.
+_NATIVE_WRITE_RE: dict[str, re.Pattern[str]] = {
+    "csharp": re.compile(r"\bFile\.(?:Write\w*|Append\w*|Create\w*|Delete|Move|Copy|Replace|Open(?=\([^)]*FileMode\.(?:Create|Append|Truncate|OpenOrCreate|CreateNew)))\s*\("
+                         r"|\bDirectory\.(?:Delete|Move|CreateDirectory)\s*\(|\bFileAccess\.(?:Read)?Write\b|\bnew\s+StreamWriter\s*\("),
+    "typescript": re.compile(r"\b(?:fs\.)?(?:writeFile|appendFile|unlink|rm|rmdir|rename|copyFile|mkdir|createWriteStream)(?:Sync)?\s*\("),
+    "kotlin": re.compile(r"\.(?:writeText|writeBytes|appendText|delete|deleteRecursively|renameTo|copyTo)\s*\(|\bFiles\.(?:write\w*|delete\w*|move|copy|create\w*)\s*\("),
+    "java": re.compile(r"\bFiles\.(?:write\w*|delete\w*|move|copy|create\w*)\s*\(|\bnew\s+File(?:Output\w*|Writer)\s*\("),
+}
 _IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 RETRY_LIBS = frozenset({"tenacity", "backoff", "retrying"})
@@ -268,6 +286,13 @@ def scan_native(facts: Facts, rel: str, text: str, language: str) -> None:
             facts.imports.setdefault(".".join(parts[:k]), rel)
     for m in _NATIVE_INTERPOLATION_RE[language].finditer(text):
         facts.interpolated.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1}")
+    for m in _NATIVE_FUNCTION_RE[language].finditer(text):
+        name = next((g for g in m.groups() if g), "")
+        if name:
+            facts.functions.setdefault(_CAMEL_RE.sub("_", name).lower(), rel)
+    for m in _NATIVE_WRITE_RE[language].finditer(text):
+        line = text.count(chr(10), 0, m.start()) + 1
+        facts.file_writes.append(f"{rel}:{line} {m.group(0).strip()}")
 
 
 def collect(root: Path, data_dir: Path) -> tuple[Facts, dict[str, str]]:

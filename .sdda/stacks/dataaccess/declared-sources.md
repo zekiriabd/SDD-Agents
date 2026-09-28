@@ -3,7 +3,7 @@
 Stack ID: dataaccess-declared-sources
 Status: Draft
 Validation: 🟡 design-phase — non encore validé par un run mesuré
-Languages: python
+Languages: python, csharp
 Scope: stratégie **DATA ACCESS** pour une surface de données **hétérogène et déclarée** — des fichiers (`json`, `jsonl`, `csv`, `tsv`, `xlsx`, `parquet`) sur un répertoire local, un partage réseau ou un stockage objet (S3 / Azure Blob / GCS), des **API HTTP** authentifiées, et des **outils MCP**. Un seul registre : `Stores[]` (où c'est, et avec quelles clés) + `Sources[]` (ce que c'est, et ce qu'on en expose), déclarés **inline** dans `STACK.md ## Active Data Sources` (versionné) — avec, en option, l'import d'un fichier de configuration MCP au format standard. Secrets **par noms de variables** dans un fichier `.env` gitignoré, jamais en clair. Schéma **inféré puis figé** par source, index déterministe, exposition en outils `read-only` typés, enveloppe de sûreté complète (frontières de racine, allowlist d'egress, timeout, plafonds, allowlists de stores et de sources, champs libres traités comme hostiles). Pas de `.libs.json` propre : `json`, `csv` et `sqlite3` sont dans la stdlib ; `openpyxl` (xlsx) et `pyarrow` (parquet) sont des ajouts optionnels au `.libs.json` du framework actif (§7.11).
 
 ---
@@ -79,11 +79,11 @@ volumétrie au-delà de §2.1 (→ une base, et `view-per-agent.md`).
 | **Stack ID** | `dataaccess-declared-sources` |
 | **Famille** | DATA ACCESS · lecture seule · sources hétérogènes déclarées · besoins connus et stables |
 | **Sources cibles** | fichiers (`json` / `jsonl` / `csv` / `tsv` / `xlsx` / `parquet`) sur `local` / `smb` / `nfs` / `s3` / `azure-blob` / `gcs` / `sftp` · API `http` · serveurs `mcp` |
-| **Client** | Python 3.12 · `json`, `csv` (stdlib) · `pydantic` 2.x pour les modèles générés · `httpx` pour le connecteur `http-api` · `mcp` pour le connecteur `mcp` · `openpyxl` / `pyarrow` **optionnels** (§7.11) |
+| **Client** | **Python 3.12** · `json`, `csv` (stdlib) · `pydantic` 2.x pour les modèles générés · `httpx` pour le connecteur `http-api` · `mcp` pour le connecteur `mcp` · `openpyxl` / `pyarrow` **optionnels** (§7.11) — **C# / .NET 10** · BCL seule (`System.Text.Json`, aucun paquet) · formats `object` / `array` / `jsonl` / `csv` / `tsv` ; `xlsx` et `parquet` refusés au générateur (§3.11) |
 | **`DatabaseType`** | `none` — cette stack **n'est pas** une base ; déclarer un `DatabaseType` non `none` en même temps est `[DATA_SOURCE_DB_CONFLICT]` |
 | **Déclaration** | `STACK.md ## Active Data Sources` → `Stores[]`, `Sources[]` inline, enveloppe `Source*` ; `SourceManifests[]` optionnel pour un `mcp.json` standard |
 | **Secrets** | `SourceSecretsFile` (défaut `.env`, **relatif à `workspace/src/{App}/`**), gitignoré ; les déclarations ne portent que des **noms** de variables (`*_env`) |
-| **Générateur** | `sdda_scripts/gen_source_tools.py` — lit stores + sources + schémas figés → wrappers Python + squelettes de tool-contracts. 0 token, aucun réseau. Trois modes : `--infer` (une fois, §3.8), `--write` (à chaque changement de déclaration), `--check` (défaut, en CI). |
+| **Générateur** | `sdda_scripts/gen_source_tools.py` — lit stores + sources + schémas figés → wrappers **du langage actif** (Python ou C#) + leur runtime `data/` et `tools/` + squelettes de tool-contracts. 0 token, aucun réseau. Trois modes : `--infer` (une fois, §3.8), `--write` (à chaque changement de déclaration), `--check` (défaut, en CI). |
 | **Validateur** | `sdda_scripts/validate_data_access.py` — enforcer de l'invariant `db-safety-envelope-present` pour cette stack. 0 token, aucun réseau, sans exécuter l'application. |
 
 ### 2.1 Domaine de validité
@@ -583,6 +583,60 @@ ou hôte), timeout, lecture, validation contre le schéma figé, troncature à
 `maxRows`, redaction des `pii`, enveloppe des `free_text`, émission du span, et
 **`as_of` toujours joint**.
 
+### 3.11 Le runtime C#
+
+Sur une stack `lang/csharp.md`, `gen_source_tools --write --scope code` émet le
+**même** runtime, porté en C# et tenu au même comportement : une seule enveloppe
+(`DataEnvelope.LookupRecord` / `SearchRecords` / `CountRecords`), les mêmes
+erreurs levées (`INVALID_FILTER`, `SOURCE_UNAVAILABLE`, `TIMEOUT`,
+`PATH_ESCAPE`, `DATA_SOURCE_SCHEMA_DRIFT`), les mêmes états rendus
+(`record: null`, `truncated`, `stale`, `as_of`), la même frontière de racine
+(liens refusés), le même garde de schéma figé avant la première réponse, la même
+enveloppe `<untrusted>` des champs `free_text`, les mêmes spans redigés
+(`data.lookup`, `data.search`, `data.count`). Espaces de noms :
+`{AppName}.Data`, `{AppName}.Data.Tools`, `{AppName}.Tools`.
+
+Deux différences, voulues :
+
+- **Pas de record d'entrée typé.** Le wrapper porte le schéma d'entrée du
+  contrat (§2) tel quel (`InputSchemaJson`), et `InputValidator` l'applique à
+  l'appel : `enum`, `pattern`, bornes de longueur, `additionalProperties: false`.
+  Un record C# passé à `AIFunctionFactory` aurait dérivé un SECOND schéma,
+  sans `pattern` ni `enum`, et c'est lui que le modèle aurait vu.
+- **Les fichiers portent `// <auto-generated>`.** Le code est généré et
+  invariant ; ses règles de qualité se vérifient dans le framework (sonde
+  compilée sous `AnalysisLevel latest-all`), pas dans chaque projet où un
+  `.editorconfig` local en déciderait autrement.
+
+```csharp
+// data/tools/OrdersLookup.cs — GÉNÉRÉ, ne pas éditer
+public static class OrdersLookup
+{
+    public const string SideEffectClass = "read-only";
+    public static DataToolDefinition Definition { get; } = new() { ContractId = "1-orders-lookup", Name = "orders_lookup", /* … */ };
+    public static Task<ToolResult> InvokeAsync(JsonElement arguments, ToolContext context, CancellationToken cancellationToken) => /* … */;
+}
+```
+
+**Câblage (composition, `dev-app` / `dev-agent`)** — le seul code à écrire :
+
+```csharp
+var registry = new ToolRegistry();
+registry.Register(OrdersLookup.Definition.Bind(() => new ToolContext(repoRoot) { RunId = runId, AgentId = agentId, Identity = identity, Span = emit }));
+registry.Grant("1-order-assistant", ["orders_lookup"]);
+// Puis, par outil de GetForAgent : un AIFunction dont Name, Description et JsonSchema
+// viennent de RegisteredTool (Spec.Name, Spec.Description, InputSchema), et dont
+// InvokeCoreAsync appelle tool.Invoke(argumentsJson, ct) et rend ToolResult.Content.
+```
+
+`ToolContext.BaseDirectory` est la racine contre laquelle se résolvent les
+`root` relatifs des stores (`workspace/assets` : la racine du dépôt).
+`ToolContext.DataDirectory` vaut par défaut `data/` à côté de l'exécutable :
+le `.csproj` (dev-backend) y copie `data/**/*.json` —
+`<None Include="data/**/*.json" CopyToOutputDirectory="PreserveNewest" />` —
+sans quoi `sources.json`, `tool_specs.json` et les schémas figés restent dans
+le dépôt et l'exécutable publié ne trouve aucune source.
+
 ---
 
 ## 4. Structure de fichiers générée
@@ -611,6 +665,18 @@ workspace/src/{AppName}/data/
 ├── schema_guard.py     # validation au démarrage contre les schémas figés (§3.8) ; fail-fast
 └── tools/
     └── {source_id}_{lookup|search|count}.py   # GÉNÉRÉ — Input/Record/Output + fonction outil
+
+C# (§3.11) — même rôle, fichier par type :
+workspace/src/{AppName}/data/
+├── schemas/  sources.json  tool_specs.json      # identiques au Python
+├── SourceRegistry.cs  SourceEnvelope.cs  StoreConfig.cs  SourceConfig.cs
+├── SourceIndex.cs  RecordLocation.cs  RecordReaders.cs  RecordValues.cs
+├── FrozenSchema.cs  SchemaGuard.cs  InputValidator.cs  DataTrust.cs
+├── DataEnvelope.cs     # LookupRecord / SearchRecords / CountRecords — la seule porte
+├── DataTool.cs  DataToolDefinition.cs  DataAccessException.cs  DataErrorCodes.cs
+└── tools/{SourceId}{Lookup|Search|Count}.cs      # GÉNÉRÉ — définition + InvokeAsync
+workspace/src/{AppName}/tools/
+└── ToolContext.cs  ToolSpec.cs  ToolSpecs.cs  ToolRegistry.cs  RegisteredTool.cs  ToolResult.cs  ToolException.cs
 
 workspace/pipeline/contracts/dataaccess/
 └── schemas/{source_id}.schema.json            # SCHÉMA FIGÉ — inféré une fois, relu, versionné, fait foi

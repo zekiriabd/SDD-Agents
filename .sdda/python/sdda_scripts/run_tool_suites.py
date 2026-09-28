@@ -360,6 +360,12 @@ def tool_code(app_dir: Path, tool: dict[str, Any], language: str = "python") -> 
             continue
         if wanted in _norm(path.stem):
             out.append(path)
+    # L'enveloppe C# générée (`gen-source-tools`) est la porte de chaque outil de
+    # données : qu'elle bouge, et tous leurs verdicts G3 sont périmés — comme
+    # `data/envelope.py` en Python.
+    envelope = app_dir / "data" / "DataEnvelope.cs"
+    if language == "csharp" and out and envelope.is_file() and any("data" in p.parts for p in out):
+        out.append(envelope)
     return out
 
 
