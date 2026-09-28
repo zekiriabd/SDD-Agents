@@ -52,13 +52,13 @@ Read **uniquement** :
   lui-même »). Ce fichier-là seulement, en lecture : pas tout `assets/`, et
   jamais un `.env` (`[SECRET_READ_FORBIDDEN]`). Sans lui, chaque valeur attendue
   serait une invention.
-- `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (`trustPosture`,
+- `workspace/.sys/.ir/views/{n}-qa-evals.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `agents[]` (`trustPosture`,
   `refusalPolicy`, `tools`), `retrievers[].gateThresholds`, `evaluation`, `traceability`.
 - `workspace/pipeline/contracts/**` — pour les trajectoires attendues, les erreurs
   d'outils, les modes de citation.
 - `workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl` **si présent** —
   brouillon de `architect-rag`, à reprendre ou refaire, jamais copié sans relecture.
-- `workspace/stack/STACK.md` — `## Active Eval Stack`, `## Project Config`
+- STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/qa-evals.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — `## Active Eval Stack`, `## Project Config`
   (`EvalRuns`, `EvalRunsCritical`, `EvalVarianceWarnPct`, `JudgeCalibrationMinKappa`,
   `JudgeCalibrationMinItems`, `HoldoutDisjointCheck`, `GoldenSetMinItems`,
   `HoldoutSetMinItems`, `AdversarialSetMinItems`), `## Runtime Models` (`JudgeModel`).

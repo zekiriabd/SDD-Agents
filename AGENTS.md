@@ -12,7 +12,7 @@ toute action** :
   hooks `.codex/hooks.json`.
 - **Gemini CLI** : `.gemini/GEMINI.md` (importé ci-dessous) ; commandes
   `.gemini/commands/*.toml` ; agents `.gemini/agents/` ; hooks `.gemini/settings.json`.
-- **Antigravity** : règles `.agents/rules/` (l'architecture, en parties) ;
+- **Antigravity** : règles `.agents/rules/` (la carte opératoire) ;
   skills `.agents/skills/` (`/sdda-…`) ; agents `.agents/agents/`.
 
 **Statut : expérimental.** Ces façades se compilent et sont vérifiées, mais

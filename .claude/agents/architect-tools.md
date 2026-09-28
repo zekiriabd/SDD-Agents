@@ -40,7 +40,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/pipeline/topology/{n}-topology.md` — section outils : liste, agent exposé, CAP exigeante.
 - `workspace/pipeline/caps/{n}-*-*.md` — pour les `inputs`/`outputs` et les `failure_behavior`.
-- `workspace/stack/STACK.md` — `## Active Tools & Integrations` (MCP servers,
+- STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/architect-tools.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — `## Active Tools & Integrations` (MCP servers,
   `trust`, `ExternalAPIs`, `idempotency`), `## Active Secrets` (**noms** seulement).
 - `.sdda/templates/tool-contract.template.md`.
 - `.sdda/stacks/tools/*.md` actifs — idiomes de transport, jamais recopiés dans le contrat.

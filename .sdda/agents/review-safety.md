@@ -38,7 +38,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte et les rapports des scans déterministes
 
 Read :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (`tools`, `trustPosture`,
+- `workspace/.sys/.ir/views/{n}-review-safety.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `agents[]` (`tools`, `trustPosture`,
   `refusalPolicy`, `bounds`), `tools[]` (`sideEffectClass`, `safetyStrategy`,
   `trust`), `dataAccess[].envelope`, `orchestration.edges`, `guardrails`.
 - `workspace/pipeline/missions/{n}-*.md ## Trust Boundaries` et `## Actors` — la liste

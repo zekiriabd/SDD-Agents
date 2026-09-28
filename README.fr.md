@@ -398,10 +398,10 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 <!--sdda:count commands-->11<!--/sdda:count--> commandes,
 <!--sdda:count invariants-->22<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->67<!--/sdda:count--> fiches de stack,
-<!--sdda:count classes-->444<!--/sdda:count--> classes d'erreur,
+<!--sdda:count classes-->446<!--/sdda:count--> classes d'erreur,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks et
-<!--sdda:count subcommands-->80<!--/sdda:count--> sous-commandes déterministes existent sur
-disque et sont testés (<!--sdda:count tests-->1863<!--/sdda:count--> fonctions de test).
+<!--sdda:count subcommands-->81<!--/sdda:count--> sous-commandes déterministes existent sur
+disque et sont testés (<!--sdda:count tests-->1878<!--/sdda:count--> fonctions de test).
 Aucun script cité par un prompt ne manque
 ([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
 n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en

@@ -166,10 +166,17 @@ def active_stack_values(root: Path) -> dict[str, list[str]]:
     qui n'est pas celui du spawn.
     """
     out: dict[str, list[str]] = {}
+    has_stack = paths.stack_md_path(root).is_file()
     for name, heading in STACK_PLACEHOLDERS.items():
         values = [v for v in active_stacks(root, heading) if v]
         if values:
             out[name] = values
+        elif has_stack:
+            # STACK.md présent, catégorie vide : AUCUNE fiche n'est active, donc
+            # aucune n'est à charger. L'élargir en `*` chargeait le catalogue
+            # entier de la catégorie — les quatre fiches MCP (73 Ko) dans le pack
+            # de `dev-tools` d'un projet qui n'active aucun outil MCP.
+            out[name] = []
     # `{memoryfile}` : le fichier de contexte de l'application générée
     # (`workspace/src/{App}/{memoryfile}`), nommé comme le harnais actif le
     # charge (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`). Sans lui, le motif
@@ -189,7 +196,9 @@ def substitute_all(pattern: str, *, mission: str | None, target: str | None, obj
     patterns = [pattern]
     for name, values in sorted((stack or {}).items()):
         token = "{" + name + "}"
-        if values and any(token in p for p in patterns):
+        if any(token in p for p in patterns):
+            # `[]` : catégorie déclarée vide dans STACK.md -> le motif ne désigne
+            # rien (cf. `active_stack_values`), il ne s'élargit pas.
             patterns = [p.replace(token, value) for p in patterns for value in values]
 
     resolved: list[str] = []
@@ -285,6 +294,47 @@ def layer_of(entry: Any, pattern: str) -> str:
         if pattern.startswith(prefix):
             return layer
     return "volatile"
+
+
+def harness_injected(root: Path, agent: str) -> list[tuple[str, Path]]:
+    """Les fichiers que le harnais actif charge dans l'agent sans `Read` explicite.
+
+    `harness:memory` — le fichier mémoire de la façade (`.claude/CLAUDE.md`…),
+    injecté dans chaque session et chaque sous-agent ; `harness:agent` — la
+    façade compilée de l'agent, son prompt système. Tous deux sont renvoyés au
+    modèle à chaque tour : ils font partie du contexte au même titre qu'un
+    `reads:`. Façade non construite : rien à compter, rien d'inventé.
+    """
+    try:
+        from sdda_admin.harness_build import ADAPTERS  # import tardif : sdda_admin dépend de sdda_scripts
+        from sdda_lib.layered_config import active_harness
+    except ImportError:
+        return []
+    adapter = ADAPTERS.get(active_harness(root) or "claude-code")
+    if adapter is None or not adapter.out_dir:
+        return []
+    facade = root / adapter.out_dir
+    out: list[tuple[str, Path]] = []
+    memory = facade / harness_memory_file(root)
+    if memory.is_file():
+        out.append(("harness:memory", memory))
+    out.extend(("harness:agent", p) for p in sorted((facade / "agents").glob(f"{agent}.*")) if p.is_file())
+    return out
+
+
+def _stale_ir_view(path: Path) -> str:
+    """'' si la vue dérive de l'IR courante ; sinon la raison, en clair."""
+    from sdda_lib import ir_views
+
+    try:
+        declared = json.loads(path.read_text(encoding="utf-8")).get("view", {}).get("sourceIrHash")
+    except (OSError, ValueError, AttributeError):
+        return "illisible"
+    number = path.name.split("-", 1)[0]
+    ir_path = path.parent.parent / f"{number}-system.ir.json"
+    if not ir_path.is_file():
+        return f"sans IR source ({ir_path.name} absent)"
+    return "" if declared == ir_views.source_hash_of(ir_path) else "dérive d'une IR précédente"
 
 
 def read_entries(loader: dict[str, Any], agent: str) -> list[tuple[str, Any]]:
@@ -400,10 +450,20 @@ def resolve_context(
     res = Resolution(agent=agent, model_tier=str(spec.get("model_tier") or "balanced"), budget_bytes=int(spec.get("budget_bytes") or 0))
     stack = active_stack_values(root)
     seen: set[str] = set()
+    # Ce que le HARNAIS injecte avant toute lecture : son fichier mémoire et la
+    # façade de l'agent (son prompt système). Absents du décompte, ils rendaient
+    # un budget « tenu » pour un contexte qui ne l'était pas — et c'était la
+    # part la plus lourde : 60 Ko de fichier mémoire dans chaque sous-agent.
+    for label, path in harness_injected(root, agent):
+        rel = _source_ref(root, path)
+        seen.add(rel)
+        res.files.append(ResolvedFile(pattern=label, path=rel, layer="stable", bytes=path.stat().st_size))
     for pattern, entry in read_entries(loader, agent):
         files, widened = expand(root, pattern, mission=mission, target=target, obj=obj, stack=stack)
         res.widened.extend(widened)
         if not files:
+            if not substitute_all(pattern, mission=mission, target=target, obj=obj, stack=stack)[0]:
+                continue  # catégorie de stack vide dans STACK.md : rien d'actif, rien de manquant
             res.missing.append(pattern)
             continue
         layer = layer_of(entry, pattern)
@@ -428,6 +488,15 @@ def resolve_context(
         if not state["fresh"]:
             report.error("PACK_UNUSABLE", f"agent `{agent}` : pack `{resolved}` {state['reason']}",
                          f"reconstruire : python .sdda/sdda.py context-pack build --agent {agent}", resolved)
+
+    # Une vue d'IR périmée décrit une IR qui n'existe plus : même sort qu'un
+    # pack périmé, refusée au spawn (le hook `preflight_agent_budget` passe ici).
+    for f in res.files:
+        if "/.ir/views/" in f.path:
+            stale = _stale_ir_view(root / f.path)
+            if stale:
+                report.error("IR_VIEW_STALE", f"agent `{agent}` : vue `{f.path}` {stale}",
+                             f"python .sdda/sdda.py ir-view --mission {mission or '{n}'} --write", f.path)
 
     written = {str(w) for w in (spec.get("writes") or [])}
     for pattern in res.missing:
@@ -470,15 +539,78 @@ def pack_path(root: Path, agent: str) -> Path:
 #: Le fragment porte la tranche plutôt qu'une clé de `loader.yml` séparée : ce
 #: qui est tranché doit se lire sur la ligne qui nomme la source, sinon la
 #: relation entre les deux se perd à la première relecture.
-_SLICE_RE = re.compile(r"^(?P<path>[^#]+)#families=(?P<families>[A-Za-z0-9_,-]+)$")
+#:
+#: Même principe pour un Markdown, par sections `##` :
+#: `workspace/stack/STACK.md#sections=Project Config;Active Memory Strategy`.
+#: STACK.md pèse 40 Ko en 22 sections ; `architect-memory` en exploite deux, et
+#: sept agents le lisaient en entier. Le séparateur est `;` : les titres portent
+#: des espaces et des `&`. La tranche est interprétée par le type du fichier —
+#: familles pour un registre `.json`, sections pour un `.md`.
+_SLICE_RE = re.compile(r"^(?P<path>[^#]+)#(?P<kind>families|sections)=(?P<values>.+)$")
 
 
 def _split_slice(pattern: str) -> tuple[str, tuple[str, ...]]:
     m = _SLICE_RE.match(pattern.strip())
     if not m:
         return pattern, ()
-    families = tuple(f for f in m.group("families").split(",") if f)
-    return m.group("path"), families
+    sep = "," if m.group("kind") == "families" else ";"
+    values = tuple(v.strip() for v in m.group("values").split(sep) if v.strip())
+    return m.group("path"), values
+
+
+def _strip_stack_comments(text: str) -> str:
+    """STACK.md sans ses commentaires `#` ni ses marges — le filtre de `gen-app-context`.
+
+    Les commentaires de STACK.md sont le catalogue des options non retenues et
+    le mode d'emploi du gabarit : utiles à l'humain qui choisit, pas à l'agent
+    qui applique un choix fait. Les titres `##` restent.
+    """
+    from sdda_scripts.gen_app_skeleton import strip_stack_comments  # import tardif : module lourd
+
+    return strip_stack_comments(text)
+
+
+def slice_markdown(text: str, sections: tuple[str, ...], *, strip_comments: bool = False) -> tuple[str, list[str]]:
+    """Un Markdown réduit aux sections `##` demandées. Renvoie (texte, titres retirés).
+
+    Le préambule avant le premier `##` est retiré : c'est la bannière du
+    fichier. L'ordre du fichier est conservé, pas celui de la liste. Un titre
+    demandé et absent n'est pas une erreur ici : `pack_state` n'en dépend pas,
+    et la section manque à la source, pas au pack.
+    """
+    if strip_comments:
+        text = _strip_stack_comments(text)
+    wanted = {s.strip() for s in sections}
+    blocks: list[list[str]] = []
+    dropped: list[str] = []
+    keeping = False
+    for line in text.split("\n"):
+        if line.startswith("## "):
+            title = line[3:].strip()
+            keeping = title in wanted
+            if keeping:
+                blocks.append([line])
+            else:
+                dropped.append(title)
+        elif keeping:
+            blocks[-1].append(line)
+    rendered = [re.sub(r"\n{3,}", "\n\n", "\n".join(ln.rstrip() for ln in b)).strip() for b in blocks]
+    return "\n\n".join(r for r in rendered if r) + "\n", dropped
+
+
+def _slice_source(path: Path, slice_: tuple[str, ...]) -> tuple[str, dict[str, Any] | None]:
+    """Le contenu d'une source de pack, tranche appliquée, et la déclaration du retrait."""
+    text = markdown_io.read_text(path)
+    if not slice_:
+        return text, None
+    full = path.stat().st_size
+    if path.suffix == ".json":
+        text, dropped = slice_registry(text, slice_)
+        return text, {"keptFamilies": sorted(slice_), "patternsDropped": dropped,
+                      "bytesSaved": full - len(text.encode("utf-8"))}
+    text, dropped_titles = slice_markdown(text, slice_, strip_comments=path.name == "STACK.md")
+    return text, {"keptSections": list(slice_), "sectionsDropped": dropped_titles,
+                  "bytesSaved": full - len(text.encode("utf-8"))}
 
 
 def slice_registry(text: str, families: tuple[str, ...]) -> tuple[str, int]:
@@ -533,10 +665,9 @@ def pack_source_bytes(root: Path, loader: dict[str, Any], agent: str) -> int:
     plus la sienne.
     """
     total = 0
-    for path, families in pack_sources(root, loader, agent):
-        if families and path.suffix == ".json":
-            sliced, _ = slice_registry(markdown_io.read_text(path), families)
-            total += len(sliced.encode("utf-8"))
+    for path, slice_ in pack_sources(root, loader, agent):
+        if slice_:
+            total += len(_slice_source(path, slice_)[0].encode("utf-8"))
         else:
             total += path.stat().st_size
     return total
@@ -615,17 +746,12 @@ def build_pack(root: Path, loader: dict[str, Any], agent: str, *, report: Report
     bodies: list[str] = []
     entries: list[dict[str, Any]] = []
     trimmed: list[dict[str, Any]] = []
-    for path, families in sources:
-        text = markdown_io.read_text(path)
+    for path, slice_ in sources:
+        text, cut = _slice_source(path, slice_)
         full_bytes = path.stat().st_size
-        if families and path.suffix == ".json":
-            text, dropped = slice_registry(text, families)
-            kept_bytes = len(text.encode("utf-8"))
-            trimmed.append({
-                "path": _source_ref(root, path), "keptFamilies": sorted(families),
-                "patternsDropped": dropped, "bytesSaved": full_bytes - kept_bytes,
-            })
-            full_bytes = kept_bytes
+        if cut is not None:
+            trimmed.append({"path": _source_ref(root, path), **cut})
+            full_bytes = len(text.encode("utf-8"))
         bodies.append(text)
         entries.append({
             "path": _source_ref(root, path),
@@ -658,16 +784,19 @@ def build_pack(root: Path, loader: dict[str, Any], agent: str, *, report: Report
     if trimmed:
         lines += [
             "> **Ce pack est TRANCHÉ.** Les sources marquées ci-dessous ne t'ont été",
-            "> servies que sur les familles qui relèvent de ton rôle. Une famille",
-            "> absente n'est pas une famille inexistante : c'est une famille dont",
-            "> un autre agent décide. Ne conclus rien de son absence, et ne",
-            "> l'invente pas — dis que tu ne l'as pas reçue.",
+            "> servies que sur les familles ou les sections qui relèvent de ton rôle.",
+            "> Une partie absente n'est pas une partie inexistante : c'est une partie",
+            "> dont un autre agent décide. Ne conclus rien de son absence, et ne",
+            "> l'invente pas — si ta tâche l'exige, lis-la dans la source, ou dis que",
+            "> tu ne l'as pas reçue.",
             "",
-            "| Source tranchée | Familles retenues | Patterns retirés | Octets économisés |",
-            "|---|---|---:|---:|",
+            "| Source tranchée | Retenu | Retiré | Octets économisés |",
+            "|---|---|---|---:|",
         ]
         lines += [
-            f"| `{t['path']}` | {', '.join(t['keptFamilies'])} | {t['patternsDropped']} | {t['bytesSaved']} |"
+            (f"| `{t['path']}` | {', '.join(t['keptFamilies'])} | {t['patternsDropped']} pattern(s) | {t['bytesSaved']} |"
+             if "keptFamilies" in t else
+             f"| `{t['path']}` | {' · '.join(t['keptSections'])} | {len(t['sectionsDropped'])} section(s) | {t['bytesSaved']} |")
             for t in trimmed
         ]
         lines.append("")

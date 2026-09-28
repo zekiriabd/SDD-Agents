@@ -40,7 +40,7 @@ Read **uniquement** :
 - `workspace/pipeline/missions/{n}-*.md` — `## Actors` (données personnelles ?), `## Business Rules`
   (obligations de rétention ou d'effacement), `## Trust Boundaries`.
 - `workspace/pipeline/caps/{n}-*-*.md` — quelles CAPs exigent de se souvenir de quelque chose.
-- `workspace/stack/STACK.md` — `## Active Memory Strategy` : `ShortTermPolicy`,
+- STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/architect-memory.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — `## Active Memory Strategy` : `ShortTermPolicy`,
   `ShortTermMaxTurns`, `SummarizeTriggerTokens`, `LongTermEnabled`,
   `LongTermStore`, `LongTermWritePolicy`, `LongTermRetentionDays`,
   `MemoryPIIPolicy`, `CrossAgentSharedState` ; `## Project Config` `TokenCeilingPerRun`.

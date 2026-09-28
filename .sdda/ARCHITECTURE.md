@@ -3,13 +3,15 @@
 Reference document: tree, layers, pipeline, gates, harness/provider
 abstraction. It follows from [PHILOSOPHY.md](PHILOSOPHY.md).
 
-> French twin: [ARCHITECTURE.fr.md](ARCHITECTURE.fr.md). It carries the same
-> technical content, and **it** is what `harness_build.py` compiles into the
-> harness memory file (`.claude/CLAUDE.md`, `.codex/AGENTS.md`,
-> `.gemini/GEMINI.md`): the Developer Agents read French prompts, and serving
-> them the architecture in another language would give one rule two
-> vocabularies. If the twin is missing, the build compiles this page and says
-> so.
+> French twin: [ARCHITECTURE.fr.md](ARCHITECTURE.fr.md), same technical
+> content. Neither page is the harness memory file any more
+> (`.claude/CLAUDE.md`, `.codex/AGENTS.md`, `.gemini/GEMINI.md`):
+> `harness_build.py` compiles that file from the **operating card**
+> `.sdda/memory/core.md`, a few KB, because the harness injects it into every
+> session and every sub-agent and resends it on every turn — the whole
+> architecture there cost ~15,000 tokens per turn of each of the ~30 spawns of
+> a MISSION. This page is read on demand. Without the card, the build falls
+> back to the French twin, then to this page, and says so.
 
 ---
 
@@ -50,7 +52,8 @@ SDD-Agents/
 │
 ├── .sdda/                             # ── FRAMEWORK (neutral source) ─────────
 │   ├── PHILOSOPHY.md · PHILOSOPHY.fr.md
-│   ├── ARCHITECTURE.md · ARCHITECTURE.fr.md   # the .fr.md is the memory files' source
+│   ├── ARCHITECTURE.md · ARCHITECTURE.fr.md   # reference, read on demand
+│   ├── memory/core.md                 # operating card: the memory files' source
 │   ├── INVARIANTS.yml                 # load-bearing contracts + on-disk enforcer (count: sync_counters)
 │   ├── config.base.yml                # layer 1/3 of the Project Config
 │   ├── loader.yml                     # reads/writes/forbidden_reads + budget + cache per agent
@@ -149,11 +152,12 @@ SDD-Agents/
 │   │       │                          #   ## Active Guardrails
 │   │       └── data/ · tools/         #   runtime of the declared sources
 │   │       # (stack combinations live in registry/compatibility.matrix.json)
-│   ├── digests/                       # per-agent slices of the taxonomy
+│   ├── digests/                       # per-agent slices of the taxonomy; cross-agent.md,
+│   │                                  #   the only rule text loaded by EVERY agent
 │   ├── sdda.py                        # launcher: `python .sdda/sdda.py {cmd}` —
 │   │                                  #   works from a bare clone, no pip install
 │   └── python/                        # deterministic 0-token tooling
-│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->80<!--/sdda:count--> subcommands; registry
+│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->81<!--/sdda:count--> subcommands; registry
 │       │                              #   DERIVED from disk, also read by the scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (including judge_clients: the real LLM judge)
@@ -212,6 +216,7 @@ SDD-Agents/
     │
     └── .sys/                          # ── INTERNAL STATE AND RUN OUTPUT ───────
         ├── .ir/         {n}-system.ir.json  # Agentic IR compiled from the contracts
+        │   └── views/   {n}-{agent}.ir.json # the slice each agent reads (ir-view)
         ├── .context/ · .state/ · .validation/ · .audit/
         ├── reports/     {n}-{run-id}.json   # eval reports; runs/: recorded executions
         ├── traces/runs/ {run-id}.jsonl
@@ -313,7 +318,7 @@ refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`) instead of being swallowed.
 
 ### 2.ante One entry point for the tooling
 
-The <!--sdda:count subcommands-->80<!--/sdda:count--> deterministic subcommands are called in a single form:
+The <!--sdda:count subcommands-->81<!--/sdda:count--> deterministic subcommands are called in a single form:
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # from a bare clone
@@ -811,7 +816,7 @@ failing tools.
 
 Inherited from SDD_Pro (193 classes): every ERROR block carries a `[CLASS]` code
 in its `CAUSE:`, so that hooks, retry loops and dashboards classify without
-interpreting text. SDD_Agents carries **<!--sdda:count classes-->444<!--/sdda:count-->**, a closed list regenerated from
+interpreting text. SDD_Agents carries **<!--sdda:count classes-->446<!--/sdda:count-->**, a closed list regenerated from
 the real emitters by `sdda_admin/sync_error_registry.py` — writing the list by
 hand would let it drift both ways (`rules/error-classification.md §6`). The
 figure above is itself regenerated (`sync-counters`), not copied.

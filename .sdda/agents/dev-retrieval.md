@@ -41,7 +41,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `retrievers[]`, et les `agents[]`
+- `workspace/.sys/.ir/views/{n}-dev-retrieval.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `retrievers[]`, et les `agents[]`
   qui les consomment (`trustPosture`).
 - `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` — tableau comparatif,
   config retenue, contraintes de filtrage, fraîcheur, PII.

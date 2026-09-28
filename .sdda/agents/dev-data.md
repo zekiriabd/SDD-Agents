@@ -34,7 +34,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `dataAccess[]` (stratégie, `envelope`,
+- `workspace/.sys/.ir/views/{n}-dev-data.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `dataAccess[]` (stratégie, `envelope`,
   `exposedTo`) et les `tools[]` d'id `{n}-data-*`.
 - `workspace/pipeline/contracts/tools/{n}-data-*.tool.md` — section `## Data Access` :
   SQL de la vue, chemin d'identité, classe d'effet de bord.

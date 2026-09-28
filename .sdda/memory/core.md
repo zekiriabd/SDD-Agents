@@ -1,11 +1,3 @@
----
-trigger: always_on
-description: "Architecture SDD_Agents, partie 1/1 (1. Trois couches) — lire avant toute action du pipeline SDD_Agents"
----
-<!-- GÉNÉRÉ par sdda_admin/harness_build.py depuis .sdda/memory/core.md.
-     NE PAS ÉDITER ICI : toute modification est écrasée au build suivant,
-     et le test de parité la signale. Éditer la source. -->
-
 # SDD_Agents — carte opératoire
 
 Ce fichier est chargé par le harnais dans CHAQUE session et CHAQUE sous-agent :

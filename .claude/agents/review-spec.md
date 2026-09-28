@@ -42,7 +42,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 Read **uniquement** :
 - `workspace/pipeline/missions/{n}-*.md` — BR, AC système, Quantified Goal, Failure Policy, out_of_scope.
 - `workspace/pipeline/caps/{n}-*-*.md` — chaque AC (metric, threshold, dataset, grader, runs, notes), `covers`, `failure_behavior`.
-- `workspace/.sys/.ir/{n}-system.ir.json` — `traceability`, `evaluation.suites`, `agents[].servesCaps`, `tools[]`.
+- `workspace/.sys/.ir/views/{n}-review-spec.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `traceability`, `evaluation.suites`, `agents[].servesCaps`, `tools[]`.
 - `workspace/pipeline/suites/*.yaml` et `workspace/.sys/reports/{n}-*.json` — définitions et derniers résultats (un rapport par appel d'`eval-runner`, nommé par `{n}-{run-id}`).
 - `workspace/.sys/.validation/G5-{n}.calibration.json` — statut **mesuré** de chaque juge
   (bloquant ou `advisory`) ; `workspace/pipeline/calibration/*.json` n'en est que l'entrée.

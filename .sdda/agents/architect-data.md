@@ -55,7 +55,7 @@ Read **uniquement** :
 - `workspace/pipeline/topology/{n}-topology.md` — accès base déclarés, agent exposé, CAP exigeante.
 - `workspace/pipeline/missions/{n}-*.md` — `## Actors` (**qui a le droit de voir quoi**), `## Business Rules`.
 - `workspace/pipeline/caps/{n}-*-*.md` — inputs/outputs, lecture ou écriture impliquée.
-- `workspace/stack/STACK.md` — `## Active Data Access` : `DatabaseType`,
+- STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/architect-data.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — `## Active Data Access` : `DatabaseType`,
   `DbAgentRole`, `DbStatementTimeoutMs`, `DbMaxRowsReturned`, `DbAllowedSchemas`,
   `DbForbiddenStatements`, `DbQueryLogging`. Et, si `declared-sources` est
   actif, `## Active Data Sources` : `Stores`, `Sources` (déclarés INLINE —

@@ -1360,6 +1360,70 @@ def check_context_budgets() -> None:
         ok("context.budgets", f"{len(agents)} budgets tiennent leur contexte stable (commun {common // 1024} Ko)")
 
 
+#: Plafonds du contexte FIXE — ce que chaque session ou chaque spawn paie avant
+#: la première ligne utile, et repaie à chacun de ses tours. Un plafond n'est
+#: pas un objectif : il empêche le texte de regrossir sans que personne le voie.
+#: Le fichier mémoire a son plafond dans `harness_build.MEMORY_MAX_BYTES`.
+CROSS_AGENT_MAX_BYTES = 8_000
+COMMAND_MAX_BYTES = 45_000
+
+
+def check_static_cost() -> None:
+    """`cost.static` : le contexte que chaque session et chaque agent paie d'office.
+
+    L'audit du 2026-09-28 chiffrait plus d'un million de tokens d'entrée par
+    MISSION hors boucles de correction : un fichier mémoire de 60 Ko injecté
+    dans chaque sous-agent, trois règles entières (23 Ko) rechargées par chacun,
+    l'IR complète lue par tous les `dev-*`, et des commandes de 50 Ko restées
+    dans la session de l'orchestrateur. Chaque correction est tenue ici :
+    plafond de la carte mémoire, du digest commun et des commandes, et aucun
+    agent à vue d'IR qui déclare encore lire l'IR entière.
+    """
+    sys.path.insert(0, str(SDDA / "python"))
+    from sdda_admin import harness_build  # noqa: E402  (import tardif : dépend de sys.path)
+    from sdda_lib import ir_views  # noqa: E402
+    from sdda_scripts import context_pack  # noqa: E402
+
+    problems: list[str] = []
+    source = harness_build.memory_source()
+    if source.name != "core.md":
+        problems.append(f"fichier mémoire compilé depuis {source.name}, pas depuis la carte `memory/core.md`")
+    elif source.stat().st_size > harness_build.MEMORY_MAX_BYTES:
+        problems.append(f"`memory/core.md` {source.stat().st_size} o > {harness_build.MEMORY_MAX_BYTES} o")
+
+    loader = context_pack.load_loader(ROOT)
+    common = sum(p.stat().st_size for entry in loader.get("cross_agent_reads") or []
+                 for p in context_pack.expand(ROOT, str(entry.get("path") if isinstance(entry, dict) else entry),
+                                              mission=None, target=None, obj=None)[0])
+    if common > CROSS_AGENT_MAX_BYTES:
+        problems.append(f"lectures communes {common} o > {CROSS_AGENT_MAX_BYTES} o (chargées par chaque agent)")
+
+    for command in sorted((SDDA / "commands").glob("*.md")):
+        size = command.stat().st_size
+        if size > COMMAND_MAX_BYTES:
+            problems.append(f"commande {command.name} {size} o > {COMMAND_MAX_BYTES} o")
+
+    full_ir = "workspace/.sys/.ir/{n}-system.ir.json"
+    for agent in ir_views.view_agents():
+        reads = [str(e.get("path") if isinstance(e, dict) else e) for e in (loader.get(agent) or {}).get("reads") or []]
+        if full_ir in reads:
+            problems.append(f"{agent} lit l'IR complète alors qu'il a une vue (`.ir/views/`)")
+
+    # STACK.md (40 Ko, 22 sections) se sert tranché : dans le pack de l'agent
+    # (`STACK.md#sections=…`) ou, pour les `dev-*`, par le contexte projet.
+    for agent in context_pack.agent_names(loader):
+        reads = [str(e.get("path") if isinstance(e, dict) else e) for e in (loader.get(agent) or {}).get("reads") or []]
+        if "workspace/stack/STACK.md" in reads:
+            problems.append(f"{agent} lit STACK.md entier — le trancher dans son pack (`STACK.md#sections=…`)")
+
+    if problems:
+        for problem in problems:
+            fail("cost.static", problem)
+    else:
+        ok("cost.static", f"mémoire {source.stat().st_size // 1024} Ko · commun {common // 1024} Ko · "
+                          f"{len(ir_views.view_agents())} agents sur vue d'IR")
+
+
 def check_catalog_integrity() -> None:
     """Toute ligne de stack proposée par le template pointe-t-elle un fichier réel ?
 
@@ -1549,6 +1613,7 @@ def main() -> int:
         check_catalog_integrity,
         check_generated_stack_drift,
         check_context_budgets,
+        check_static_cost,
     ):
         try:
             check()

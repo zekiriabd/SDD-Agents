@@ -80,7 +80,7 @@ overwritten by the next build, and the parity check catches it (§6).
 | `agents/{a}.md` | `.claude/agents/{a}.md` — `model:` resolved from the tier | `.codex/agents/{a}.toml` — `name`, `description`, `developer_instructions`, `model`, `sandbox_mode` | `.gemini/agents/{a}.md` — translated `tools` (`read_file`, `write_file`, `replace`…), `model` | `.agents/agents/{a}.md` — `model` (`pro`/`flash`), `subagent: true`, **no** `tools` |
 | `commands/{c}.md` | `.claude/commands/{c}.md` | skill `.agents/skills/{c}/SKILL.md` (`$sdda-…`) | `.gemini/commands/{c}.toml` | skill `.agents/skills/{c}/SKILL.md` (`/sdda-…`) — the same as Codex |
 | `rules/*.md` | `@`-referenced | inlined ("Read ce fichier") | inlined | inlined |
-| memory file | `.claude/CLAUDE.md` | `.codex/AGENTS.md`, pointed to by `AGENTS.md` | `.gemini/GEMINI.md`, **imported** by `GEMINI.md` | `.agents/rules/sdda-architecture-*.md`, ≤ 24,000 bytes each, `trigger: model_decision` |
+| memory file | `.claude/CLAUDE.md` | `.codex/AGENTS.md`, pointed to by `AGENTS.md` | `.gemini/GEMINI.md`, **imported** by `GEMINI.md` | `.agents/rules/sdda-architecture-*.md`, ≤ 24,000 bytes each — one `always_on` rule for the operating card, `model_decision` parts if a larger source is split |
 | hooks | `.claude/settings.json` — all of them, blocking, plus native `deny` rules on reading `.env` files | `.codex/hooks.json` — `preflight_ownership` on `apply_patch` | `.gemini/settings.json` — `BeforeTool`: ownership on `write_file`/`replace`, spawn gates on each agent's tool | none |
 | models (`tier_models`) | `opus` / `sonnet` / `haiku` | `gpt-6-astra` / `gpt-6-sol` / `gpt-6-luna` | `gemini-3-pro-preview` (deep, balanced) / `gemini-3-flash-preview` | `pro` (deep, balanced) / `flash` |
 
@@ -90,8 +90,9 @@ Why these choices, and what they fix:
   them: the former `.codex/prompts/` facade was read by nobody. Skills in
   `.agents/skills/` are looked up from the current directory to the repository
   root. `AGENTS.md` is silently truncated beyond 32 KiB
-  (`project_doc_max_bytes`): the pointer stays small, the facade (59 KB) is read
-  on instruction.
+  (`project_doc_max_bytes`): the pointer stays small, and the facade it points
+  to — the operating card compiled from `.sdda/memory/core.md`, a few KB — is
+  read on instruction.
 - **Gemini CLI** executes `@{…}` (file injection) and `!{…}` (shell) in a
   command prompt: `recall@{k}` read the file `k` on every `/sdda-build`. The
   compiler inserts a space (`@ {k}`) — no escape is documented. Sub-agents are

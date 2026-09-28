@@ -42,7 +42,7 @@ Read **uniquement** :
 - `workspace/pipeline/missions/{n}-*.md` — `## Ground Truth` (d'où viendra le golden set),
   `## Trust Boundaries` (le corpus est-il maîtrisé ?), acteurs et cloisonnement.
 - `workspace/pipeline/caps/{n}-*-*.md` — les AC de récupération (`recall@k`, `groundedness`…).
-- `workspace/stack/STACK.md` — `## Active RAG Pattern`, `## Active Retrieval Stack`
+- STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/architect-rag.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — `## Active RAG Pattern`, `## Active Retrieval Stack`
   (dont `VectorStoreConnection` : où vit l'index, distinct de la base métier),
   `## Active Reranker`, `## Runtime Models` (`EmbeddingModel`, `RerankModel`),
   seuils `Retrieval*`.

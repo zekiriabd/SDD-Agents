@@ -44,19 +44,18 @@ updated: "2026-09-20"
 # ============================================================================
 # Règles chargées par TOUS les agents (inconditionnelles)
 # ============================================================================
-# Coût ~12-16 KB par invocation. Gardées inconditionnelles parce qu'elles
-# définissent le vocabulaire commun sans lequel les sorties ne sont pas
-# comparables entre agents.
+# UN digest, pas trois règles entières. Les trois règles (output-protocol,
+# eval-protocol, agent-safety) pesaient 23 Ko, chargés par chacun des ~30
+# spawns d'une MISSION — et repayés à CHAQUE tour de chacun, puisque le contexte
+# initial d'un agent est renvoyé à chaque appel au modèle. Le digest en garde
+# le vocabulaire opératoire (5 Ko) ; le texte intégral reste lu par l'agent dont
+# c'est la règle centrale : `qa-evals` (eval-protocol), `review-safety` et
+# `review-adversarial` (agent-safety), déclarés dans leurs `reads:`.
+# Plafond vérifié par `framework_smoke` (`cost.static`, CROSS_AGENT_MAX_BYTES).
 cross_agent_reads:
-  - path: .sdda/rules/output-protocol.md
+  - path: .sdda/digests/cross-agent.md
     cache_layer: stable
-    why: format de sortie 1L, bloc ERROR 3L, verdict 3 couleurs, règle mentale [CLASS]
-  - path: .sdda/rules/eval-protocol.md
-    cache_layer: stable
-    why: k runs, variance, calibration, épinglage — le vocabulaire de « ça marche »
-  - path: .sdda/rules/agent-safety.md
-    cache_layer: stable
-    why: texte non maîtrisé, classes d'effet de bord, défenses structurelles
+    why: sortie 1L, bloc ERROR 3L, trois couleurs, posture, k runs, épinglage, défenses structurelles
 
 # Règles path-scoped (frontmatter `paths:`) — injectées au contact des artefacts,
 # pas systématiquement : ownership.md, error-classification.md,
@@ -242,7 +241,6 @@ architect-topology:
     - .sdda/templates/topology.template.md           # stable
     - .sdda/digests/error-classification.architect-topology.md  # stable
     - workspace/.sys/.context/packs/architect-topology.md       # stable — LE PACK
-    - workspace/stack/STACK.md                       # semi
     - workspace/feats/{n}-roster.md         # semi — LE ROSTER déclaré par l'architecte (P7) ; lu, jamais écrit
     - workspace/pipeline/missions/{n}-*.md                    # volatile
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — toutes les CAPs
@@ -250,6 +248,9 @@ architect-topology:
   # désigne le pack, et le constructeur ne peut pas y lire ses propres entrées
   # sans circularité (un pack ne peut pas être sa propre source).
   pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Runtime Models;Active Language & Runtime;Active Agent Framework;Active Orchestration Pattern;Active RAG Pattern;Active Agent Topology;Active Data Access;Active Tools & Integrations;Active Memory Strategy;Active Guardrails;Active Serving Surface
     - .sdda/docs/ORCHESTRATION-PATTERNS.md
     # Tranché comme celui d'`architect-rag`, et pour la même raison : cet agent
     # choisit et borne une TOPOLOGIE. Les familles `rag`, `chunking`,
@@ -288,9 +289,13 @@ architect-tools:
     - .sdda/templates/tool-contract.template.md      # stable
     - .sdda/rules/prompt-authoring.md                # stable — la description EST un prompt
     - .sdda/stacks/tools/{tools}.md                        # stable
-    - workspace/stack/STACK.md                       # semi
+    - workspace/.sys/.context/packs/architect-tools.md   # stable — pack : STACK.md tranché (pack_sources)
     - workspace/pipeline/topology/{n}-topology.md             # volatile
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile
+  pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Active Language & Runtime;Active Tools & Integrations;Active Secrets
   writes:
     - workspace/pipeline/contracts/tools/{n}-*.tool.md
   forbidden_writes:
@@ -321,10 +326,12 @@ architect-rag:
   reads:
     - .sdda/templates/retrieval-contract.template.md # stable
     - workspace/.sys/.context/packs/architect-rag.md # stable — pack RAG
-    - workspace/stack/STACK.md                       # semi
     - workspace/pipeline/topology/{n}-topology.md             # volatile
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile
   pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Runtime Models;Active RAG Pattern;Active Retrieval Stack;Active Reranker;Active Data Sources;Active Memory Strategy
     - .sdda/docs/RAG-PATTERNS.md
     # Deux familles sur six : cet agent ne décide ni de l'orchestration, ni de
     # l'accès aux données, ni des graders. Le retrait est DÉCLARÉ au manifeste
@@ -349,9 +356,13 @@ architect-data:
     - .sdda/docs/DATA-ACCESS.md                      # stable
     - .sdda/docs/DATA-SOURCES.md                     # stable — sources hors base
     - .sdda/stacks/dataaccess/{dataaccess}.md                   # stable
-    - workspace/stack/STACK.md                       # semi — Stores/Sources inline (## Active Data Sources)
+    - workspace/.sys/.context/packs/architect-data.md   # stable — pack : STACK.md tranché (pack_sources)
     - workspace/stack/mcp.json                       # semi — optionnel : config MCP standard importée
     - workspace/pipeline/topology/{n}-topology.md             # volatile
+  pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Active Language & Runtime;Active Data Access;Active Data Sources;Active Secrets
   writes:
     - workspace/pipeline/contracts/tools/{n}-data-*.tool.md   # préfixe `data-` RÉSERVÉ :
                                                      # namespace disjoint de architect-tools,
@@ -368,8 +379,12 @@ architect-memory:
   reads:
     - .sdda/templates/memory-contract.template.md    # stable
     - .sdda/stacks/memory/{memory}.md                       # stable
-    - workspace/stack/STACK.md                       # semi
+    - workspace/.sys/.context/packs/architect-memory.md   # stable — pack : STACK.md tranché (pack_sources)
     - workspace/pipeline/topology/{n}-topology.md             # volatile
+  pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Active Memory Strategy
   writes:
     - workspace/pipeline/contracts/memory/{n}-memory.md
 
@@ -383,6 +398,7 @@ dev-prompt:
     - .sdda/rules/prompt-authoring.md                # stable — sa règle centrale
     - .sdda/templates/prompt.template.md             # stable
     - workspace/src/*/{memoryfile}                   # semi — contexte projet : `### Runtime Models` (tier de l'agent)
+    - workspace/.sys/.ir/views/{n}-dev-prompt.ir.json   # semi — SA vue de l'IR (ir-view) : outils câblés, postures, bornes
     - workspace/pipeline/contracts/agents/{n}-*.agent.md      # volatile — 1 par invocation
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — les CAPs servies
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile — descriptions d'outils
@@ -433,7 +449,7 @@ dev-tools:
   reads:
     - workspace/.sys/.context/packs/dev-tools.md      # stable — stack tranchée
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-dev-tools.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
@@ -457,7 +473,7 @@ dev-retrieval:
   reads:
     - workspace/.sys/.context/packs/dev-retrieval.md       # stable
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-dev-retrieval.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md  # volatile
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
@@ -483,7 +499,7 @@ dev-data:
     - workspace/.sys/.context/packs/dev-data.md      # stable
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes ; Stores/Sources inline (### Active Data Sources)
     - workspace/stack/mcp.json                       # semi — optionnel : config MCP standard importée
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-dev-data.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/pipeline/contracts/tools/{n}-data-*.tool.md   # volatile — SES contrats (enveloppe,
                                                      # stratégie d'accès) : sa fiche les nomme comme
                                                      # entrée, et `reads:` ne les ouvrait pas
@@ -514,7 +530,7 @@ dev-agent:
   reads:
     - workspace/.sys/.context/packs/dev-agent.md     # stable — framework tranché
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-dev-agent.{agent}.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/pipeline/contracts/agents/{n}-{agent}.agent.md   # volatile — SON agent seul
     - workspace/pipeline/contracts/memory/{n}-memory.md    # semi — SES scopes ; absent en mémoire courte seule (ir.memory)
     - workspace/src/*/prompts/{agent}.system.md            # volatile — lecture seule
@@ -565,7 +581,7 @@ dev-orchestration:
   reads:
     - workspace/.sys/.context/packs/dev-orchestration.md  # stable
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi — le graphe ET les bornes
+    - workspace/.sys/.ir/views/{n}-dev-orchestration.ir.json   # semi — SA vue de l'IR (ir-view) — le graphe ET les bornes
     # Ce que sa fiche (STEP 2) lit et que la pré-passe PROJETTE : les handoffs
     # (§13) deviennent shared/, le contrat de mémoire devient memory/interface.*.
     # Un `reads:` qui ne les ouvrait pas laissait la pré-passe inventer ce
@@ -611,7 +627,7 @@ dev-api:
   reads:
     - workspace/.sys/.context/packs/dev-api.md   # stable
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-dev-api.ir.json   # semi — SA vue de l'IR (ir-view)
   # Sources du pack : la stack TRANCHÉE que cet agent implémente. Déclarées ici
   # parce qu'un pack que `reads:` exige et que rien ne sait construire est un
   # [PACK_UNUSABLE] garanti au premier spawn — `context_pack.py check` le dit.
@@ -637,7 +653,7 @@ dev-backend:
   reads:
     - workspace/.sys/.context/packs/dev-backend.md   # stable — LE PACK
     - workspace/src/*/{memoryfile}                   # semi — contexte projet (project-init) : stack résolue, arbo, libs, commandes
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-dev-backend.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/pipeline/missions/{n}-*.md                    # semi — Business Rules (le Domaine), Failure Policy
     - .sdda/stacks/framework/{framework}.libs.json   # stable — les versions, rien d'autre
   pack_sources:
@@ -708,20 +724,24 @@ qa-evals:
     - .sdda/rules/eval-protocol.md                   # stable — sa règle centrale
     - .sdda/templates/eval-suite.template.md         # stable
     - .sdda/templates/golden-set.schema.json         # stable
-    - workspace/stack/STACK.md                       # semi — ## Active Eval Stack, tailles minimales, JudgeModel
+    - workspace/.sys/.context/packs/qa-evals.md   # stable — pack : STACK.md tranché (pack_sources)
     - workspace/pipeline/missions/{n}-*.md                    # semi — où est la ground truth
     - workspace/seed/**                        # semi — la ground truth ELLE-MÊME, fournie par l'humain
                                                # (+ le fichier sous assets/ que `## Ground Truth → Source`
                                                # désigne, lu à la demande : pas tout assets/, qui ferait
                                                # déborder budget_bytes dès qu'un export pèse)
     - workspace/pipeline/caps/{n}-*-*.md                      # volatile — les AC à mesurer
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-qa-evals.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/.sys/.validation/retrieval-golden-draft-{n}.jsonl   # volatile — si présent : le
                                                      # brouillon d'architect-rag, que sa fiche lui
                                                      # demande de promouvoir (jamais de recopier)
     - workspace/.sys/.validation/adversarial-findings/{n}.jsonl     # volatile — si présent : les
                                                      # attaques réussies de l'étage C, à promouvoir
                                                      # au set permanent (qa-evals.md)
+  pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Runtime Models;Active Eval Stack
   writes:
     - workspace/pipeline/datasets/**                          # OWNER EXCLUSIF — dérivés de seed/, jamais l'inverse
     - workspace/pipeline/suites/**
@@ -746,7 +766,7 @@ qa-tests:
   # et `{object}` ci-dessous désigne la couche du spawn.
   budget_bytes: 420000
   reads:
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-qa-tests.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
     # Les suites L2 de qa-evals : leur `id` et leurs `cases[].id` sont ce que
     # `run-tool-suites` exige de voir exercé. Sans cette lecture, la part
@@ -782,7 +802,7 @@ review-spec:
     - workspace/pipeline/calibration/*.json          # l'ENTRÉE de chaque juge (grille, labelsRef) — le statut mesuré est G5-{n}.calibration.json, ci-dessous
     - workspace/.sys/reports/{n}-*.json              # les rapports d'eval-runner de CETTE mission
     - workspace/.sys/.validation/G*-*.json           # rapports de gate G3→G6, à plat (gate_reports.report_path)
-    - workspace/.sys/.ir/{n}-system.ir.json
+    - workspace/.sys/.ir/views/{n}-review-spec.ir.json   # semi — SA vue de l'IR (ir-view)
   writes:
     - workspace/.sys/.validation/reports/spec-compliance-{n}.md
 
@@ -791,7 +811,7 @@ review-safety:
   budget_bytes: 180000
   reads:
     - .sdda/rules/agent-safety.md                    # stable
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi — scopes et postures
+    - workspace/.sys/.ir/views/{n}-review-safety.ir.json   # semi — SA vue de l'IR (ir-view) — scopes et postures
     - workspace/src/*/prompts/**                           # volatile
     - workspace/pipeline/contracts/tools/{n}-*.tool.md        # volatile
     # Les rapports des scans (`G7-*.secrets|pii|toolscope.json`), joués par
@@ -807,7 +827,7 @@ review-cost:
   budget_bytes: 180000      # recalibré sur le premier projet réel (était 60000) : IR ~100 Ko + STACK.md 36 Ko + pack + ce que l'agent lit du code
   reads:
     - workspace/pipeline/missions/{n}-*.md                    # le budget déclaré
-    - workspace/.sys/.ir/{n}-system.ir.json          # le budget estimé
+    - workspace/.sys/.ir/views/{n}-review-cost.ir.json   # semi — SA vue de l'IR (ir-view) : le budget estimé
     - workspace/pipeline/topology/{n}-topology.md    # le budget ESTIMÉ en G2 (nominal, pire cas)
     - workspace/pipeline/caps/{n}-*-*.md             # criticité, valeur métier déclarée
     - workspace/.sys/reports/{n}-*.json              # le budget mesuré — suites L7 d'eval-runner
@@ -827,8 +847,11 @@ review-orchestration:
   model_tier: balanced
   budget_bytes: 140000
   reads:
-    - workspace/.sys/.ir/{n}-system.ir.json
-    - workspace/.sys/traces/runs/*.jsonl                  # volatile — les trajectoires réelles
+    - workspace/.sys/.ir/views/{n}-review-orchestration.ir.json   # semi — SA vue de l'IR (ir-view)
+    # PAS `traces/runs/*.jsonl` : c'est l'entrée de `trajectory-report`, que
+    # l'agent LANCE, pas du contexte qu'il lit (fiche STEP 2 : « Read uniquement
+    # ce rapport… »). Déclaré, il comptait toutes les traces du workspace — 468 Ko
+    # pour 227 runs — et le spawn était refusé sous `budget_bytes`.
     - workspace/.sys/.validation/trajectories-{n}.json    # le rapport que sa fiche produit (trajectory-report)
     - workspace/.sys/reports/{n}-*.json                   # les suites L5/L7 d'eval-runner
     - workspace/pipeline/topology/{n}-topology.md         # le graphe DESSINÉ, confronté au graphe observé
@@ -844,6 +867,7 @@ review-rag:
   model_tier: balanced
   budget_bytes: 140000
   reads:
+    - workspace/.sys/.ir/views/{n}-review-rag.ir.json   # semi — SA vue de l'IR (ir-view) : retrievers[], agents[].retrievers
     - workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md
     - workspace/.sys/reports/retrieval-*.json            # L3, écrits par run-retrieval-eval
     # La groundedness est une suite d'eval-runner, dans le rapport de son run —
@@ -865,10 +889,14 @@ review-adversarial:
     # Ce que sa description promet de lire, et que `reads:` n'ouvrait pas :
     # l'IR (postures, outils, arêtes), les prompts (la refusal policy à faire
     # céder) et les cibles de l'étage B.
-    - workspace/.sys/.ir/{n}-system.ir.json          # semi
+    - workspace/.sys/.ir/views/{n}-review-adversarial.ir.json   # semi — SA vue de l'IR (ir-view)
     - workspace/src/*/prompts/*.system.md            # volatile — lecture seule
     - workspace/.sys/.validation/reports/agent-safety-{n}.md  # « Cibles pour l'étage C »
-    - workspace/stack/STACK.md                       # semi — ## Active Serving Surface : comment appeler le système
+    - workspace/.sys/.context/packs/review-adversarial.md   # stable — pack : STACK.md tranché (pack_sources)
+  pack_sources:
+    # STACK.md TRANCHÉ : les seules sections que la fiche exploite, sans commentaires.
+    # Une section absente se lit dans workspace/stack/STACK.md, à la demande.
+    - workspace/stack/STACK.md#sections=Project Config;Active Language & Runtime;Active Serving Surface;Active Guardrails
   writes:
     - workspace/.sys/.validation/reports/adversarial-{n}.md
     - workspace/.sys/.validation/adversarial-findings/{n}.jsonl

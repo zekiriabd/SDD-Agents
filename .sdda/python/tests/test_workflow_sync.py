@@ -250,9 +250,13 @@ def test_reviewers_read_what_is_produced_before_them() -> None:
     orch = _reads("review-orchestration")
     assert "workspace/.sys/.validation/trajectories-{n}.json" in orch
     assert not any("trajectory-" in r or "cost-latency" in r for r in orch)
+    # Les traces brutes sont l'entrée de `trajectory-report`, pas le contexte du
+    # reviewer : toutes les traces du workspace (468 Ko au premier projet réel)
+    # rendaient son spawn impossible sous son budget.
+    assert not any("traces/runs" in r for r in orch)
     assert not any("groundedness-" in r for r in _reads("review-rag"))
     adversarial = _reads("review-adversarial")
-    assert "workspace/.sys/.ir/{n}-system.ir.json" in adversarial
+    assert "workspace/.sys/.ir/views/{n}-review-adversarial.ir.json" in adversarial
     assert any("prompts" in r for r in adversarial)
 
 

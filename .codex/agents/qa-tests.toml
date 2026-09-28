@@ -37,7 +37,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `tools[]` (erreurs, safetyStrategy,
+- `workspace/.sys/.ir/views/{n}-qa-tests.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `tools[]` (erreurs, safetyStrategy,
   timeoutSec, contractTestsRef), `retrievers[].binding.chunk`, `agents[].bounds`,
   `orchestration` (maxHops, edges), `dataAccess[].envelope`.
 - `workspace/pipeline/contracts/tools/{n}-*.tool.md` §4 (erreurs) et §8 (checklist L2).

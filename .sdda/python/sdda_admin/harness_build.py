@@ -5,8 +5,9 @@ harness_build — compile `.sdda/` vers les façades des harnais.
 C'est **la jonction** : sans elle, les agents et les commandes de `.sdda/`
 ne sont visibles d'aucun harnais et ne s'exécutent jamais. Le fichier mémoire
 (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) est compilé depuis
-`.sdda/ARCHITECTURE.fr.md` — le jumeau français, parce que les agents lisent
-des prompts français — avec repli sur `ARCHITECTURE.md` (cf. `memory_source`).
+`.sdda/memory/core.md` — la carte opératoire, courte parce que le harnais la
+charge dans chaque session et chaque sous-agent — avec repli sur
+`ARCHITECTURE.fr.md` puis `ARCHITECTURE.md` (cf. `memory_source`).
 
     .sdda/  (source neutre, la seule chose qu'on écrit)
         │
@@ -283,22 +284,44 @@ def toml_multiline(text: str) -> str:
 BUILD_NOTES: dict[str, list[str]] = {}
 
 #: Le fichier mémoire des harnais (`.claude/CLAUDE.md`, `.codex/AGENTS.md`,
-#: `.gemini/GEMINI.md`, `.agents/rules/`) est compilé depuis le jumeau FRANÇAIS
-#: de l'architecture. La documentation est en anglais par défaut
-#: (`ARCHITECTURE.md`), mais le fichier mémoire est lu par les Developer Agents
-#: avec leurs prompts, qui sont en français : leur servir l'architecture dans
-#: une autre langue que leurs fiches, c'est deux vocabulaires pour une même
-#: règle. Si le jumeau manque, on compile l'anglais plutôt que rien — et le
-#: build le dit.
+#: `.gemini/GEMINI.md`, `.agents/rules/`) est compilé depuis la CARTE
+#: OPÉRATOIRE `.sdda/memory/core.md`, pas depuis l'architecture entière.
+#:
+#: Le harnais injecte ce fichier dans la session principale ET dans chaque
+#: sous-agent, et le renvoie au modèle à chaque tour. Compiler les 60 Ko de
+#: l'architecture y mettait ~15 000 tokens repayés par chacun des ~30 spawns
+#: d'une MISSION, à chacun de leurs tours — la première ligne de la facture
+#: d'entrée, pour un texte dont aucun agent n'a besoin en entier. L'architecture
+#: reste la référence ; la carte dit où la lire à la demande.
+#:
+#: Replis, dans l'ordre : le jumeau français de l'architecture (les prompts
+#: sont en français), puis l'anglais — et le build le dit.
+MEMORY_SOURCE_CORE = "memory/core.md"
 MEMORY_SOURCE_FR = "ARCHITECTURE.fr.md"
 MEMORY_SOURCE_FALLBACK = "ARCHITECTURE.md"
 
+#: Plafond de la source mémoire, en octets (~2 500 tokens). Vérifié par
+#: `framework_smoke` (`cost.static`) : un ajout qui ne sert pas à chaque tour
+#: de chaque agent appartient à l'architecture ou à une règle.
+MEMORY_MAX_BYTES = 10_000
+
 
 def memory_source(sdda: Path | None = None) -> Path:
-    """La source du fichier mémoire : `ARCHITECTURE.fr.md`, sinon `ARCHITECTURE.md`."""
+    """La source du fichier mémoire : `memory/core.md`, sinon l'architecture (fr, puis en)."""
     base = sdda or SDDA
-    preferred = base / MEMORY_SOURCE_FR
-    return preferred if preferred.is_file() else base / MEMORY_SOURCE_FALLBACK
+    for name in (MEMORY_SOURCE_CORE, MEMORY_SOURCE_FR):
+        if (base / name).is_file():
+            return base / name
+    return base / MEMORY_SOURCE_FALLBACK
+
+
+def memory_source_label(source: Path, sdda: Path | None = None) -> str:
+    """`.sdda/memory/core.md` — le chemin de la source tel que la bannière le cite."""
+    base = sdda or SDDA
+    try:
+        return ".sdda/" + source.relative_to(base).as_posix()
+    except ValueError:
+        return f".sdda/{source.name}"
 
 
 def tier_of(meta: dict[str, Any]) -> str:
@@ -396,7 +419,13 @@ class Adapter:
     # -- mémoire -----------------------------------------------------------
     def memory_text(self) -> tuple[Path, str]:
         source = memory_source()
-        if source.name != MEMORY_SOURCE_FR:
+        label = memory_source_label(source)
+        if label != f".sdda/{MEMORY_SOURCE_CORE}":
+            self.note(
+                f".sdda/{MEMORY_SOURCE_CORE} absent — fichier mémoire compilé depuis {label}, "
+                "c'est-à-dire l'architecture entière dans chaque session et chaque sous-agent"
+            )
+        if source.name == MEMORY_SOURCE_FALLBACK:
             self.note(
                 f".sdda/{MEMORY_SOURCE_FR} absent — fichier mémoire compilé depuis "
                 f".sdda/{source.name} (anglais), alors que les prompts sont en français"
@@ -404,12 +433,12 @@ class Adapter:
         return source, rewrite_refs(strip_sync_markers(source.read_text(encoding="utf-8")), self.harness)
 
     def emit_memory_file(self, plan: BuildPlan, out: Path) -> None:
-        # Le fichier mémoire de chaque harnais EST l'architecture : une seule
-        # source, pas de « corps d'entrée » optionnel qu'aucun dépôt n'a jamais eu.
+        # Une seule source, la carte opératoire : pas de « corps d'entrée »
+        # optionnel qu'aucun dépôt n'a jamais eu.
         source, text = self.memory_text()
         plan.add(
             out / self.harness.memory_file,
-            GENERATED_BANNER.format(source=f".sdda/{source.name}") + "\n" + text,
+            GENERATED_BANNER.format(source=memory_source_label(source)) + "\n" + text,
         )
 
     def emit_settings(self, plan: BuildPlan, out: Path) -> None:
@@ -1003,24 +1032,28 @@ class AntigravityAdapter(Adapter):
         return emit_shared_skills(plan)
 
     def emit_memory_file(self, plan, out) -> None:
-        """L'architecture en règles de 24 000 octets au plus, `model_decision`.
+        """La carte opératoire en règles de 24 000 octets au plus.
 
-        59 Ko d'un seul tenant dépassent la limite par fichier ; `always_on`
-        partout mangerait l'essentiel des 20 000 tokens du budget des règles
-        actives. Les pointeurs racine (toujours actifs) disent de les lire.
+        Tenant en une règle, elle est `always_on` : c'est le rôle d'un fichier
+        mémoire, et quelques milliers de tokens tiennent dans le budget des
+        règles actives. Découpée (repli sur l'architecture entière, 60 Ko),
+        chaque partie est `model_decision` : `always_on` partout mangerait
+        l'essentiel des 20 000 tokens de ce budget. Les pointeurs racine
+        (toujours actifs) disent de les lire.
         """
         source, text = self.memory_text()
-        banner = GENERATED_BANNER.format(source=f".sdda/{source.name}")
+        banner = GENERATED_BANNER.format(source=memory_source_label(source))
         heads: list[tuple[str, str]] = []
         overhead = 400 + len(banner.encode("utf-8"))
         chunks = split_markdown(text, ANTIGRAVITY_RULE_MAX_BYTES - overhead)
+        trigger = "always_on" if len(chunks) == 1 else "model_decision"
         for index, chunk in enumerate(chunks, 1):
             titles = re.findall(r"^## (.+)$", chunk, re.M)
             label = titles[0] if titles else "préambule"
             description = (f"Architecture SDD_Agents, partie {index}/{len(chunks)} ({label}) — "
                            "lire avant toute action du pipeline SDD_Agents")
             heads.append((f"sdda-architecture-{index:02d}.md",
-                          frontmatter({"trigger": "model_decision", "description": description})
+                          frontmatter({"trigger": trigger, "description": description})
                           + banner + "\n" + chunk))
         for filename, content in heads:
             plan.add(out / "rules" / filename, content)
@@ -1170,8 +1203,8 @@ def root_pointer(filename: str) -> str:
     `GEMINI.md` IMPORTE la façade (`@./.gemini/GEMINI.md`, syntaxe documentée :
     https://geminicli.com/docs/cli/gemini-md/) : Gemini CLI la charge alors
     nativement au lieu de compter sur une consigne « lire en entier ». Codex
-    n'a pas d'import, et sa façade (59 Ko) dépasserait `project_doc_max_bytes`
-    de toute façon : `AGENTS.md` reste un renvoi.
+    n'a pas d'import : `AGENTS.md` reste un renvoi, et la façade qu'il désigne
+    — la carte opératoire, quelques Ko — tient dans `project_doc_max_bytes`.
     """
     text = (
         GENERATED_BANNER.format(source=".sdda/capability-matrix.yml")
@@ -1183,7 +1216,7 @@ def root_pointer(filename: str) -> str:
         "  hooks `.codex/hooks.json`.\n"
         "- **Gemini CLI** : `.gemini/GEMINI.md` (importé ci-dessous) ; commandes\n"
         "  `.gemini/commands/*.toml` ; agents `.gemini/agents/` ; hooks `.gemini/settings.json`.\n"
-        "- **Antigravity** : règles `.agents/rules/` (l'architecture, en parties) ;\n"
+        "- **Antigravity** : règles `.agents/rules/` (la carte opératoire) ;\n"
         "  skills `.agents/skills/` (`/sdda-…`) ; agents `.agents/agents/`.\n\n"
         "**Statut : expérimental.** Ces façades se compilent et sont vérifiées, mais\n"
         "aucun run de conformance ne les a validées. Codex CLI et Antigravity n'ont\n"

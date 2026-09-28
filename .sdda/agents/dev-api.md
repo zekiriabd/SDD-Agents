@@ -31,7 +31,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration.entryNode`,
+- `workspace/.sys/.ir/views/{n}-dev-api.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `orchestration.entryNode`,
   `inputSchema` / `outputSchema` du système, `budget`, `guardrails.input`.
 - `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :
   `### Active Serving Surface` (`ServingLocalPort`,

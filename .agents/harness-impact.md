@@ -63,9 +63,10 @@ appliqué au moment de l'action :
 EXPÉRIMENTAL : compilable, jamais validé par un run de conformance.
 Façade propre `.agents/` (il partageait `.gemini/`, qu'il ne lit pas).
 Antigravity lit `AGENTS.md` ET `GEMINI.md` à la racine (toujours actifs) et
-`.agents/rules/` : l'architecture y est découpée en règles de 24 000 octets au
-plus, `trigger: model_decision` (59 Ko en `always_on` dépasseraient la limite
-par fichier et le budget de 20 000 tokens des règles actives). Commandes en
+`.agents/rules/` : la carte opératoire (`.sdda/memory/core.md`) y tient en une
+règle `always_on` ; une source plus grosse que 24 000 octets serait découpée en
+parties `model_decision`, pour tenir la limite par fichier et le budget de
+20 000 tokens des règles actives. Commandes en
 skills `.agents/skills/` — les workflows sont retirés le 1er novembre 2026.
 Sous-agents sans `tools` : la doc ne publie pas les noms d'outils et signale
 qu'un nom erroné peut bloquer l'agent ; les outils autorisés sont écrits dans

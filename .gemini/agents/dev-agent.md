@@ -47,7 +47,7 @@ matérialises ses bornes **en code**, pas en consigne.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — l'entrée `agents[]` de cet agent :
+- `workspace/.sys/.ir/views/{n}-dev-agent.{agent}.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. l'entrée `agents[]` de cet agent :
   `promptRef`, `promptHash`, `modelTier`, `tools`, `retrievers`, `memoryScopes`,
   `inputSchema`, `outputSchema`, `bounds`, `onBoundExceeded`, `trustPosture`.
   Plus les `tools[]` / `retrievers[]` référencés (pour leurs interfaces).

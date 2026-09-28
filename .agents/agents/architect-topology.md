@@ -63,7 +63,7 @@ FIX: relancer /sdda-topology {n} avec n entier
 Read **uniquement** :
 - `workspace/pipeline/missions/{n}-*.md` — 1 fichier. 0 → `[MISSION_NOT_FOUND]`, >1 → `[MISSION_AMBIGUOUS]`.
 - `workspace/pipeline/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
-- `workspace/stack/STACK.md` — sections `## Active Agent Framework`,
+- STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/architect-topology.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — sections `## Active Agent Framework`,
   `## Active Orchestration Pattern`, `## Active RAG Pattern`,
   `## Active Data Access`, `## Runtime Models`, `## Project Config`.
 - `workspace/feats/{n}-roster.md` — le roster déclaré, s'il existe

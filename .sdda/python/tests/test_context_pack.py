@@ -274,9 +274,23 @@ def test_source_without_fragment_is_untouched(project: Path) -> None:
     assert manifest["trimPolicyApplied"] is False and manifest["trimmed"] == []
 
 
-def test_an_unresolved_stack_placeholder_widens_and_is_declared(project: Path) -> None:
-    """Une section de stack vide élargit en `*` — mais le dit, elle ne ment pas."""
+def test_an_empty_stack_section_loads_nothing(project: Path) -> None:
+    """Section vide dans un STACK.md présent : aucune fiche n'est active, aucune n'est chargée.
+
+    L'élargir en `*` chargeait le catalogue entier de la catégorie — les quatre
+    fiches MCP (73 Ko) dans le pack de `dev-tools` d'un projet sans outil MCP.
+    """
     _set_stack(project, "Active Language & Runtime", [])
+    assert context_pack.active_stack_values(project)["lang"] == []
+    patterns, widened = context_pack.substitute_all(
+        ".sdda/stacks/lang/{lang}.md", mission=None, target=None, obj=None,
+        stack=context_pack.active_stack_values(project))
+    assert patterns == [] and widened == []
+
+
+def test_without_a_stack_file_the_placeholder_widens_and_is_declared(project: Path) -> None:
+    """Sans STACK.md, rien ne dit ce qui est actif : `*`, déclaré — pas de mensonge."""
+    (project / "workspace" / "stack" / "STACK.md").unlink()
     assert "lang" not in context_pack.active_stack_values(project)
     _, widened = context_pack.substitute_all(
         ".sdda/stacks/lang/{lang}.md", mission=None, target=None, obj=None,

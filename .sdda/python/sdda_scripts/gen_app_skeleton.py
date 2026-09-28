@@ -290,8 +290,13 @@ def _stack_text(root: Path) -> str:
     stack = paths.stack_md_path(root)
     if not stack.is_file():
         return ""
+    return strip_stack_comments(markdown_io.read_text(stack))
+
+
+def strip_stack_comments(text: str) -> str:
+    """Le texte de STACK.md sans lignes `#` (hors titres `##`) ni commentaires en marge."""
     lines = []
-    for line in markdown_io.read_text(stack).split("\n"):
+    for line in text.split("\n"):
         if line.lstrip().startswith("#") and not line.lstrip().startswith("## "):
             continue
         lines.append(re.split(r"\s#\s", line, maxsplit=1)[0])

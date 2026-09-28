@@ -52,7 +52,7 @@ cycles observés et leur longueur.
 
 Read **uniquement** :
 - ce rapport et les rapports d'eval `workspace/.sys/reports/{n}-*.json` (suites `L5` et `L7`) ;
-- `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `agents[].bounds`, `agents[].handoff` ;
+- `workspace/.sys/.ir/views/{n}-review-orchestration.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `orchestration`, `agents[].bounds`, `agents[].handoff` ;
 - `workspace/pipeline/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4), les justifications P7, l'alternative écartée, le budget estimé ;
 - `workspace/pipeline/contracts/agents/{n}-*.agent.md §13` — contrats de handoff.
 

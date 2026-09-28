@@ -82,7 +82,7 @@ nativement.
 | `agents/{a}.md` | `.claude/agents/{a}.md` — `model:` résolu depuis le tier | `.codex/agents/{a}.toml` — `name`, `description`, `developer_instructions`, `model`, `sandbox_mode` | `.gemini/agents/{a}.md` — `tools` traduits (`read_file`, `write_file`, `replace`…), `model` | `.agents/agents/{a}.md` — `model` (`pro`/`flash`), `subagent: true`, **sans** `tools` |
 | `commands/{c}.md` | `.claude/commands/{c}.md` | skill `.agents/skills/{c}/SKILL.md` (`$sdda-…`) | `.gemini/commands/{c}.toml` | skill `.agents/skills/{c}/SKILL.md` (`/sdda-…`) — la même que Codex |
 | `rules/*.md` | `@`-référencées | inlinées (« Read ce fichier ») | inlinées | inlinées |
-| fichier mémoire | `.claude/CLAUDE.md` | `.codex/AGENTS.md`, renvoyé par `AGENTS.md` | `.gemini/GEMINI.md`, **importé** par `GEMINI.md` | `.agents/rules/sdda-architecture-*.md`, ≤ 24 000 octets chacun, `trigger: model_decision` |
+| fichier mémoire | `.claude/CLAUDE.md` | `.codex/AGENTS.md`, renvoyé par `AGENTS.md` | `.gemini/GEMINI.md`, **importé** par `GEMINI.md` | `.agents/rules/sdda-architecture-*.md`, ≤ 24 000 octets chacun — une règle `always_on` pour la carte opératoire, des parties `model_decision` si une source plus grosse est découpée |
 | hooks | `.claude/settings.json` — tous, bloquants, plus des `deny` natifs de lecture des `.env` | `.codex/hooks.json` — `preflight_ownership` sur `apply_patch` | `.gemini/settings.json` — `BeforeTool` : ownership sur `write_file`/`replace`, gates de spawn sur l'outil de chaque agent | aucun |
 | modèles (`tier_models`) | `opus` / `sonnet` / `haiku` | `gpt-6-astra` / `gpt-6-sol` / `gpt-6-luna` | `gemini-3-pro-preview` (deep, balanced) / `gemini-3-flash-preview` | `pro` (deep, balanced) / `flash` |
 
@@ -92,8 +92,9 @@ Pourquoi ces choix, et ce qu'ils corrigent :
   déprécie : l'ancienne façade `.codex/prompts/` n'était lue par personne. Les
   skills `.agents/skills/` sont cherchées du répertoire courant jusqu'à la
   racine du dépôt. `AGENTS.md` est tronqué en silence au-delà de 32 KiB
-  (`project_doc_max_bytes`) : le pointeur reste petit, la façade (59 Ko) est lue
-  sur consigne.
+  (`project_doc_max_bytes`) : le pointeur reste petit, et la façade qu'il
+  désigne — la carte opératoire compilée depuis `.sdda/memory/core.md`, quelques
+  Ko — est lue sur consigne.
 - **Gemini CLI** exécute `@{…}` (injection de fichier) et `!{…}` (shell) dans le
   prompt d'une commande : `recall@{k}` lisait le fichier `k` à chaque
   `/sdda-build`. La compilation insère une espace (`@ {k}`) — aucun échappement

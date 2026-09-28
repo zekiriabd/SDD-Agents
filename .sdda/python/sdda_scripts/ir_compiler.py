@@ -1680,6 +1680,13 @@ def compile_to_file(root: Path, number: int, *, out: Path | None = None, config:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(dump_ir(ir))
     report.data["path"] = paths.rel(root, target)
+    # Les vues par agent (`.ir/views/`) sont régénérées avec l'IR qu'elles
+    # projettent : une vue écrite à part pourrait dériver d'une IR précédente.
+    # Seulement pour l'IR canonique — une sortie `--out` ailleurs est un essai.
+    if target.resolve() == paths.ir_path(root, number).resolve():
+        from sdda_scripts import ir_view
+
+        report.data["views"] = len(ir_view.write_views(root, number))
     return target, report
 
 

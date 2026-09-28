@@ -46,7 +46,7 @@ Read **uniquement**, pour chaque agent du périmètre :
 - `workspace/pipeline/contracts/tools/{n}-*.tool.md` des outils listés au §4 du contrat —
   pour connaître leurs `description` et erreurs ; tu ne les réécris pas.
 - `workspace/pipeline/contracts/retrieval/{n}-*.retrieval.md` des retrievers du §7 — mode de citation.
-- `workspace/.sys/.ir/{n}-system.ir.json` — l'entrée `agents[]` de cet agent :
+- `workspace/.sys/.ir/views/{n}-dev-prompt.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. l'entrée `agents[]` de cet agent :
   outils réellement câblés, `trustPosture`, `refusalPolicy`, `bounds`.
 - `workspace/pipeline/missions/{n}-*.md` — `## Failure Policy`, `## Business Rules`.
 - `workspace/src/{App}/CLAUDE.md` — contexte projet écrit par `project-init` (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini), §6 stack résolue :

@@ -45,7 +45,7 @@ peut pas les projeter sans les avoir lus.
 ## STEP 2 — Charger le contexte
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `orchestration`, `budget`,
+- `workspace/.sys/.ir/views/{n}-dev-orchestration.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `orchestration`, `budget`,
   `agents[]` (`bounds`, `handoff`), `guardrails`.
 - `workspace/pipeline/topology/{n}-topology.md` — le dessin (bloc ```mermaid de §4)
   que l'IR compile : si le code et le dessin divergent, c'est le code qui a tort.

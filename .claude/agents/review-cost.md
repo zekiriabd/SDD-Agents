@@ -66,7 +66,7 @@ in/out/cache, taux de hits de cache, top des outils en échec et en retry.
 
 Read **uniquement** :
 - ce rapport ;
-- `workspace/.sys/.ir/{n}-system.ir.json` — `budget` (`costPerRunTargetUsd`,
+- `workspace/.sys/.ir/views/{n}-review-cost.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `budget` (`costPerRunTargetUsd`,
   `costPerRunHardCapUsd`, `latencyP95TargetMs`, `tokenCeilingPerRun`),
   `orchestration.maxHops`, `agents[].bounds.budgetUsd`, `agents[].modelTier` ;
 - `workspace/pipeline/topology/{n}-topology.md §4` — le budget **estimé** en G2 (nominal, pire cas) ;

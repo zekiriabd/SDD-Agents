@@ -66,7 +66,15 @@ def findings():
 # ---------------------------------------------------------------------------
 # harness_build — la source du fichier mémoire
 # ---------------------------------------------------------------------------
-def test_memory_file_is_compiled_from_the_french_twin(tmp_path: Path) -> None:
+def test_memory_file_is_compiled_from_the_operating_card(tmp_path: Path) -> None:
+    (tmp_path / "ARCHITECTURE.md").write_text("# English", encoding="utf-8")
+    (tmp_path / "ARCHITECTURE.fr.md").write_text("# Français", encoding="utf-8")
+    (tmp_path / "memory").mkdir()
+    (tmp_path / "memory" / "core.md").write_text("# Carte", encoding="utf-8")
+    assert harness_build.memory_source(tmp_path) == tmp_path / "memory" / "core.md"
+
+
+def test_memory_file_falls_back_to_the_french_twin(tmp_path: Path) -> None:
     (tmp_path / "ARCHITECTURE.md").write_text("# English", encoding="utf-8")
     (tmp_path / "ARCHITECTURE.fr.md").write_text("# Français", encoding="utf-8")
     assert harness_build.memory_source(tmp_path).name == "ARCHITECTURE.fr.md"
@@ -91,9 +99,12 @@ def test_fallback_is_announced_by_the_build(tmp_path: Path, monkeypatch: pytest.
     assert any("ARCHITECTURE.fr.md absent" in n for n in harness_build.BUILD_NOTES["claude-code"])
 
 
-def test_claude_md_on_disk_comes_from_the_french_architecture() -> None:
+def test_claude_md_on_disk_comes_from_the_operating_card() -> None:
     claude_md = (harness_build.ROOT / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "depuis .sdda/ARCHITECTURE.fr.md" in claude_md
+    assert "depuis .sdda/memory/core.md" in claude_md
+    # Le fichier mémoire est injecté dans chaque session et chaque sous-agent :
+    # l'architecture entière (60 Ko) y coûtait ~15 000 tokens par tour.
+    assert len(claude_md.encode("utf-8")) <= harness_build.MEMORY_MAX_BYTES + 1_000
 
 
 # ---------------------------------------------------------------------------

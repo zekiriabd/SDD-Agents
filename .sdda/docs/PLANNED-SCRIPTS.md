@@ -10,7 +10,7 @@ implementation lots, not a list of bugs.
 six places is an established need; a script requested once may have
 been invented in passing and deserves a question before it is written.
 
-- **77** written · **0** to write · **0** cited without declaration
+- **79** written · **0** to write · **0** cited without declaration
 
 **Declared**: the prompt that calls the script says « Planifié » on the
 following line, with what to do while it is missing. A missing script

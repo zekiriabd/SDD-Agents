@@ -85,7 +85,7 @@ Read **uniquement** :
   FIX: python .sdda/sdda.py project-init --mission {n}  (/sdda-build STEP 3.0)
   ```
   Tu ne l'édites jamais : il est régénéré par script (`forbidden_writes`).
-- `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]` (ids, tiers, bounds),
+- `workspace/.sys/.ir/views/{n}-dev-backend.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `agents[]` (ids, tiers, bounds),
   `tools[]`, `retrievers[]`, `dataAccess[]`, `orchestration.entryNode`,
   `inputSchema` / `outputSchema`, `budget`. IR absent → `[IR_NOT_FOUND]`, STOP.
 - `workspace/pipeline/missions/{n}-*.md` — `## Business Rules` (les `BR-x` que le

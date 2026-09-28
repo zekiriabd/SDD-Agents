@@ -23,20 +23,35 @@ def test_it_has_its_own_facade_and_is_built_by_default() -> None:
     assert not any(k.startswith(".gemini/") for k in files)
 
 
-def test_the_architecture_is_split_into_rules_within_the_documented_limit() -> None:
+def test_the_memory_is_split_into_rules_within_the_documented_limit() -> None:
     _plan_obj, files = _plan()
     rules = {k: v for k, v in files.items() if k.startswith(".agents/rules/")}
-    assert len(rules) >= 2
+    assert len(rules) >= 1
     for rel, text in rules.items():
         assert len(text.encode("utf-8")) <= hb.ANTIGRAVITY_RULE_MAX_BYTES, rel
         problems: list[str] = []
         values = framework_smoke._strict_frontmatter(hb.ROOT / rel, text, ("trigger", "description"), problems)
         assert not problems and values["trigger"] in hb.ANTIGRAVITY_RULE_TRIGGERS
-    # Rien de l'architecture ne se perd au découpage : chaque titre `##` est quelque part.
+        # Une règle seule est toujours active ; des parties se chargent à la demande.
+        assert values["trigger"] == ("always_on" if len(rules) == 1 else "model_decision")
+    # Rien de la source ne se perd au découpage : chaque titre `##` est quelque part.
     source = hb.memory_source().read_text(encoding="utf-8")
     joined = "\n".join(rules.values())
     for title in [ln for ln in source.splitlines() if ln.startswith("## ")]:
         assert title in joined, title
+
+
+def test_a_split_source_is_loaded_on_decision_not_always(monkeypatch) -> None:
+    # Repli sur l'architecture entière (60 Ko) : `always_on` partout mangerait le
+    # budget des règles actives — les parties restent `model_decision`.
+    matrix = hb.load_matrix()
+    arch = (hb.SDDA / "ARCHITECTURE.fr.md").read_text(encoding="utf-8")
+    adapter = hb.ADAPTERS["antigravity"](matrix["antigravity"])
+    monkeypatch.setattr(adapter, "memory_text", lambda: (hb.SDDA / "ARCHITECTURE.fr.md", arch))
+    plan = hb.BuildPlan()
+    adapter.emit_memory_file(plan, hb.ROOT / ".agents")
+    assert len(plan.files) >= 2
+    assert all("trigger: model_decision" in text for text in plan.files.values())
 
 
 def test_split_markdown_never_exceeds_the_budget_and_keeps_the_text() -> None:

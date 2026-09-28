@@ -108,6 +108,17 @@ RUN_ID=${SDDA_RUN_ID:-$(python .sdda/sdda.py state new-run \
   --mission {n} --command "/sdda-eval" --tags "$TAGS")}
 ```
 
+Packs et vues d'IR avant tout spawn — `qa-evals` lit STACK.md tranché dans
+son pack et sa vue de l'IR ; périmés, le spawn est refusé (`[PACK_UNUSABLE]`,
+`[IR_VIEW_STALE]`) :
+
+```bash
+python .sdda/sdda.py context-pack check --agent all --json || \
+python .sdda/sdda.py context-pack build --agent all
+python .sdda/sdda.py ir-view --mission {n} --check || \
+python .sdda/sdda.py ir-view --mission {n} --write
+```
+
 Si `--run-only` → STEP 5. Si `--acceptance` → STEP 7.
 
 ---

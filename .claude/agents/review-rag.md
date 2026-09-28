@@ -41,7 +41,7 @@ Argument `{n}`. Absent ou non numérique → `[INVALID_ARG]`, STOP.
 ## STEP 2 — Charger
 
 Read **uniquement** :
-- `workspace/.sys/.ir/{n}-system.ir.json` — `retrievers[]` : l'intention
+- `workspace/.sys/.ir/views/{n}-review-rag.ir.json` — ta **vue** de l'IR (`ir-view`), à lire à la place de l'IR complète ; un champ absent est déclaré dans `view.omitted` et se lit alors dans `{n}-system.ir.json`. `retrievers[]` : l'intention
   (`pattern`, `topK`, `gateThresholds`, `indexHash`, `citationMode`) et, quand
   le diagnostic descend jusqu'aux composants, `binding` (`chunk`, `store`,
   `embeddingModel`, `hybridWeights`, `rerank`). Plus `agents[].retrievers`.
