@@ -239,6 +239,12 @@ def provider_client(settings: Settings) -> LLMClient:
     timeout = float(settings.bounds.get("timeout_s") or 60.0)
     if provider in ("stub", "none", ""):
         return StubClient()
+    if "langchain" in settings.frameworks:
+        # La stack DÉCLARÉE sert le modèle : `framework/langchain.md` actif, le
+        # SDK nu ci-dessous n'est plus que le repli d'un projet sans framework.
+        from .agents.chat_model import langchain_client  # noqa: PLC0415 - émis avec la fiche seulement
+
+        return langchain_client(settings, timeout)
     if provider == "anthropic":
         import anthropic  # noqa: PLC0415 - import paresseux volontaire
 

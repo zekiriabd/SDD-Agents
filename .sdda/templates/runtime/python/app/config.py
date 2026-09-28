@@ -130,6 +130,9 @@ class Settings:
     app_name: str = "App"
     mission_id: str = ""
     provider: str = "none"
+    #: Les fiches de `## Active Agent Framework` (`langchain`, `langgraph`) :
+    #: c'est ce qui fait passer le client et la boucle par le framework déclaré.
+    frameworks: tuple[str, ...] = ()
     default_tier: str = "balanced"
     tier_map: Mapping[str, str] = field(default_factory=dict)
     pricing: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
@@ -198,6 +201,7 @@ class Settings:
             app_name=str(raw.get("appName") or "App"),
             mission_id=str(raw.get("missionId") or ""),
             provider=str(raw.get("provider") or "none"),
+            frameworks=tuple(str(f) for f in raw.get("frameworks") or [] if str(f).strip()),
             default_tier=str(raw.get("defaultTier") or "balanced"),
             tier_map=tier_map,
             pricing={str(k): {str(rk): float(rv) for rk, rv in (v or {}).items()}

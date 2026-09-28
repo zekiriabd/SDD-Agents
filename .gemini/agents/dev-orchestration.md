@@ -118,8 +118,13 @@ suivants sont la phase 5.
 `base.py` (boucle bornée, `Graph`, `dump_graph()`), `router.py`,
 `sequential.py` — **sans framework**, générés depuis
 `.sdda/templates/runtime/python/`, marqués « GÉNÉRÉ, ne pas éditer » et dans
-la zone de `dev-backend`. Ils font tourner un `single-agent` avant qu'une
-topologie existe, donc valident la plomberie (surface, traces, bornes) à vide.
+la zone de `dev-backend`. Quand la fiche de framework active porte un graphe,
+s'y ajoute `single_agent.py` : la boucle bornée dans un graphe du framework à
+un nœud, et `manifest_from_compiled()`, qui introspecte un graphe compilé —
+réutilise-le pour ton manifeste. Ils font tourner un `single-agent` avant
+qu'une topologie existe, donc valident la plomberie (surface, traces, bornes)
+à vide. Le fichier de graphe que la fiche te fait écrire est à toi, pas au
+squelette.
 `app/run_service.py` expose le point d'extension `agent_factory` : tant qu'il
 est absent, le service câble la boucle de `base.py` ; fourni, il rend l'objet
 exécutable que tu construis.

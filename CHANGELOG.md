@@ -259,6 +259,20 @@ against the hooks, and is now a regression test
 
 ### Fixed
 
+- The Python skeleton now follows the declared framework, which removes the
+  `[FRAMEWORK_DRIFT]` that turned G6 red on C1 while everything else worked.
+  Under `framework/langchain.md`, `models.provider_client` returns a
+  `BaseChatModel` adapter (`agents/chat_model.py`: `bind_tools`, tokens from
+  `usage_metadata` with cache tokens split out). Under `framework/langgraph.md`,
+  `RunService`'s fallback runs the bounded loop inside a one-node `StateGraph`
+  (`orchestration/single_agent.py`). `recursion_limit` stays a safety net,
+  `GraphRecursionError` becomes `[UNBOUNDED_LOOP]`, and the manifest is
+  introspected from the compiled graph (`manifest_from_compiled`). Each module
+  is emitted only with its sheet, and `app_config.json` carries `frameworks`.
+  `validate-framework` gains a third check: a module under `agents/` or
+  `orchestration/` (tests excepted) that imports a provider SDK is drift, so a
+  hand-written loop beside the skeleton is still caught.
+
 Audit of 2026-09-26 — false greens and wrong measures, each with a test that
 failed before the fix:
 

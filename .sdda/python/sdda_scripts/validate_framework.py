@@ -2,8 +2,8 @@
 """FRAMEWORK — le code généré utilise le framework déclaré, et lui seul (0 token).
 
 Part `framework` de G6. `## Active Agent Framework` est une déclaration ; le
-squelette généré n'importe ni LangChain ni LangGraph (il n'impose que la
-coquille), et ce sont les `dev-*` qui écrivent agents et orchestration. Rien ne
+squelette généré en suit les fiches Python (repli LangChain + LangGraph), mais
+ce sont les `dev-*` qui écrivent agents et orchestration. Rien ne
 vérifiait qu'ils écrivaient avec la stack choisie : un `dev-orchestration` qui
 code son routeur en `if/else` sur le SDK brut, ou un `dev-agent` qui importe
 CrewAI « parce que c'est plus court », livre un système dont la fiche de stack,
@@ -20,6 +20,15 @@ Deux contrôles, sur les imports Python (`ast`, aucun import exécuté) de
    `crewai`, `llama_index`, `autogen`, `pydantic_ai`… ; et `langgraph` (ou
    `langchain.agents.create_agent`, un graphe LangGraph sous le capot) sans
    `framework/langgraph.md` actif. -> `[FRAMEWORK_DRIFT]`.
+3. **Le framework n'est pas contourné** : sous une fiche Python active, aucun
+   module (hors tests) de `agents/` ou `orchestration/` n'importe le SDK d'un
+   fournisseur (`anthropic`, `openai`…). Le squelette importe désormais
+   LangChain et LangGraph là où leurs fiches les placent
+   (`agents/chat_model.py`, `orchestration/single_agent.py`), ce qui suffit au
+   contrôle 1 : une boucle écrite à la main contre le SDK, à côté, passerait
+   sans ce troisième contrôle. Le
+   SDK n'a sa place que dans `models.py`, derrière `provider_client`.
+   -> `[FRAMEWORK_DRIFT]`.
 
 Hors Python (C#, TypeScript, Kotlin, Java), les imports sont lus par motif —
 `using X;`, `import … from "x"`, `import x.y` — sans parseur par langage : les
@@ -72,6 +81,13 @@ COMPETITORS: dict[str, str] = {
 #: `langchain.agents.create_agent` (1.x) est un graphe LangGraph : l'utiliser
 #: sans langgraph.md, c'est activer LangGraph sans le déclarer (fiche langchain.md).
 HIDDEN_LANGGRAPH = ("langchain.agents",)
+
+#: SDK de fournisseurs : la couche modèle, légitime dans `models.py`, mais une
+#: boucle d'agent ou un graphe qui les importe contourne le framework déclaré.
+PROVIDER_SDKS = ("anthropic", "openai", "google.genai", "google.generativeai", "mistralai", "cohere", "ollama")
+
+#: Couches où le framework déclaré porte les appels au modèle.
+FRAMEWORK_LAYERS = ("agents", "orchestration")
 
 #: Hors Python — langage -> (suffixes de fichiers, motif d'import).
 NATIVE_IMPORTS: dict[str, tuple[tuple[str, ...], re.Pattern[str]]] = {
@@ -187,6 +203,22 @@ def run(root: Path, report: Report) -> Report:
                 report.error("FRAMEWORK_DRIFT", f"`{rel}` importe `{mod}` sans `framework/langgraph.md` actif",
                              "activer langgraph.md (et en assumer les bornes) ou écrire la boucle de la fiche "
                              "langchain.md §3.3 — `create_agent` est un graphe LangGraph sous le capot", f"{loc}{rel}")
+
+    # 3. Pas de contournement par le SDK nu.
+    if declared & set(DECLARED):
+        for rel, mods in sorted(files.items()):
+            parts = rel.split("/")
+            if parts[0] not in FRAMEWORK_LAYERS or "tests" in parts[:-1] or parts[-1].startswith("test_"):
+                continue
+            for mod in mods:
+                sdk = next((p for p in PROVIDER_SDKS if _matches(mod, p)), None)
+                if sdk is not None:
+                    report.error("FRAMEWORK_DRIFT",
+                                 f"`{rel}` importe le SDK `{mod}` : la boucle contourne "
+                                 f"{', '.join(sorted(declared & set(DECLARED)))}",
+                                 "appeler le modèle par `models.provider_client` (servi par LangChain quand "
+                                 "`framework/langchain.md` est actif) — le SDK n'a sa place que dans `models.py`",
+                                 f"{loc}{rel}")
     return report
 
 

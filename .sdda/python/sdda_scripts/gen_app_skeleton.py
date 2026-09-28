@@ -70,6 +70,17 @@ APP_DIR = "app"
 PYPROJECT_TMPL = "pyproject.toml.tmpl"
 CONFIG_TMPL = "app_config.json.tmpl"
 
+#: Modules du squelette qui importent un framework : émis SEULEMENT quand sa
+#: fiche est active dans `## Active Agent Framework`. Le squelette appelait le
+#: SDK du fournisseur sans framework, et `validate-framework` rendait G6 rouge
+#: (`[FRAMEWORK_DRIFT]`) sur C1 (LangChain + LangGraph) alors que tout marchait.
+#: Émis sans leur fiche, ils importeraient un framework non déclaré — la même
+#: dérive dans l'autre sens.
+FRAMEWORK_MODULES: dict[str, str] = {
+    "agents/chat_model.py": "langchain",
+    "orchestration/single_agent.py": "langgraph",
+}
+
 #: Le langage que ce squelette sait écrire. Un seul, et c'est dit ici plutôt
 #: que déduit : le jour où `csharp` aura son squelette, il aura son générateur.
 LANGUAGE = "python"
@@ -140,6 +151,7 @@ class Context:
     app: str = "App"
     mission: str = ""
     language: str = ""
+    frameworks: list[str] = field(default_factory=list)
     surfaces: list[str] = field(default_factory=list)
     deliverable: str = "cli-exe"
     provider: str = "none"
@@ -166,6 +178,7 @@ class Context:
             root=root,
             app=str(project.get("AppName") or "").strip(),
             language=languages[0] if languages else "",
+            frameworks=active_stacks(root, "Active Agent Framework"),
             surfaces=surfaces,
             deliverable=str(config.get("DeliverableType", "cli-exe")),
             provider=str(_section(root, "Runtime Models").get("RuntimeProvider") or "none"),
@@ -595,6 +608,7 @@ def render_app_config(ctx: Context, template: str) -> str:
         "{ToolMeta}": _json(tool_meta),
         "{MissionId}": ctx.mission,
         "{RuntimeProvider}": ctx.provider,
+        "{Frameworks}": _json(sorted(ctx.frameworks)),
         "{DefaultTier}": ctx.default_tier,
         "{TierMap}": _json(ctx.tier_map),
         "{Pricing}": _json(_pricing(ctx.root)),
@@ -639,6 +653,9 @@ def plan(ctx: Context, report: Report, deps: Dependencies | None = None) -> list
         if not path.is_file() or "__pycache__" in path.parts:
             continue
         relative = path.relative_to(source)
+        framework = FRAMEWORK_MODULES.get(relative.as_posix())
+        if framework is not None and framework not in ctx.frameworks:
+            continue
         text = markdown_io.read_text(path)
         if path.name == PYPROJECT_TMPL:
             targets.append((ctx.project_dir / "pyproject.toml", _subst(render_pyproject(text, deps), ctx)))

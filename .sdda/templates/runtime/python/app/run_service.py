@@ -125,7 +125,10 @@ class RunService:
     pipeline) à partir des dépendances résolues ici. Tant qu'il n'est pas
     fourni, le service câble la boucle bornée de `orchestration/base.py` — ce
     qui suffit à faire tourner un `single-agent`, donc à valider la plomberie
-    avant qu'une topologie existe.
+    avant qu'une topologie existe. Sous `framework/langgraph.md`, cette boucle
+    est portée par le graphe à un nœud de `orchestration/single_agent.py`, et sous
+    `framework/langchain.md` son modèle est un `BaseChatModel`
+    (`agents/chat_model.py`) : le repli suit la stack déclarée.
     """
 
     def __init__(self, settings: Settings | None = None, *,
@@ -471,12 +474,19 @@ class RunService:
                 kwargs["retriever"] = self.retriever
             return self._agent_factory(**kwargs)
         max_output = self.settings.bounds.get("max_output_tokens")
-        return BoundedLoop(
+        loop = BoundedLoop(
             agent_id="agent", agent_name="agent", bounds=bounds, client=client,
             model=resolve(self.settings.default_tier, self.settings),
             tier=self.settings.default_tier, system_prompt=self._system_prompt,
             toolset=self._toolset, tracer=tracer, guardrails=guards,
             max_output_tokens=int(max_output) if max_output else None)
+        if "langgraph" in self.settings.frameworks:
+            # `framework/langgraph.md` actif : la boucle tourne DANS un graphe à
+            # un nœud, pas à côté de la stack déclarée (`[FRAMEWORK_DRIFT]`).
+            from .orchestration.single_agent import LangGraphAgent  # noqa: PLC0415 - émis avec sa fiche
+
+            return LangGraphAgent(loop, max_hops=self.settings.max_hops or 1)
+        return loop
 
     def _absorb(self, result: RunResult, agent: AgentResult, tracer: Tracer) -> None:
         result.output = agent.output

@@ -292,7 +292,9 @@ def test_m13_azure_uses_the_resource_endpoint_and_the_deployment(rt: Runtime, mo
 
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AzureOpenAI=Fake, OpenAI=Fake))
     base = rt.settings()
-    settings = replace(base, provider="azure", tier_map={"balanced": "gpt-5.4"},
+    # Le SDK nu : le repli d'un projet SANS framework déclaré (sous LangChain,
+    # c'est `agents/chat_model.py`, testé dans test_runtime_framework.py).
+    settings = replace(base, provider="azure", tier_map={"balanced": "gpt-5.4"}, frameworks=(),
                        provider_env={"AZURE_OPENAI_ENDPOINT": "https://r.openai.azure.com",
                                      "AZURE_OPENAI_API_VERSION": "2025-01-01",
                                      "AZURE_OPENAI_DEPLOYMENT_BALANCED": "prod-balanced"},
