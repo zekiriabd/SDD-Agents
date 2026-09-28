@@ -49,7 +49,7 @@ sous-entendu.
 | | Langage | Framework | RAG · vector · rerank | Serving | État |
 |---|---|---|---|---|---|
 | **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | combo **C1** — seul runtime doté d'un générateur de squelette |
-| **.NET** | ✅ | Microsoft Agent Framework | ✅ hybrid-dotnet · pgvector-dotnet | cli-dotnet · aspnet-minimal | combo **C1-NET** — pins résolus et API compilées sur une sonde du SDK ; pas de générateur de squelette (dev-backend l'écrit) |
+| **.NET** | ✅ | Microsoft Agent Framework | ✅ hybrid-dotnet · pgvector-dotnet | cli-dotnet · aspnet-minimal | combos **C1-NET** (RAG) et **SOURCES-NET** (sources déclarées : `data/` et `tools/` générés). Première MISSION construite par le pipeline (OrderLookup, 2026-09-28) : elle compile et répond à de vraies questions, mais G5/G6 ne sont pas encore mesurées. Pas de générateur de squelette (`dev-app` / `dev-backend` écrivent la coquille) |
 | **TypeScript** | ✅ | LangGraph.js | ✅ hybrid-node · pgvector-node | cli-node · http-sse-node | combo **C1-TS** — pas de générateur de squelette |
 | **Kotlin** | ✅ | Spring AI | ✅ hybrid-jvm · pgvector-jvm | cli-kotlin · spring-sse | combo **C1-KT** — build de vérification seulement |
 | **Java** | ✅ | Spring AI (mêmes bibliothèques que Kotlin) | ✅ hybrid-jvm · pgvector-jvm | cli-java · spring-sse | combo **C1-JAVA** — build de vérification seulement |
@@ -67,8 +67,9 @@ RAG (`rag/hybrid-*`, `vectorstore/pgvector-*`, `dataaccess/view-per-agent-*`),
 sa fiche d'eval et sa fiche d'observabilité, et tous parlent le même contrat CLI
 (`stacks/serving/cli.md` §3.5) et écrivent la même trace JSONL : les runners du
 framework jugent l'application livrée par `--executor cli`, quel que soit son
-langage. Ce qui reste propre à Python est dit : le générateur de squelette, le
-code de référence des garde-fous, et les sources déclarées (`declared-sources`).
+langage. Ce qui reste propre à Python est dit : le générateur de squelette et le
+code de référence des garde-fous. Les sources déclarées (`declared-sources`) sont
+générées en Python et en C#.
 
 Rien ici n'est *validé* : `frameworkStatus: design-phase`, et tous les
 composants sont `untested` tant qu'aucun run mesuré n'a eu lieu (Lot 6).
@@ -590,7 +591,10 @@ génération — huit agents `dev-*`, le squelette Python — et la couche de re
 six reviewers — sont écrites et câblées à leurs gates, et **n'ont jamais été
 exécutées de bout en bout**. Python est le seul runtime doté d'un générateur de
 squelette ; .NET, TypeScript, Kotlin et Java ont leur chaîne C1 complète en
-fiches, écrite par les agents `dev-*`.
+fiches, écrite par les agents `dev-*`. .NET est le seul, après Python, à avoir
+traversé le pipeline sur une vraie MISSION (2026-09-28) : G0-G2 verts,
+application construite et qui répond juste à la main, G5/G6 non mesurées (quota
+du fournisseur) — un run, pas une mesure.
 
 **Aucune combinaison de stack n'est annoncée validée**, parce qu'aucune n'a
 encore été mesurée par un run réel. C1 est la cible du MVP, en `design-phase`.

@@ -47,7 +47,7 @@ implied.
 | | Language | Framework | RAG · vector · rerank | Serving | State |
 |---|---|---|---|---|---|
 | **Python** | ✅ | LangChain · LangGraph | ✅ hybrid · pgvector · rerank | cli · fastapi-sse · batch | combo **C1** — the only runtime with a skeleton generator |
-| **.NET** | ✅ | Microsoft Agent Framework | ✅ hybrid-dotnet · pgvector-dotnet | cli-dotnet · aspnet-minimal | combo **C1-NET** — pins resolved and API compiled on an SDK probe; no skeleton generator (dev-backend writes it) |
+| **.NET** | ✅ | Microsoft Agent Framework | ✅ hybrid-dotnet · pgvector-dotnet | cli-dotnet · aspnet-minimal | combos **C1-NET** (RAG) and **SOURCES-NET** (declared sources: `data/` and `tools/` generated). First MISSION built by the pipeline (OrderLookup, 2026-09-28): it compiles and answers real questions, but G5/G6 are not measured yet. No skeleton generator (`dev-app` / `dev-backend` write the shell) |
 | **TypeScript** | ✅ | LangGraph.js | ✅ hybrid-node · pgvector-node | cli-node · http-sse-node | combo **C1-TS** — no skeleton generator |
 | **Kotlin** | ✅ | Spring AI | ✅ hybrid-jvm · pgvector-jvm | cli-kotlin · spring-sse | combo **C1-KT** — verification build only |
 | **Java** | ✅ | Spring AI (same libraries as Kotlin) | ✅ hybrid-jvm · pgvector-jvm | cli-java · spring-sse | combo **C1-JAVA** — verification build only |
@@ -65,8 +65,9 @@ chain (`rag/hybrid-*`, `vectorstore/pgvector-*`, `dataaccess/view-per-agent-*`),
 eval sheet and observability sheet, and they all speak the same CLI contract
 (`stacks/serving/cli.md` §3.5) and write the same JSONL trace: the framework's
 runners judge the delivered application through `--executor cli`, whatever its
-language. What remains Python-only is said: the skeleton generator, the
-guardrails' reference code, and declared sources (`declared-sources`).
+language. What remains Python-only is said: the skeleton generator and the
+guardrails' reference code. Declared sources (`declared-sources`) are generated
+in Python and C#.
 
 Nothing here is *validated*: `frameworkStatus: design-phase`, and every
 component is `untested` until a measured run has taken place (Lot 6).
@@ -570,6 +571,9 @@ eight `dev-*` agents, the Python skeleton — and the review layer — six revie
 — are written and wired to their gates, and **have never been run end to end**.
 Python is the only runtime with a skeleton generator; .NET, TypeScript, Kotlin
 and Java have their full C1 chain in sheets, written by the `dev-*` agents.
+.NET is the only one after Python to have gone through the pipeline on a real
+MISSION (2026-09-28): G0-G2 green, application built and answering correctly by
+hand, G5/G6 not measured (provider quota) — a run, not a measurement.
 
 **No stack combination is announced as validated**, because none has yet been
 measured by a real run. C1 is the MVP target, in `design-phase`. Announcing
