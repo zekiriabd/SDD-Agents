@@ -71,7 +71,10 @@ GATE_PARTS_ADVISORY: dict[str, tuple[str, ...]] = {
     # `framework` (validate_framework) : le code des dev-* importe le framework
     # déclaré là où sa fiche le place, et aucun autre. Rouge = une architecture
     # que la fiche relue en revue ne décrit plus.
-    "G6": ("api", "framework"),
+    # `proportionality` (validate_effective_architecture) : le livrable ne porte
+    # que les capacités que la spec exige (IR `architecture`). Rouge = un
+    # composant, un symbole ou un paquet sans exigence.
+    "G6": ("api", "framework", "proportionality"),
     "G7": ("secrets", "pii", "toolscope"),
 }
 

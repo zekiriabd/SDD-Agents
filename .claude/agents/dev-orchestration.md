@@ -94,10 +94,12 @@ contrat de mémoire ou `ir.memory`) :
 - `workspace/src/{App}/shared/` — les types partagés : chaque schéma d'état de
   handoff du §13 des contrats d'agents, chaque `inputSchema`/`outputSchema` de
   l'IR qu'un autre agent ou le graphe consomme. Des types, aucune logique.
-- `workspace/src/{App}/memory/interface.{ext}` — l'INTERFACE de la mémoire du
-  contrat de `architect-memory` : une opération de lecture et d'écriture par
-  scope nommé, leurs signatures, les erreurs (`[MEMORY_SHARED_STATE_UNSCOPED]`).
-  Aucune implémentation : elle vient en phase 5, DERRIÈRE cette interface.
+- `workspace/src/{App}/memory/interface.{ext}` — **seulement si
+  `memory.layer` figure dans `ir.architecture.required`** (sinon aucun
+  `memory/`) : l'INTERFACE de la mémoire du contrat de `architect-memory`, une
+  opération de lecture et d'écriture par scope nommé, leurs signatures, les
+  erreurs (`[MEMORY_SHARED_STATE_UNSCOPED]`). Aucune implémentation : elle vient
+  en phase 5, DERRIÈRE cette interface.
 
 Rien sous `orchestration/` : l'AGENT GATE n'est pas passée, le graphe n'a rien
 à câbler. `/sdda-build` le vérifie sur le disque (instantané de la phase 4.0,
@@ -114,8 +116,8 @@ suivants sont la phase 5.
 ## STEP 3.0 — Le squelette a déjà un graphe : le tien le remplace, il ne le double pas
 
 `project-init` (Python) pose `workspace/src/{App}/app/orchestration/` —
-`base.py` (boucle bornée, `Graph`, `dump_graph()`), `router.py`,
-`sequential.py` — **sans framework**, générés depuis
+`base.py` (boucle bornée, `Graph`, `dump_graph()`) et, seulement si
+l'architecture effective les exige, `router.py` / `sequential.py` — **sans framework**, générés depuis
 `.sdda/templates/runtime/python/`, marqués « GÉNÉRÉ, ne pas éditer » et dans
 la zone de `dev-backend`. Quand la fiche de framework active porte un graphe,
 s'y ajoute `single_agent.py` : la boucle bornée dans un graphe du framework à
@@ -196,7 +198,11 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
 - **État partagé** : la matrice d'ownership du memory contract est **appliquée**
   — un nœud qui écrit une section dont il n'est pas owner est refusé à
   l'exécution, avec `[MEMORY_SHARED_STATE_UNSCOPED]` dans la trace.
-- **Mémoire** : le contrat de `architect-memory`
+- **Mémoire** — seulement si `memory.layer` est requise. Une conversation
+  multi-tour à fenêtre glissante (`conversation.session` seule) n'est PAS une
+  couche mémoire : c'est une borne de l'historique de session, tenue par le
+  framework là où la session vit — aucun `memory/`, aucune classe de fenêtre.
+  Sinon, le contrat de `architect-memory`
   (`workspace/pipeline/contracts/memory/{n}-memory.md`) devient du code dans
   `workspace/src/{App}/memory/` — c'est TA zone, et lui seul : une mémoire est
   un état qui survit au tour, donc un état du graphe. L'implémentation se
@@ -208,9 +214,16 @@ FIX: ajouter `hops` à l'état, l'incrémenter sur l'arête, forcer `finalize` �
   nomme (`CrossAgentSharedState: scoped`) ; politique PII appliquée À
   L'ÉCRITURE (`MemoryPIIPolicy: redact-before-write` : ce qui n'entre pas ne
   peut pas fuir) ; aucune persistance tant que `LongTermEnabled: false`. Le
-  squelette Python pose `memory/__init__.py` vide (ailleurs : le module mémoire
-  vide de la fiche de langage) : un contrat sans implémentation
-  n'existe pas, et c'est ici qu'il cesse de ne pas exister.
+  squelette Python pose `memory/__init__.py` vide quand `memory.layer` est
+  requise (ailleurs : le module mémoire vide de la fiche de langage) : un
+  contrat sans implémentation n'existe pas, et c'est ici qu'il cesse de ne pas
+  exister.
+- **Proportionnalité** : un `single-agent` n'a ni routeur, ni état
+  d'orchestration, ni graphe multi-nœuds — sa boucle bornée suffit. Tout
+  composant d'orchestration porte une capacité de `ir.architecture.required`
+  (`orchestration.router`, `.sequential`, `.graph`, `.shared-state`,
+  `.delegation`, `.human-in-the-loop`) ; sans elle, il n'est pas écrit
+  (`[ARCH_COMPONENT_UNJUSTIFIED]`, part `proportionality` de G6).
 - **Checkpointing / human-in-the-loop** : si déclarés, chaque interruption
   reprend depuis un état persisté, et le point d'interruption est un nœud de
   l'IR, pas un `input()` glissé dans une fonction.

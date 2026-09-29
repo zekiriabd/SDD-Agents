@@ -485,6 +485,21 @@ sert la donnée avec `stale: true` et sa date `as_of`, et l'agent doit le dire
 à l'utilisateur. Lever une erreur privait l'agent de la donnée ET de sa date :
 il ne pouvait plus rien dire d'exact.
 
+La fraîcheur est une EXIGENCE que la source déclare : c'est `max_staleness_hours`
+**sur la source** qui la rend requise (capacité `data.staleness`). Sans lui,
+aucun champ `stale`, aucun seuil, aucun calcul d'âge ne sont générés — `as_of`
+reste, lui, dans chaque réponse. `SourceMaxStalenessHours` n'est que le défaut
+appliqué aux sources quand l'une au moins déclare sa fraîcheur.
+
+**Le runtime généré est proportionné.** `gen-source-tools` rend le runtime de
+référence avec les capacités de l'architecture effective
+(`sdda_lib/effective_architecture.py`, marqueurs `@sdda-if` des gabarits) : les
+lecteurs des seuls formats déclarés (`data.format.*`), les seules portes des
+outils câblés (`data.tool.lookup|search|count`), le filtre d'identité si une
+source déclare `required_filter`, les plages si une recherche porte des
+`ranges`, la fraîcheur si elle est déclarée. Une source JSON seule ne reçoit ni
+lecteur CSV ni lecteur JSONL.
+
 ### 3.10 Les outils générés
 
 Une source produit jusqu'à **trois** outils, et le troisième n'est pas un luxe :
@@ -494,6 +509,11 @@ Une source produit jusqu'à **trois** outils, et le troisième n'est pas un luxe
 | `{id}_lookup` | la source déclare une `key` | — |
 | `{id}_search` | la source déclare `filters` / `ranges` / `required_filter` | — |
 | `{id}_count` | dès que `search` existe | que « combien de commandes en exception ? » se réponde en tronquant 1 800 enregistrements à 200 et en laissant le modèle compter. Il comptera faux, avec aplomb, et la réponse aura l'air d'un fait |
+
+La déclaration dit ce qui est POSSIBLE ; le **roster** dit ce qui est DÉCIDÉ.
+Dès qu'il est lisible, seuls les outils qu'il nomme sont générés — contrat,
+wrapper et porte de l'enveloppe — et une source dont il ne cite aucun outil
+n'en reçoit aucun. Un `count` que personne ne câble n'existe pas.
 
 Une source sans `key` ni filtre ne produit aucun outil et le générateur le dit
 (`[DATA_SOURCE_NO_TOOL]`) : une source qu'on ne peut pas interroger n'est pas

@@ -308,6 +308,49 @@
         }
       }
     },
+    "architecture": {
+      "description": "Architecture EFFECTIVE : le sous-ensemble du catalogue de référence (sdda_lib/effective_architecture.py) que cette spec exige. Chaque capacité requise porte l'exigence qui la justifie ; une capacité omise n'est pas générée.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "required",
+        "omitted"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string"
+        },
+        "derivedFrom": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "ir",
+              "roster",
+              "mission",
+              "stack"
+            ]
+          }
+        },
+        "required": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "omitted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "evaluation": {
       "$ref": "#/$defs/evaluation"
     },

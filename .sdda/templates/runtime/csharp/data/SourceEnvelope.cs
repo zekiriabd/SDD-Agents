@@ -18,7 +18,9 @@ public sealed record SourceEnvelope
 
     public int SchemaCheckSample { get; init; } = 500;
 
+    // @sdda-if data.staleness
     public int MaxStalenessHours { get; init; } = 24;
+    // @sdda-endif
 
     public IReadOnlyList<string> ForbiddenOps { get; init; } = [];
 

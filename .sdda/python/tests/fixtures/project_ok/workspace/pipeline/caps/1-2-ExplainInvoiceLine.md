@@ -2,7 +2,7 @@
 
 ID: 1-2-ExplainInvoiceLine
 Parent MISSION: 1-SupportAssistant
-Parent MISSION hash: sha256:5a983251
+Parent MISSION hash: sha256:2379a43d
 Status: Draft
 Criticality: normal
 Confidence: high

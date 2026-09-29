@@ -1,7 +1,8 @@
 """L'enveloppe de sûreté — le seul chemin par lequel un agent touche une source.
 
-Tous les outils générés passent par `lookup_record`, `search_records` ou
-`count_records`. Il n'existe pas d'autre porte : c'est ce qui permet d'affirmer
+Tous les outils générés passent par l'une de ses portes (lecture par clé,
+recherche, comptage — seules celles qu'appellent les outils EXIGÉS sont
+générées). Il n'existe pas d'autre porte : c'est ce qui permet d'affirmer
 que **toute** lecture est bornée, tracée, redigée et datée, plutôt que de
 l'espérer de N wrappers écrits séparément.
 
@@ -11,7 +12,9 @@ Ce que l'enveloppe applique, dans cet ordre, à chaque appel :
     2. la frontière de racine                     (index.py, à la construction)
     3. le budget de lecture                       -> Timeout, jamais un partiel muet
     4. les filtres, sur champs DÉCLARÉS           -> InvalidFilter sinon
+# @sdda-if data.staleness
     5. la fraîcheur                               -> `stale: true` + `as_of`, jamais tue
+# @sdda-endif
     6. l'ordre déterministe                       sinon les evals ne rejouent pas
     7. le plafond, lu à maxRows + 1               -> truncated: true
     8. l'enveloppe des champs de texte libre      (P8)
@@ -19,10 +22,9 @@ Ce que l'enveloppe applique, dans cet ordre, à chaque appel :
    10. le span, PII redigées                      sans quoi aucun post-mortem
 
 L'ordre n'est pas indifférent. Le plafond est appliqué **après** le tri : « les
-200 premiers » doivent être les mêmes d'un run à l'autre. La fraîcheur est
-vérifiée **avant** de rendre quoi que ce soit, et DITE dans la réponse
-(`stale`, `as_of`) : une réponse exacte sur un instantané périmé est fausse
-avec assurance si rien ne le signale — et inutile si on refuse de la rendre.
+200 premiers » doivent être les mêmes d'un run à l'autre. L'instantané `as_of`
+est DIT dans chaque réponse : une réponse exacte sur un instantané périmé est
+fausse avec assurance si rien ne le signale.
 
 Ce qui est une ERREUR (levée) et ce qui est un ÉTAT (rendu) ne se confondent
 pas : une clé inconnue rend `record: null`, un plafond atteint `truncated:
@@ -31,45 +33,69 @@ identité absente, une source illisible et un budget dépassé lèvent.
 """
 from __future__ import annotations
 
+# @sdda-if data.tool.search|data.tool.count
 import functools
+# @sdda-endif
+# @sdda-if data.tool.search
 import heapq
+# @sdda-endif
+# @sdda-if data.identity-filter
 import importlib
+# @sdda-endif
+# @sdda-if data.tool.search|data.tool.count
 import json
+# @sdda-endif
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+# @sdda-if data.tool.search|data.tool.count
 from typing import Any, Callable, Iterable, Iterator
+# @sdda-else
+from typing import Any, Iterable
+# @sdda-endif
 
 from ..tools.spec import ToolContext
+# @sdda-if data.identity-filter|data.tool.search|data.tool.count
 from .errors import DataAccessError, InvalidFilter, Timeout
+# @sdda-else
+from .errors import DataAccessError, Timeout
+# @sdda-endif
 from .formats import read_records
 from .index import SourceIndex, build_index, record_at
 from .registry import Registry, Source, load_registry
 from .schema_guard import guard_index
 from .trust import wrap_record
 
+# @sdda-if data.tool.search|data.tool.count
 #: Au-delà, un `IN` n'est plus un filtre : c'est une jointure que l'appelant
 #: aurait dû faire côté données.
 MAX_IN_VALUES = 20
 
 #: Suffixes des paramètres de plage, dérivés d'un champ déclaré dans `ranges`.
 RANGE_SUFFIXES = ("_min", "_max")
+# @sdda-endif
 
 
 @dataclass
 class Result:
-    """Ce que rend l'enveloppe. `as_of` et `stale` ne sont jamais optionnels."""
+    """Ce que rend l'enveloppe. `as_of` n'est jamais optionnel, `stale` non plus s'il est déclaré."""
 
     as_of: str
+    # @sdda-if data.staleness
     stale: bool
+    # @sdda-endif
     record: dict[str, Any] | None = None
     records: list[dict[str, Any]] = field(default_factory=list)
     count: int = 0
     truncated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {"as_of": self.as_of, "stale": self.stale, "record": self.record,
-                "records": self.records, "count": self.count, "truncated": self.truncated}
+        out: dict[str, Any] = {"as_of": self.as_of, "record": self.record,
+                               "records": self.records, "count": self.count, "truncated": self.truncated}
+        # @sdda-if data.staleness
+        out["stale"] = self.stale
+        # @sdda-endif
+        return out
 
 
 #: Un SEUL contexte pour tous les outils — les outils de données sont des
@@ -79,6 +105,7 @@ class Result:
 Context = ToolContext
 
 
+# @sdda-if data.identity-filter
 def current_tenant() -> str:
     """L'identité posée par le transport pour le run (`identity.current_tenant`), ou `""`.
 
@@ -91,6 +118,9 @@ def current_tenant() -> str:
         return ""
     reader = getattr(module, "current_tenant", None)
     return str(reader()) if callable(reader) else ""
+
+
+# @sdda-endif
 
 
 def _registry_of(ctx: ToolContext) -> Registry:
@@ -161,6 +191,7 @@ def _resolve(ctx: ToolContext, source_id: str) -> tuple[Registry, Source]:
     return registry, source
 
 
+# @sdda-if data.staleness
 def _check_freshness(registry: Registry, source: Source, index: SourceIndex) -> bool:
     """`True` si l'instantané dépasse `max_staleness_hours` — la donnée est SERVIE, marquée.
 
@@ -173,6 +204,10 @@ def _check_freshness(registry: Registry, source: Source, index: SourceIndex) -> 
     return bool(limit and index.age_hours > limit)
 
 
+# @sdda-endif
+
+
+# @sdda-if data.identity-filter
 def _identity_filters(ctx: ToolContext, source: Source) -> dict[str, str]:
     """Les valeurs des `required_filter` de la source, tirées de l'identité de l'APPELANT.
 
@@ -194,6 +229,8 @@ def _identity_filters(ctx: ToolContext, source: Source) -> dict[str, str]:
     return out
 
 
+# @sdda-endif
+# @sdda-if data.tool.search|data.tool.count
 @functools.lru_cache(maxsize=None)
 def _properties_of(source_id: str) -> dict[str, dict[str, Any]]:
     """Les `properties` du schéma FIGÉ de la source (`data/schemas/{id}.schema.json`).
@@ -287,10 +324,12 @@ def _validate_filters(source: Source, filters: dict[str, Any]) -> dict[str, Any]
                 _check_enum(source, name, [value])
             clean[name] = value
 
+    # @sdda-if data.identity-filter
     missing = [f for f in source.required_filter if f not in clean]
     if missing:
         raise InvalidFilter(f"filtre(s) obligatoire(s) absent(s) : {missing}", source=source.id,
                             detail="la source n'est pas interrogeable sans")
+    # @sdda-endif
     return clean
 
 
@@ -360,6 +399,7 @@ def _sort_key(source: Source) -> Callable[[dict[str, Any]], tuple[str, str]]:
     return key
 
 
+# @sdda-endif
 def _present(source: Source, records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """Ce qui sort vers le modèle : champs du schéma, texte libre enveloppé."""
     untrusted = frozenset(source.free_text)
@@ -384,39 +424,57 @@ def _redact(source: Source, payload: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Les trois opérations
 # ---------------------------------------------------------------------------
+# @sdda-if data.tool.lookup
 async def lookup_record(*, source: str, key: Any, ctx: ToolContext,
                         record_model: Any = None, output_model: Any = None, **_: Any) -> Any:
     registry, spec = _resolve(ctx, source)
     index = _index_of(ctx, spec)
+    # @sdda-if data.staleness
     stale = _check_freshness(registry, spec, index)
+    # @sdda-endif
 
+    # @sdda-if data.identity-filter
     identity = _identity_filters(ctx, spec)
+    # @sdda-endif
     deadline = _now(ctx) + registry.envelope.read_timeout_ms / 1000.0
     location = index.by_key.get(str(key))
     record = record_at(location, spec) if location else None
     if _now(ctx) > deadline:
         raise Timeout(f"budget de lecture dépassé ({registry.envelope.read_timeout_ms} ms)", source=spec.id)
+    # @sdda-if data.identity-filter
     if record is not None and any(str(record.get(k)) != v for k, v in identity.items()):
         # L'enregistrement d'un AUTRE appelant n'existe pas pour celui-ci :
         # même réponse qu'une clé absente, rien qui dise qu'elle existe ailleurs.
         record = None
+    # @sdda-endif
     ctx.emit("data.lookup", _redact(spec, {
         "source": spec.id, "key": str(key), "found": record is not None,
         "as_of": index.as_of, "content_hash": index.content_hash}))
 
     return _build(output_model, record_model, {
-        "as_of": index.as_of, "stale": stale,
+        "as_of": index.as_of,
+        # @sdda-if data.staleness
+        "stale": stale,
+        # @sdda-endif
         "record": _present(spec, [record])[0] if record else None})
 
 
+# @sdda-endif
+# @sdda-if data.tool.search
 async def search_records(*, source: str, filters: dict[str, Any] | None = None,
                          ctx: ToolContext, record_model: Any = None,
                          output_model: Any = None, **_: Any) -> Any:
     registry, spec = _resolve(ctx, source)
     index = _index_of(ctx, spec)
+    # @sdda-if data.staleness
     stale = _check_freshness(registry, spec, index)
+    # @sdda-endif
+    # @sdda-if data.identity-filter
     supplied = {k: v for k, v in (filters or {}).items() if k not in spec.required_filter}
     clean = _validate_filters(spec, {**supplied, **_identity_filters(ctx, spec)})
+    # @sdda-else
+    clean = _validate_filters(spec, dict(filters or {}))
+    # @sdda-endif
 
     max_rows = registry.envelope.max_records_returned
     budget = registry.envelope.read_timeout_ms
@@ -441,10 +499,15 @@ async def search_records(*, source: str, filters: dict[str, Any] | None = None,
         "truncated": truncated, "as_of": index.as_of, "content_hash": index.content_hash}))
 
     return _build(output_model, record_model, {
-        "as_of": index.as_of, "stale": stale, "records": _present(spec, kept),
-        "count": len(kept), "truncated": truncated})
+        "as_of": index.as_of,
+        # @sdda-if data.staleness
+        "stale": stale,
+        # @sdda-endif
+        "records": _present(spec, kept), "count": len(kept), "truncated": truncated})
 
 
+# @sdda-endif
+# @sdda-if data.tool.count
 async def count_records(*, source: str, filters: dict[str, Any] | None = None,
                         ctx: ToolContext, output_model: Any = None, **_: Any) -> Any:
     """Compte le TOTAL, pas la page.
@@ -455,9 +518,15 @@ async def count_records(*, source: str, filters: dict[str, Any] | None = None,
     """
     registry, spec = _resolve(ctx, source)
     index = _index_of(ctx, spec)
+    # @sdda-if data.staleness
     stale = _check_freshness(registry, spec, index)
+    # @sdda-endif
+    # @sdda-if data.identity-filter
     supplied = {k: v for k, v in (filters or {}).items() if k not in spec.required_filter}
     clean = _validate_filters(spec, {**supplied, **_identity_filters(ctx, spec)})
+    # @sdda-else
+    clean = _validate_filters(spec, dict(filters or {}))
+    # @sdda-endif
 
     total = sum(1 for _ in _scan(ctx, spec, index, clean,
                                  registry.envelope.read_timeout_ms, limit=None))
@@ -466,4 +535,9 @@ async def count_records(*, source: str, filters: dict[str, Any] | None = None,
         "as_of": index.as_of, "content_hash": index.content_hash}))
 
     return _build(output_model, None, {
-        "as_of": index.as_of, "stale": stale, "count": total})
+        "as_of": index.as_of,
+        # @sdda-if data.staleness
+        "stale": stale,
+        # @sdda-endif
+        "count": total})
+# @sdda-endif

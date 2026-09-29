@@ -34,6 +34,7 @@ import pytest
 pytest.importorskip("pydantic", reason="runtime généré exécuté : `pip install pydantic==2.13.5`")
 
 from conftest import make_project  # noqa: E402
+from sdda_lib.feature_template import ALL
 from sdda_scripts import gen_source_tools as gst  # noqa: E402
 
 APP = "SupportAssistant"
@@ -90,7 +91,7 @@ def runtime(tmp_path: Path):
     # vieillit lui-même (`os.utime`), les autres partent d'une source fraîche.
     now = time.time()
     os.utime(project / TRACKING, (now, now))
-    report = gst.run(project, mode="write")
+    report = gst.run(project, mode="write", features=ALL)
     assert report.ok, report.render_text()
     rt = Runtime(project)
     yield rt
@@ -237,7 +238,7 @@ def test_an_oversized_in_clause_is_refused(runtime) -> None:
 def test_a_missing_required_filter_is_refused(runtime) -> None:
     patch(runtime.project, MANIFEST, "    filters: [order_id, customer_id, carrier, status]",
           "    filters: [order_id, customer_id, carrier, status]\n    required_filter: [customer_id]")
-    gst.run(runtime.project, mode="write")
+    gst.run(runtime.project, mode="write", features=ALL)
     fresh = Runtime(runtime.project)
     try:
         with pytest.raises(fresh.errors.InvalidFilter):
@@ -263,7 +264,7 @@ def test_the_cap_reports_that_it_truncated(runtime) -> None:
     _many_records(runtime.project, 300)
     patch(runtime.project, "workspace/stack/STACK.md",
           "SourceMaxRecordsReturned: 200", "SourceMaxRecordsReturned: 5")
-    gst.run(runtime.project, mode="write")
+    gst.run(runtime.project, mode="write", features=ALL)
     fresh = Runtime(runtime.project)
     try:
         result = fresh.run(fresh.envelope.search_records(source="order_tracking", ctx=fresh.ctx()))
@@ -291,7 +292,7 @@ def test_count_returns_the_total_not_the_page(runtime) -> None:
     _many_records(runtime.project, 300)
     patch(runtime.project, "workspace/stack/STACK.md",
           "SourceMaxRecordsReturned: 200", "SourceMaxRecordsReturned: 5")
-    gst.run(runtime.project, mode="write")
+    gst.run(runtime.project, mode="write", features=ALL)
     fresh = Runtime(runtime.project)
     try:
         assert fresh.run(fresh.envelope.count_records(source="order_tracking", ctx=fresh.ctx())).count == 300
@@ -322,7 +323,7 @@ def test_the_runtime_ignores_a_manifest_edited_behind_its_back(runtime) -> None:
 def test_a_glob_escaping_the_root_is_refused(runtime) -> None:
     """Après régénération, la frontière est la dernière ligne de défense."""
     patch(runtime.project, MANIFEST, "    glob: tracking/*.jsonl", "    glob: ../../stack/*.md")
-    gst.run(runtime.project, mode="write")
+    gst.run(runtime.project, mode="write", features=ALL)
     fresh = Runtime(runtime.project)
     try:
         with pytest.raises(fresh.errors.BoundaryViolation):
@@ -454,13 +455,13 @@ def test_an_undeclared_field_is_reported_as_omitted(runtime) -> None:
 def test_a_hand_edited_runtime_is_detected(runtime) -> None:
     path = runtime.data / "envelope.py"
     path.write_text(path.read_text(encoding="utf-8") + "\n# retouche locale\n", encoding="utf-8")
-    report = gst.run(runtime.project, mode="check")
+    report = gst.run(runtime.project, mode="check", features=ALL)
     assert "DATA_RUNTIME_STALE" in {f.cls for f in report.errors}
 
 
 def test_regeneration_is_idempotent(runtime) -> None:
     before = {p.name: p.read_bytes() for p in sorted(runtime.data.rglob("*")) if p.is_file()}
-    gst.run(runtime.project, mode="write")
+    gst.run(runtime.project, mode="write", features=ALL)
     after = {p.name: p.read_bytes() for p in sorted(runtime.data.rglob("*")) if p.is_file()}
     assert before == after
 

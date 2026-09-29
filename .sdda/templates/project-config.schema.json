@@ -726,12 +726,14 @@
     },
     "Profile": {
       "enum": [
+        "auto",
+        "micro",
         "poc",
         "standard",
         "production"
       ],
-      "default": "standard",
-      "description": "Profil du projet. `poc` : défauts de .sdda/profiles/poc.yml (jeux réduits), /sdda-build en deux agents (dev-prompt + dev-app), gates rapportées sans être bloquantes, revue et acceptation sautées — la MISSION plafonne à `Tested`. `standard` : le pipeline complet. `production` : réservé (aujourd'hui identique à standard).",
+      "default": "auto",
+      "description": "Profil du projet. `auto` (défaut du gabarit) : la MISSION le fixe par ses besoins déclarés (`## Architecture Needs`) — `micro` si un agent, des outils de lecture et une console suffisent, `standard` sinon. `micro` : chemin court de `poc`, application en un seul module, jeux d'évaluation minimaux, aucun architecte de contrat sans objet. `poc` : défauts de .sdda/profiles/poc.yml (jeux réduits), /sdda-build en deux agents (dev-prompt + dev-app), gates rapportées sans être bloquantes, revue et acceptation sautées — la MISSION plafonne à `Tested`. `standard` : le pipeline complet. `production` : réservé (aujourd'hui identique à standard).",
       "x-readBy": [
         "script:sdda_lib/layered_config.py",
         "command:sdda-build",

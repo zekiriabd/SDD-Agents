@@ -72,8 +72,24 @@ Confidence: high          # high | medium | low — ne monte jamais en montant l
 - Outil indisponible: <ex. dégrader vers une réponse partielle explicite>
 - Budget atteint: <ex. échec explicite avec l'état partiel, jamais une réponse tronquée silencieuse>
 
+## Architecture Needs
+<Obligatoire (G0). Ce dont CETTE spec a besoin — lu dans le brief, jamais recopié
+ de STACK.md. STACK.md dit ce que le Tech Lead AUTORISE ; ces besoins disent ce
+ qui est EXIGÉ ; seule l'intersection est générée. Ce que le brief ne demande pas
+ vaut la valeur minimale (première valeur). Un projet dont tous les besoins sont
+ minimaux est `micro` : un agent, une page de code, un pipeline court.>
+- Conversation: <single-turn | multi-turn — multi-turn seulement si une question se comprend par la précédente>
+- Memory: <none | session | long-term — long-term seulement si une info doit survivre entre deux sessions>
+- Documents: <none | le corpus à interroger en langage naturel (déclenche le RAG)>
+- Agents: <single | multi — multi seulement si des rôles distincts sont exigés>
+- SideEffects: <none | ce que le système écrit, envoie ou déclenche>
+- StructuredOutput: <no | yes — yes seulement si un programme consomme la réponse>
+- PersonalDataRedaction: <no | yes — yes seulement si des PII ne doivent pas atteindre le modèle>
+
 ## Required Stack
-<Anti-dérive : G0 vérifie que STACK.md active exactement ces stacks.>
+<Anti-dérive : les stacks que CETTE MISSION utilise, parmi celles que STACK.md
+ autorise. G0 refuse une stack non autorisée ; `none` (ou `single-agent`) est
+ toujours admis : utiliser moins que ce qui est autorisé n'est pas une dérive.>
 - language: <ex. python>
 - framework: <ex. langgraph, ou none>
 - orchestration: <ex. router>

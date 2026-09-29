@@ -1,3 +1,4 @@
+# @sdda-file-if guardrail.schema-validation
 """Validation des SORTIES contre l'`outputSchema` de l'IR — `schema-validation.md`. GÉNÉRÉ.
 
 « Le guardrail le moins cher et le plus efficace du catalogue » : une sortie

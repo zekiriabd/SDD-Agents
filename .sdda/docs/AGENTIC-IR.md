@@ -220,6 +220,25 @@ exists. Tracking prompts and the holdout is not a detail: it is what triggers
 the recompilation that pins `promptHash` once `dev-prompt` has written, and the
 one that emits the L9 acceptance suite as soon as the verdict set exists.
 
+`architecture` is the **effective architecture**: the subset of the reference
+catalogue this specification requires, each capability with the requirement
+that justifies it (`required`), the rest listed as `omitted`. Generators and
+`dev-*` agents build `required`, never the full reference; see
+[ARCHITECTURE §2.quater](../ARCHITECTURE.md).
+
+```json
+"architecture": {
+  "reference": "1",
+  "derivedFrom": ["ir", "roster", "stack"],
+  "required": {
+    "agent.loop": ["IR agents[] : 1-order-assistant"],
+    "data.format.json": ["source `orders` : format: array"],
+    "conversation.session": ["IR memory : shortTermPolicy: sliding-window (conversation multi-tour)"]
+  },
+  "omitted": ["orchestration.router", "memory.layer", "data.format.delimited", "data.tool.count"]
+}
+```
+
 ---
 
 ## 4. What `validate_ir.py` checks (0 tokens, blocking)

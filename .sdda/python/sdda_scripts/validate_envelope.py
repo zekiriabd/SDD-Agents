@@ -28,8 +28,10 @@ rien n'est importé ni exécuté. Ce qu'elle établit, par stratégie :
                           paramètre que le modèle remplit
       text-to-sql         `EXPLAIN` préalable
     declared-sources
-      l'enveloppe unique (`lookup_record`, `search_records`, `count_records`),
-      l'identité tirée de `ctx.identity`, `read_timeout_ms`, `max_records_returned`,
+      l'enveloppe unique — les portes (`lookup_record`, `search_records`,
+      `count_records`) que l'architecture effective EXIGE ou qu'un wrapper appelle —,
+      l'identité tirée de `ctx.identity` si une source déclare `required_filter`,
+      `read_timeout_ms`, `max_records_returned` (si `search` est exigé),
       la résolution par le registre (allowlist), `ctx.emit` — et AUCUNE écriture
       de fichier sous `data/` (lecture seule par construction)
 
@@ -68,6 +70,7 @@ from sdda_lib.layered_config import app_name  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_json, now_iso  # noqa: E402
 from sdda_scripts import scan_secrets, validate_data_access  # noqa: E402
 from sdda_scripts._common import add_common_args, finish, resolve_root  # noqa: E402
+from sdda_lib import effective_architecture  # noqa: E402
 
 DECLARED = validate_data_access.DECLARED
 
@@ -420,21 +423,57 @@ def check_sql(facts: Facts, sql: dict[str, str], entry: dict[str, Any], strategy
     return checks
 
 
-def check_declared(facts: Facts, entry: dict[str, Any], loc: str, report: Report) -> list[Check]:
+#: Porte de l'enveloppe -> capacité de l'architecture effective qui l'exige.
+DECLARED_OPERATIONS: dict[str, str] = {
+    "lookup_record": "data.tool.lookup", "search_records": "data.tool.search", "count_records": "data.tool.count",
+}
+
+
+def required_operations(data_dir: Path, arch: effective_architecture.EffectiveArchitecture) -> list[str]:
+    """Les portes que le livrable DOIT porter : celles que la spec exige, et celles qu'un wrapper appelle.
+
+    L'enveloppe exigeait ses trois portes quoi qu'il arrive : une application qui
+    n'expose que `lookup` et `search` devait embarquer un `count_records` qu'aucun
+    outil n'appelle. Une porte exigée ET absente reste un défaut ; une porte
+    non exigée n'est plus réclamée.
+    """
+    wanted = {op for op, capability in DECLARED_OPERATIONS.items() if arch.requires(capability)}
+    tools_dir = data_dir / "tools"
+    if tools_dir.is_dir():
+        for path in sorted(tools_dir.glob("*.py")):
+            text = markdown_io.read_text(path)
+            wanted |= {op for op in DECLARED_OPERATIONS if f"{op}(" in text}
+    return sorted(wanted)
+
+
+def check_declared(facts: Facts, entry: dict[str, Any], loc: str, report: Report, *,
+                   operations: list[str] | None = None, identity_required: bool = True) -> list[Check]:
     eid = str(entry.get("id") or DECLARED)
     checks: list[Check] = []
-    ops = [f for f in ("lookup_record", "search_records", "count_records") if f in facts.functions]
-    checks.append(Check("envelope", len(ops) == 3, facts.functions.get("search_records"), f"opérations : {ops}"))
-    if len(ops) < 3:
-        _missing(report, eid, "envelope", f"opérations de l'enveloppe unique présentes : {ops}",
+    expected = list(DECLARED_OPERATIONS) if operations is None else operations
+    ops = [f for f in expected if f in facts.functions]
+    absent = [f for f in expected if f not in facts.functions]
+    checks.append(Check("envelope", not absent,
+                        next((facts.functions[o] for o in ops), None), f"opérations : {ops}"))
+    if absent:
+        _missing(report, eid, "envelope", f"opérations exigées de l'enveloppe unique absentes : {absent}",
                  "régénérer le runtime (`gen-source-tools --write`) : tous les outils passent par la même porte", loc)
-    for key, hints, what in (
+    hints_table = [
         ("identity", ("identity",), "l'identité n'est pas lue depuis le contexte d'appel (`ctx.identity`)"),
         ("statementTimeoutMs", ("read_timeout_ms",), "aucun budget de lecture (`read_timeout_ms`)"),
         ("maxRows", ("max_records_returned",), "aucun plafond (`max_records_returned`)"),
         ("schemas", ("load_registry",), "aucune résolution par le registre — l'allowlist n'est pas appliquée"),
         ("logging", ("emit",), "aucun événement émis par appel (`ctx.emit`)"),
-    ):
+    ]
+    for key, hints, what in hints_table:
+        if key == "identity" and not identity_required:
+            # Aucune source n'exige d'identité (`required_filter`) : le moteur
+            # d'identité n'est pas généré, et son absence n'est pas un défaut.
+            checks.append(Check(key, True, None, "aucun required_filter déclaré"))
+            continue
+        if key == "maxRows" and "search_records" not in expected:
+            checks.append(Check(key, True, None, "aucune recherche exigée : rien à plafonner"))
+            continue
         ev = facts.find(hints)
         checks.append(Check(key, bool(ev), ev))
         if not ev:
@@ -529,7 +568,10 @@ def run(root: Path, ir: dict[str, Any], data_dir: Path) -> tuple[Report, dict[st
     for entry in entries:
         strategy = str((entry.get("binding") or {}).get("strategy") or "")
         if strategy == DECLARED:
-            checks = check_declared(facts, entry, loc, report)
+            arch = effective_architecture.derive(ir, root=root)
+            checks = check_declared(
+                facts, entry, loc, report, operations=required_operations(data_dir, arch),
+                identity_required=bool(identity_fields(data_dir, entry)) or arch.requires("data.identity-filter"))
         elif strategy in validate_data_access.SQL_STRATEGIES:
             checks = check_sql(facts, sql, entry, strategy, loc, report)
         else:

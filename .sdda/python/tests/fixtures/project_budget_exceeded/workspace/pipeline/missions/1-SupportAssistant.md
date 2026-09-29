@@ -53,6 +53,15 @@ vérifiables, et escalader le reste.
 - Outil indisponible: dégrader vers une réponse partielle explicite
 - Budget atteint: échec explicite avec l'état partiel, jamais une réponse tronquée silencieuse
 
+## Architecture Needs
+- Conversation: multi-turn
+- Memory: session
+- Documents: contrats clients et conditions générales, interrogés en langage naturel
+- Agents: multi
+- SideEffects: création d'un ticket d'escalade (Zendesk)
+- StructuredOutput: yes
+- PersonalDataRedaction: no
+
 ## Required Stack
 - language: python
 - framework: langgraph

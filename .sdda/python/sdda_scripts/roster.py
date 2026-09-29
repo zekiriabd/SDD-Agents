@@ -165,7 +165,7 @@ def render_scaffold(number: int, pattern: str, caps: list[str], requires: dict[s
         "# Ce qu'il exige : python .sdda/sdda.py validate-architecture --explain",
         "",
         f"mission: {number}",
-        f"pattern: {pattern}" + " " * max(1, 24 - len(pattern)) + "# doit rester égal au pattern actif de STACK.md",
+        f"pattern: {pattern}" + " " * max(1, 24 - len(pattern)) + "# celui de STACK.md, ou `single-agent` (toujours admis)",
         "",
         "# L'orchestrateur — reçoit l'entrée, décide de la suite. Se déclare même en single-agent.",
         "orchestrator:",
@@ -231,6 +231,13 @@ def scaffold(root: Path, mission: int | str, *, force: bool = False, reason: str
     pattern = active_pattern(root, report)
     if spec is None or not pattern:
         return report
+    from sdda_lib.spec_needs import parse_needs  # noqa: PLC0415
+
+    needs = parse_needs(spec.text)
+    if needs.declared and not needs.multi_agent:
+        # La MISSION déclare un agent seul (`Agents: single`) : le gabarit part du
+        # minimum qu'elle exige, pas du maximum que STACK.md autorise.
+        pattern = va.SINGLE_AGENT
 
     target = manifest_path(root, mission)
     rel = paths.rel(root, target)
@@ -359,10 +366,16 @@ def validate_manifest(root: Path, mission: int | str, *, if_present: bool = Fals
                      fix=f"écrire `mission: {mission}`", location=f"{loc}:$.mission")
     pattern = active_pattern(root, report)
     declared_pattern = str(data.get("pattern") or "").strip().lower()
+    subagents = [s for s in (data.get("subagents") or []) if isinstance(s, dict)]
+    if declared_pattern == va.SINGLE_AGENT and not subagents:
+        # STACK.md déclare le pattern MAXIMUM autorisé ; un agent seul est
+        # toujours admis — et c'est lui qu'on vérifie, pas le maximum.
+        pattern = va.SINGLE_AGENT
     if pattern and declared_pattern and declared_pattern != pattern and not _PLACEHOLDER_RE.search(declared_pattern):
         report.error("ARCH_ROSTER_INCOHERENT",
                      f"`pattern: {declared_pattern}` mais STACK.md active `{pattern}`",
-                     fix=f"une seule source : changer `## {ORCHESTRATION_SECTION}` dans STACK.md, ou aligner le manifeste",
+                     fix=f"`single-agent` est toujours admis ; un autre pattern doit être celui que STACK.md autorise "
+                         f"(`## {ORCHESTRATION_SECTION}`) — changer l'un ou l'autre",
                      location=f"{loc}:$.pattern")
     report.data["pattern"] = pattern
 

@@ -1,3 +1,4 @@
+# @sdda-file-if data.format.delimited
 """CSV / TSV — tout est une chaîne, et ça le reste.
 
 Le lecteur ne type RIEN. Le schéma figé porte les types, et c'est lui qui fait

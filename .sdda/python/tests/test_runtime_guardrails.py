@@ -30,6 +30,7 @@ import pytest
 
 from conftest import make_project
 from sdda_lib import paths
+from sdda_lib.feature_template import ALL
 from sdda_scripts import gen_app_skeleton
 from test_runtime_app import Runtime
 
@@ -39,7 +40,9 @@ SEED = paths.FRAMEWORK_SDDA_DIR / "templates/datasets/adversarial-seed.jsonl"
 @pytest.fixture
 def rt(tmp_path: Path):
     project = make_project(tmp_path)
-    report = gen_app_skeleton.run(project, mode="write")
+    # Le runtime de RÉFÉRENCE entier (routeur, séquentiel, trois guardrails) :
+    # ces tests exercent les gabarits, pas la sélection de l'architecture effective.
+    report = gen_app_skeleton.run(project, mode="write", features=ALL)
     assert report.ok, report.render_text()
     runtime = Runtime(project)
     import importlib

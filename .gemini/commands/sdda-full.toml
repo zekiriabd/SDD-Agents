@@ -214,19 +214,30 @@ avant que le moindre agent ne soit payé.
 ## STEP 1.quinquies — Le profil décide du chemin
 
 ```bash
-PROFILE=$(python .sdda/sdda.py project-profile)      # poc | standard | production
+PROFILE=$(python .sdda/sdda.py project-profile)      # micro | poc | standard | production (`auto` résolu)
 ```
 
-| Étape | `standard` / `production` | `poc` |
-|---|---|---|
-| PHASES 0 → 2 | inchangées | inchangées — la MISSION, les CAPs et l'IR restent ce que tout le reste lit |
-| STEP 4.5 (PHASE 6a) | avec la coquille : `/sdda-build --with-datasets` | avec les prompts : `/sdda-build` STEP P.2 |
-| STEP 5 (PHASES 3 → 5) | sept `dev-*`, une gate bloquante par couche | `/sdda-build` STEP P : `dev-prompt` + `dev-app`, gates **rapportées** |
-| STEP 6 (PHASE 6) | `/sdda-eval {n}` | `/sdda-eval {n} --run-only` — `dev-app` a écrit les tests de couche ; sous `poc`, ce mode exige **G2** et non G6 (`/sdda-eval` STEP 2) : les gates G3→G6 y sont rapportées, pas franchies |
-| STEP 7 (revue) | jouée | `⊘ PHASE 7 skipped (Profile: poc)` |
-| STEP 8 (acceptation) | jouée | `⊘ PHASE 8 skipped (Profile: poc)` |
+**`Profile: auto` (défaut du gabarit) : c'est la SPEC qui choisit.** STACK.md
+autorise ; la MISSION déclare ses besoins (`## Architecture Needs`) ; un projet
+qui n'exige qu'un agent, des outils de lecture et une console est **`micro`**,
+sinon `standard`. Avant la PHASE 0, aucune MISSION n'existe : le profil vaut
+`standard` pour les PHASES 0 et 1, identiques dans tous les profils, puis il
+est **re-résolu au STEP 3.bis** (après G0, G1 et le roster) — c'est cette
+valeur qui vaut pour tout le reste du run. Le récap l'affiche avec sa preuve :
+`📐 micro — un agent, des outils de lecture, une console` ou la liste des
+`blockers` (`project-profile --mission {n} --json`, champ `sizing`).
 
-Un poc s'arrête donc à `Tested` au mieux : sans G7, `compute-status` ne monte
+| Étape | `standard` / `production` | `poc` / `micro` |
+|---|---|---|
+| PHASES 0 → 1 | inchangées | inchangées — la MISSION et les CAPs restent ce que tout le reste lit |
+| PHASE 2 | tous les architectes de contrat que la topologie appelle | `poc` : idem. `micro` : ni `architect-data`, ni `architect-memory`, ni `architect-rag` ; `architect-tools` seulement pour un outil qui n'est pas une source déclarée (`/sdda-topology` STEP 5) |
+| STEP 4.5 (PHASE 6a) | avec la coquille : `/sdda-build --with-datasets` | avec les prompts : `/sdda-build` STEP P.2 |
+| STEP 5 (PHASES 3 → 5) | sept `dev-*`, une gate bloquante par couche | `/sdda-build` STEP P : `dev-prompt` + `dev-app`, gates **rapportées**. `micro` : `dev-app` écrit UN module, pas l'arborescence en couches |
+| STEP 6 (PHASE 6) | `/sdda-eval {n}` | `/sdda-eval {n} --run-only` — `dev-app` a écrit les tests de couche ; sous `poc`, ce mode exige **G2** et non G6 (`/sdda-eval` STEP 2) : les gates G3→G6 y sont rapportées, pas franchies |
+| STEP 7 (revue) | jouée | `⊘ PHASE 7 skipped (Profile: {PROFILE})` |
+| STEP 8 (acceptation) | jouée | `⊘ PHASE 8 skipped (Profile: {PROFILE})` |
+
+Un poc ou un micro s'arrête donc à `Tested` au mieux : sans G7, `compute-status` ne monte
 pas plus haut, et le récap le dit (`POC — non revu, non accepté`). Passer le
 même projet en `Profile: standard` puis relancer `/sdda-full {n}` rejoue ce que
 le poc a sauté, à partir de l'état dérivé des gates.
@@ -317,6 +328,18 @@ python .sdda/sdda.py roster validate --mission {n} --if-present
 | `0` | **aucun** manifeste | émettre le WARN ci-dessous, puis → STEP 4 |
 | `1` | manifeste présent, incomplet (`[ARCH_SPEC_INCOMPLETE]`, `<à préciser>` résiduels) | **STOP humain** |
 
+**Puis le dimensionnement, 0 token** — la MISSION, ses CAPs et le roster
+existent : `Profile: auto` se résout ici, et cette valeur vaut pour la suite.
+
+```bash
+PROFILE=$(python .sdda/sdda.py project-profile --mission {n})
+python .sdda/sdda.py project-profile --mission {n} --json    # sizing : complexity, reasons, blockers
+```
+
+Afficher `📐 {PROFILE} — {reasons ou blockers}` : l'humain voit POURQUOI le
+pipeline est court ou complet, et corrige la MISSION (`## Architecture Needs`)
+si un besoin a été surestimé.
+
 `--if-present` est délibéré : le repli mono-agent — déclarer le roster dans la
 section `## 2. Roster déclaré` de la topologie — reste légitime, et cette
 section n'existe pas encore à ce STEP. On refuse donc une déclaration
@@ -392,7 +415,7 @@ Garde `should-skip-step eval_datasets`. **Ne pas l'exécuter seule** : la PHASE
 message et referme les jeux avant le socle. Les deux ne peuvent pas se lire
 (`forbidden_reads`) ; les enchaîner faisait attendre la coquille 17 minutes au
 premier run réel. Garde « skip » (jeux déjà verts, reprise) → STEP 5 sans le
-flag. Sous `Profile: poc`, rien ici non plus : `/sdda-build` STEP P.2 les joue
+flag. Sous un profil court (`poc`, `micro`), rien ici non plus : `/sdda-build` STEP P.2 les joue
 avec les prompts. Hors `/sdda-full`, `/sdda-eval {n} --datasets-only` reste la
 forme seule.
 
@@ -421,7 +444,7 @@ sous-commande accepte `--layer` pour reprendre à la bonne couche).
 
 Exécuter `/sdda-build {n} --with-datasets` si la PHASE 6a n'est pas encore
 verte (STEP 4.5), `/sdda-build {n}` sinon, ou `--layer {couche}` en reprise.
-Sous `Profile: poc`, `/sdda-build {n}` sans flag : son STEP P joue la PHASE 6a
+Sous un profil court (`poc`, `micro`), `/sdda-build {n}` sans flag : son STEP P joue la PHASE 6a
 lui-même, avec les prompts, et ses gates sont rapportées sans bloquer — la
 table ci-dessous ne s'applique pas.
 Les sorties de la PHASE 6a (table du STEP 4.5) s'appliquent à la jonction.
@@ -450,7 +473,7 @@ Le plafond de construction `MaxCostPerRun` s'applique au **cumul du run**
 ## STEP 6 — PHASE 6 : `/sdda-eval {n}`
 
 Garde `should-skip-step eval`. Exécuter `/sdda-eval {n}` (agents + L0→L7) ;
-sous `Profile: poc`, `/sdda-eval {n} --run-only` (STEP 1.quinquies).
+sous un profil court (`poc`, `micro`), `/sdda-eval {n} --run-only` (STEP 1.quinquies).
 
 `qa-tests` et `qa-evals` ont déjà tourné en partie (6a) :
 `/sdda-eval` est idempotent — `qa-evals` complète (suites, baselines),
@@ -470,9 +493,9 @@ sous `Profile: poc`, `/sdda-eval {n} --run-only` (STEP 1.quinquies).
 Si `--no-review` → `⊘ PHASE 7 skipped (--no-review, dev local)` + audit-log +
 **aller à STEP 9** (PHASE 8 non exécutable sans G7).
 
-Si `Profile: poc` → `⊘ PHASE 7 skipped (Profile: poc)` + `⊘ PHASE 8 skipped
-(Profile: poc)` et **aller à STEP 9** : le récap porte `POC — non revu, non
-accepté` et l'état dérivé (`Tested` au mieux).
+Si `PROFILE` ∈ {`poc`, `micro`} → `⊘ PHASE 7 skipped (Profile: {PROFILE})` +
+`⊘ PHASE 8 skipped (Profile: {PROFILE})` et **aller à STEP 9** : le récap porte
+`{PROFILE} — non revu, non accepté` et l'état dérivé (`Tested` au mieux).
 
 Garde `should-skip-step review`. Exécuter `/sdda-review {n}`.
 

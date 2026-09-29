@@ -351,7 +351,7 @@ liste chaque document et ses langues disponibles.
 | [DATA-SOURCES.fr.md](.sdda/docs/DATA-SOURCES.fr.md) | Sources de données hors base — registre, connecteurs, secrets |
 | [MULTI-HARNESS.fr.md](.sdda/docs/MULTI-HARNESS.fr.md) | Compilation vers Claude Code / Codex / Gemini CLI |
 | [TESTING-AND-EVAL.fr.md](.sdda/docs/TESTING-AND-EVAL.fr.md) | La pyramide L0→L9 |
-| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les <!--sdda:count invariants-->22<!--/sdda:count--> contrats porteurs + leur enforcer |
+| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | Les <!--sdda:count invariants-->23<!--/sdda:count--> contrats porteurs + leur enforcer |
 | [ROADMAP.fr.md](.sdda/docs/ROADMAP.fr.md) | Ordre de construction + le MVP |
 | [PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) | Le backlog déterministe, généré — qui réclame quoi |
 | [python/README.fr.md](.sdda/python/README.fr.md) | La couche Python déterministe |
@@ -397,12 +397,12 @@ python -m pytest .sdda/python/tests/ -q                         # couche déterm
 
 **Phase de conception.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commandes,
-<!--sdda:count invariants-->22<!--/sdda:count--> invariants,
+<!--sdda:count invariants-->23<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->67<!--/sdda:count--> fiches de stack,
-<!--sdda:count classes-->446<!--/sdda:count--> classes d'erreur,
+<!--sdda:count classes-->449<!--/sdda:count--> classes d'erreur,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks et
-<!--sdda:count subcommands-->81<!--/sdda:count--> sous-commandes déterministes existent sur
-disque et sont testés (<!--sdda:count tests-->1899<!--/sdda:count--> fonctions de test).
+<!--sdda:count subcommands-->83<!--/sdda:count--> sous-commandes déterministes existent sur
+disque et sont testés (<!--sdda:count tests-->1929<!--/sdda:count--> fonctions de test).
 Aucun script cité par un prompt ne manque
 ([PLANNED-SCRIPTS.fr.md](.sdda/docs/PLANNED-SCRIPTS.fr.md) est vide). Ce qui
 n'existe **pas** encore, c'est la preuve : aucun pipeline n'a tourné de bout en

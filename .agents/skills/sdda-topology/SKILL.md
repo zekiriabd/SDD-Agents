@@ -251,8 +251,24 @@ Construire le `BATCH` depuis la topologie et `STACK.md` :
 |---|---|---|:-:|
 | ≥ 1 outil alloué | `architect-tools` | `workspace/pipeline/contracts/tools/{n}-{tool}.tool.md` | balanced |
 | `## Active RAG` ≠ `none` ET ≥ 1 retriever alloué | `architect-rag` | `workspace/pipeline/contracts/retrieval/{n}-{index}.retrieval.md` | **deep** |
-| `## Active Data Access` ≠ `none` | `architect-data` | `workspace/pipeline/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
-| `## Active Memory Strategy` porte une **décision** : `LongTermEnabled: true`, OU `ShortTermPolicy` ∈ {`summarize-over`, `hybrid`}, OU `CrossAgentSharedState` ≠ `none` avec ≥ 2 agents au roster | `architect-memory` | `workspace/pipeline/contracts/memory/{n}-memory.md` | balanced |
+| accès base : `## Active Data Access` = `view-per-agent*`, OU la topologie alloue un outil `{n}-data-*` | `architect-data` | `workspace/pipeline/contracts/tools/{n}-{view}.tool.md` (data tools) + ADR | balanced |
+| `memory.layer` requise par l'architecture effective — la MISSION déclare `Memory: long-term`, OU une conversation multi-tour que STACK.md résume (`summarize-over`, `hybrid`), OU ≥ 2 agents au roster avec `CrossAgentSharedState` ≠ `none` | `architect-memory` | `workspace/pipeline/contracts/memory/{n}-memory.md` | balanced |
+
+**Ce sont les besoins de la SPEC qui décident, pas les activations de STACK.md.**
+Un `declared-sources` actif n'appelle pas `architect-data` : ses contrats
+d'outils sont générés par script (STEP 4.bis) ; une politique de mémoire
+autorisée par STACK.md n'appelle pas `architect-memory` si la MISSION ne
+déclare ni conversation multi-tour ni mémoire. La décision se lit, 0 token :
+
+```bash
+python .sdda/sdda.py show-architecture --mission {n} --json   # capacités requises + la preuve de chacune
+```
+
+**Sous `Profile: micro`** (`project-profile --mission {n}`) : ni `architect-data`,
+ni `architect-memory`, ni `architect-rag` — un projet micro n'en a pas l'usage
+par construction ; `architect-tools` seulement si un outil alloué n'est pas un
+outil de source déclarée (`{source}_{lookup|search|count}`, dont le contrat est
+généré par script).
 
 Agents absents du `BATCH` → ligne `⊘ {agent}: skipped ({raison})`.
 

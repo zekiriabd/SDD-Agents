@@ -18,6 +18,7 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[HANDOFF_UNCONTRACTED]`
+- `[MEMORY_CONTRACT_MISMATCH]`
 - `[MEMORY_PII_POLICY_MISSING]`
 - `[MEMORY_RETENTION_UNDECLARED]`
 - `[MEMORY_SCOPE_UNJUSTIFIED]`

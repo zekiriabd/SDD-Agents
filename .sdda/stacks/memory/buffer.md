@@ -15,6 +15,16 @@ renvoyés au modèle à chaque appel. Rien n'est stocké au-delà de la session.
 C'est le défaut du MVP, et c'est le bon défaut : **la mémoire à long terme est
 une complexité qu'il faut mériter.**
 
+**Ce que cette fiche génère : une borne, pas une couche.** La fenêtre glissante
+seule donne la capacité `conversation.session` de l'architecture effective :
+l'historique de session du framework (thread, liste de messages), tronqué aux
+`ShortTermMaxTurns` derniers tours là où la session vit (la surface ou
+l'agent). Elle ne crée **pas** de répertoire `memory/` ni de classe de fenêtre
+dédiée : `memory.layer` n'est requise que par un résumé glissant
+(`summarize-over`, `hybrid`), une mémoire longue (`LongTermEnabled: true`) ou un
+état partagé entre plusieurs agents. Sans conversation multi-tour du tout
+(`ShortTermPolicy: none`), il n'y a pas même d'historique de session.
+
 ---
 
 ## 2. Quand l'employer

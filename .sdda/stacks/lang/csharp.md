@@ -284,9 +284,9 @@ workspace/src/{AppName}/            # ce répertoire EST le projet (layout plat,
 │   └── {agent}/                    # Agent.cs (Build(deps, bounds)), Schemas.cs, Deps.cs — un répertoire par instance dev-agent
 ├── tools/                          # ToolSpec, ToolRegistry (GetForAgent : moindre privilège), {ToolSlug}.cs
 │   └── mcp/                        # cf. tools/mcp-dotnet.md
-├── data/                           # cf. dataaccess/view-per-agent-dotnet.md
-├── retrieval/                      # cf. rag/hybrid-dotnet.md, vectorstore/pgvector-dotnet.md
-├── memory/                         # interface (pré-passe) puis implémentation (dev-orchestration)
+├── data/                           # si `data.*` requise — cf. dataaccess/view-per-agent-dotnet.md
+├── retrieval/                      # si `retrieval` requise — cf. rag/hybrid-dotnet.md, vectorstore/pgvector-dotnet.md
+├── memory/                         # si `memory.layer` requise : interface (pré-passe) puis implémentation (dev-orchestration)
 ├── orchestration/                  # cf. framework/ms-agent-framework.md — SEUL endroit nommant le framework
 ├── serving/                        # dev-api — Program.cs (Main) + la CLI (serving/cli-dotnet.md) : run, resume, retrieve, health, inspect, trace, version
 │   └── http/                       # seulement si aspnet-minimal est actif : commande `serve` (serving/aspnet-minimal.md)
@@ -296,6 +296,14 @@ workspace/src/{AppName}/            # ce répertoire EST le projet (layout plat,
     ├── {AppName}.Tests.csproj      # xunit v3, VSTest, JunitXml.TestLogger — cf. §5.4
     └── {couche}/…Tests.cs          # tests/tools/, tests/retrieval/, tests/data/… — L0 → L2, modèle mocké
 ```
+
+**Cette arborescence est un MAXIMUM, pas un gabarit.** Une couche n'existe
+que si une capacité de l'architecture effective l'exige (IR
+`architecture.required`) : un agent seul avec deux outils sur un fichier JSON
+n'a ni `retrieval/`, ni `memory/`, ni routeur. De même, `{AppName}.csproj` ne
+porte que les `PackageReference` que le code utilise — un paquet `core` du
+`.libs.json` sans `using` ni appel est `[ARCH_DEPENDENCY_UNUSED]`
+(`validate-effective-architecture`).
 
 **Pourquoi plat et en minuscules.** La matrice d'ownership (`loader.yml`)
 attribue les zones d'écriture par répertoire de couche **directement** sous

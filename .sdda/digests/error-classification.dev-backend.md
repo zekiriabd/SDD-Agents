@@ -17,6 +17,7 @@ FIX: <l'action précise qui débloque>
 
 ## Classes propres à cet agent
 
+- `[ARCH_DEPENDENCY_UNUSED]`
 - `[BUILD_CORRECTIBLE]`
 - `[DATASET_OWNERSHIP_VIOLATION]`
 - `[IR_NOT_FOUND]`

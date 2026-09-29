@@ -36,7 +36,9 @@ public sealed record SourceConfig
 
     public IReadOnlyList<string> Ranges { get; init; } = [];
 
+    // @sdda-if data.identity-filter
     public IReadOnlyList<string> RequiredFilter { get; init; } = [];
+    // @sdda-endif
 
     public IReadOnlyList<string> Pii { get; init; } = [];
 
@@ -44,7 +46,9 @@ public sealed record SourceConfig
 
     public string? DateField { get; init; }
 
+    // @sdda-if data.staleness
     public int? MaxStalenessHours { get; init; }
+    // @sdda-endif
 
     public string Trust { get; init; } = "trusted";
 
@@ -55,5 +59,9 @@ public sealed record SourceConfig
     /// enregistrements, et l'agent conclurait sur un ensemble qu'il croyait restreint.
     /// </remarks>
     public IReadOnlySet<string> Queryable =>
+        // @sdda-if data.identity-filter
         new HashSet<string>(Filters.Concat(Ranges).Concat(RequiredFilter), StringComparer.Ordinal);
+        // @sdda-else
+        new HashSet<string>(Filters.Concat(Ranges), StringComparer.Ordinal);
+        // @sdda-endif
 }

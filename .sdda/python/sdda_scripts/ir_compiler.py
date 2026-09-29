@@ -56,7 +56,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, markdown_io, mermaid, paths, yaml_mini  # noqa: E402
+from sdda_lib import effective_architecture, hashing, markdown_io, mermaid, paths, spec_needs, yaml_mini  # noqa: E402
 from sdda_lib.errors import Report, emit  # noqa: E402
 from sdda_lib.layered_config import LayeredConfig, app_name, read_stack_section_kv  # noqa: E402
 from sdda_scripts._common import add_common_args, load_config, resolve_root  # noqa: E402
@@ -1308,6 +1308,25 @@ def _memory_contract_values(root: Path, number: int) -> tuple[dict[str, Any], st
     return out, paths.rel(root, path)
 
 
+def _memory_restricts(key: str, value: Any, stacked: Any) -> bool:
+    """Le contrat RESTREINT-il ce que STACK.md autorise ? Alors ce n'est pas un désaccord.
+
+    STACK.md déclare le MAXIMUM (fenêtre de 12 tours, état partagé `scoped`) ; un
+    contrat qui décide « aucune fenêtre » ou « 4 tours » pour CETTE spec est une
+    décision d'architecture légitime. Seul un contrat qui ÉLARGIT (mémoire longue
+    que STACK.md n'autorise pas, PII `allow`) reste `[MEMORY_CONTRACT_MISMATCH]`.
+    """
+    v, s = str(value).strip().lower(), str(stacked).strip().lower()
+    if v in ("none", "false", "no", "0"):
+        return True
+    if key in _MEMORY_INT_KEYS:
+        try:
+            return int(v) <= int(s)
+        except ValueError:
+            return False
+    return key == "crossAgentSharedState" and v == "scoped" and s == "full"
+
+
 def compile_memory(root: Path, number: int | None = None, report: Report | None = None) -> dict[str, Any] | None:
     """`memory` : STACK.md (ce qui est POSSIBLE), recouvert par le contrat (ce qui est DÉCIDÉ).
 
@@ -1321,7 +1340,7 @@ def compile_memory(root: Path, number: int | None = None, report: Report | None 
         contract, loc = _memory_contract_values(root, number)
         for ir, value in contract.items():
             stacked = out.get(ir)
-            if report is not None and stacked is not None and str(stacked).strip().lower() != str(value).strip().lower():
+            if report is not None and stacked is not None and str(stacked).strip().lower() != str(value).strip().lower()                     and not _memory_restricts(ir, value, stacked):
                 report.error("MEMORY_CONTRACT_MISMATCH",
                              f"mémoire : le contrat déclare `{ir}: {value}`, `STACK.md ## Active Memory Strategy` porte `{stacked}`",
                              "aligner le contrat mémoire et STACK.md : une décision de rétention ou de PII ne vaut pas deux valeurs",
@@ -1335,6 +1354,46 @@ def compile_memory(root: Path, number: int | None = None, report: Report | None 
     enabled = str(out.get("longTermEnabled", "")).strip().lower()
     if enabled in ("false", "no", "0", "non", "") and _to_int(out.get("longTermRetentionDays")) in (None, 0):
         out.pop("longTermRetentionDays", None)
+    return out or None
+
+
+def restrict_memory(memory: dict[str, Any] | None, needs: Any, agent_count: int) -> dict[str, Any] | None:
+    """`memory` réduit à ce que la SPEC exige (`## Architecture Needs`).
+
+    STACK.md dit COMMENT tenir une conversation (fenêtre de 12 tours, résumé) ;
+    la MISSION dit S'IL Y EN A UNE. Un chat question/réponse ne reçoit pas de
+    fenêtre glissante parce que le gabarit de STACK.md en active une.
+    """
+    if not needs.declared:
+        return memory
+    out = dict(memory or {})
+    if not needs.multi_turn:
+        out["shortTermPolicy"] = "none"
+        out.pop("shortTermMaxTurns", None)
+        out.pop("summarizeTriggerTokens", None)
+    if not needs.long_term_memory:
+        out["longTermEnabled"] = False
+        for key in ("longTermStore", "longTermWritePolicy", "longTermRetentionDays"):
+            out.pop(key, None)
+    if agent_count < 2:
+        # Un état partagé suppose au moins deux agents qui le partagent.
+        out["crossAgentSharedState"] = "none"
+    if not (needs.multi_turn or needs.long_term_memory):
+        out.pop("piiPolicy", None)
+    return out or None
+
+
+def restrict_guardrails(guardrails: dict[str, Any] | None, needs: Any) -> dict[str, Any] | None:
+    """Les guardrails AUTORISÉS par STACK.md que la SPEC rend nécessaires — et eux seuls."""
+    if not needs.declared or not guardrails:
+        return guardrails
+    from sdda_lib.effective_architecture import guardrail_needed  # noqa: PLC0415
+
+    out: dict[str, Any] = {}
+    for point in ("input", "output"):
+        kept = [g for g in guardrails.get(point) or [] if guardrail_needed(str(g.get("id")), needs)]
+        if kept:
+            out[point] = kept
     return out or None
 
 
@@ -1644,15 +1703,22 @@ def compile_mission(root: Path, number: int, *, config: LayeredConfig | None = N
         # `dataaccess/none` ne produit AUCUNE entrée : l'absence de la clé est
         # la représentation de `none` (ir.schema.json, `$defs/dataAccess`).
         ir["dataAccess"] = sorted(data_access, key=lambda d: d["id"])
-    memory = compile_memory(root, number, report)
+    # STACK.md AUTORISE, la MISSION EXIGE : l'IR porte l'intersection.
+    needs = spec_needs.parse_needs(mission.text)
+    memory = restrict_memory(compile_memory(root, number, report), needs, len(agents))
     if memory:
         ir["memory"] = memory
-    guardrails = compile_guardrails(root)
+    guardrails = restrict_guardrails(compile_guardrails(root), needs)
     if guardrails:
         ir["guardrails"] = guardrails
     serving = read_stack_section_kv(root, "Active Serving Surface")
     if isinstance(serving.get("HumanInTheLoopEnabled"), bool):
         ir["orchestration"]["humanInTheLoop"] = serving["HumanInTheLoopEnabled"]
+    # L'architecture EFFECTIVE : le sous-ensemble du catalogue de référence que
+    # CETTE spec exige, chaque capacité avec l'exigence qui la justifie. Les
+    # générateurs et les `dev-*` construisent ceci, pas la référence entière
+    # (`sdda_lib/effective_architecture.py`).
+    ir["architecture"] = effective_architecture.derive(ir, root=root, mission=number).to_ir()
 
     if report.errors:
         raise CompileError(report)

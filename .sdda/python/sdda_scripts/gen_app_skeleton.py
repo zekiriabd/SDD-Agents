@@ -47,7 +47,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import markdown_io, paths  # noqa: E402
+from sdda_lib import effective_architecture, feature_template, markdown_io, paths  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_text  # noqa: E402
 from sdda_lib.layered_config import (  # noqa: E402
@@ -160,10 +160,16 @@ class Context:
     streaming: bool = False
     src_root: Path = field(default_factory=Path)
     project_dir: Path = field(default_factory=Path)
+    #: Les capacités de l'architecture EFFECTIVE (`effective_architecture`) : un
+    #: module du squelette marqué `@sdda-file-if` n'est émis que si la sienne y
+    #: figure. `feature_template.ALL` : la référence entière (tests du runtime).
+    features: Any = None
+    #: Rempli par `plan` : (cible, rendu de référence) des modules que la spec n'exige pas.
+    omitted: list[tuple[Path, str]] = field(default_factory=list)
 
     @classmethod
     def resolve(cls, root: Path, report: Report, *, src_root: Path | None = None,
-                mission: str | None = None) -> "Context":
+                mission: str | None = None, features: Any = None) -> "Context":
         project = read_project_section(root)
         config = load_config(root, report)
         languages = active_stacks(root, "Active Language & Runtime")
@@ -191,6 +197,8 @@ class Context:
         # l'application naissait sans `missionId` ni schémas de sortie de l'IR
         # — en silence, guardrail `schema-validation` compris.
         ctx.mission = str(mission).strip() if mission else _detect_mission(root)
+        ctx.features = features if features is not None else effective_architecture.derive(
+            root=root, mission=ctx.mission or None).features()
         # Layout plat (SDD_Pro) : le projet EST le paquet — cf. paths.app_src_root.
         try:
             ctx.project_dir = paths.app_dir(root, ctx.app or "App")
@@ -649,6 +657,7 @@ def plan(ctx: Context, report: Report, deps: Dependencies | None = None) -> list
         return []
 
     targets: list[tuple[Path, str]] = []
+    ctx.omitted = []
     for path in sorted(source.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts:
             continue
@@ -657,6 +666,15 @@ def plan(ctx: Context, report: Report, deps: Dependencies | None = None) -> list
         if framework is not None and framework not in ctx.frameworks:
             continue
         text = markdown_io.read_text(path)
+        # Architecture de référence ≠ architecture générée : un routeur, un
+        # pipeline séquentiel, une couche `memory/` ou un guardrail que la spec
+        # n'exige pas n'est pas émis. Le fichier omis est retenu : s'il traîne
+        # sur disque d'une génération précédente, `generate` le signale.
+        if not feature_template.wanted(text, ctx.features):
+            ctx.omitted.append((ctx.src_root / relative,
+                                _subst(feature_template.render(text, feature_template.ALL), ctx)))
+            continue
+        text = feature_template.render(text, ctx.features)
         if path.name == PYPROJECT_TMPL:
             targets.append((ctx.project_dir / "pyproject.toml", _subst(render_pyproject(text, deps), ctx)))
         elif path.name == CONFIG_TMPL:
@@ -766,6 +784,28 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
         elif not same:
             drifted.append(rel)
 
+    unjustified: list[str] = []
+    for target, reference in ctx.omitted:
+        if not target.is_file():
+            continue
+        rel = paths.rel(ctx.root, target)
+        if write and markdown_io.read_text(target) == reference:
+            # Un module du squelette, jamais retouché, que la spec n'exige plus :
+            # le retirer n'efface le travail de personne.
+            target.unlink()
+            written.append(f"{rel} (retiré)")
+        else:
+            unjustified.append(rel)
+    if unjustified:
+        report.error(
+            "ARCH_COMPONENT_UNJUSTIFIED",
+            f"{len(unjustified)} module(s) du squelette sans exigence dans la spec : {', '.join(unjustified[:4])}"
+            + (" …" if len(unjustified) > 4 else ""),
+            fix="`gen-app-skeleton --write` retire un module inchangé ; un module retouché se retire à la main. "
+                "Si la capacité est voulue, c'est la spec qui la déclare (pattern, mémoire, guardrail) — "
+                "l'architecture effective se lit dans l'IR (`architecture`)",
+            location=paths.rel(ctx.root, ctx.src_root))
+
     if missing or drifted:
         detail = ", ".join((missing + drifted)[:4]) + (" …" if len(missing) + len(drifted) > 4 else "")
         if missing_pins and not write:
@@ -785,18 +825,22 @@ def generate(ctx: Context, report: Report, *, write: bool) -> dict[str, Any]:
         "planned": [paths.rel(ctx.root, t) for t, _ in targets],
         "written": written, "drifted": drifted, "missing": missing,
         "dependencies": deps.to_dict(), "missingPins": [] if write else missing_pins,
+        "capabilities": ["*"] if ctx.features is feature_template.ALL else sorted(ctx.features or ()),
+        "unjustified": unjustified,
     }
 
 
 def run(root: Path, *, mode: str = "check", src_root: Path | None = None,
-        mission: str | None = None) -> Report:
+        mission: str | None = None, features: Any = None) -> Report:
+    """`features` : capacités imposées (tests du runtime : `feature_template.ALL`). Absent —
+    le cas du pipeline — l'architecture effective du projet décide."""
     report = Report(name="GEN-APP-SKELETON", target=str(root))
 
     if not paths.stack_md_path(root).is_file():
         report.error("STACK_MISSING", "STACK.md introuvable", fix="lancer `python bootstrap.py`")
         return report
 
-    ctx = Context.resolve(root, report, src_root=src_root, mission=mission)
+    ctx = Context.resolve(root, report, src_root=src_root, mission=mission, features=features)
 
     if ctx.language != LANGUAGE:
         report.error(

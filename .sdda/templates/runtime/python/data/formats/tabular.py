@@ -1,3 +1,4 @@
+# @sdda-file-if data.format.xlsx|data.format.parquet
 """XLSX et Parquet — dépendances optionnelles, absence explicite.
 
 Ces deux formats exigent un paquet hors stdlib. Leur absence n'est pas un bug :

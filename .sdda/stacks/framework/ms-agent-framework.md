@@ -96,6 +96,12 @@ bornée que P12 existe pour empêcher.
 
 ### 3.2 L'état d'orchestration
 
+> **Seulement si l'architecture effective porte `orchestration.graph` ou
+> `orchestration.router`** (IR `architecture.required`). Un `single-agent`
+> compte ses bornes dans `BoundedAgentRunner` (§3.3) et n'a pas d'état
+> d'orchestration : l'écrire quand même, c'est livrer un composant qu'aucune
+> exigence ne justifie (`[ARCH_COMPONENT_UNJUSTIFIED]`).
+
 ```csharp
 // orchestration/OrchestrationState.cs
 namespace {AppName}.Orchestration;
@@ -278,15 +284,15 @@ workspace/src/{AppName}/
 │   └── mcp/                       # cf. tools/mcp-dotnet.md
 └── orchestration/                 # SEUL endroit nommant Microsoft.Agents.AI (avec agents/{agent}/Agent.cs)
     ├── BoundedAgentRunner.cs      # bornes + politique de dépassement + span invoke_agent — PARTAGÉ
-    ├── OrchestrationState.cs
-    ├── Routers.cs                 # fonctions PURES, testées en L1
+    ├── OrchestrationState.cs      # seulement si `orchestration.graph` / `.router` (jamais pour un agent seul)
+    ├── Routers.cs                 # seulement si `orchestration.router` — fonctions PURES, testées en L1
     └── Graph.cs                   # Workflow — présent seulement si §3.5 l'exige
 
 workspace/src/{AppName}/tests/
 ├── {AppName}.Tests.csproj
 └── orchestration/
     ├── BoundedAgentRunnerTests.cs # L1 : les 5 bornes, les 3 politiques, l'annulation appelant
-    ├── RoutersTests.cs            # L1 : table de cas exhaustive, fallback compris
+    ├── RoutersTests.cs            # L1 : table de cas exhaustive, fallback compris (si Routers.cs existe)
     └── ResumeTests.cs             # L2 : la reprise ne remet aucun compteur à zéro
 ```
 

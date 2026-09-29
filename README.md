@@ -341,7 +341,7 @@ its available languages.
 | [DATA-SOURCES.md](.sdda/docs/DATA-SOURCES.md) | Data sources outside a database — registry, connectors, secrets |
 | [MULTI-HARNESS.md](.sdda/docs/MULTI-HARNESS.md) | Compilation to Claude Code / Codex / Gemini CLI |
 | [TESTING-AND-EVAL.md](.sdda/docs/TESTING-AND-EVAL.md) | The L0→L9 pyramid |
-| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | The <!--sdda:count invariants-->22<!--/sdda:count--> load-bearing contracts + their enforcer |
+| [INVARIANTS.yml](.sdda/INVARIANTS.yml) | The <!--sdda:count invariants-->23<!--/sdda:count--> load-bearing contracts + their enforcer |
 | [ROADMAP.md](.sdda/docs/ROADMAP.md) | Build order + the MVP |
 | [PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md) | The deterministic backlog, generated — who asks for what |
 | [python/README.md](.sdda/python/README.md) | The deterministic Python layer |
@@ -386,12 +386,12 @@ python -m pytest .sdda/python/tests/ -q                         # deterministic 
 
 **Design phase.** <!--sdda:count agents-->24<!--/sdda:count--> Developer Agents,
 <!--sdda:count commands-->11<!--/sdda:count--> commands,
-<!--sdda:count invariants-->22<!--/sdda:count--> invariants,
+<!--sdda:count invariants-->23<!--/sdda:count--> invariants,
 <!--sdda:count stacks-->67<!--/sdda:count--> stack sheets,
-<!--sdda:count classes-->446<!--/sdda:count--> error classes,
+<!--sdda:count classes-->449<!--/sdda:count--> error classes,
 <!--sdda:count hooks-->15<!--/sdda:count--> hooks and
-<!--sdda:count subcommands-->81<!--/sdda:count--> deterministic subcommands exist on disk and
-are tested (<!--sdda:count tests-->1899<!--/sdda:count--> test functions). No script
+<!--sdda:count subcommands-->83<!--/sdda:count--> deterministic subcommands exist on disk and
+are tested (<!--sdda:count tests-->1929<!--/sdda:count--> test functions). No script
 cited by a prompt is missing ([PLANNED-SCRIPTS.md](.sdda/docs/PLANNED-SCRIPTS.md)
 is empty). What does **not** exist yet is the proof: no pipeline has run end to
 end on a real product, so no combination is validated. That is Lot 6 of the

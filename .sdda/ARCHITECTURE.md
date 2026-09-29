@@ -157,7 +157,7 @@ SDD-Agents/
 │   ├── sdda.py                        # launcher: `python .sdda/sdda.py {cmd}` —
 │   │                                  #   works from a bare clone, no pip install
 │   └── python/                        # deterministic 0-token tooling
-│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->81<!--/sdda:count--> subcommands; registry
+│       ├── sdda_cli.py                # dispatcher of the <!--sdda:count subcommands-->83<!--/sdda:count--> subcommands; registry
 │       │                              #   DERIVED from disk, also read by the scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (including judge_clients: the real LLM judge)
@@ -318,7 +318,7 @@ refused at preflight (`[STACK_VALUE_UNIMPLEMENTED]`) instead of being swallowed.
 
 ### 2.ante One entry point for the tooling
 
-The <!--sdda:count subcommands-->81<!--/sdda:count--> deterministic subcommands are called in a single form:
+The <!--sdda:count subcommands-->83<!--/sdda:count--> deterministic subcommands are called in a single form:
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # from a bare clone
@@ -378,6 +378,63 @@ The IR does not replace the Markdown contracts: the contracts remain the
 authoritative source edited by humans and agents. The IR is their compiled
 projection, regenerable, never edited by hand. Details and schema:
 [docs/AGENTIC-IR.md](docs/AGENTIC-IR.md).
+
+### 2.quater Reference architecture ≠ generated architecture
+
+The framework carries a rich **reference architecture**: agents, tools, router,
+sequential pipeline, delegation, long-term memory, RAG, database access,
+declared sources in six formats, counting, identity filtering, freshness,
+guardrails, serving surfaces. It is what the framework *can* build. It is not
+what an application *receives*.
+
+```
+spec -> requirements -> required capabilities -> minimal sufficient architecture -> generation
+```
+
+The IR carries the decision: `architecture.required` maps each capability of
+the catalogue (`sdda_lib/effective_architecture.py`) to **the requirement that
+justifies it** (an IR entry, a roster grant, a STACK.md declaration);
+`architecture.omitted` lists the rest. The rule is single: *a capability that no
+requirement makes necessary is not generated* — no file, no class, no package.
+"Good practice", "useful later", "the framework provides it" are not
+requirements; a mandatory framework convention (bounds in code, traces the
+evaluation measures) is, and it is named as such.
+
+Minimal does not mean poor: every functional, security, bound, test and tracing
+requirement stays. A single agent with two tools over one JSON file gets an
+agent, two tools, a JSON reader, a conversation session, a prompt and a CLI —
+no router, no orchestration state, no `memory/` layer, no CSV/TSV/JSONL reader,
+no `count` gate nobody wires. A three-agent system with routing, memory and RAG
+gets exactly those components.
+
+**Who decides.** STACK.md, written by the tech lead before any mission, declares
+what is ALLOWED (language, libraries, maximum orchestration pattern, memory
+policy, guardrail catalogue, RAG). The MISSION declares what is REQUIRED, in a
+closed section `## Architecture Needs` that `po-elicitor` fills from the brief
+(conversation, memory, documents, agents, side effects, structured output, PII
+redaction — minimal by default). Only the intersection is generated: a memory
+window or an output-schema guardrail that STACK.md allows but the mission does
+not need enters neither the IR nor the code. `## Required Stack` lists a SUBSET
+of STACK.md — `rag: none` or `single-agent` is never a drift.
+
+**Sizing.** `Profile: auto` (template default) lets the mission choose the
+pipeline: a spec that needs one agent, read-only tools and a console is
+`micro` (`spec_needs.sizing`, `project-profile --mission {n} --json`) — no
+data/memory/RAG contract architects, minimal evaluation sets, suites run once,
+and `dev-app` writes ONE module. Anything more is `standard`, with the blockers
+named.
+
+Three mechanisms hold the rule:
+
+- **Generators** (`gen-app-skeleton`, `gen-source-tools`) render their runtime
+  templates with the required capabilities (`@sdda-if` markers,
+  `sdda_lib/feature_template.py`); rendered with every capability, a template
+  gives back the full reference, which is how its tests exercise it.
+- **`dev-*` agents** read `architecture.required` in their IR view and build
+  that, not the stack sheets' full layouts.
+- **`validate-effective-architecture`** (G6, part `proportionality`) refuses a
+  component, a symbol or a .NET package without its capability
+  (`[ARCH_COMPONENT_UNJUSTIFIED]`, `[ARCH_DEPENDENCY_UNUSED]`).
 
 ---
 
@@ -816,7 +873,7 @@ failing tools.
 
 Inherited from SDD_Pro (193 classes): every ERROR block carries a `[CLASS]` code
 in its `CAUSE:`, so that hooks, retry loops and dashboards classify without
-interpreting text. SDD_Agents carries **<!--sdda:count classes-->446<!--/sdda:count-->**, a closed list regenerated from
+interpreting text. SDD_Agents carries **<!--sdda:count classes-->449<!--/sdda:count-->**, a closed list regenerated from
 the real emitters by `sdda_admin/sync_error_registry.py` — writing the list by
 hand would let it drift both ways (`rules/error-classification.md §6`). The
 figure above is itself regenerated (`sync-counters`), not copied.

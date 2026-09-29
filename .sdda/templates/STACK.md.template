@@ -15,6 +15,22 @@
 # et `seed/` (sa vérité terrain). Tout le reste est produit sous `pipeline/`,
 # `src/` et `.sys/`. Ce `.template` est le squelette de ce fichier.
 #
+# ============================================================================
+# CE QUE CE FICHIER DÉCLARE : DES CHOIX AUTORISÉS, PAS UNE ARCHITECTURE À LIVRER
+# ============================================================================
+# Le Tech Lead écrit ici les choix techniques PAR DÉFAUT et les options
+# AUTORISÉES : langage, librairies, framework, pattern d'orchestration MAXIMUM,
+# politique de mémoire, catalogue de guardrails, RAG, sources, surface.
+# Ce n'est PAS la liste de ce que chaque projet reçoit. La MISSION déclare ses
+# besoins (`## Architecture Needs` : multi-tour ? mémoire ? corpus ? plusieurs
+# agents ? effets de bord ? sortie structurée ?) et l'architecte ne retient que
+# l'INTERSECTION : un chat question/réponse sur un fichier n'a ni routeur, ni
+# mémoire, ni RAG, ni guardrail de sortie, même si ce fichier les autorise.
+# `Profile: auto` laisse la spec choisir le chemin : `micro` (un agent, une
+# page de code, un pipeline court) ou `standard`.
+# Les VRAIES obligations, elles, valent pour tout projet : langage, harnais,
+# modèles, secrets par noms, budget d'exécution, bornes en code.
+#
 # CHAQUE CLÉ A UN LECTEUR, et il est nommé : `x-readBy` dans
 # `.sdda/templates/project-config.schema.json` — un script (qui l'applique),
 # un agent ou une commande (dont la prose la lit : `agent:dev-retrieval`…),
@@ -105,11 +121,14 @@ JudgeModel: claude-opus-5             # grader LLM — DOIT être calibré (inva
 
 ## Project Config
 AppName: {{AppName}}
-Profile: standard                   # poc | standard | production — `poc` : 2 agents de build au lieu de 8,
-                                    # jeux réduits (.sdda/profiles/poc.yml — `bootstrap.py --profile poc`
-                                    # omet alors les *SetMinItems de `## Active Eval Stack` ; les retirer
-                                    # à la main si le profil change après coup), gates rapportées non
-                                    # bloquantes, pas de revue ni d'acceptation — la MISSION plafonne à `Tested`
+Profile: auto                       # auto | micro | poc | standard | production
+                                    # auto (défaut) : la MISSION fixe le profil par ses besoins déclarés —
+                                    #   `micro` si un agent, des outils de lecture et une console suffisent
+                                    #   (pipeline court, application en un module), `standard` sinon.
+                                    # poc : chemin court forcé (2 agents de build), gates rapportées,
+                                    #   pas de revue ni d'acceptation — la MISSION plafonne à `Tested`.
+                                    # Les tailles de jeux et le nombre de runs viennent du profil
+                                    # (.sdda/profiles/*.yml) : les écrire ici les fige pour tout profil.
 
 # --- Budget d'EXECUTION du produit généré (exigence fonctionnelle, cf. P6) ---
 CostPerRunTargetUsd: 0.05           # coût cible d'une exécution bout-en-bout
@@ -131,10 +150,10 @@ BuildLoopMaxIter: 3
 MaxParallel: 3
 
 # --- Evaluation (cf. P3) ---
-EvalRuns: 3                         # k runs par item — 5 pour les CAPs critiques
+# EvalRuns / EvalRunsCritical / JudgeCalibrationMinItems : défauts du PROFIL
+# (base 3 / 5 / 50, micro 2 / 3 / 10) — ne les écrire ici que pour les forcer.
 EvalVarianceWarnPct: 15             # écart-type du score au-delà -> verdict JAUNE
 JudgeCalibrationMinKappa: 0.6
-JudgeCalibrationMinItems: 50
 HoldoutDisjointCheck: strict        # strict | warn — vérifie golden ∩ holdout = 0 par hash
 RegressionTolerancePct: 3           # baisse tolérée vs baseline avant [REGRESSION]
 
@@ -258,7 +277,10 @@ MaxAgentsWarnAt: 4                  # au-delà, justification renforcée exigée
 
 
 ## Active Orchestration Pattern
-# Exactement 1 actif. C'est l'ARCHITECTE qui choisit — le LLM implémente (P7).
+# Exactement 1 actif : le pattern MAXIMUM autorisé. `single-agent` reste
+# toujours admis — un projet dont la MISSION ne déclare qu'un agent n'hérite
+# pas d'un routeur parce que ce fichier en autorise un. C'est l'ARCHITECTE qui
+# choisit, dans cette limite — le LLM implémente (P7).
 # Ce choix IMPOSE des champs au roster (`## Active Agent Topology`) : nombre
 # d'agents, orchestrateur, relations, bornes. Incomplet = [ARCH_SPEC_INCOMPLETE],
 # bloquant en G2. Ce qu'il exige exactement :
@@ -506,7 +528,8 @@ Sources:
 #    pii:     [recipient_name]
 #    free_text: [carrier_message]     # -> l'outil passe trust: untrusted
 #    date_field: last_scan_at
-#    max_staleness_hours: 24
+#    max_staleness_hours: 24          # OPTIONNEL : déclarer la fraîcheur la rend requise
+#                                     # (`stale` + seuil) ; l'omettre = aucun moteur de fraîcheur
 #    description: |
 #      >= 200 caractères. C'est la description de l'outil vue par le modèle :
 #      quand utiliser / quand NE PAS utiliser / ce qui est retourné / unités /
@@ -519,7 +542,7 @@ SourceReadTimeoutMs: 5000             # budget de lecture+filtrage d'UN appel d'
 SourceMaxRecordsReturned: 200         # on lit maxRows+1 -> truncated: true
 SourceMaxObjectBytes: 52428800        # 50 Mo — fichier ou réponse d'API plus gros : refusé
 SourceSchemaCheckSample: 500          # enregistrements revalidés contre le schéma figé au boot
-SourceMaxStalenessHours: 24           # au-delà -> erreur SOURCE_STALE, pas un log
+SourceMaxStalenessHours: 24           # défaut des sources qui déclarent leur fraîcheur ; au-delà -> stale: true + as_of
 SourceForbiddenOps: [WRITE, DELETE, EXEC, SYMLINK_FOLLOW, UNDECLARED_EGRESS]
 SourceAllowedStores:                  # allowlist d'id ; vide = tous les stores déclarés
 SourceAllowedSources:                 # allowlist d'id ; vide = toutes les sources déclarées
@@ -569,6 +592,11 @@ ExternalAPIs:
 
 
 ## Active Memory Strategy
+# Ce que le projet a le DROIT d'utiliser, pas ce qu'il reçoit. La MISSION décide
+# (`## Architecture Needs` : Conversation, Memory) : sans conversation multi-tour
+# ni mémoire, aucune fenêtre n'est générée, quelle que soit la politique ci-dessous.
+# Avec une conversation multi-tour, ShortTermPolicy/MaxTurns disent COMMENT la
+# borner — un historique de session, pas une couche `memory/`.
  - .sdda/stacks/memory/{{MemoryStrategy}}.md
 # - .sdda/stacks/memory/buffer.md                 # [*]
 # - .sdda/stacks/memory/summary.md                  # (fiche absente)
@@ -587,7 +615,7 @@ LongTermStore: none                   # none | pgvector | redis | store-backed (
 LongTermWritePolicy: explicit         # explicit (l'agent décide via un outil) | automatic
 LongTermRetentionDays: 90
 MemoryPIIPolicy: redact-before-write  # forbid | redact-before-write | allow (allow exige un ADR)
-CrossAgentSharedState: scoped         # none | scoped | full  — qui lit l'état de qui
+CrossAgentSharedState: scoped         # none | scoped | full  — qui lit l'état de qui (sans objet avec un seul agent)
 
 
 ## Active Guardrails
@@ -599,6 +627,10 @@ CrossAgentSharedState: scoped         # none | scoped | full  — qui lit l'éta
 # - .sdda/stacks/guardrails/nemo-guardrails.md    # (fiche absente)
 # Chaque nom ci-dessous DOIT être une fiche activée plus haut : un garde-fou
 # nommé sans fiche n'existe pas ([STACK_VALUE_UNIMPLEMENTED]).
+# C'est un CATALOGUE AUTORISÉ : un guardrail n'est généré que si la MISSION
+# l'exige — injection-detection si une entrée est non maîtrisée (Trust
+# Boundaries), schema-validation si `StructuredOutput: yes`, pii-redaction si
+# `PersonalDataRedaction: yes`. Un chat en texte libre n'a pas de schema-validation.
 InputGuardrails: [injection-detection]
 OutputGuardrails: [schema-validation]
 OnGuardrailTrip: block-and-log        # block-and-log | sanitize-and-continue | escalate-human
@@ -625,9 +657,10 @@ CostTrackingEnabled: true
 # - .sdda/stacks/eval/deepeval.md                   # (fiche absente)
 # - .sdda/stacks/eval/promptfoo.md                  # (fiche absente)
 # - .sdda/stacks/eval/langsmith.md                  # (fiche absente)
-GoldenSetMinItems: 50
-HoldoutSetMinItems: 30
-AdversarialSetMinItems: 25
+# Tailles minimales des jeux (GoldenSetMinItems, HoldoutSetMinItems,
+# AdversarialSetMinItems, CalibrationSetMinItems) : défauts du PROFIL
+# (standard 50/30/25/50, poc 15/10/10/15, micro 8/5/5/10). Les écrire ici les
+# impose à tout profil — un micro exigerait alors 50 items pour une page de code.
 # Les baselines vivent sous `workspace/pipeline/baselines/`, et nulle part
 # ailleurs : c'est une zone de JUGEMENT, interdite en écriture à tout `dev-*`
 # (ARCHITECTURE §2.ter). La clé `BaselineStorage` qui prétendait la déplacer

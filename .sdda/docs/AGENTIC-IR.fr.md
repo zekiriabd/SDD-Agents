@@ -219,6 +219,25 @@ le holdout n'est pas un détail : c'est ce qui déclenche la recompilation qui
 épingle `promptHash` une fois que `dev-prompt` a écrit, et celle qui émet la
 suite d'acceptation L9 dès que le jeu de verdict existe.
 
+`architecture` est l'**architecture effective** : le sous-ensemble du catalogue
+de référence que cette spécification exige, chaque capacité avec l'exigence qui
+la justifie (`required`), le reste listé dans `omitted`. Les générateurs et les
+agents `dev-*` construisent `required`, jamais la référence entière ; voir
+[ARCHITECTURE §2.quater](../ARCHITECTURE.fr.md).
+
+```json
+"architecture": {
+  "reference": "1",
+  "derivedFrom": ["ir", "roster", "stack"],
+  "required": {
+    "agent.loop": ["IR agents[] : 1-order-assistant"],
+    "data.format.json": ["source `orders` : format: array"],
+    "conversation.session": ["IR memory : shortTermPolicy: sliding-window (conversation multi-tour)"]
+  },
+  "omitted": ["orchestration.router", "memory.layer", "data.format.delimited", "data.tool.count"]
+}
+```
+
 ---
 
 ## 4. Ce que `validate_ir.py` vérifie (0 token, bloquant)

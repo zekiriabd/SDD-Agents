@@ -72,14 +72,14 @@ Invalide → ERROR `[INVALID_ARG]`.
    KO → ERROR `[CAP_GATE_NOT_PASSED]` ou `[ORCH_GATE_NOT_PASSED]` (FIX :
    `/sdda-caps {n}` ou `/sdda-build {n}`).
 
-   **Sous `Profile: poc`** (`python .sdda/sdda.py project-profile`), le mode
+   **Sous un profil court, `poc` ou `micro`** (`python .sdda/sdda.py project-profile --mission {n}`), le mode
    `--run-only` exige **G2** et non G6 : `/sdda-build` STEP P joue G3→G6 et les
    **rapporte** sans bloquer — un G6 rouge est le cas nominal d'un prototype,
    et exiger G6 ici fermait la PHASE 6 à tout poc qui n'était pas déjà parfait.
    ```bash
-   python .sdda/sdda.py compute-status --mission {n} --require-gate G2   # Profile: poc, mode run-only
+   python .sdda/sdda.py compute-status --mission {n} --require-gate G2   # profil court, mode run-only
    ```
-   `--acceptance` reste hors du profil `poc` (`/sdda-full` STEP 1.quinquies).
+   `--acceptance` reste hors des profils courts (`/sdda-full` STEP 1.quinquies).
 3. Les clés de l'application sont là — c'est ici qu'elle appelle vraiment ses
    modèles (0 token, aucune valeur affichée) :
    ```bash
@@ -247,6 +247,11 @@ python .sdda/sdda.py eval-runner --mission {n} --run-id "$RUN_ID" \
   --levels ${LEVELS:-L0,L1,L3,L4,L5,L6,L7} $( [ -n "$RUNS" ] && echo --runs "$RUNS" ) \
   --executor cli --json
 ```
+
+**Profil court (`poc`, `micro`), mode `--run-only` : `LEVELS=L0,L1,L3`.**
+`/sdda-build` STEP P.4 vient de jouer L4 (G5) et L5/L7 (G6) sur la MÊME
+application, et leurs rapports font foi : les rejouer ici doublait le temps et
+le coût des appels de modèle pour une mesure identique.
 
 `--run-id "$RUN_ID"` est obligatoire : sans lui le rapport est nommé par
 horodatage, et `check-regression --run` / `promote-baseline --run` ne le

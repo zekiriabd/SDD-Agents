@@ -51,6 +51,10 @@ AGENT_POSTURE = AGENT_IDENTITY + ("tools", "retrievers", "memoryScopes", "handof
 TOOL_IDENTITY = ("id", "name", "sideEffectClass")
 TOOL_SAFETY = TOOL_IDENTITY + ("description", "trust", "retryPolicy", "timeoutSec", "rateLimitRpm",
                                "safetyStrategy", "errors")
+#: L'architecture effective vue par un constructeur : ce qu'il a le DROIT de
+#: construire, et l'exigence qui le justifie. La liste `omitted` se déduit du
+#: catalogue ; un `dev-*` n'en a pas besoin pour ne pas la construire.
+ARCH_REQUIRED = ("reference", "required")
 
 #: Pour chaque agent de construction : `section -> champs gardés`.
 #:   "*"     la section entière ;
@@ -60,25 +64,28 @@ TOOL_SAFETY = TOOL_IDENTITY + ("description", "trust", "retryPolicy", "timeoutSe
 #: `dev-app` (poc) et `architect-*` sont absents : le premier construit tout le
 #: système, les seconds écrivent ce que l'IR compile — ils ne lisent pas de vue.
 VIEW_SPECS: dict[str, dict[str, Any]] = {
-    "dev-tools": {"tools": "*", "dataAccess": ("id", "exposedTo", "binding"), "schemas": "*"},
-    "dev-retrieval": {"retrievers": "*", "agents": ("id", "role", "retrievers", "trustPosture"), "schemas": "*"},
-    "dev-data": {"dataAccess": "*", "tools": "*data*", "schemas": "*"},
+    "dev-tools": {"tools": "*", "dataAccess": ("id", "exposedTo", "binding"), "schemas": "*",
+                  "architecture": ARCH_REQUIRED},
+    "dev-retrieval": {"retrievers": "*", "agents": ("id", "role", "retrievers", "trustPosture"), "schemas": "*",
+                      "architecture": ARCH_REQUIRED},
+    "dev-data": {"dataAccess": "*", "tools": "*data*", "schemas": "*", "architecture": ARCH_REQUIRED},
     "dev-prompt": {
         "agents": "*", "tools": ("id", "name", "description", "inputSchema", "sideEffectClass", "errors"),
         "retrievers": ("id", "pattern", "citationMode"), "traceability": "*", "schemas": "*",
     },
     "dev-orchestration": {
         "orchestration": "*", "agents": AGENT_WIRING, "tools": TOOL_IDENTITY,
-        "memory": "*", "budget": "*", "guardrails": "*", "schemas": "*",
+        "memory": "*", "budget": "*", "guardrails": "*", "schemas": "*", "architecture": ARCH_REQUIRED,
     },
     "dev-api": {
         "orchestration": "*", "agents": AGENT_INTERFACE, "budget": "*", "guardrails": "*", "schemas": "*",
+        "architecture": ARCH_REQUIRED,
     },
     "dev-backend": {
         # `authEnv` : la composition configure chaque outil par NOMS de variables.
         "orchestration": "*", "agents": AGENT_WIRING, "tools": TOOL_IDENTITY + ("authEnv", "timeoutSec"),
         "retrievers": ("id", "pattern", "binding", "indexHash"), "dataAccess": "*",
-        "memory": "*", "guardrails": "*", "budget": "*", "schemas": "*",
+        "memory": "*", "guardrails": "*", "budget": "*", "schemas": "*", "architecture": ARCH_REQUIRED,
     },
     "qa-evals": {
         "agents": AGENT_INTERFACE + ("tools", "retrievers", "trustPosture", "refusalPolicy"),
@@ -88,10 +95,11 @@ VIEW_SPECS: dict[str, dict[str, Any]] = {
     "qa-tests": {
         "agents": AGENT_INTERFACE + ("tools", "retrievers", "bounds"), "tools": "*", "retrievers": "*",
         "dataAccess": "*", "orchestration": ("maxHops", "entryNode", "edges", "terminalNodes"), "schemas": "*",
+        "architecture": ARCH_REQUIRED,
     },
     "review-spec": {
         "agents": AGENT_IDENTITY + ("tools",), "tools": TOOL_IDENTITY, "evaluation": "*",
-        "traceability": "*", "budget": "*", "orchestration": "*",
+        "traceability": "*", "budget": "*", "orchestration": "*", "architecture": "*",
     },
     "review-rag": {
         "retrievers": "*", "agents": ("id", "role", "servesCaps", "retrievers"), "evaluation": "*",
@@ -210,6 +218,8 @@ def agent_view(ir: dict[str, Any], agent_id: str, *, source_hash: str) -> dict[s
     for section in ("memory", "guardrails", "budget", "schemas"):
         if section in ir:
             kept[section] = ir[section]
+    if isinstance(ir.get("architecture"), dict):
+        kept["architecture"] = _project_section(ir["architecture"], ARCH_REQUIRED)
     view = _envelope(ir, INSTANCE_VIEW_AGENT, source_hash, kept,
                      reduced=["agents", "tools"] + (["retrievers"] if "retrievers" in kept else []),
                      extra={"instance": agent_id})

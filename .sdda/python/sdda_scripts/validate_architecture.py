@@ -180,6 +180,9 @@ class Roster:
         self.relations: list[dict[str, str]] = []
         self.loops: list[dict[str, str]] = []
         self.merge = ""
+        #: `pattern:` du manifeste. STACK.md déclare le pattern MAXIMUM autorisé ;
+        #: un roster `single-agent` est toujours admis (`effective_pattern`).
+        self.pattern = ""
 
     # -- depuis le manifeste -------------------------------------------------
     @classmethod
@@ -187,6 +190,7 @@ class Roster:
         self = cls()
         self.present = True
         self.source = source
+        self.pattern = _joined(data.get("pattern")).strip().lower()
         orch = data.get("orchestrator") if isinstance(data.get("orchestrator"), dict) else {}
         self.orchestrator = {
             "id": _joined(orch.get("id")),
@@ -601,6 +605,8 @@ def run(root: Path, mission: int | str | None = None, explain: bool = False) -> 
     for axis, choice in active.items():
         if not choice:
             continue
+        if axis == "orchestration":
+            choice = effective_pattern(choice, roster)
         for one in (choice.split(",") if axis == "tools" else [choice]):
             if not one:
                 continue
@@ -626,6 +632,23 @@ def run(root: Path, mission: int | str | None = None, explain: bool = False) -> 
         "loopBounds": len(roster.loops),
     })
     return report
+
+
+#: Le pattern toujours admis, quel que soit le maximum que STACK.md autorise.
+SINGLE_AGENT = "single-agent"
+
+
+def effective_pattern(stack_pattern: str, roster: "Roster") -> str:
+    """Le pattern que le roster EXERCE : `single-agent` s'il le déclare et n'a aucun sous-agent.
+
+    STACK.md déclare le pattern MAXIMUM que le Tech Lead autorise, pas celui que
+    chaque MISSION doit porter : un chat à un agent sous un STACK.md `router`
+    n'a ni routeur ni spécialiste à inventer. Seul un roster qui déclare un
+    AUTRE pattern que celui de STACK.md reste un désaccord.
+    """
+    if roster.pattern == SINGLE_AGENT and not roster.subagents:
+        return SINGLE_AGENT
+    return stack_pattern
 
 
 def _topology_path(root: Path, mission: int | str | None) -> Path | None:

@@ -1,3 +1,4 @@
+# @sdda-file-if guardrail.pii-redaction
 """Rédaction des données personnelles à FORMAT VÉRIFIABLE — `pii-redaction.md §4-§5`. GÉNÉRÉ.
 
 Ce module couvre la ligne « haute fiabilité » de la fiche, et elle seule :

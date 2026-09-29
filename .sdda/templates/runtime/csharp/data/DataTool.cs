@@ -42,9 +42,15 @@ public static class DataTool
             var supplied = InputValidator.Validate(arguments, tool.InputSchema, tool.SourceId);
             var output = tool.Kind switch
             {
+                // @sdda-if data.tool.lookup
                 "lookup" => DataEnvelope.LookupRecord(tool, supplied, context, cancellationToken),
+                // @sdda-endif
+                // @sdda-if data.tool.search
                 "search" => DataEnvelope.SearchRecords(tool, supplied, context, cancellationToken),
+                // @sdda-endif
+                // @sdda-if data.tool.count
                 "count" => DataEnvelope.CountRecords(tool, supplied, context, cancellationToken),
+                // @sdda-endif
                 _ => throw new DataAccessException(DataErrorCodes.DataAccessError, $"type d'outil `{tool.Kind}` inconnu", tool.SourceId),
             };
             return Task.FromResult(ToolResult.Success(output.ToJsonString(OutputOptions)));

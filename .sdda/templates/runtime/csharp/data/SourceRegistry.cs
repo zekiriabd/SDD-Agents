@@ -92,9 +92,11 @@ public sealed record SourceRegistry
         return Sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
     }
 
+    // @sdda-if data.staleness
     public int StalenessHours(SourceConfig source)
     {
         ArgumentNullException.ThrowIfNull(source);
         return source.MaxStalenessHours ?? Envelope.MaxStalenessHours;
     }
+    // @sdda-endif
 }

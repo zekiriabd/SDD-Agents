@@ -200,8 +200,10 @@ def test_only_the_tools_the_roster_grants_are_generated(sources_project: Path) -
     """Premier run réel : `orders_count`, absent du roster, recevait contrat, code et tests.
 
     Le roster nomme `order_tracking_lookup` seul : `search` et `count` de cette
-    source ne sont plus générés. Une source dont le roster ne cite aucun outil
-    garde tout ce que sa déclaration commande.
+    source ne sont plus générés. Une source dont le roster ne cite AUCUN outil
+    n'en reçoit aucun : un outil sans exigence n'existe pas (architecture
+    effective) — la déclaration d'une source dit ce qui est POSSIBLE, le roster
+    ce qui est DÉCIDÉ.
     """
     roster = sources_project / "workspace/feats/1-roster.md"
     roster.parent.mkdir(parents=True, exist_ok=True)
@@ -211,7 +213,8 @@ def test_only_the_tools_the_roster_grants_are_generated(sources_project: Path) -
     contracts = {p.name for p in (sources_project / CONTRACTS).glob("*.tool.md")}
     assert "1-order-tracking-lookup.tool.md" in contracts
     assert not {"1-order-tracking-search.tool.md", "1-order-tracking-count.tool.md"} & contracts
-    assert any(n.startswith("1-crm-customer-") for n in contracts)
+    source_contracts = {n for n in contracts if n.startswith(("1-order-tracking-", "1-crm-"))}
+    assert source_contracts == {"1-order-tracking-lookup.tool.md"}
     assert gst.run(sources_project, mode="check").ok
 
 

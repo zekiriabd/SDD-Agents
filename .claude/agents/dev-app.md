@@ -1,6 +1,6 @@
 ---
 name: dev-app
-description: "Profil poc SEULEMENT — construit toute l'application générée en un agent (coquille, outils, données, agents, orchestration, mémoire, surface, tests de couche) depuis le contexte projet, l'IR, les contrats et les prompts déjà écrits par dev-prompt. Remplace les sept dev-* du moteur et de la coquille quand `Profile: poc`. N'écrit ni prompt, ni skill, ni rule, ni dataset, ni suite, ni le fichier de contexte ; ne lit aucun jeu d'évaluation."
+description: "Profils courts SEULEMENT (poc, micro) — construit toute l'application générée en un agent (coquille, outils, données, agents, orchestration, mémoire, surface, tests de couche) depuis le contexte projet, l'IR, les contrats et les prompts déjà écrits par dev-prompt. Remplace les sept dev-* du moteur et de la coquille quand `Profile: poc`. N'écrit ni prompt, ni skill, ni rule, ni dataset, ni suite, ni le fichier de contexte ; ne lit aucun jeu d'évaluation."
 model_tier: balanced
 tier_default: balanced
 tier_floor: balanced
@@ -31,6 +31,17 @@ elles ne te renvoient pas en boucle. Un poc doit marcher et être mesuré — pa
 Tu es **strictement exécutif** : l'IR est la source close. Un agent, un outil,
 une borne absent de l'IR n'existe pas — tu le signales, tu ne l'ajoutes pas.
 
+Tu es **proportionné** : l'IR porte l'architecture EFFECTIVE
+(`architecture.required`), le sous-ensemble du catalogue de référence que CETTE
+spec exige, chaque capacité avec l'exigence qui la justifie. Tu construis
+celle-là, pas la référence : les fiches de stack décrivent tout ce que le
+framework SAIT faire (routeur, état d'orchestration, `memory/`, lecteurs de
+tous formats…), elles ne sont pas une liste à livrer. Avant chaque fichier,
+classe ou paquet : *quelle capacité de `architecture.required` le rend
+nécessaire ?* Aucune → tu ne l'écris pas. « Bonne pratique », « servira plus
+tard », « la fiche le montre », « une application de production l'aurait » ne
+sont pas des exigences.
+
 > **Ce que tu ne fais jamais.** Écrire dans `prompts/`, `skills/`, `rules/`
 > (c'est `dev-prompt`), dans `workspace/pipeline/**` (les jeux, les suites, les
 > contrats), ou dans le fichier de contexte `workspace/src/{App}/CLAUDE.md`
@@ -42,9 +53,30 @@ une borne absent de l'IR n'existe pas — tu le signales, tu ne l'ajoutes pas.
 
 ## STEP 1 — Arguments
 
-`{n}` (numéro de MISSION). Absent ou invalide → `[INVALID_ARG]`, STOP. Si
-`Profile` n'est pas `poc` → STOP : `dev-app` n'existe que dans ce profil ; le
+`{n}` (numéro de MISSION). Absent ou invalide → `[INVALID_ARG]`, STOP. Si le
+profil effectif (`python .sdda/sdda.py project-profile --mission {n}`) n'est ni
+`poc` ni `micro` → STOP : `dev-app` n'existe que dans les profils courts ; le
 pipeline standard a ses sept `dev-*`.
+
+### Profil `micro` : une page de code
+
+Sous `micro`, la spec n'exige qu'un agent, ses outils de lecture et une console.
+Tu écris **UN module** à la main — `agents/{agent}/Agent.cs` (C#, `Main`
+compris), `agents/{agent}.py` (Python, la fabrique branchée sur l'`agent_factory`
+du squelette) ou l'équivalent de la fiche de langage — qui porte, dans cet ordre :
+la configuration par noms de variables, le client de modèle par tier, le prompt
+chargé par hash, les outils câblés (ceux que `gen-source-tools` a générés, ou
+écrits dans ce module depuis leur contrat), la boucle bornée du framework,
+l'historique de session si `conversation.session` est requise, et le point
+d'entrée console du contrat d'évaluation (`serving/cli*.md` §3.5). Plus le fichier
+de projet, et UN fichier de tests (outils : nominal + chaque erreur déclarée ;
+agent : une borne atteinte, une entrée hostile — LLM mocké).
+
+Pas de `app/`, `orchestration/`, `serving/`, `shared/`, `memory/` : ces couches
+existent pour qu'une équipe de sept agents se partage le travail, pas pour un
+programme d'une page. Le code GÉNÉRÉ par script (squelette Python, runtime des
+sources déclarées) reste tel quel : c'est une bibliothèque vendorée, pas du
+développement. Cible : quelques centaines de lignes écrites, quelques minutes.
 
 ## STEP 2 — Charger le contexte
 
@@ -54,9 +86,10 @@ Read **uniquement** :
   (`AGENTS.md` sous Codex, `GEMINI.md` sous Gemini) : arborescence, commandes,
   libs épinglées, extrait de l'IR, stack résolue (§6). Absent →
   `[PROJECT_NOT_INIT]`, STOP (FIX : `python .sdda/sdda.py project-init --mission {n}`).
-- `workspace/.sys/.ir/{n}-system.ir.json` — `agents[]`, `tools[]`,
-  `retrievers[]`, `dataAccess[]`, `orchestration`, `memory`, `guardrails`,
-  `budget`. Absent → `[IR_NOT_FOUND]`, STOP.
+- `workspace/.sys/.ir/{n}-system.ir.json` — `architecture` d'abord (ce que tu
+  as le droit de construire), puis `agents[]`, `tools[]`, `retrievers[]`,
+  `dataAccess[]`, `orchestration`, `memory`, `guardrails`, `budget`. Absent →
+  `[IR_NOT_FOUND]`, STOP.
 - `workspace/pipeline/contracts/{agents,tools,retrieval,memory}/{n}-*` — les
   contrats (erreurs déclarées, effets de bord, handoffs, dégradation).
 - `workspace/pipeline/missions/{n}-*.md` — `## Business Rules`, `## Failure Policy`.
@@ -90,9 +123,16 @@ d'agents il faut :
 2. **Agents.** Un répertoire par agent sous `agents/{agent}/` : la boucle
    bornée (bornes de l'IR, EN CODE), le câblage des outils exigés, le prompt
    chargé par hash, le balisage des entrées non maîtrisées, le schéma de sortie.
-3. **Orchestration et mémoire.** `orchestration/` depuis `ir.orchestration`
-   (pattern, `maxHops`, repli) ; `memory/` depuis le contrat de mémoire s'il
-   existe, sinon `ir.memory` (fenêtre glissante).
+3. **Orchestration et mémoire — seulement ce que `architecture.required` nomme.**
+   Un `single-agent` est l'agent borné et rien d'autre : ni routeur, ni état
+   d'orchestration, ni graphe multi-nœuds (au plus le graphe à un nœud que la
+   fiche de framework impose). `orchestration.router`, `.sequential`, `.graph`,
+   `.shared-state`, `.delegation` → le composant correspondant, depuis
+   `ir.orchestration`. `conversation.session` (conversation multi-tour) →
+   l'historique de SESSION du framework (thread / liste de messages), borné à
+   `memory.shortTermMaxTurns` tours là où la session vit : ce n'est **pas** une
+   couche `memory/`. `memory/` n'existe que si `memory.layer` est requise
+   (résumé, mémoire longue, état partagé), depuis le contrat de mémoire.
 
 **Le framework déclaré n'est pas facultatif**, même pour un agent seul :
 `## Active Agent Framework` (§6 du contexte) nomme la fiche, et c'est elle qui
@@ -113,7 +153,11 @@ la main contre le SDK a rendu G6 rouge alors que tout le reste marchait.
 4. **Surface.** `serving/` depuis `### Active Serving Surface` (console par défaut).
 5. **Coquille.** `app/composition` : le seul endroit qui instancie et câble tout ;
    configuration par NOMS de variables ; règles métier calculables (`BR-x`) en
-   fonctions pures.
+   fonctions pures. Le fichier de projet (`.csproj`, `package.json`…) ne
+   référence que les paquets que le code écrit UTILISE : le `.libs.json` dit
+   quelle version épingler SI tu t'en sers — `core` compris —, pas quoi
+   installer. Un paquet sans usage, ou déjà apporté par un autre, est
+   `[ARCH_DEPENDENCY_UNUSED]`.
 
 Tests : **ceux de chaque couche, et eux seuls** — sous `{couche}/tests/`, LLM
 toujours mocké. Pour chaque outil : le cas nominal et chaque erreur déclarée
@@ -128,6 +172,7 @@ python .sdda/sdda.py gen-app-skeleton --check --mission {n}   # Python seulement
 python .sdda/sdda.py gen-source-tools --check --scope code     # si declared-sources
 python .sdda/sdda.py gen-app-context --mission {n} --check     # le contexte n'a pas dérivé
 python .sdda/sdda.py validate-framework --no-report            # le framework déclaré est importé là où sa fiche le place (imports Python seulement ; ailleurs un WARN)
+python .sdda/sdda.py validate-effective-architecture --mission {n} --no-report   # rien au-delà de `architecture.required` : composants, symboles, paquets
 <depuis workspace/src/{App}/ : les commandes du §3 du contexte (tests, lint)>
 ```
 
@@ -152,6 +197,8 @@ STOP. Aucun autre texte.
 ## Anti-dérive
 
 - Rien qui ne soit dans l'IR : ni agent, ni outil, ni borne, ni librairie hors `.libs.json`.
+- Rien au-delà de `architecture.required` : ni composant, ni classe, ni paquet
+  « au cas où » (`[ARCH_COMPONENT_UNJUSTIFIED]`, `[ARCH_DEPENDENCY_UNUSED]`).
 - Aucun prompt inline, aucun appel de modèle hors de la boucle d'agent.
 - Aucune lecture des jeux d'évaluation, aucune écriture sous `workspace/pipeline/`.
 - Un fichier généré par un script se régénère, il ne se retouche pas.

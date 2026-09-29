@@ -39,16 +39,18 @@ def test_the_profiles_are_the_schema_enum() -> None:
     assert bs.DEFAULT_PROFILE == schema["properties"]["Profile"]["default"]
 
 
-def test_the_default_is_standard_with_the_template_minimums(tmp_path: Path) -> None:
+def test_the_default_is_auto_and_the_minimums_come_from_the_profile(tmp_path: Path) -> None:
+    """`Profile: auto` : la MISSION choisit ; aucune taille de jeu figée par le gabarit."""
     text = bs.build_stack_md("Demo", bs.COMBOS["c1"], {})
-    assert "Profile: standard" in text and "Profile: poc" not in text
-    assert MIN_ITEMS_RE.search(text), "le gabarit standard garde ses minimums explicites"
-    assert read_layered_config(_project(tmp_path, text)).get("GoldenSetMinItems") == 50
+    assert re.search(r"^Profile: auto", text, re.M) and not re.search(r"^Profile: (poc|standard)", text, re.M)
+    assert not MIN_ITEMS_RE.search(text), "une taille écrite dans STACK.md l'emporterait sur tout profil"
+    cfg = read_layered_config(_project(tmp_path, text))
+    assert cfg.get("GoldenSetMinItems") == 50, "sans MISSION, `auto` vaut `standard` : défauts de la base"
 
 
 def test_poc_writes_the_profile_and_omits_the_minimums_so_the_profile_applies(tmp_path: Path) -> None:
     text = bs.build_stack_md("Demo", bs.COMBOS["c1"], {}, profile="poc")
-    assert "Profile: poc" in text and "Profile: standard" not in text
+    assert re.search(r"^Profile: poc", text, re.M) and not re.search(r"^Profile: (auto|standard)", text, re.M)
     assert not MIN_ITEMS_RE.search(text), "une valeur écrite dans STACK.md l'emporterait sur profiles/poc.yml"
     cfg = read_layered_config(_project(tmp_path, text))
     assert cfg.get("Profile") == "poc"
@@ -56,12 +58,18 @@ def test_poc_writes_the_profile_and_omits_the_minimums_so_the_profile_applies(tm
     assert not any(f"{{{{{p}}}}}" in text for p in ("AppName", "Language"))
 
 
-def test_poc_only_touches_the_eval_stack_section() -> None:
-    standard = bs.build_stack_md("Demo", bs.COMBOS["c1"], {}).splitlines()
+def test_micro_profile_carries_minimal_eval_sizes(tmp_path: Path) -> None:
+    text = bs.build_stack_md("Demo", bs.COMBOS["c1"], {}, profile="micro")
+    cfg = read_layered_config(_project(tmp_path, text))
+    assert cfg.get("GoldenSetMinItems") == 8 and cfg.get("EvalRuns") == 2
+    assert cfg.sources["GoldenSetMinItems"] == "profile"
+
+
+def test_a_profile_only_touches_the_profile_line() -> None:
+    auto = bs.build_stack_md("Demo", bs.COMBOS["c1"], {}).splitlines()
     poc = bs.build_stack_md("Demo", bs.COMBOS["c1"], {}, profile="poc").splitlines()
-    removed = sorted(set(standard) - set(poc))
-    assert removed == ["AdversarialSetMinItems: 25", "GoldenSetMinItems: 50", "HoldoutSetMinItems: 30",
-                       "Profile: standard                   # poc | standard | production — `poc` : 2 agents de build au lieu de 8,"]
+    removed = sorted(set(auto) - set(poc))
+    assert len(removed) == 1 and removed[0].startswith("Profile: auto")
 
 
 def test_an_unknown_profile_is_refused() -> None:

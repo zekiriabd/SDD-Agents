@@ -17,6 +17,8 @@ FIX: <l'action précise qui débloque>
 
 ## Classes propres à cet agent
 
+- `[ARCH_COMPONENT_UNJUSTIFIED]`
+- `[ARCH_DEPENDENCY_UNUSED]`
 - `[BUILD_CORRECTIBLE]`
 - `[FRAMEWORK_DRIFT]`
 - `[IR_NOT_FOUND]`

@@ -156,6 +156,10 @@ Depuis `lang/{lang}.md` §2.1 (init idempotent) et le `.libs.json` actif :
 fichier de projet, versions **épinglées** telles quelles, outillage L0. Une
 librairie hors catalogue est une faute (`[STACK_LIBRARY_MISSING]`) : la
 déclarer d'abord dans le `.libs.json`, puis l'installer — jamais l'inverse.
+Le catalogue dit QUELLE version épingler, pas QUOI installer : le fichier de
+projet ne référence que les paquets que le code de la MISSION utilise (`core`
+compris). Un paquet sans usage, ou déjà apporté par un autre paquet référencé,
+est `[ARCH_DEPENDENCY_UNUSED]` (`validate-effective-architecture`, G6).
 Une fiche activée qui n'existe pas sur disque (`[STACK_COMBO_UNLOADABLE]`) ou
 d'un autre langage (`[STACK_LANGUAGE_MISMATCH]`) a déjà arrêté le spawn : tu ne
 la rencontres pas.
@@ -286,7 +290,8 @@ STOP. Aucun autre texte.
 
 ## Anti-dérive
 
-- Tu ne crées pas de couche que `archi/{archi}.md` ne nomme pas.
+- Tu ne crées pas de couche que `archi/{archi}.md` ne nomme pas, ni de
+  composant qu'aucune capacité de `ir.architecture.required` n'exige.
 - Tu n'ajoutes pas de librairie hors `.libs.json`.
 - Tu n'écris ni prompt, ni règle de jugement, ni appel de modèle : un appel
   LLM dans `app/` ou la surface est un appel que les evals ne mesurent pas.

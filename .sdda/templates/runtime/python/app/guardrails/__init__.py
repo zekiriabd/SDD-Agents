@@ -36,9 +36,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
+# @sdda-if guardrail.injection-detection
 from .injection import InjectionDetector, Verdict
+# @sdda-endif
+# @sdda-if guardrail.pii-redaction
 from .pii import PiiRedactor
+# @sdda-endif
+# @sdda-if guardrail.schema-validation
 from .schema import coerce_output, validate
+# @sdda-endif
 
 INJECTION = "injection-detection"
 PII = "pii-redaction"
@@ -54,7 +60,11 @@ class GuardrailTripped(Exception):
 
     cls = "SAFETY_GUARDRAIL_TRIPPED"
 
+    # @sdda-if guardrail.injection-detection
     def __init__(self, guardrail: str, verdict: Verdict) -> None:
+    # @sdda-else
+    def __init__(self, guardrail: str, verdict: Any) -> None:
+    # @sdda-endif
         super().__init__(f"guardrail `{guardrail}` déclenché : score {verdict.score:.2f} >= "
                          f"{verdict.threshold:.2f} (règles {list(verdict.rules)})")
         self.guardrail = guardrail
@@ -68,8 +78,12 @@ class Guardrails:
     active: tuple[str, ...] = ()
     input_guards: tuple[str, ...] = ()
     on_trip: str = "block-and-log"
+    # @sdda-if guardrail.injection-detection
     injection: InjectionDetector | None = None
+    # @sdda-endif
+    # @sdda-if guardrail.pii-redaction
     pii: PiiRedactor | None = None
+    # @sdda-endif
     output_schema: Mapping[str, Any] | None = None
     output_schemas: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
@@ -80,25 +94,37 @@ class Guardrails:
         on_trip = str(config.get("onTrip") or "block-and-log")
         if on_trip not in POLICIES:
             raise ValueError(f"`OnGuardrailTrip: {on_trip}` hors liste {list(POLICIES)}")
+        # @sdda-if guardrail.injection-detection
         injection_cfg = config.get("injection")
+        # @sdda-endif
+        # @sdda-if guardrail.pii-redaction
         pii_cfg = config.get("pii")
+        # @sdda-endif
         schemas = config.get("outputSchemas") or {}
         final = config.get("outputSchema")
+        # @sdda-if guardrail.injection-detection
         injection = None
         if INJECTION in active:
             injection = InjectionDetector.from_config(
                 injection_cfg if isinstance(injection_cfg, Mapping) else None)
+        # @sdda-endif
+        # @sdda-if guardrail.pii-redaction
         pii = None
         if PII in active:
             pii = PiiRedactor.from_config(pii_cfg if isinstance(pii_cfg, Mapping) else None)
+        # @sdda-endif
         validating = SCHEMA in active
         declared = {str(k): v for k, v in schemas.items() if isinstance(v, Mapping)}
         return cls(
             active=active,
             input_guards=tuple(str(g) for g in config.get("input") or ()),
             on_trip=on_trip,
+            # @sdda-if guardrail.injection-detection
             injection=injection,
+            # @sdda-endif
+            # @sdda-if guardrail.pii-redaction
             pii=pii,
+            # @sdda-endif
             output_schema=final if validating and isinstance(final, Mapping) else None,
             output_schemas=declared if validating else {},
         )
@@ -114,12 +140,21 @@ class Guardrails:
         garde la correspondance jeton -> valeur, et une instance réutilisée d'un
         run à l'autre (d'un appelant à l'autre) accumulait les valeurs de tous.
         """
+        # @sdda-if guardrail.pii-redaction
         pii = PiiRedactor(self.pii.categories) if self.pii is not None else None
         return replace(self, pii=pii)
+        # @sdda-else
+        return replace(self)
+        # @sdda-endif
 
     # -- Entrée ---------------------------------------------------------------
+    # @sdda-if guardrail.injection-detection
     def check_input(self, text: str, *, tracer: Any = None) -> tuple[str, Verdict | None]:
+    # @sdda-else
+    def check_input(self, text: str, *, tracer: Any = None) -> tuple[str, None]:
+    # @sdda-endif
         """L'entrée utilisateur, après injection directe et PII. `GuardrailTripped` si bloquant."""
+        # @sdda-if guardrail.injection-detection
         verdict: Verdict | None = None
         if self.injection is not None and (not self.input_guards or INJECTION in self.input_guards):
             verdict = self.injection.scan(text)
@@ -135,6 +170,9 @@ class Guardrails:
                 if action == "sanitized":
                     text = self.injection.neutralize(text, verdict)
         return self.redact(text, point="user_input", tracer=tracer), verdict
+        # @sdda-else
+        return self.redact(text, point="user_input", tracer=tracer), None
+        # @sdda-endif
 
     def screen_untrusted(self, text: str, *, source: str, tracer: Any = None) -> str:
         """Texte d'un TIERS (outil, document) : neutralisé s'il instruit, rédigé s'il porte des PII.
@@ -142,6 +180,7 @@ class Guardrails:
         Jamais bloquant : un document suspect est la faute de son auteur, pas
         de l'utilisateur. Le passage est rendu inerte et le run continue.
         """
+        # @sdda-if guardrail.injection-detection
         if self.injection is not None:
             verdict = self.injection.scan(text)
             if verdict.hits:
@@ -151,9 +190,11 @@ class Guardrails:
                        "sdda.guardrail.action": action, **_verdict_attrs(verdict)})
                 if verdict.tripped:
                     text = self.injection.neutralize(text, verdict)
+        # @sdda-endif
         return self.redact(text, point=source, tracer=tracer)
 
     def redact(self, text: str, *, point: str = "prompt", tracer: Any = None) -> str:
+        # @sdda-if guardrail.pii-redaction
         if self.pii is None:
             return text
         redacted, findings = self.pii.redact(text)
@@ -162,6 +203,9 @@ class Guardrails:
                                 "sdda.guardrail.pii.categories": sorted({f.category for f in findings}),
                                 "sdda.guardrail.pii.count": len(findings)})
         return redacted
+        # @sdda-else
+        return text
+        # @sdda-endif
 
     # -- Sortie ---------------------------------------------------------------
     def schema_for(self, agent_id: str = "") -> Mapping[str, Any] | None:
@@ -172,6 +216,7 @@ class Guardrails:
         schema = self.schema_for(agent_id)
         if schema is None:
             return output, []
+        # @sdda-if guardrail.schema-validation
         value = coerce_output(output)
         violations = validate(value, schema)
         if violations:
@@ -180,12 +225,19 @@ class Guardrails:
                    "sdda.guardrail.violations": violations[:10]},
                   error="AGENT_OUTPUT_INVALID")
         return value, violations
+        # @sdda-else
+        return output, []
+        # @sdda-endif
 
 
+# @sdda-if guardrail.injection-detection
 def _verdict_attrs(verdict: Verdict) -> dict[str, Any]:
     data = verdict.to_dict()
     return {"sdda.guardrail.score": data["score"], "sdda.guardrail.threshold": data["threshold"],
             "sdda.guardrail.rules": data["rules"], "sdda.guardrail.categories": data["categories"]}
+
+
+# @sdda-endif
 
 
 def _span(tracer: Any, name: str, attributes: Mapping[str, Any], *, error: str = "") -> None:
@@ -196,5 +248,15 @@ def _span(tracer: Any, name: str, attributes: Mapping[str, Any], *, error: str =
             span.error(error)
 
 
-__all__: Sequence[str] = ("GuardrailTripped", "Guardrails", "InjectionDetector", "PiiRedactor", "Verdict",
-                          "coerce_output", "validate")
+__all__: Sequence[str] = (
+    "GuardrailTripped", "Guardrails",
+    # @sdda-if guardrail.injection-detection
+    "InjectionDetector", "Verdict",
+    # @sdda-endif
+    # @sdda-if guardrail.pii-redaction
+    "PiiRedactor",
+    # @sdda-endif
+    # @sdda-if guardrail.schema-validation
+    "coerce_output", "validate",
+    # @sdda-endif
+)

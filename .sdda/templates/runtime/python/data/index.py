@@ -15,7 +15,9 @@ entrer dans l'index, sinon chaque appel ultérieur le trouvera légitimement.
 from __future__ import annotations
 
 import hashlib
+# @sdda-if data.format.jsonl
 import json
+# @sdda-endif
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,8 +123,12 @@ def build_index(registry: Registry, source: Source, base: Path) -> SourceIndex:
     index.content_hash = "sha256:" + signature.hexdigest()
 
     for path in files:
+        # @sdda-if data.format.jsonl
         rows = _jsonl_rows(path, source) if source.format == "jsonl" else (
             (offset, None, record) for offset, record in enumerate(read_records(path, source)))
+        # @sdda-else
+        rows = ((offset, None, record) for offset, record in enumerate(read_records(path, source)))
+        # @sdda-endif
         for offset, byte_offset, record in rows:
             index.count += 1
             raw = record.get(source.key)
@@ -142,6 +148,7 @@ def build_index(registry: Registry, source: Source, base: Path) -> SourceIndex:
     return index
 
 
+# @sdda-if data.format.jsonl
 def _jsonl_rows(path: Path, source: Source) -> Iterator[tuple[int, int, dict[str, Any]]]:
     """(rang, position en octets, enregistrement) de chaque ligne-objet d'un JSONL."""
     encoding = source.encoding or "utf-8"
@@ -162,6 +169,7 @@ def _jsonl_rows(path: Path, source: Source) -> Iterator[tuple[int, int, dict[str
                                 detail=f"{exc.__class__.__name__}: {exc}") from exc
 
 
+# @sdda-endif
 def record_at(location: Location, source: Source) -> dict[str, Any] | None:
     """Relit l'enregistrement à son emplacement. L'index ne garde aucune donnée.
 
@@ -171,6 +179,7 @@ def record_at(location: Location, source: Source) -> dict[str, Any] | None:
     de position stable (un CSV peut porter un champ multiligne) et sont relus
     jusqu'au rang — c'est la limite assumée, pas un « O(1) » annoncé à tort.
     """
+    # @sdda-if data.format.jsonl
     if location.byte_offset is not None:
         try:
             with location.path.open("rb") as handle:
@@ -180,6 +189,7 @@ def record_at(location: Location, source: Source) -> dict[str, Any] | None:
             raise SourceUnavailable(f"`{location.path.name}` illisible", source=source.id,
                                     detail=f"{exc.__class__.__name__}: {exc}") from exc
         return value if isinstance(value, dict) else None
+    # @sdda-endif
     for offset, record in enumerate(read_records(location.path, source)):
         if offset == location.offset:
             return record

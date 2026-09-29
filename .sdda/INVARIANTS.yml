@@ -26,7 +26,7 @@ status: enforced              # chaque enforcer listé existe sur disque et, pou
                               # les hooks, est câblé (framework-smoke
                               # invariants.enforcers + hooks.reachable). Ce qui
                               # reste planifié vit dans docs/ROADMAP.md, pas ici.
-total: 22
+total: 23
 
 invariants:
 
@@ -159,6 +159,32 @@ invariants:
       - .sdda/python/sdda_scripts/ir_compiler.py
       - .sdda/python/tests/test_contract_neutrality.py
       - .sdda/python/tests/test_ir_compiler.py
+    bypasses: []
+
+  - id: effective-architecture-only
+    name: Le livrable ne porte que les capacités que la spec exige
+    rationale: |
+      Architecture possible ≠ architecture générée. Le framework porte une
+      architecture de référence riche (routeur, état d'orchestration, mémoire,
+      RAG, lecteurs de six formats, comptage, identité, fraîcheur…) ; la copier
+      entière livrait à « 1 agent, 2 outils, 1 fichier JSON » un `Routers.cs`,
+      un `OrchestrationState.cs`, un `memory/`, un lecteur CSV, un
+      `CountRecords` et des paquets NuGet sans usage — du code sans exigence,
+      qui se compile, se teste, se maintient et élargit la surface d'attaque.
+      L'IR porte l'architecture EFFECTIVE (`architecture.required`, chaque
+      capacité avec l'exigence qui la justifie) ; les générateurs la rendent,
+      les `dev-*` la construisent, et un composant, un symbole ou un paquet sans
+      sa capacité est `[ARCH_COMPONENT_UNJUSTIFIED]` / `[ARCH_DEPENDENCY_UNUSED]`.
+    severity: major
+    principle: P7
+    gate: G6
+    enforcers:
+      - .sdda/python/sdda_lib/effective_architecture.py
+      - .sdda/python/sdda_lib/spec_needs.py
+      - .sdda/python/sdda_scripts/validate_mission.py
+      - .sdda/python/sdda_scripts/validate_effective_architecture.py
+      - .sdda/python/tests/test_effective_architecture.py
+      - .sdda/python/tests/test_spec_sizing.py
     bypasses: []
 
   - id: budget-estimated-before-code

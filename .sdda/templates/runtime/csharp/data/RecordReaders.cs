@@ -17,15 +17,25 @@ namespace {AppName}.Data;
 /// L'encodage est déclaré par source et décodé STRICT : un caractère mal décodé
 /// remplacé par <c>?</c> produirait une donnée plausible et fausse.
 ///
-/// Formats : <c>object</c>, <c>array</c>, <c>jsonl</c>, <c>csv</c>, <c>tsv</c>.
-/// <c>xlsx</c> et <c>parquet</c> n'ont pas de lecteur C# : le générateur les refuse
-/// avant le build ([STACK_VALUE_UNIMPLEMENTED]), et ce lecteur les refuse encore.
+/// Seuls les lecteurs des formats que les sources DÉCLARÉES utilisent sont
+/// générés (architecture effective, `data.format.*`) : une application qui ne lit
+/// qu'un JSON ne reçoit ni lecteur CSV ni lecteur JSONL. <c>xlsx</c> et
+/// <c>parquet</c> n'ont pas de lecteur C# : le générateur les refuse avant le
+/// build ([STACK_VALUE_UNIMPLEMENTED]), et ce lecteur les refuse encore.
 /// </remarks>
 public static class RecordReaders
 {
     private static readonly HashSet<string> Formats = new(StringComparer.Ordinal)
     {
-        "object", "array", "jsonl", "csv", "tsv",
+        // @sdda-if data.format.json
+        "object", "array",
+        // @sdda-endif
+        // @sdda-if data.format.jsonl
+        "jsonl",
+        // @sdda-endif
+        // @sdda-if data.format.delimited
+        "csv", "tsv",
+        // @sdda-endif
     };
 
     /// <exception cref="DataAccessException"><c>SOURCE_UNAVAILABLE</c> : format sans lecteur, fichier illisible ou tronqué.</exception>
@@ -44,9 +54,17 @@ public static class RecordReaders
 
         return format switch
         {
+            // @sdda-if data.format.jsonl
             "jsonl" => Guard(ReadJsonLines(path, source), path, source),
+            // @sdda-endif
+            // @sdda-if data.format.delimited
             "csv" or "tsv" => Guard(ReadCsv(path, source), path, source),
+            // @sdda-endif
+            // @sdda-if data.format.json
             _ => Guard(ReadJson(path, source), path, source),
+            // @sdda-else
+            _ => throw new DataAccessException(DataErrorCodes.SourceUnavailable, $"format `{format}` sans lecteur", source.Id),
+            // @sdda-endif
         };
     }
 
@@ -108,6 +126,7 @@ public static class RecordReaders
         }
     }
 
+    // @sdda-if data.format.json
     private static IEnumerable<JsonObject> ReadJson(string path, SourceConfig source)
     {
         var payload = JsonNode.Parse(ReadText(path, source));
@@ -141,6 +160,8 @@ public static class RecordReaders
         }
     }
 
+    // @sdda-endif
+    // @sdda-if data.format.jsonl
     /// <summary>Ligne à ligne : une ligne corrompue en fin de fichier n'invalide pas les précédentes à la lecture en flux.</summary>
     private static IEnumerable<JsonObject> ReadJsonLines(string path, SourceConfig source)
     {
@@ -206,6 +227,8 @@ public static class RecordReaders
         return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text) as JsonObject;
     }
 
+    // @sdda-endif
+    // @sdda-if data.format.delimited
     /// <summary>CSV / TSV — tout est une chaîne, et ça le reste : le schéma figé porte les types.</summary>
     private static IEnumerable<JsonObject> ReadCsv(string path, SourceConfig source)
     {
@@ -326,4 +349,5 @@ public static class RecordReaders
             yield return [.. fields];
         }
     }
+    // @sdda-endif
 }

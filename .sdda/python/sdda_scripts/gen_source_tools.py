@@ -56,7 +56,8 @@ from typing import Any, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import markdown_io, paths, schema_infer, source_registry as sr  # noqa: E402
+from sdda_lib import effective_architecture, feature_template, markdown_io, paths, schema_infer  # noqa: E402
+from sdda_lib import source_registry as sr  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.runtime_io import atomic_write_text  # noqa: E402
 from sdda_lib.layered_config import active_stacks, read_project_section, read_stack_section_kv  # noqa: E402
@@ -125,15 +126,25 @@ def signaled_states(ctx: Any, source_id: str, kind: str) -> dict[str, tuple[str,
 
     Premier run C# : le roster ne câblait que `lookup` et `search`, et le contrat
     de `search` disait « compter avec l'outil `count` » — un outil absent de
-    l'IR, que `dev-prompt` a dû refuser de citer.
+    l'IR, que `dev-prompt` a dû refuser de citer. De même, `stale` n'est un état
+    que si une source DÉCLARE sa fraîcheur (`max_staleness_hours`) : sinon le
+    runtime ne le calcule pas, et le contrat ne le promet pas.
     """
     states = dict(SIGNALED_STATES[kind])
+    if not staleness_on(ctx):
+        states.pop("stale: true", None)
     kinds = getattr(ctx, "planned_kinds", {}).get(source_id)
     if kind == "search" and kinds is not None and "count" not in kinds:
         when, _ = states["truncated: true"]
         states["truncated: true"] = (when, "affiner les filtres avant de conclure ; ne jamais annoncer un total "
                                            "depuis une page tronquée")
     return states
+
+
+def staleness_on(ctx: Any) -> bool:
+    """La fraîcheur fait-elle partie de l'architecture effective ? (`data.staleness`)"""
+    features = getattr(ctx, "features", None)
+    return features is None or feature_template.enabled("data.staleness", features)
 
 
 def declared_errors(kind: str, src: dict[str, Any]) -> dict[str, tuple[str, str]]:
@@ -150,7 +161,8 @@ def declared_errors(kind: str, src: dict[str, Any]) -> dict[str, tuple[str, str]
 class Context:
     """Ce qu'il faut savoir du projet pour générer, résolu une seule fois."""
 
-    def __init__(self, root: Path, *, mission: str | None = None, src_root: Path | None = None):
+    def __init__(self, root: Path, *, mission: str | None = None, src_root: Path | None = None,
+                 features: Any = None):
         self.root = root
         self.section = read_stack_section_kv(root, "Active Data Sources")
         self.registry = sr.load_registry(root, self.section)
@@ -160,6 +172,12 @@ class Context:
         self.src_root = src_root or paths.app_src_root(root, self.app)
         languages = active_stacks(root, "Active Language & Runtime")
         self.language = languages[0] if languages else "python"
+        # L'architecture EFFECTIVE : ce que la spec exige, pas tout ce que le
+        # runtime de référence sait faire. `features` pilote le rendu des
+        # gabarits (`feature_template`) ; `features=ALL` redonne la référence
+        # entière — c'est ainsi que les tests du runtime l'exercent.
+        self.architecture = effective_architecture.derive(root=root, mission=self.mission or None)
+        self.features: Any = features if features is not None else self.architecture.features()
 
     def _detect_mission(self) -> str:
         found = sorted(p.name.split("-", 1)[0] for p in paths.missions_dir(self.root).glob("*-*.md"))
@@ -606,7 +624,8 @@ def render_wrapper(ctx: Context, source_id: str, src: dict[str, Any], schema: di
     else:
         lines.append('    count: int = Field(description="Nombre d\'enregistrements correspondant aux filtres, compté côté code et non par le modèle.")')
     lines.append('    as_of: str = Field(description="Instantané de la source, ISO 8601 UTC. La donnée a pu changer depuis.")')
-    lines.append('    stale: bool = Field(description="Vrai si l\'instantané dépasse max_staleness_hours : le dire à l\'utilisateur.")')
+    if staleness_on(ctx):
+        lines.append('    stale: bool = Field(description="Vrai si l\'instantané dépasse max_staleness_hours : le dire à l\'utilisateur.")')
 
     lines.extend(["", "", f"async def {tool_name}(params: Input, *, ctx: ToolContext) -> Output:"])
     lines.append(f'    """{_docstring(src, kind)}"""')
@@ -760,7 +779,7 @@ def render_wrapper_csharp(ctx: Context, source_id: str, src: dict[str, Any], sch
     renommage. Ici le modèle voit le contrat, octet pour octet.
     """
     max_rows = ctx.envelope_int("SourceMaxRecordsReturned", 200)
-    input_schema, _ = _tool_schemas(src, schema, kind, max_rows)
+    input_schema, _ = _tool_schemas(src, schema, kind, max_rows, staleness=staleness_on(ctx))
     name = csharp_class_name(source_id, kind)
     store_id = str(src.get("store") or "")
     connector = str(src.get("connector") or "")
@@ -814,7 +833,7 @@ def render_wrapper_csharp(ctx: Context, source_id: str, src: dict[str, Any], sch
 # Rendu — squelettes de tool-contract
 # ---------------------------------------------------------------------------
 def _tool_schemas(src: dict[str, Any], schema: dict[str, Any], kind: str,
-                  max_rows: int) -> tuple[dict[str, Any], dict[str, Any]]:
+                  max_rows: int, *, staleness: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
     props: dict[str, Any] = {k: _clean(v) for k, v in (schema.get("properties") or {}).items()}
     key = str(src.get("key") or "")
 
@@ -843,18 +862,20 @@ def _tool_schemas(src: dict[str, Any], schema: dict[str, Any], kind: str,
 
     record_schema = {"type": "object", "properties": props,
                      "required": sorted(schema.get("required") or [])}
-    common = {
+    common: dict[str, Any] = {
         "as_of": {"type": "string", "format": "date-time",
                   "description": "Instantané de la source en ISO 8601 UTC. La donnée a pu changer depuis : toute réponse temporelle doit en tenir compte."},
-        "stale": {"type": "boolean",
-                  "description": "Vrai si l'instantané dépasse max_staleness_hours ; l'agent doit alors le signaler à l'utilisateur."},
     }
+    if staleness:
+        common["stale"] = {"type": "boolean",
+                           "description": "Vrai si l'instantané dépasse max_staleness_hours ; l'agent doit alors le signaler à l'utilisateur."}
+    fresh = ["stale"] if staleness else []
     if kind == "lookup":
         output = {"type": "object",
                   "properties": {"record": {"type": ["object", "null"], **record_schema,
                                             "description": "L'enregistrement trouvé, ou null si la clé est inconnue."},
                                  **common},
-                  "required": ["as_of", "stale"]}
+                  "required": ["as_of", *fresh]}
     elif kind == "search":
         output = {"type": "object",
                   "properties": {"records": {"type": "array", "items": record_schema,
@@ -862,13 +883,13 @@ def _tool_schemas(src: dict[str, Any], schema: dict[str, Any], kind: str,
                                  "truncated": {"type": "boolean",
                                                "description": f"Vrai si le plafond de {max_rows} a été atteint : le total réel est SUPÉRIEUR, ne jamais conclure sur ce sous-ensemble."},
                                  **common},
-                  "required": ["records", "truncated", "as_of", "stale"]}
+                  "required": ["records", "truncated", "as_of", *fresh]}
     else:
         output = {"type": "object",
                   "properties": {"count": {"type": "integer",
                                            "description": "Nombre d'enregistrements correspondant aux filtres, compté côté code. Utiliser CET outil pour toute question « combien »."},
                                  **common},
-                  "required": ["count", "as_of", "stale"]}
+                  "required": ["count", "as_of", *fresh]}
     return input_schema, output
 
 
@@ -885,7 +906,7 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
     store = ctx.registry.stores.get(str(src.get("store") or "")) or {}
     rpm = store.get("rate_limit_rpm") or 600
     trust = sr.source_trust(src)
-    input_schema, output_schema = _tool_schemas(src, schema, kind, max_rows)
+    input_schema, output_schema = _tool_schemas(src, schema, kind, max_rows, staleness=staleness_on(ctx))
     auth_env = sorted(sr.auth_env_refs(store))
     contract_id = ctx.contract_id(source_id, kind)
     max_bytes = max_rows * 1024 if kind == "search" else 65536
@@ -988,7 +1009,7 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
         f"Fichier : `workspace/pipeline/suites/tool-{contract_id}.yaml`",
         "",
     ])
-    body.extend(f"- [ ] {item}" for item in _test_checklist(kind, src))
+    body.extend(f"- [ ] {item}" for item in _test_checklist(kind, src, signaled_states(ctx, source_id, kind)))
     if trust == "untrusted":
         body.extend([
             "",
@@ -999,9 +1020,11 @@ def render_contract(ctx: Context, source_id: str, src: dict[str, Any], schema: d
     return "\n".join(body) + "\n"
 
 
-def _test_checklist(kind: str, src: dict[str, Any]) -> list[str]:
+def _test_checklist(kind: str, src: dict[str, Any],
+                    states: dict[str, tuple[str, str]] | None = None) -> list[str]:
     items = ["happy path"] + [f"erreur `{code}`" for code in declared_errors(kind, src)]
-    items += [f"état `{field}`" for field in SIGNALED_STATES[kind] if field != "truncated: true"]
+    items += [f"état `{field}`" for field in (states if states is not None else SIGNALED_STATES[kind])
+              if field != "truncated: true"]
     items.append("`as_of` présent dans chaque réponse, y compris vide")
     if kind == "search":
         items.append("plafond atteint -> `truncated: true` (lecture de maxRows+1)")
@@ -1055,9 +1078,11 @@ def roster_tools(ctx: Context) -> set[str] | None:
 def planned(ctx: Context, report: Report, only: str | None = None) -> list[tuple[str, dict[str, Any], str]]:
     """Les (source, déclaration, kind) que la déclaration commande de générer.
 
-    Quand le roster nomme au moins un outil d'une source, seuls les outils qu'il
-    nomme sont générés. Sans roster, ou si le roster ne cite aucun outil de la
-    source, la déclaration seule décide — comme avant.
+    Le roster est une décision, pas une suggestion : quand il est lisible, seuls
+    les outils qu'il NOMME sont générés — une source dont il ne cite aucun outil
+    n'en reçoit aucun (architecture effective : un outil sans exigence n'existe
+    pas). Sans roster (usage manuel, avant l'architecte), la déclaration seule
+    décide.
     """
     out: list[tuple[str, dict[str, Any], str]] = []
     wired = roster_tools(ctx)
@@ -1077,7 +1102,7 @@ def planned(ctx: Context, report: Report, only: str | None = None) -> list[tuple
                 fix="déclarer au moins une clé ou un filtre : une source qu'on ne peut pas interroger "
                     "n'est pas une surface, c'est un fichier",
             )
-        if wired and any(f"{source_id}_{k}" in wired for k in kinds):
+        if wired is not None:
             kinds = [k for k in kinds if f"{source_id}_{k}" in wired]
         out.extend((source_id, src, kind) for kind in kinds)
     return out
@@ -1143,13 +1168,20 @@ def render_registry(ctx: Context, report: Report) -> dict[str, Any]:
         "max_records_returned": ctx.envelope_int("SourceMaxRecordsReturned", 200),
         "max_object_bytes": ctx.envelope_int("SourceMaxObjectBytes", 52_428_800),
         "schema_check_sample": ctx.envelope_int("SourceSchemaCheckSample", 500),
-        "max_staleness_hours": ctx.envelope_int("SourceMaxStalenessHours", 24),
         "forbidden_ops": _as_tuple(section.get("SourceForbiddenOps")),
         "allowed_sources": _as_tuple(section.get("SourceAllowedSources")) or tuple(sorted(ctx.registry.sources)),
         "allowed_stores": _as_tuple(section.get("SourceAllowedStores")) or tuple(sorted(ctx.registry.stores)),
         "egress_allowlist": _as_tuple(section.get("SourceEgressAllowlist")),
         "query_logging": str(section.get("SourceQueryLogging") or "full"),
     }
+    # Une clé que le runtime effectif ne lit pas n'est pas émise : le C# refuse
+    # un membre inconnu (`UnmappedMemberHandling.Disallow`), et un registre qui
+    # porte `max_staleness_hours` sans moteur de fraîcheur promet un contrôle
+    # qui n'existe pas.
+    identity = feature_template.enabled("data.identity-filter", ctx.features)
+    staleness = staleness_on(ctx)
+    if staleness:
+        envelope["max_staleness_hours"] = ctx.envelope_int("SourceMaxStalenessHours", 24)
 
     stores = [{"id": sid, "kind": str(s.get("kind") or ""),
                "root": str(s["root"]) if s.get("root") else None,
@@ -1171,9 +1203,12 @@ def render_registry(ctx: Context, report: Report) -> dict[str, Any]:
             value = src.get(field_name)
             entry[field_name] = str(value) if value not in (None, "") else None
         for field_name in ("filters", "ranges", "required_filter", "pii", "free_text"):
+            if field_name == "required_filter" and not identity:
+                continue
             entry[field_name] = _as_tuple(src.get(field_name))
-        stale = src.get("max_staleness_hours")
-        entry["max_staleness_hours"] = int(stale) if isinstance(stale, int) else None
+        if staleness:
+            stale = src.get("max_staleness_hours")
+            entry["max_staleness_hours"] = int(stale) if isinstance(stale, int) else None
         sources.append(entry)
 
     payload = {
@@ -1211,7 +1246,7 @@ def render_tool_specs(ctx: Context, report: Report, only: str | None) -> dict[st
         schema = load_frozen(ctx, source_id, report)
         if schema is None:
             continue
-        input_schema, output_schema = _tool_schemas(src, schema, kind, max_rows)
+        input_schema, output_schema = _tool_schemas(src, schema, kind, max_rows, staleness=staleness_on(ctx))
         description = str(src.get("description") or "").strip()
         store = ctx.registry.stores.get(str(src.get("store") or "")) or {}
         pinned = json.dumps({"description": description, "input": input_schema,
@@ -1257,13 +1292,26 @@ def emit_runtime(ctx: Context, report: Report, *, write: bool,
     # tout l'arbre livrerait une application entière à un projet qui n'a demandé
     # que ses outils de données, et `--check` la réclamerait ensuite à chaque
     # passage.
+    #
+    # Et de ces deux sous-arbres, seulement ce que l'architecture EFFECTIVE
+    # exige : un fichier marqué `@sdda-file-if` sans sa capacité n'est pas émis,
+    # un bloc `@sdda-if` sans la sienne est retiré (`sdda_lib.feature_template`).
+    # Une application qui ne lit qu'un JSON ne reçoit ni lecteur CSV ni JSONL.
+    omitted: list[Path] = []
     for subtree in RUNTIME_SUBTREES:
         for path in sorted((source_dir / subtree).rglob(f"*{ctx.suffix}")):
+            if "__pycache__" in path.parts:
+                continue
             relative = path.relative_to(source_dir)
             text = markdown_io.read_text(path)
+            if not feature_template.wanted(text, ctx.features):
+                omitted.append(ctx.src_root / relative)
+                continue
+            text = feature_template.render(text, ctx.features)
             if ctx.language == "csharp":
                 text = text.replace(APP_TOKEN, ctx.app)
             targets.append((ctx.src_root / relative, text))
+    ctx.runtime_omitted = omitted
 
     registry_json = json.dumps(render_registry(ctx, report), ensure_ascii=False,
                                indent=2, sort_keys=True) + "\n"
@@ -1400,6 +1448,24 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
                     "son ancien outil importable, donc câblable, sans contrat ni schéma à jour",
                 location=paths.rel(ctx.root, ctx.tools_dir()))
     runtime_written, runtime_drifted = emit_runtime(ctx, report, write=write, only=only)
+    unjustified = [p for p in getattr(ctx, "runtime_omitted", []) if p.is_file()]
+    if unjustified:
+        if write:
+            # Des fichiers de runtime GÉNÉRÉS (code invariant, jamais édité) que
+            # l'architecture effective n'exige plus : les laisser, c'est livrer un
+            # lecteur, un moteur ou une porte sans exigence — et les compiler.
+            for orphan in unjustified:
+                orphan.unlink()
+                runtime_written.append(paths.rel(ctx.root, orphan) + " (retiré)")
+        else:
+            report.error(
+                "ARCH_COMPONENT_UNJUSTIFIED",
+                f"{len(unjustified)} fichier(s) de runtime sans exigence dans la spec : "
+                + ", ".join(paths.rel(ctx.root, o) for o in unjustified[:4])
+                + (" …" if len(unjustified) > 4 else ""),
+                fix="`gen-source-tools --write` les retire : l'architecture effective (IR `architecture`) "
+                    "n'exige pas leur capacité. Si elle doit l'être, c'est la spec qui change (source, roster)",
+                location=paths.rel(ctx.root, ctx.src_root))
     if runtime_drifted:
         report.error(
             "DATA_RUNTIME_STALE",
@@ -1424,6 +1490,7 @@ def run_generate(ctx: Context, report: Report, *, write: bool, only: str | None,
         "wrappersWritten": wrappers_written, "contractsWritten": contracts_written,
         "runtimeWritten": runtime_written, "runtimeDrifted": runtime_drifted,
         "stale": stale, "missing": missing,
+        "capabilities": sorted(ctx.features) if ctx.features is not feature_template.ALL else ["*"],
     }
 
 
@@ -1524,7 +1591,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(root: Path, *, mode: str, source: str | None = None, mission: str | None = None,
         sample: Path | None = None, src_root: Path | None = None, force: bool = False,
-        scope: str = "all", missing: bool = False) -> Report:
+        scope: str = "all", missing: bool = False, features: Any = None) -> Report:
+    """`features` : ensemble de capacités imposé (tests du runtime : `feature_template.ALL`).
+    Absent — le cas du pipeline — c'est l'architecture effective du projet qui décide."""
     report = Report(name="GEN-SOURCE-TOOLS", target=str(root))
 
     if not paths.stack_md_path(root).is_file():
@@ -1568,7 +1637,7 @@ def run(root: Path, *, mode: str, source: str | None = None, mission: str | None
         return report
 
     try:
-        ctx = Context(root, mission=mission, src_root=src_root)
+        ctx = Context(root, mission=mission, src_root=src_root, features=features)
     except ValueError as exc:   # `AppName` refusé par `sdda_lib.paths` (il sortirait de workspace/src/)
         report.error("CONFIG_VALUE_INVALID", f"`AppName` inutilisable : {exc}",
                      fix="un identifiant simple (`SupportDesk`) dans `## Project Config`",

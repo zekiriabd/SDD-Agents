@@ -62,6 +62,10 @@ FIX: relancer /sdda-topology {n} avec n entier
 
 Read **uniquement** :
 - `workspace/pipeline/missions/{n}-*.md` — 1 fichier. 0 → `[MISSION_NOT_FOUND]`, >1 → `[MISSION_AMBIGUOUS]`.
+  Sa section `## Architecture Needs` est ta source de vérité sur ce qui est
+  EXIGÉ ; STACK.md ne dit que ce qui est AUTORISÉ. La décision, 0 token :
+  `python .sdda/sdda.py show-architecture --mission {n} --json` (capacités
+  requises, preuve de chacune, dimensionnement `micro` | `standard`).
 - `workspace/pipeline/caps/{n}-*-*.md` — toutes les CAPs de cette MISSION.
 - STACK.md, **tranché dans ton pack** (`workspace/.sys/.context/packs/architect-topology.md` : les seules sections utiles, sans commentaires ; une section absente se lit dans `workspace/stack/STACK.md`) — sections `## Active Agent Framework`,
   `## Active Orchestration Pattern`, `## Active RAG Pattern`,
@@ -117,6 +121,26 @@ ces questions et **écrire la réponse** :
 > est confiée se traiterait par un outil déterministe. C'est une information que
 > l'architecte peut utiliser ; la taire ne l'est pas.
 
+### Le dimensionnement : prendre dans STACK.md ce dont la spec a besoin, rien de plus
+
+Pour chaque préoccupation, écris au §6 de la topologie une ligne **nécessaire ?
++ preuve** (clé de `## Architecture Needs`, CAP, ou roster) — c'est ce tableau
+qui décide des contrats demandés et des architectes lancés :
+
+| Préoccupation | Nécessaire seulement si | Sinon |
+|---|---|---|
+| mémoire (contrat `architect-memory`) | `Memory: long-term`, ou conversation multi-tour à résumer, ou ≥ 2 agents qui partagent un état | aucune ligne `memory` ; une conversation multi-tour simple est un historique de SESSION borné, porté par `ir.memory` |
+| retrieval (RAG) | `Documents` ≠ none ET une CAP qui cherche dans ce corpus | aucun retriever, aucune ligne `retrieval`, même si STACK.md autorise un pattern RAG |
+| accès base | un outil `{n}-data-*` sur une base | rien : une source déclarée (fichier, API) a ses contrats générés par script |
+| guardrails | injection : une entrée non maîtrisée ; schema : `StructuredOutput: yes` ; pii : `PersonalDataRedaction: yes` | non généré, même autorisé par STACK.md |
+| orchestration | plus d'un agent au roster | `single-agent` : ni routeur, ni état d'orchestration, ni graphe multi-nœuds |
+
+Une activation de STACK.md n'est PAS une preuve. « C'est une bonne pratique »,
+« servira plus tard », « le framework le prévoit » non plus. Sous
+`Profile: micro` (le dimensionnement de `show-architecture`), la topologie est
+courte : un agent, ses outils, sa surface — §3 « Alternative plus simple »
+se réduit à une ligne (« aucune : un agent seul est le minimum »).
+
 Un agent du roster auquel **aucune CAP** n'est allouée et qui ne porte aucune
 `reason:` est `[ARCH_ROSTER_AGENT_IDLE]` (`validate-architecture`) : soit une
 CAP manque, soit l'agent est de trop — dans les deux cas, c'est à l'architecte
@@ -168,9 +192,12 @@ combien coûte le pire chemin, quelle borne le ramène.
 ## STEP 5 — Appliquer le pattern d'orchestration choisi dans STACK.md
 
 Consulte la matrice de sélection de ton pack. Le pattern déclaré dans
-`STACK.md ## Active Orchestration Pattern` est une **contrainte de l'opérateur**,
-pas une suggestion : si ton analyse le contredit, tu ne le changes pas — tu
-émets un WARN et tu expliques.
+`STACK.md ## Active Orchestration Pattern` est le **maximum autorisé** par
+l'opérateur, pas une obligation : le pattern effectif est celui du ROSTER
+(décision de l'architecte), et `single-agent` est toujours admis. Un roster à un
+agent sous un STACK.md `router` reste `single-agent` — tu n'ajoutes ni routeur
+ni spécialiste pour « honorer » STACK.md. Si ton analyse contredit le roster,
+tu ne le changes pas — tu émets un WARN et tu expliques.
 
 ```
 WARN: agent architect-topology — pattern imposé contesté
@@ -269,8 +296,8 @@ agents et ce que ça aurait coûté en moins — chiffré depuis le STEP 8. Pré
 comme une observation, jamais comme une exigence.
 
 Ce n'est pas un exercice de style : c'est la trace qui permettra, dans six mois,
-de savoir si le graphe à cinq agents était un choix ou une dérive. Tu la produis
-même quand elle ne change rien.
+de savoir si le graphe à cinq agents était un choix ou une dérive. Pour un agent
+seul, une ligne suffit : il n'existe pas de topologie plus simple.
 
 ---
 

@@ -22,6 +22,17 @@ fonctionneraient mieux ici.
 
 ---
 
+### Ce que ce pattern ne génère PAS
+
+Un `single-agent` est l'agent borné, ses outils et sa surface. Il n'a **ni
+routeur, ni état d'orchestration, ni pipeline, ni sous-agent, ni graphe
+multi-nœuds** — ces composants portent chacun une capacité
+(`orchestration.router`, `.shared-state`, `.sequential`, `.delegation`,
+`.graph`) que ce pattern ne rend jamais requise. Les bornes vivent dans la
+boucle de l'agent. Le seul graphe admis est le graphe à UN nœud qu'une fiche de
+framework impose pour héberger la boucle (LangGraph) ; il ne justifie aucun des
+composants ci-dessus (`[ARCH_COMPONENT_UNJUSTIFIED]`, G6).
+
 ## 2. Quand l'employer
 
 - ≤ ~8 outils ;

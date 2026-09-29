@@ -209,8 +209,9 @@ else:
 #: réduits) ne s'appliquent que si STACK.md ne les recouvre pas ; le bootstrap
 #: omet donc les `*SetMinItems` de `## Active Eval Stack` pour ce profil, au
 #: lieu de demander à l'utilisateur de les retirer à la main.
-PROFILES: tuple[str, ...] = ("poc", "standard", "production")
-DEFAULT_PROFILE = "standard"
+PROFILES: tuple[str, ...] = ("auto", "micro", "poc", "standard", "production")
+#: `auto` : la MISSION fixe le profil par ses besoins déclarés (`micro` ou `standard`).
+DEFAULT_PROFILE = "auto"
 #: Les clés que le gabarit écrit sous `## Active Eval Stack` et que le profil
 #: `poc` veut voir absentes.
 PROFILE_DEFAULTED_KEYS: tuple[str, ...] = (
@@ -383,17 +384,18 @@ def apply_profile(text: str, profile: str) -> str:
         fail(
             "profil inconnu",
             f"[BOOTSTRAP_UNKNOWN_PROFILE] « {profile} » n'est pas dans {', '.join(PROFILES)}",
-            "choisir --profile poc | standard | production",
+            "choisir --profile auto | micro | poc | standard | production",
         )
     anchor = f"Profile: {DEFAULT_PROFILE}"
-    if anchor not in text:
+    line = re.compile(rf"^{re.escape(anchor)}(?=\s|$)", re.M)   # la CLÉ, pas un commentaire qui la cite
+    if not line.search(text):
         fail(
             "template sans ligne Profile",
             f"[BOOTSTRAP_TEMPLATE_UNRESOLVED] « {anchor} » absent de STACK.md.template",
             "signaler ce bug : STACK.md.template et bootstrap.py ont divergé",
         )
-    text = text.replace(anchor, f"Profile: {profile}", 1)
-    if profile != "poc":
+    text = line.sub(f"Profile: {profile}", text, count=1)
+    if profile not in ("poc", "micro", "auto"):
         return text
     kept, section = [], None
     for line in text.splitlines(keepends=True):
@@ -695,8 +697,8 @@ def main() -> int:
     parser.add_argument("--auto", action="store_true", help="aucune interaction (CI)")
     parser.add_argument("--force", action="store_true", help="écraser un STACK.md existant")
     parser.add_argument("--profile", choices=PROFILES, default=None,
-                        help="profil du projet (défaut : standard ; `poc` omet les *SetMinItems pour que "
-                             ".sdda/profiles/poc.yml s'applique) ; SDDA_PROFILE en mode CI")
+                        help="profil du projet (défaut : auto — la MISSION choisit micro ou standard ; poc, micro et auto omettent les *SetMinItems pour que "
+                             "le profil s'applique) ; SDDA_PROFILE en mode CI")
     args = parser.parse_args()
 
     preflight()

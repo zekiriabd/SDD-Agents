@@ -1,3 +1,4 @@
+# @sdda-file-if orchestration.sequential
 """Pattern `sequential` — N étapes validées, aucun cycle. GÉNÉRÉ, ne pas éditer.
 
 Le piège du pipeline est arithmétique et personne ne fait le calcul avant de

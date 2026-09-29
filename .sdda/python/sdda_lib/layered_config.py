@@ -272,7 +272,8 @@ def read_layered_config(root: Path, *, team_path: Path | None = None, warn_strea
     # ce que le framework suppose quand STACK.md ne dit rien — des jeux plus
     # petits pour un poc — sans jamais passer au-dessus de la politique d'équipe
     # (security-down reste jugé team contre projet) ni de ce que le projet écrit.
-    profile_name = str(project.get("Profile") or team.get("Profile") or base.get("Profile") or "standard").strip()
+    profile_name = resolve_profile(
+        root, str(project.get("Profile") or team.get("Profile") or base.get("Profile") or "standard").strip())
     profile_path = profile_config_path(root, profile_name)
     profile = _read_yaml(profile_path)
     profile.pop("security_down_protected", None)
@@ -312,18 +313,46 @@ def read_layered_config(root: Path, *, team_path: Path | None = None, warn_strea
     )
 
 
+#: Profils qui prennent le chemin COURT des commandes : un seul `dev-app`, gates
+#: rapportées, revue et acceptation sautées. `micro` y ajoute une application en
+#: un module et un pipeline de spécification réduit (`profiles/micro.yml`).
+SHORT_PATH_PROFILES: tuple[str, ...] = ("poc", "micro")
+
+
+def resolve_profile(root: Path, declared: str, mission: str | int | None = None) -> str:
+    """`auto` -> `micro` si la spec est simple (`spec_needs.sizing`), `standard` sinon.
+
+    Le profil n'est plus un choix global posé avant la spec : sous `auto` (le
+    défaut du gabarit), c'est la MISSION qui le fixe par ses besoins déclarés.
+    Tant qu'elle n'existe pas — ou qu'il y en a plusieurs sans `mission` —,
+    rien n'est décidable et le pipeline complet s'applique : on ne raccourcit
+    jamais sur une supposition.
+    """
+    if declared != "auto":
+        return declared
+    if mission is None:
+        found = sorted({p.name.split("-", 1)[0] for p in paths.missions_dir(root).glob("*-*.md")})
+        if len(found) != 1:
+            return "standard"
+        mission = found[0]
+    from sdda_lib.spec_needs import sizing  # noqa: PLC0415
+
+    return "micro" if sizing(root, mission).complexity == "micro" else "standard"
+
+
 def profile_config_path(root: Path, profile: str) -> Path:
     """`.sdda/profiles/{profil}.yml` du projet s'il vendore le framework, du framework sinon."""
     sdda = root / ".sdda" if (root / ".sdda" / "profiles").is_dir() else paths.FRAMEWORK_SDDA_DIR
     return sdda / "profiles" / f"{profile}.yml"
 
 
-def active_profile(root: Path) -> str:
-    """`Profile` effectif (`standard` à défaut) — ce que les commandes lisent pour choisir leur chemin."""
+def active_profile(root: Path, mission: str | int | None = None) -> str:
+    """`Profile` effectif, `auto` résolu (`standard` à défaut) — ce que les commandes lisent pour choisir leur chemin."""
     try:
-        return str(read_layered_config(root, warn_stream=io.StringIO()).get("Profile", "standard")).strip()
+        declared = str(read_layered_config(root, warn_stream=io.StringIO()).get("Profile", "standard")).strip()
     except SddaError:
-        return str(read_project_section(root).get("Profile") or "standard").strip()
+        declared = str(read_project_section(root).get("Profile") or "standard").strip()
+    return resolve_profile(root, declared, mission)
 
 
 #: ` - DB_HOST: ${DB_HOST}` — une DÉCLARATION de variable (nom -> référence),

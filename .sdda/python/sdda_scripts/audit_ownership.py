@@ -1020,8 +1020,10 @@ PHASE_AGENTS_POC: dict[str, tuple[str, ...]] = {
 
 def phase_agents(root: Path, phase: str, report: Report) -> tuple[str, ...]:
     """Les agents d'une phase, selon le profil actif (`Profile` de `## Project Config`)."""
-    profile = str(load_config(root, report).get("Profile", "standard")).strip()
-    if profile == "poc" and phase in PHASE_AGENTS_POC:
+    from sdda_lib.layered_config import SHORT_PATH_PROFILES, resolve_profile  # noqa: PLC0415
+
+    profile = resolve_profile(root, str(load_config(root, report).get("Profile", "standard")).strip())
+    if profile in SHORT_PATH_PROFILES and phase in PHASE_AGENTS_POC:
         return PHASE_AGENTS_POC[phase]
     return PHASE_AGENTS.get(phase, ())
 

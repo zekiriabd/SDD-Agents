@@ -1,0 +1,30 @@
+# Profil `micro` — la spec est simple, l'architecture et le pipeline le sont aussi.
+#
+# Choisi par `Profile: auto` (défaut du gabarit STACK.md) quand la MISSION
+# déclare des besoins minimaux (`## Architecture Needs` : un agent, ni corpus,
+# ni mémoire longue, ni effet de bord) et que le roster n'a qu'un agent aux
+# outils de lecture, servi en console — `spec_needs.sizing`. Écrire
+# `Profile: micro` le force.
+#
+# Ce que le profil change AILLEURS que dans ces valeurs — le chemin des
+# commandes — est décrit là où il s'exécute :
+#   - /sdda-topology : ni architect-data, ni architect-memory, ni architect-rag ;
+#     architect-tools seulement pour un outil qui n'est pas une source déclarée ;
+#   - /sdda-build STEP P : le chemin court de `poc` (dev-prompt ∥ qa-evals, puis
+#     UN dev-app), et dev-app écrit une application en UN module (plus son
+#     prompt et ses tests) — pas l'arborescence en couches ;
+#   - /sdda-eval : les suites jouées une fois, pas deux ;
+#   - /sdda-full : PHASE 7 (revue) et PHASE 8 (acceptation) sautées.
+#
+# Ce que le profil NE change PAS : la frontière du jugement, le hash des prompts,
+# les bornes en code, les secrets, le budget d'exécution. Comme un poc, un micro
+# plafonne à `Tested` ; passer en `standard` rejoue ce qu'il a sauté.
+
+# Jeux d'évaluation : de quoi mesurer une page de code, pas un système.
+GoldenSetMinItems: 8
+HoldoutSetMinItems: 5
+AdversarialSetMinItems: 5
+CalibrationSetMinItems: 10
+JudgeCalibrationMinItems: 10
+EvalRuns: 2
+EvalRunsCritical: 3

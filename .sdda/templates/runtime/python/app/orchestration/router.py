@@ -1,3 +1,4 @@
+# @sdda-file-if orchestration.router
 """Pattern `router` — classifier puis spécialiste, un seul passage. GÉNÉRÉ, ne pas éditer.
 
 Un nœud de classification bon marché détermine l'intention, puis délègue à un

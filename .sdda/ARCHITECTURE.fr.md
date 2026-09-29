@@ -157,7 +157,7 @@ SDD-Agents/
 │   ├── sdda.py                        # lanceur : `python .sdda/sdda.py {cmd}` —
 │   │                                  #   marche depuis un clone nu, sans pip install
 │   └── python/                        # outillage déterministe 0-token
-│       ├── sdda_cli.py                # dispatcher des <!--sdda:count subcommands-->81<!--/sdda:count--> sous-commandes ; registre
+│       ├── sdda_cli.py                # dispatcher des <!--sdda:count subcommands-->83<!--/sdda:count--> sous-commandes ; registre
 │       │                              #   DÉRIVÉ du disque, lu aussi par les scanners
 │       ├── sdda_lib/                  # config, markdown_io, hashing, pricing, traces,
 │       │                              #   graders (dont judge_clients : le juge LLM réel)
@@ -319,7 +319,7 @@ refusée au preflight (`[STACK_VALUE_UNIMPLEMENTED]`) au lieu d'être avalée.
 
 ### 2.ante Un seul point d'entrée pour l'outillage
 
-Les <!--sdda:count subcommands-->81<!--/sdda:count--> sous-commandes déterministes s'appellent par une forme unique :
+Les <!--sdda:count subcommands-->83<!--/sdda:count--> sous-commandes déterministes s'appellent par une forme unique :
 
 ```bash
 python .sdda/sdda.py validate-mission --mission 1     # depuis un clone nu
@@ -379,6 +379,66 @@ L'IR ne remplace pas les contrats Markdown : les contrats restent la source
 autoritaire éditée par l'humain et les agents. L'IR en est la projection
 compilée, régénérable, jamais éditée à la main. Détail et schéma :
 [docs/AGENTIC-IR.fr.md](docs/AGENTIC-IR.fr.md).
+
+### 2.quater Architecture de référence ≠ architecture générée
+
+Le framework porte une **architecture de référence** riche : agents, outils,
+routeur, pipeline séquentiel, délégation, mémoire longue, RAG, accès base,
+sources déclarées en six formats, comptage, filtre d'identité, fraîcheur,
+guardrails, surfaces. C'est ce que le framework *sait* construire. Ce n'est pas
+ce qu'une application *reçoit*.
+
+```
+spec -> exigences -> capacités nécessaires -> architecture minimale suffisante -> génération
+```
+
+L'IR porte la décision : `architecture.required` associe chaque capacité du
+catalogue (`sdda_lib/effective_architecture.py`) à **l'exigence qui la
+justifie** (une entrée de l'IR, un outil accordé par le roster, une déclaration
+de STACK.md) ; `architecture.omitted` liste le reste. La règle est unique :
+*une capacité qu'aucune exigence ne rend nécessaire n'est pas générée* — ni
+fichier, ni classe, ni paquet. « Bonne pratique », « utile plus tard », « le
+framework la prévoit » ne sont pas des exigences ; une convention OBLIGATOIRE
+du framework (bornes en code, traces que l'évaluation mesure) en est une, et
+elle est nommée comme telle.
+
+Minimal ne veut pas dire pauvre : chaque exigence fonctionnelle, de sécurité,
+de borne, de test et de traçabilité reste. Un agent seul avec deux outils sur
+un fichier JSON reçoit un agent, deux outils, un lecteur JSON, une session de
+conversation, un prompt et une CLI — ni routeur, ni état d'orchestration, ni
+couche `memory/`, ni lecteur CSV/TSV/JSONL, ni porte `count` que personne ne
+câble. Un système à trois agents avec routage, mémoire et RAG reçoit
+exactement ces composants.
+
+**Qui décide.** STACK.md, écrit par le Tech Lead avant toute MISSION, déclare
+ce qui est AUTORISÉ (langage, librairies, pattern d'orchestration maximum,
+politique de mémoire, catalogue de guardrails, RAG). La MISSION déclare ce qui
+est EXIGÉ, dans une section fermée `## Architecture Needs` que `po-elicitor`
+remplit depuis le brief (conversation, mémoire, documents, agents, effets de
+bord, sortie structurée, rédaction des PII — minimale par défaut). Seule
+l'intersection est générée : une fenêtre de mémoire ou un guardrail de schéma
+de sortie que STACK.md autorise mais que la MISSION n'exige pas n'entre ni dans
+l'IR ni dans le code. `## Required Stack` liste un SOUS-ENSEMBLE de STACK.md —
+`rag: none` ou `single-agent` n'est jamais une dérive.
+
+**Dimensionnement.** `Profile: auto` (défaut du gabarit) laisse la MISSION
+choisir le pipeline : une spec qui n'exige qu'un agent, des outils de lecture et
+une console est `micro` (`spec_needs.sizing`, `project-profile --mission {n}
+--json`) — aucun architecte de contrat données/mémoire/RAG, jeux d'évaluation
+minimaux, suites jouées une fois, et `dev-app` écrit UN module. Au-delà,
+`standard`, avec les empêchements nommés.
+
+Trois mécanismes tiennent la règle :
+
+- **Les générateurs** (`gen-app-skeleton`, `gen-source-tools`) rendent leurs
+  gabarits de runtime avec les capacités requises (marqueurs `@sdda-if`,
+  `sdda_lib/feature_template.py`) ; rendu avec toutes les capacités, un gabarit
+  redonne la référence entière, et c'est ainsi que ses tests l'exercent.
+- **Les agents `dev-*`** lisent `architecture.required` dans leur vue de l'IR
+  et construisent cela, pas l'arborescence complète des fiches de stack.
+- **`validate-effective-architecture`** (G6, part `proportionality`) refuse un
+  composant, un symbole ou un paquet .NET sans sa capacité
+  (`[ARCH_COMPONENT_UNJUSTIFIED]`, `[ARCH_DEPENDENCY_UNUSED]`).
 
 ---
 
@@ -818,7 +878,7 @@ trajectoires, top des outils en échec.
 
 Hérité de SDD_Pro (193 classes) : tout bloc ERROR porte un code `[CLASS]` dans son
 `CAUSE:`, pour que hooks, boucles de reprise et tableaux de bord classent sans
-interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->446<!--/sdda:count-->**, liste close régénérée depuis
+interpréter du texte. SDD_Agents en porte **<!--sdda:count classes-->449<!--/sdda:count-->**, liste close régénérée depuis
 les émetteurs réels par `sdda_admin/sync_error_registry.py` — écrire la liste à la
 main la ferait dériver dans les deux sens (`rules/error-classification.md §6`).
 Le chiffre ci-dessus est lui-même régénéré (`sync-counters`), pas recopié.

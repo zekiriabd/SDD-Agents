@@ -1,3 +1,4 @@
+# @sdda-file-if guardrail.injection-detection
 """Détection d'injection heuristique — couche « motifs » de `injection-detection.md §3`. GÉNÉRÉ.
 
 Ce module est la couche la MOINS fiable de l'arsenal, et il le dit : un

@@ -10,8 +10,9 @@ namespace {AppName}.Data;
 
 /// <summary>L'enveloppe de sûreté — le SEUL chemin par lequel un agent touche une source.</summary>
 /// <remarks>
-/// Tous les outils générés passent par <see cref="LookupRecord"/>,
-/// <see cref="SearchRecords"/> ou <see cref="CountRecords"/>. Il n'existe pas d'autre
+/// Tous les outils générés passent par l'une de ses portes (lecture par clé,
+/// recherche, comptage — seules celles qu'appellent les outils EXIGÉS sont
+/// générées). Il n'existe pas d'autre
 /// porte : c'est ce qui permet d'affirmer que TOUTE lecture est bornée, tracée,
 /// redigée et datée. Ce qu'elle applique, dans cet ordre, à chaque appel :
 /// <list type="number">
@@ -20,8 +21,12 @@ namespace {AppName}.Data;
 /// <item>le schéma figé (<see cref="SchemaGuard"/>, avant la première réponse) ;</item>
 /// <item>le budget de lecture (<c>read_timeout_ms</c>) — <c>TIMEOUT</c>, jamais un partiel muet ;</item>
 /// <item>les filtres, sur champs DÉCLARÉS — <c>INVALID_FILTER</c> sinon ;</item>
+// @sdda-if data.identity-filter
 /// <item>l'identité de l'APPELANT pour chaque <c>required_filter</c> — refus si absente ;</item>
+// @sdda-endif
+// @sdda-if data.staleness
 /// <item>la fraîcheur — <c>stale: true</c> + <c>as_of</c>, jamais tue ;</item>
+// @sdda-endif
 /// <item>l'ordre déterministe, PUIS le plafond lu à <c>max_records_returned + 1</c> — <c>truncated: true</c> ;</item>
 /// <item>la projection sur le schéma figé et l'enveloppe du texte libre (P8) ;</item>
 /// <item>le span, PII redigées.</item>
@@ -29,11 +34,17 @@ namespace {AppName}.Data;
 /// </remarks>
 public static class DataEnvelope
 {
+    // @sdda-if data.tool.search|data.tool.count
     /// <summary>Au-delà, un <c>IN</c> n'est plus un filtre : c'est une jointure à faire côté données.</summary>
     public const int MaxInValues = 20;
 
+    // @sdda-endif
+    // @sdda-if data.ranges
     private static readonly string[] RangeSuffixes = ["_min", "_max"];
 
+    // @sdda-endif
+
+    // @sdda-if data.tool.lookup
     /// <summary>Lecture par clé. Clé inconnue ou enregistrement d'un autre appelant : <c>record: null</c> (indiscernables).</summary>
     /// <exception cref="DataAccessException"><c>INVALID_FILTER</c>, <c>SOURCE_UNAVAILABLE</c>, <c>TIMEOUT</c>.</exception>
     public static JsonObject LookupRecord(
@@ -44,8 +55,12 @@ public static class DataEnvelope
         ArgumentNullException.ThrowIfNull(ctx);
         var (registry, source) = Resolve(ctx, tool.SourceId);
         var index = IndexOf(ctx, registry, source);
+        // @sdda-if data.staleness
         var stale = IsStale(ctx, registry, source, index);
+        // @sdda-endif
+        // @sdda-if data.identity-filter
         var identity = IdentityFilters(ctx, source);
+        // @sdda-endif
         var readTimeoutMs = registry.Envelope.ReadTimeoutMs;
         var started = ctx.Clock.GetTimestamp();
 
@@ -57,12 +72,14 @@ public static class DataEnvelope
             throw new DataAccessException(DataErrorCodes.Timeout, $"budget de lecture dépassé ({readTimeoutMs} ms)", source.Id);
         }
 
+        // @sdda-if data.identity-filter
         if (record is not null && identity.Any(pair => RecordValues.Text(record[pair.Key]) != pair.Value))
         {
             // L'enregistrement d'un AUTRE appelant n'existe pas pour celui-ci :
             // même réponse qu'une clé absente, rien qui dise qu'elle existe ailleurs.
             record = null;
         }
+        // @sdda-endif
 
         ctx.Emit("data.lookup", Redact(source, new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -77,10 +94,14 @@ public static class DataEnvelope
         {
             ["record"] = record is null ? null : Present(ctx, source, record),
             ["as_of"] = index.AsOf,
+            // @sdda-if data.staleness
             ["stale"] = stale,
+            // @sdda-endif
         };
     }
 
+    // @sdda-endif
+    // @sdda-if data.tool.search
     /// <summary>Recherche filtrée, triée de façon déterministe, plafonnée — <c>truncated</c> si le total dépasse le plafond.</summary>
     /// <exception cref="DataAccessException"><c>INVALID_FILTER</c>, <c>SOURCE_UNAVAILABLE</c>, <c>TIMEOUT</c>.</exception>
     public static JsonObject SearchRecords(
@@ -90,7 +111,9 @@ public static class DataEnvelope
         ArgumentNullException.ThrowIfNull(ctx);
         var (registry, source) = Resolve(ctx, tool.SourceId);
         var index = IndexOf(ctx, registry, source);
+        // @sdda-if data.staleness
         var stale = IsStale(ctx, registry, source, index);
+        // @sdda-endif
         var filters = ValidateFilters(ctx, source, arguments);
         var maxRows = registry.Envelope.MaxRecordsReturned;
 
@@ -146,10 +169,14 @@ public static class DataEnvelope
             ["records"] = new JsonArray(page),
             ["truncated"] = truncated,
             ["as_of"] = index.AsOf,
+            // @sdda-if data.staleness
             ["stale"] = stale,
+            // @sdda-endif
         };
     }
 
+    // @sdda-endif
+    // @sdda-if data.tool.count
     /// <summary>Compte le TOTAL, pas la page : « combien ? » répondu depuis 200 enregistrements tronqués donnerait 200.</summary>
     /// <exception cref="DataAccessException"><c>INVALID_FILTER</c>, <c>SOURCE_UNAVAILABLE</c>, <c>TIMEOUT</c>.</exception>
     public static JsonObject CountRecords(
@@ -159,7 +186,9 @@ public static class DataEnvelope
         ArgumentNullException.ThrowIfNull(ctx);
         var (registry, source) = Resolve(ctx, tool.SourceId);
         var index = IndexOf(ctx, registry, source);
+        // @sdda-if data.staleness
         var stale = IsStale(ctx, registry, source, index);
+        // @sdda-endif
         var filters = ValidateFilters(ctx, source, arguments);
         var total = Scan(ctx, source, index, filters, registry.Envelope.ReadTimeoutMs, cancellationToken).LongCount();
 
@@ -176,10 +205,13 @@ public static class DataEnvelope
         {
             ["count"] = total,
             ["as_of"] = index.AsOf,
+            // @sdda-if data.staleness
             ["stale"] = stale,
+            // @sdda-endif
         };
     }
 
+    // @sdda-endif
     private static (SourceRegistry Registry, SourceConfig Source) Resolve(ToolContext ctx, string sourceId)
     {
         var registry = SourceRegistry.LoadRegistry(ctx.DataDirectory);
@@ -212,13 +244,16 @@ public static class DataEnvelope
         return ctx.Indexes.GetOrAdd(source.Id, built);
     }
 
+    // @sdda-if data.staleness
     /// <summary><c>true</c> si l'instantané dépasse <c>max_staleness_hours</c> — la donnée est SERVIE, marquée.</summary>
     private static bool IsStale(ToolContext ctx, SourceRegistry registry, SourceConfig source, SourceIndex index)
     {
         var limit = registry.StalenessHours(source);
         return limit > 0 && index.AgeHours(ctx.Clock) > limit;
     }
+    // @sdda-endif
 
+    // @sdda-if data.identity-filter
     /// <summary>Les <c>required_filter</c> de la source, tirés de l'identité de l'APPELANT — jamais du modèle.</summary>
     /// <remarks>Une identité absente est un refus, pas une lecture non filtrée : un outil qui « marche » sans identité lit tout le monde.</remarks>
     private static Dictionary<string, string> IdentityFilters(ToolContext ctx, SourceConfig source)
@@ -241,7 +276,9 @@ public static class DataEnvelope
 
         return output;
     }
+    // @sdda-endif
 
+    // @sdda-if data.tool.search|data.tool.count
     /// <summary>Refuse tout filtre hors des champs déclarés ou hors enum. Rend les filtres normalisés, identité comprise.</summary>
     private static Dictionary<string, JsonNode> ValidateFilters(ToolContext ctx, SourceConfig source, IReadOnlyDictionary<string, JsonNode> arguments)
     {
@@ -251,20 +288,30 @@ public static class DataEnvelope
         var clean = new Dictionary<string, JsonNode>(StringComparer.Ordinal);
         foreach (var (name, value) in arguments)
         {
+            // @sdda-if data.identity-filter
             // Un champ d'identité fourni par le modèle est IGNORÉ : le runtime l'impose.
             if (source.RequiredFilter.Contains(name, StringComparer.Ordinal))
             {
                 continue;
             }
 
+            // @sdda-endif
+            // @sdda-if data.ranges
             var (field, suffix) = SplitRange(name);
             if (suffix.Length > 0 && !source.Ranges.Contains(field, StringComparer.Ordinal))
             {
                 throw new DataAccessException(DataErrorCodes.InvalidFilter, $"`{name}` : `{field}` n'est pas un champ de plage déclaré", source.Id,
                     $"ranges : {string.Join(", ", source.Ranges.Order(StringComparer.Ordinal))}");
             }
+            // @sdda-else
+            var field = name;
+            // @sdda-endif
 
+            // @sdda-if data.ranges
             if (suffix.Length == 0 && !queryable.Contains(field))
+            // @sdda-else
+            if (!queryable.Contains(field))
+            // @sdda-endif
             {
                 throw new DataAccessException(DataErrorCodes.InvalidFilter, $"`{name}` n'est pas un champ interrogeable", source.Id,
                     $"admis : {string.Join(", ", queryable.Order(StringComparer.Ordinal))}");
@@ -277,7 +324,11 @@ public static class DataEnvelope
                     "au-delà, ce n'est plus un filtre mais une jointure à faire côté données");
             }
 
+            // @sdda-if data.ranges
             if (suffix.Length == 0 && schema.EnumOf(field) is { } allowed)
+            // @sdda-else
+            if (schema.EnumOf(field) is { } allowed)
+            // @sdda-endif
             {
                 // Une valeur hors enum ne filtre pas « rien » : elle dit que l'appel est faux.
                 var bad = values.Where(v => !allowed.Contains(v, StringComparer.Ordinal)).ToList();
@@ -291,14 +342,17 @@ public static class DataEnvelope
             clean[name] = value.DeepClone();
         }
 
+        // @sdda-if data.identity-filter
         foreach (var (name, value) in IdentityFilters(ctx, source))
         {
             clean[name] = JsonValue.Create(value);
         }
+        // @sdda-endif
 
         return clean;
     }
 
+    // @sdda-if data.ranges
     private static (string Field, string Suffix) SplitRange(string name)
     {
         foreach (var suffix in RangeSuffixes)
@@ -312,6 +366,7 @@ public static class DataEnvelope
         return (name, "");
     }
 
+    // @sdda-endif
     /// <summary>Parcourt la source en flux, borné par le temps : le budget est vérifié à CHAQUE enregistrement, pas à la fin.</summary>
     private static IEnumerable<JsonObject> Scan(
         ToolContext ctx, SourceConfig source, SourceIndex index, Dictionary<string, JsonNode> filters, int budgetMs, CancellationToken cancellationToken)
@@ -345,12 +400,17 @@ public static class DataEnvelope
     {
         foreach (var (name, expected) in filters)
         {
+            // @sdda-if data.ranges
             var (field, suffix) = SplitRange(name);
+            // @sdda-else
+            var field = name;
+            // @sdda-endif
             if (!record.TryGetPropertyValue(field, out var actual) || RecordValues.IsNull(actual))
             {
                 return false;
             }
 
+            // @sdda-if data.ranges
             if (suffix.Length > 0)
             {
                 var numeric = schema.IsNumeric(field);
@@ -372,6 +432,7 @@ public static class DataEnvelope
                 continue;
             }
 
+            // @sdda-endif
             var actualText = RecordValues.Text(actual);
             if (expected is JsonArray options
                 ? !options.Any(option => RecordValues.Text(option) == actualText)
@@ -384,6 +445,7 @@ public static class DataEnvelope
         return true;
     }
 
+    // @sdda-if data.ranges
     /// <summary>Numérique si le champ l'est : comparer des chaînes rendrait <c>"9" &gt;= "10"</c>.</summary>
     private static (int Rank, double? Number, string Text) Ordered(JsonNode? value, bool numeric)
     {
@@ -395,11 +457,15 @@ public static class DataEnvelope
         return (0, null, RecordValues.Text(value));
     }
 
+    // @sdda-endif
+    // @sdda-endif
+    // @sdda-if data.tool.search
     private static (string Key, string Date, long Sequence) SortKey(SourceConfig source, JsonObject record, long sequence) =>
         (RecordValues.Text(record[source.Key]),
          string.IsNullOrEmpty(source.DateField) ? "" : RecordValues.Text(record[source.DateField]),
          sequence);
 
+    // @sdda-endif
     /// <summary>Ce qui sort vers le modèle : les champs du schéma figé seulement, typés, le texte libre enveloppé.</summary>
     /// <remarks>
     /// Un champ non déclaré est omis, et c'est voulu : une colonne ajoutée par

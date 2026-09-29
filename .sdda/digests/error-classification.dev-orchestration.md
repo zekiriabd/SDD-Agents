@@ -18,6 +18,7 @@ FIX: <l'action précise qui débloque>
 ## Classes propres à cet agent
 
 - `[AGENT_GATE_NOT_PASSED]`
+- `[ARCH_COMPONENT_UNJUSTIFIED]`
 - `[BUDGET_EXCEEDED_MEASURED]`
 - `[IR_INVALID]`
 - `[MEMORY_SHARED_STATE_UNSCOPED]`

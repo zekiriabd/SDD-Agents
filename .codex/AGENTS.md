@@ -70,6 +70,10 @@ un verdict se **lit** dans `.sys/.validation/`, il ne se déclare pas.
 9. **Holdout disjoint du golden**, vérifié par hash ; on n'itère jamais dessus.
 10. **Bornes en code** : `maxIterations`, `maxToolCalls`, `maxDelegationDepth`,
     `timeoutSec`, `budgetUsd` et leur `onBoundExceeded`.
+11. **Architecture effective** : STACK.md AUTORISE, la MISSION EXIGE
+    (`## Architecture Needs`) ; on génère `ir.architecture.required`, jamais la
+    référence entière. Sans exigence, ni fichier, ni classe, ni paquet.
+    Spec simple → `Profile: auto` = `micro` (un agent, un module, pipeline court).
 
 ## 5. Outillage
 

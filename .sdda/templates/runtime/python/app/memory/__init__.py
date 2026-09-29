@@ -1,3 +1,4 @@
+# @sdda-file-if memory.layer
 """memory/ — l'implémentation du contrat de mémoire (`pipeline/contracts/memory/{n}-memory.md`).
 
 Fenêtre de conversation (`ShortTermPolicy`, `ShortTermMaxTurns`), état partagé

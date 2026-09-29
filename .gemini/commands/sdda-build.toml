@@ -107,14 +107,16 @@ ne part pas : au-delà du budget, la sortie est tronquée et confiante.
 
 ---
 
-## STEP P — Profil `poc` : deux agents, gates rapportées
+## STEP P — Profils courts (`poc`, `micro`) : deux agents, gates rapportées
 
 ```bash
-PROFILE=$(python .sdda/sdda.py project-profile)      # poc | standard | production
+PROFILE=$(python .sdda/sdda.py project-profile --mission {n})   # micro | poc | standard | production
 ```
 
-`standard` ou `production` → STEP 3. **`poc` → ce STEP remplace les STEP 3 à 5
-entiers**, puis STEP 6. Ne changent pas en `poc` : la frontière du jugement
+`standard` ou `production` → STEP 3. **`poc` ou `micro` → ce STEP remplace les
+STEP 3 à 5 entiers**, puis STEP 6. `micro` ajoute une seule différence, dans le
+brief de `dev-app` : une application en UN module (voir P.3). Ne changent pas en
+`poc` ni en `micro` : la frontière du jugement
 (aucun `dev-*` n'écrit ni ne lit les jeux), les prompts écrits et hashés par
 `dev-prompt`, les bornes en code, les secrets.
 
@@ -138,7 +140,9 @@ l'application — coquille, outils, données, agents, orchestration, mémoire,
 surface, tests de couche :
 
 ```
-Construire l'application de la MISSION {n}-{MissionName} — profil poc, un seul agent.
+Construire l'application de la MISSION {n}-{MissionName} — profil {PROFILE}, un seul agent.
+{PROFILE} = micro : UN module écrit à la main (dev-app.md, « Profil micro »), rien d'autre
+que ce que `architecture.required` de l'IR exige.
 Le projet est initialisé (project-init) : lire workspace/src/{App}/CLAUDE.md d'abord.
 IR : workspace/.sys/.ir/{n}-system.ir.json (source close). Prompts déjà écrits et hashés : les charger, ne pas les écrire.
 Ordre : outils/données → agents → orchestration/mémoire → surface → composition. Tests de couche seulement, LLM mocké.
@@ -155,20 +159,20 @@ python .sdda/sdda.py audit-ownership --mission {n} --phase 3 --since-snapshot # 
 ```
 
 **P.4 — Gates jouées, rapportées, jamais bloquantes.** Les mêmes scripts, dans
-cet ordre : 3.2 (G3), 3.3 (G4, si `retrievers[]`), 4.3 (G5), 5.3 et 5.3 bis
-(G6, parts `api` et `framework`), 5.4 (G6). Les runners parlent à
+cet ordre : 3.2 (G3), 3.3 (G4, si `retrievers[]`), 4.3 (G5), 5.3, 5.3 bis et
+5.3 ter (G6, parts `api`, `framework` et `proportionality`), 5.4 (G6). Les runners parlent à
 l'application LIVRÉE par `--executor cli`, quel que soit le langage
 (`stacks/serving/cli.md` §3.1-3.5) ; seule la forme `module:attr` (L4 en
 processus, **Python**) se lance sous `uv run --project workspace/src/{App}` —
 avec l'interpréteur système, `[EVAL_EXECUTOR_MISSING]`. Un **rouge** ne
 déclenche **ni STOP ni boucle de correction** : il est rapporté (`🔴 G5 … —
-poc : rapporté, pas corrigé`). Seule une erreur d'EXÉCUTION d'un script arrête
+{PROFILE} : rapporté, pas corrigé`). Seule une erreur d'EXÉCUTION d'un script arrête
 la commande. `preflight_tool_gate` et `preflight_retrieval_gate` ne
 s'appliquent pas (ils gardent `dev-agent` et `dev-orchestration`).
 
 **State tracking** : `set-phase` `build_socle`, `build_agents` et `build_orch`
 en `pass` après P.3 et P.4, avec
-`--payload-json '{"profile":"poc","gates":{"G3":…,"G5":…,"G6":…}}'`. Sans G7,
+`--payload-json '{"profile":"{PROFILE}","gates":{"G3":…,"G5":…,"G6":…}}'`. Sans G7,
 `compute-status` plafonne la MISSION à `Tested`.
 
 ---
@@ -758,6 +762,18 @@ python .sdda/sdda.py validate-framework --mission {n} --json
 
 Le code de `agents/` et `orchestration/` importe le framework déclaré, là où sa
 fiche le place, et aucun concurrent (`[FRAMEWORK_DRIFT]`). Exit ≠ 0 → STOP.
+
+### 5.3 ter — PROPORTIONNALITÉ (G6, part `proportionality`) — déterministe, 0 token
+
+```bash
+python .sdda/sdda.py validate-effective-architecture --mission {n} --json
+```
+
+Le livrable ne porte que l'architecture EFFECTIVE (`ir.architecture.required`) :
+aucun composant (`memory/`, routeur, état d'orchestration, `retrieval/`,
+lecteur de format…), aucun symbole (`CountRecords`, `IsStale`…) sans la
+capacité qui l'exige (`[ARCH_COMPONENT_UNJUSTIFIED]`), aucun paquet du projet
+.NET sans usage (`[ARCH_DEPENDENCY_UNUSED]`). Exit ≠ 0 → STOP.
 
 ### 5.4 — ORCH GATE (G6)
 

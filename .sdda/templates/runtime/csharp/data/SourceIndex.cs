@@ -48,6 +48,7 @@ public sealed class SourceIndex
 
     public string ContentHash { get; private set; } = "";
 
+    // @sdda-if data.staleness
     public double AgeHours(TimeProvider clock)
     {
         ArgumentNullException.ThrowIfNull(clock);
@@ -58,6 +59,7 @@ public sealed class SourceIndex
 
         return Math.Max(0.0, (clock.GetUtcNow() - stamp).TotalHours);
     }
+    // @sdda-endif
 
     /// <exception cref="DataAccessException"><c>SOURCE_UNAVAILABLE</c>, <c>PATH_ESCAPE</c>.</exception>
     public static SourceIndex Build(SourceRegistry registry, SourceConfig source, string baseDirectory)
@@ -95,9 +97,13 @@ public sealed class SourceIndex
 
         foreach (var path in files)
         {
+            // @sdda-if data.format.jsonl
             IEnumerable<(int Offset, long? ByteOffset, JsonObject Record)> rows = source.Format == "jsonl"
                 ? JsonlRows(path, source)
                 : RecordReaders.ReadRecords(path, source).Select((record, i) => (i, (long?)null, record));
+            // @sdda-else
+            var rows = RecordReaders.ReadRecords(path, source).Select((record, i) => (Offset: i, ByteOffset: (long?)null, Record: record));
+            // @sdda-endif
             foreach (var (offset, byteOffset, record) in rows)
             {
                 index.Count++;
@@ -130,6 +136,7 @@ public sealed class SourceIndex
     {
         ArgumentNullException.ThrowIfNull(location);
         ArgumentNullException.ThrowIfNull(source);
+        // @sdda-if data.format.jsonl
         try
         {
             if (location.ByteOffset is { } byteOffset)
@@ -141,10 +148,12 @@ public sealed class SourceIndex
         {
             throw Unavailable(location.Path, source, exc);
         }
+        // @sdda-endif
 
         return RecordReaders.ReadRecords(location.Path, source).Skip(location.Offset).FirstOrDefault();
     }
 
+    // @sdda-if data.format.jsonl
     private static List<(int Offset, long? ByteOffset, JsonObject Record)> JsonlRows(string path, SourceConfig source)
     {
         var rows = new List<(int, long?, JsonObject)>();
@@ -165,6 +174,7 @@ public sealed class SourceIndex
         return rows;
     }
 
+    // @sdda-endif
     private static DataAccessException Unavailable(string path, SourceConfig source, Exception exc) =>
         new(DataErrorCodes.SourceUnavailable, $"`{Path.GetFileName(path)}` illisible", source.Id, $"{exc.GetType().Name}: {exc.Message}", exc);
 

@@ -125,6 +125,13 @@ sous `RetrievalGoldenMinQueries` requêtes (`[EVAL_DATASET_TOO_SMALL]`).
    — et c'est exactement la classe qui compte.
 5. `notes` dit **ce que l'AC ne couvre pas**. Un trou déclaré est un trou géré ;
    un trou tu deviendra un incident.
+5.bis **La forme de sortie suit la MISSION, pas le template.** Sous
+   `StructuredOutput: no` (`## Architecture Needs`), le `- output:` de la CAP est
+   `{"type": "string"}` — la réponse lue par un humain — et chaque fait mesuré
+   l'est par `regex` (le numéro cité, le montant, le statut) ou par un juge
+   calibré. Un chat console ne reçoit pas un objet JSON à onze champs, ni le
+   guardrail `schema-validation` qui irait avec. Un schéma d'objet n'est écrit
+   que sous `StructuredOutput: yes`.
 6. **`exact` compare la sortie ENTIÈRE.** Si le `- output:` de la CAP exige un
    champ en texte libre (`message`, `answer`… : `string` sans `enum`, `const`,
    `pattern` ni `format`), une réponse parfaite y rend 0.0. Projeter la

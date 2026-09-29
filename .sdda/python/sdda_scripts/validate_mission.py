@@ -4,7 +4,11 @@
 Vérifie qu'une MISSION est SPÉCIFIÉE au sens de LIFECYCLE.md : objectif chiffré
 (Metric / Target / Deadline) sans `<à préciser>`, budget d'exécution complet
 (P6, invariant `mission-budget-declared`), ground truth, trust boundaries,
-failure policy, et cohérence de `## Required Stack` avec `STACK.md`.
+failure policy, besoins d'architecture (`## Architecture Needs`, la SEULE entrée
+de la spec pour la mémoire, le RAG, les guardrails et le dimensionnement), et
+cohérence de `## Required Stack` avec `STACK.md` : la MISSION utilise un
+SOUS-ENSEMBLE de ce que STACK.md autorise, jamais plus — et jamais tout par
+obligation.
 
 Usage :
     python .sdda/sdda.py validate-mission workspace/pipeline/missions/1-SupportAssistant.md [--json]
@@ -22,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sdda_lib import hashing, markdown_io, paths  # noqa: E402
+from sdda_lib import hashing, markdown_io, paths, spec_needs  # noqa: E402
 from sdda_lib.errors import Report  # noqa: E402
 from sdda_lib.gate_reports import write_gate_report  # noqa: E402
 from sdda_lib.layered_config import active_stacks  # noqa: E402
@@ -32,7 +36,7 @@ MISSION_ID_RE = re.compile(r"^\d+-[A-Za-z0-9]+$")
 REQUIRED_SECTIONS = (
     "Context", "Objective", "Quantified Goal", "Execution Budget", "Ground Truth",
     "Trust Boundaries", "Actors", "Business Rules", "Acceptance Criteria",
-    "Failure Policy", "Required Stack", "Out of Scope",
+    "Failure Policy", "Architecture Needs", "Required Stack", "Out of Scope",
 )
 BUDGET_KEYS = ("CostPerRunTargetUsd", "CostPerRunHardCapUsd", "LatencyP95TargetMs", "TokenCeilingPerRun")
 FAILURE_POLICY_KEYS = ("Hors compétence", "Confiance faible", "Outil indisponible", "Budget atteint")
@@ -270,6 +274,23 @@ def validate_mission_text(text: str, *, path: Path | None, root: Path | None) ->
     if "Acceptance Criteria" not in spec.sections_missing and not any(not markdown_io.is_placeholder(v) for v in spec.acceptance_criteria.values()):
         report.error("MISSION_INCOMPLETE", "Acceptance Criteria : aucun `AC-i:` renseigné", "écrire au moins un `- AC-1: …`", loc)
 
+    # Architecture Needs (la spec dit ce dont elle a besoin) --------------------------
+    if "Architecture Needs" not in spec.sections_missing:
+        needs = spec_needs.parse_needs(text)
+        for problem in needs.problems:
+            report.error("MISSION_NEEDS_INVALID", f"Architecture Needs : {problem}",
+                         "grammaire close (templates/mission.template.md) : chaque besoin se lit dans le BRIEF ; "
+                         "ce que le brief ne demande pas vaut la valeur minimale", loc)
+        missing_keys = [k for k in spec_needs.NEEDS_GRAMMAR if k not in needs.values
+                        and not any(p.startswith(f"`{k}") for p in needs.problems)]
+        if missing_keys:
+            report.error("MISSION_NEEDS_INVALID", f"Architecture Needs : clé(s) absente(s) : {', '.join(missing_keys)}",
+                         "écrire chaque clé, à sa valeur minimale si le brief ne demande rien "
+                         "(`Conversation: single-turn`, `Memory: none`, `Documents: none`…)", loc)
+        report.data["needs"] = needs.to_dict()
+        if root is not None and paths.stack_md_path(root).is_file():
+            _check_needs_allowed(needs, root, report, loc)
+
     # Required Stack vs STACK.md ---------------------------------------------------
     if "Required Stack" not in spec.sections_missing:
         for k in STACK_SECTIONS:
@@ -285,6 +306,27 @@ def validate_mission_text(text: str, *, path: Path | None, root: Path | None) ->
     return report, spec
 
 
+def _check_needs_allowed(needs: spec_needs.Needs, root: Path, report: Report, loc: str) -> None:
+    """Un besoin de la spec que STACK.md n'AUTORISE pas est un désaccord à trancher par un humain."""
+    from sdda_lib.layered_config import read_stack_section_kv  # noqa: PLC0415
+
+    rag = {a.lower() for a in active_stacks(root, "Active RAG Pattern")} - {"none"}
+    if needs.documents and not rag:
+        report.error("MISSION_STACK_MISMATCH", "Architecture Needs : un corpus à interroger (RAG), mais STACK.md "
+                     "n'autorise aucun pattern RAG (`## Active RAG Pattern` = none)",
+                     "le Tech Lead autorise un pattern RAG dans STACK.md, ou la spec renonce au corpus", loc)
+    memory = read_stack_section_kv(root, "Active Memory Strategy")
+    if needs.long_term_memory and str(memory.get("LongTermEnabled", "false")).strip().lower() not in ("true", "yes", "1"):
+        report.error("MISSION_STACK_MISMATCH", "Architecture Needs : Memory: long-term, mais STACK.md n'autorise pas "
+                     "de mémoire longue (`LongTermEnabled: false`)",
+                     "autoriser la mémoire longue dans STACK.md (rétention et politique PII comprises), ou la retirer du besoin", loc)
+    allowed = set(active_stacks(root, "Active Guardrails"))
+    for flag, gid in ((needs.structured_output, "schema-validation"), (needs.pii_redaction, "pii-redaction")):
+        if flag and gid not in allowed:
+            report.warn("MISSION_STACK_MISMATCH", f"Architecture Needs exige `{gid}`, que STACK.md n'autorise pas "
+                        "(`## Active Guardrails`)", f"activer `.sdda/stacks/guardrails/{gid}.md`, sinon le besoin ne sera pas servi", loc)
+
+
 def _check_stack(spec: MissionSpec, root: Path, report: Report, loc: str) -> None:
     for key, heading in STACK_SECTIONS.items():
         wanted_raw = spec.required_stack.get(key)
@@ -293,11 +335,14 @@ def _check_stack(spec: MissionSpec, root: Path, report: Report, loc: str) -> Non
         wanted = {w.strip().lower() for w in re.split(r"[,+/]| et ", wanted_raw or "") if w.strip()}
         active = {a.lower() for a in active_stacks(root, heading)}
         wanted_effective = {w for w in wanted if w != "none"}
-        none_wanted = "none" in wanted
-        if none_wanted and (active - {"none", "raw-sdk"}):
-            report.error("MISSION_STACK_MISMATCH", f"Required Stack `{key}: none` mais STACK.md active {sorted(active)}",
-                         f"aligner `## {heading}` de STACK.md ou la MISSION", loc)
+        # `none` alors que STACK.md autorise une stack n'est PAS un désaccord : la
+        # spec en utilise moins que ce que le Tech Lead autorise — c'est même le
+        # cas nominal d'un projet simple. Seul un besoin HORS de STACK.md en est un.
         missing = wanted_effective - active
+        if key == "orchestration":
+            # Un agent seul est toujours plus simple que le pattern que STACK.md
+            # autorise au maximum : il n'a pas à y être activé.
+            missing -= {"single-agent"}
         if missing:
             report.error("MISSION_STACK_MISMATCH", f"Required Stack `{key}: {wanted_raw}` — non actif dans STACK.md `## {heading}` (actifs : {sorted(active) or 'aucun'})",
                          f"activer ` - .sdda/stacks/{key if key != 'language' else 'lang'}/{sorted(missing)[0]}.md` ou corriger la MISSION", loc)

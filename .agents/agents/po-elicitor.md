@@ -158,10 +158,44 @@ une fois, clairement, et tu continues si l'humain maintient.
 
 ---
 
+## STEP 5.bis — Les besoins d'architecture, lus dans le brief
+
+`## Architecture Needs` est la SEULE entrée de la spec pour tout ce que
+l'architecture générera ou non : mémoire, RAG, agents multiples, guardrails,
+dimensionnement du pipeline (`micro` ou `standard`). STACK.md dit ce que le Tech
+Lead AUTORISE ; ces besoins disent ce qui est EXIGÉ ; seule l'intersection est
+construite. Tu remplis chaque clé **depuis le brief et les réponses de
+l'humain**, jamais depuis STACK.md :
+
+| Clé | Valeur minimale (défaut) | Ne s'élève que si le brief dit… |
+|---|---|---|
+| `Conversation` | `single-turn` | qu'une question se comprend par la précédente (« et sa date de livraison ? ») |
+| `Memory` | `none` | qu'une information doit survivre à la session (`long-term`) ou au tour (`session`) |
+| `Documents` | `none` | qu'un corpus de TEXTES doit être interrogé en langage naturel (pas un fichier de lignes : c'est un outil) |
+| `Agents` | `single` | que des rôles distincts sont exigés (et non « ce serait plus propre ») |
+| `SideEffects` | `none` | que le système écrit, envoie ou déclenche quelque chose |
+| `StructuredOutput` | `no` | qu'un PROGRAMME consomme la réponse (un humain qui lit une console : `no`) |
+| `PersonalDataRedaction` | `no` | que des PII ne doivent pas atteindre le modèle |
+
+Dans le doute, la valeur minimale — et une question à l'humain, pas une
+supposition « pour être sûr ». Surestimer un besoin coûte des heures de
+pipeline et un livrable complexe ; le sous-estimer se voit à la première eval,
+et se corrige en une ligne. Un brief « chat console, un fichier JSON, deux
+recherches » donne tout au minimum sauf, s'il le dit, `Conversation: multi-turn`.
+
+`## Required Stack` liste les stacks que CETTE MISSION utilise, parmi celles de
+STACK.md : `rag: none`, `orchestration: single-agent` sont toujours admis même si
+STACK.md en autorise davantage — utiliser moins n'est pas une dérive.
+
+---
+
 ## STEP 6 — Écrire la MISSION
 
 `workspace/pipeline/missions/{n}-{Name}.md`, depuis le template. Tout champ non répondu
 reste littéralement `<à préciser>` — jamais comblé par une valeur plausible.
+Exception assumée : une clé de `## Architecture Needs` que le brief ne fait pas
+monter vaut sa valeur MINIMALE (STEP 5.bis) — ce n'est pas une invention, c'est
+l'absence de besoin.
 
 ## STEP 7 — Bootstrapper la constitution
 

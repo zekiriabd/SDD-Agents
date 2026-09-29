@@ -16,17 +16,34 @@ from typing import Any, Iterator
 
 from ..errors import SourceUnavailable
 from ..registry import Source
+# @sdda-if data.format.delimited
 from .csv_reader import read_csv
+# @sdda-endif
+# @sdda-if data.format.json|data.format.jsonl
 from .json_reader import read_json
+# @sdda-endif
+# @sdda-if data.format.xlsx|data.format.parquet
 from .tabular import read_parquet, read_xlsx
+# @sdda-endif
 
-__all__ = ["read_records", "read_csv", "read_json", "read_xlsx", "read_parquet"]
-
-_READERS = {
-    "object": read_json, "array": read_json, "jsonl": read_json,
+#: Seuls les lecteurs des formats que les sources DÉCLARÉES utilisent sont
+#: générés (architecture effective, `data.format.*`).
+_READERS: dict[str, Any] = {
+    # @sdda-if data.format.json
+    "object": read_json, "array": read_json,
+    # @sdda-endif
+    # @sdda-if data.format.jsonl
+    "jsonl": read_json,
+    # @sdda-endif
+    # @sdda-if data.format.delimited
     "csv": read_csv, "tsv": read_csv,
+    # @sdda-endif
+    # @sdda-if data.format.xlsx|data.format.parquet
     "xlsx": read_xlsx, "parquet": read_parquet,
+    # @sdda-endif
 }
+
+__all__ = ["read_records"]
 
 
 def read_records(path: Path, source: Source) -> Iterator[dict[str, Any]]:

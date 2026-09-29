@@ -51,6 +51,13 @@ Pour chaque agent, fixe `ShortTermPolicy` et ses paramètres à partir d'une
 **mesure**, pas d'une intuition : nombre de tours attendus × tokens par tour,
 comparé à `TokenCeilingPerRun` et au `budget_usd` de l'agent.
 
+`none` est une valeur, et c'est la première à envisager : un agent dont la
+MISSION déclare `Conversation: single-turn` et `Memory: none`
+(`## Architecture Needs`) n'a pas de fenêtre, quelle que soit la politique que
+STACK.md autorise. Le contrat peut RESTREINDRE STACK.md (fenêtre plus courte,
+`none`, état non partagé) sans désaccord ; seul un contrat qui élargit ce que
+STACK.md autorise est `[MEMORY_CONTRACT_MISMATCH]`.
+
 - `sliding-window` : simple, prévisible ; perd le début de la conversation.
   Dis quelle CAP peut le supporter.
 - `summarize-over` : conserve le sens, coûte un appel LLM au déclenchement et

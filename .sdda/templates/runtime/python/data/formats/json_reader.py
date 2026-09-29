@@ -1,3 +1,4 @@
+# @sdda-file-if data.format.json|data.format.jsonl
 """JSON — `object`, `array`, `jsonl`."""
 from __future__ import annotations
 
