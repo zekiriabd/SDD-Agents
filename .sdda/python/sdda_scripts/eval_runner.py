@@ -71,7 +71,7 @@ LEVELS = tuple(f"L{i}" for i in range(10))
 #: `error_class` qu'un exécuteur rend quand le FOURNISSEUR du modèle n'a pas
 #: répondu (`models.provider_error_class` du runtime généré). Un tel run n'a rien
 #: mesuré de l'agent : erreur d'exécution, et `[INFRA_BLOCKED]` au rapport.
-PROVIDER_ERROR_CLASSES = frozenset({"LLM_PROVIDER_AUTH_FAILED", "LLM_PROVIDER_UNAVAILABLE"})
+PROVIDER_ERROR_CLASSES = frozenset({"LLM_PROVIDER_AUTH_FAILED", "LLM_PROVIDER_UNAVAILABLE", "LLM_MODEL_NOT_FOUND"})
 
 #: Niveau -> (gate rejouée, part). Les gates composites (`GATE_PARTS`) reçoivent
 #: une part : G3 part `suites` (l'autre, `contracts`, vient de
@@ -597,6 +597,10 @@ def execute_suite(
     #: (run, item) -> (coût déclaré, problème de recalcul) : ce que le rapport
     #: montre à côté du coût recalculé, et ce que le plafond de coût refuse.
     cost_meta: dict[tuple[int, str], tuple[float, str | None]] = {}
+    #: (run, item) -> `CLASS: message` d'un run qui a échoué SANS être une panne
+    #: fournisseur : il reste noté (c'est le système qui a échoué), mais le
+    #: rapport le dit — un 0.000 muet se lisait « l'agent répond faux ».
+    run_errors: dict[tuple[int, str], str] = {}
 
     def measure(run_index: int, seed: int | None, item: dict[str, Any]) -> ItemResult:
         item_id = str(item.get("id"))
@@ -604,10 +608,14 @@ def execute_suite(
         try:
             produced = executor.run(item, suite=suite, run_index=run_index, seed=seed) or {}
             provider_down = str(produced.get("error_class") or "")
+            message = str(produced.get("error_message") or "")
             if provider_down in PROVIDER_ERROR_CLASSES:
                 # Le modèle n'a jamais répondu : c'est une erreur d'EXÉCUTION,
                 # comptée comme telle — pas une mauvaise réponse de l'agent.
-                return ItemResult(item_id, run_index, 0.0, False, {}, f"{provider_down}: le fournisseur du modèle n'a pas répondu")
+                return ItemResult(item_id, run_index, 0.0, False, {},
+                                  f"{provider_down}: {message or "le fournisseur du modèle n'a pas répondu"}")
+            if provider_down:
+                run_errors[(run_index, item_id)] = f"{provider_down}: {message}".rstrip(": ")
             cost, declared, cost_problem = recomputed_cost(produced)
             cost_meta[(run_index, item_id)] = (declared, cost_problem)
             measures = {"cost_usd": cost, "latency_ms": float(produced.get("latency_ms", 0.0) or 0.0)}
@@ -640,6 +648,7 @@ def execute_suite(
                 "itemId": item_id, "run": run_index, "class": cls, "score": round(ir_item.score, 6), "passed": ir_item.passed,
                 "costUsd": round(ir_item.cost_usd, 6), "costDeclaredUsd": round(declared, 6), "costProblem": cost_problem,
                 "latencyMs": round(ir_item.latency_ms, 2), "error": ir_item.error,
+                "runError": run_errors.get((run_index, item_id)),
             })
         result.runs.append(run)
 

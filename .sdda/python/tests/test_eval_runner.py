@@ -287,6 +287,41 @@ def test_a_rejected_provider_key_is_named_not_scored_as_a_wrong_answer(compiled)
     assert infra and "n'a pas été mesuré" in infra[0].message
 
 
+class FailingRunExecutor:
+    """Un run `failed` avec sa classe et son message (événement `error` de la CLI)."""
+
+    name = "failing-run"
+
+    def __init__(self, cls: str) -> None:
+        self.cls = cls
+
+    def run(self, item: dict[str, Any], *, suite: dict[str, Any], run_index: int, seed: int | None) -> dict[str, Any]:
+        return {"output": None, "status": "failed", "error_class": self.cls,
+                "error_message": "Error code: 404 - model retired", "cost_usd": 0.0}
+
+
+def test_a_retired_model_is_an_execution_error_with_its_message(compiled) -> None:
+    """PyAgentic1, 2026-09-29 : un 404 sur `gemini-2.5-flash` notait 0.000 chaque item, `error: null`."""
+    root, ir, cfg = compiled
+    _report, payload = run_evals(root, ir, FailingRunExecutor("LLM_MODEL_NOT_FOUND"), config=cfg,
+                                 filters=Filters(suites={sid_routing}), runs_override=2,
+                                 write_report=False, write_gates=False)
+    s = _suite(payload, sid_routing)
+    assert s["executorErrors"] == len(s["items"]) > 0
+    assert all("model retired" in row["error"] for row in s["items"])
+
+
+def test_a_failed_run_stays_scored_but_the_report_says_why(compiled) -> None:
+    root, ir, cfg = compiled
+    _report, payload = run_evals(root, ir, FailingRunExecutor("INTERNAL_ERROR"), config=cfg,
+                                 filters=Filters(suites={sid_routing}), runs_override=2,
+                                 write_report=False, write_gates=False)
+    s = _suite(payload, sid_routing)
+    assert s["executorErrors"] == 0
+    assert all(row["error"] is None and row["runError"].startswith("INTERNAL_ERROR: Error code: 404")
+               for row in s["items"])
+
+
 def test_unknown_grader_is_an_error_not_a_silent_green(compiled) -> None:
     root, ir, cfg = compiled
     for s in ir["evaluation"]["suites"]:

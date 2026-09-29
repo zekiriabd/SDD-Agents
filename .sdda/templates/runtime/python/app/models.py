@@ -197,11 +197,23 @@ GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/opena
 
 
 #: Exceptions des SDK fournisseurs (anthropic, openai — Gemini passe par ce
-#: dernier) qui disent « le modèle n'a pas pu répondre », par nom de classe :
-#: le squelette ne doit pas importer un SDK pour le reconnaître.
-PROVIDER_AUTH_ERRORS = frozenset({"AuthenticationError", "PermissionDeniedError"})
+#: dernier — et les `Model*Error` de langchain_core) qui disent « le modèle n'a
+#: pas pu répondre », par nom de classe : le squelette ne doit pas importer un
+#: SDK pour le reconnaître.
+PROVIDER_AUTH_ERRORS = frozenset({"AuthenticationError", "PermissionDeniedError",
+                                  "ModelAuthenticationError", "ModelPermissionDeniedError"})
 PROVIDER_DOWN_ERRORS = frozenset({"APIConnectionError", "APITimeoutError", "InternalServerError",
-                                  "ServiceUnavailableError", "OverloadedError", "RateLimitError"})
+                                  "ServiceUnavailableError", "OverloadedError", "RateLimitError",
+                                  "ModelAPIError", "ModelRateLimitError", "ModelConnectionError",
+                                  "ModelTimeoutError"})
+#: 404 sur le modèle : identifiant retiré ou inconnu du fournisseur (Google a
+#: fermé `gemini-2.5-flash` aux nouveaux comptes). C'est `## Runtime Models`
+#: qu'il faut corriger, pas l'agent.
+PROVIDER_MODEL_ERRORS = frozenset({"NotFoundError", "ModelNotFoundError"})
+#: Seules ces bibliothèques parlent pour le fournisseur : un `NotFoundError`
+#: levé par un outil (« commande inconnue ») est une réponse de l'agent à noter.
+PROVIDER_MODULES = frozenset({"openai", "anthropic", "google", "langchain_core", "langchain_openai",
+                              "langchain_anthropic", "langchain_google_genai"})
 
 
 def provider_error_class(exc: BaseException) -> str | None:
@@ -210,11 +222,18 @@ def provider_error_class(exc: BaseException) -> str | None:
     Distinguée d'`INTERNAL_ERROR` parce qu'elle ne dit rien de l'agent : une clé
     refusée faisait noter 0.000 chaque item d'une suite, et le rapport concluait
     « l'agent répond faux » là où aucun appel n'avait abouti.
+
+    Toute la hiérarchie est lue, pas le seul nom : langchain_openai enveloppe
+    un 503 dans `OpenAIAPIError(openai.InternalServerError, ModelAPIError)`, et
+    le nom de surface ne figurait dans aucune liste.
     """
-    name = type(exc).__name__
-    if name in PROVIDER_AUTH_ERRORS:
+    names = {cls.__name__ for cls in type(exc).__mro__
+             if str(getattr(cls, "__module__", "")).split(".", 1)[0] in PROVIDER_MODULES}
+    if names & PROVIDER_AUTH_ERRORS:
         return "LLM_PROVIDER_AUTH_FAILED"
-    if name in PROVIDER_DOWN_ERRORS:
+    if names & PROVIDER_MODEL_ERRORS:
+        return "LLM_MODEL_NOT_FOUND"
+    if names & PROVIDER_DOWN_ERRORS:
         return "LLM_PROVIDER_UNAVAILABLE"
     return None
 

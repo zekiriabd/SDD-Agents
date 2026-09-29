@@ -175,6 +175,19 @@ def test_missing_usage_is_a_problem(tmp_path: Path) -> None:
     assert any("coût non recalculable" in p for p in tracing.summarize(w.path).problems)
 
 
+def test_a_call_the_provider_refused_costs_nothing_and_is_not_malformed(tmp_path: Path) -> None:
+    """PyAgentic1, 2026-09-29 : chaque 404/503 de Gemini rendait la trace MALFORMÉE."""
+    w = writer(tmp_path)
+    root_span(w)
+    agent_span(w, "a1", "billing")
+    w.emit("chat gemini-3.8-flash", span_id="c1", parent_span_id="a1", status="ERROR",
+           attributes={"gen_ai.operation.name": "chat", "gen_ai.request.model": "gemini-3.8-flash",
+                       "error.type": "OpenAIAPIError"})
+    summary = tracing.summarize(w.path)
+    assert not any("coût non recalculable" in p for p in summary.problems)
+    assert summary.cost_usd == 0.0
+
+
 # ---------------------------------------------------------------------------
 # L'arbre : profondeur de délégation et agent responsable
 # ---------------------------------------------------------------------------

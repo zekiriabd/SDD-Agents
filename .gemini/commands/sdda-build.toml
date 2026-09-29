@@ -158,6 +158,14 @@ python .sdda/sdda.py audit-ownership snapshot --mission {n} --phase 3        # a
 python .sdda/sdda.py audit-ownership --mission {n} --phase 3 --since-snapshot # après, avant les gates
 ```
 
+**P.3 bis — `qa-tests` sur les outils, comme en 3.1 bis.** Si l'IR porte des
+`tools[]`, un spawn `qa-tests` par couche qui les câble (`SDDA-LAYER: tools`,
+et `data` en `declared-sources` ; en `micro`, la couche du module unique). Les
+tests de couche de `dev-app` ne remplacent pas celui-ci : `dev-app` ne lit pas
+les suites `tool-{n}-*.yaml` de `qa-evals`, et `run-tool-suites` exige chacun
+de leurs `cases[].id` — sans ce spawn, la part `suites` de G3 était rouge par
+construction (PyAgentic1, 2026-09-29 : « aucun test ne joue la suite »).
+
 **P.4 — Gates jouées, rapportées, jamais bloquantes.** Les mêmes scripts, dans
 cet ordre : 3.2 (G3), 3.3 (G4, si `retrievers[]`), 4.3 (G5), 5.3, 5.3 bis et
 5.3 ter (G6, parts `api`, `framework` et `proportionality`), 5.4 (G6). Les runners parlent à

@@ -422,6 +422,12 @@ def span_cost_usd(attrs: dict[str, Any]) -> tuple[float | None, str | None]:
     if not isinstance(model, str) or not model.strip():
         return None, f"span `chat` sans `{A_REQUEST_MODEL}` : coût non recalculable"
     tokens_in, tokens_out = _int(attrs.get(A_TOKENS_IN)), _int(attrs.get(A_TOKENS_OUT))
+    if tokens_in is None and tokens_out is None and attrs.get("error.type"):
+        # L'appel a échoué avant toute réponse (404, 429, 503 du fournisseur) :
+        # rien n'a été facturé, et c'est l'erreur qui porte l'information, pas
+        # le coût. Le noter « non recalculable » faisait classer MALFORMÉE
+        # chaque trace d'un run tombé sur une panne fournisseur.
+        return 0.0, None
     if tokens_in is None or tokens_out is None:
         return None, f"span `chat` ({model}) sans `{A_TOKENS_IN}`/`{A_TOKENS_OUT}` : coût non recalculable"
     try:

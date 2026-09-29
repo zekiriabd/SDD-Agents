@@ -138,14 +138,22 @@ def load_executor(spec: str, *, method: str = "run", root: Path | None = None) -
 
 
 def _item_input(item: Mapping[str, Any]) -> str:
-    """L'entrée d'un item de dataset. `input` peut être un objet (golden-set)."""
+    """L'entrée d'un item de dataset. `input` peut être un objet (golden-set).
+
+    L'objet suit l'`inputSchema` de l'agent (`{"user_message": …}`) : un seul
+    champ texte EST le message. Le passer en JSON brut faisait répondre l'agent
+    à `{"user_message": "…"}` au lieu de la question.
+    """
     raw = item.get("input")
     if isinstance(raw, str):
         return raw
     if isinstance(raw, Mapping):
-        for key in ("text", "query", "question", "prompt"):
+        for key in ("text", "query", "question", "prompt", "user_message", "message"):
             if isinstance(raw.get(key), str):
                 return str(raw[key])
+        texts = [v for v in raw.values() if isinstance(v, str)]
+        if len(raw) == 1 and len(texts) == 1:
+            return texts[0]
     return json.dumps(raw, ensure_ascii=False, sort_keys=True, default=str)
 
 
@@ -237,6 +245,7 @@ class CommandExecutor:
             "status": str(finished.get("status") or ("failed" if error or completed.returncode else "ok")),
             "exit_code": completed.returncode,
             "error_class": str(error.get("class") or ""),
+            "error_message": str(error.get("message") or "")[:500],
             "run_id": str(finished.get("run_id") or ""),
             "isolated": isolated,
             # Un run qui échoue à démarrer n'émet aucun événement : sans stderr,

@@ -63,14 +63,22 @@ def _isolation(suite: Mapping[str, Any] | None) -> dict[str, str]:
 
 
 def _item_input(item: Mapping[str, Any]) -> str:
-    """L'entrée d'un item de dataset. `input` peut être un objet (golden-set)."""
+    """L'entrée d'un item de dataset. `input` peut être un objet (golden-set).
+
+    L'objet suit l'`inputSchema` de l'agent (`{"user_message": …}`) : un seul
+    champ texte EST le message. Le passer en JSON brut faisait répondre l'agent
+    à `{"user_message": "…"}` au lieu de la question.
+    """
     raw = item.get("input")
     if isinstance(raw, str):
         return raw
     if isinstance(raw, Mapping):
-        for key in ("text", "query", "question", "prompt"):
+        for key in ("text", "query", "question", "prompt", "user_message", "message"):
             if isinstance(raw.get(key), str):
                 return str(raw[key])
+        texts = [v for v in raw.values() if isinstance(v, str)]
+        if len(raw) == 1 and len(texts) == 1:
+            return texts[0]
     return json.dumps(raw, ensure_ascii=False, sort_keys=True, default=str)
 
 

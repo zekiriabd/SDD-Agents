@@ -470,3 +470,29 @@ def test_minor_the_cli_executor_passes_the_input_on_stdin_and_filters_the_enviro
     executor = rt.executor.CliExecutor(command=(sys.executable, "-c", "x"), cwd=rt.package)
     env = executor.child_env()
     assert "SDDA_TEST_OPERATOR_TOKEN" not in env and "PATH" in {k.upper() for k in env}
+
+
+# ---------------------------------------------------------------------------
+# Run PyAgentic1 du 2026-09-29 — un 404/503 du fournisseur noté « réponse fausse »
+# ---------------------------------------------------------------------------
+def _provider_exc(name: str, *bases: type, module: str = "openai") -> BaseException:
+    return type(name, bases or (Exception,), {"__module__": module})("x")
+
+
+def test_a_wrapped_provider_error_is_classified_by_its_hierarchy(rt: Runtime) -> None:
+    # langchain_openai : OpenAIAPIError(openai.InternalServerError, ModelAPIError)
+    server = type(_provider_exc("InternalServerError"))
+    wrapped = type("OpenAIAPIError", (server,), {"__module__": "langchain_openai.chat_models.base"})("503")
+    assert rt.models.provider_error_class(wrapped) == "LLM_PROVIDER_UNAVAILABLE"
+    missing = type(_provider_exc("NotFoundError"))
+    retired = type("OpenAIModelNotFoundError", (missing,), {"__module__": "langchain_openai.chat_models.base"})("404")
+    assert rt.models.provider_error_class(retired) == "LLM_MODEL_NOT_FOUND"
+
+
+def test_a_tool_not_found_error_is_not_a_provider_failure(rt: Runtime) -> None:
+    assert rt.models.provider_error_class(_provider_exc("NotFoundError", module="pyagentic.tools")) is None
+
+
+def test_an_input_object_with_one_text_field_is_the_message(rt: Runtime) -> None:
+    assert rt.executor._item_input({"input": {"user_message": "commande 1006 ?"}}) == "commande 1006 ?"
+    assert rt.executor._item_input({"input": {"ask": "commande 1006 ?"}}) == "commande 1006 ?"
