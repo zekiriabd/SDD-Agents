@@ -19,7 +19,6 @@
     "langgraph-checkpoint-sqlite": "3.1.1",
     "langchain-anthropic": "1.7.2",
     "langchain-openai": "1.6.3",
-    "langchain-google-genai": "4.4.0",
     "langchain-mcp-adapters": "0.3.2",
     "psycopg": "3.3.6",
     "pydantic": "2.13.5",
@@ -99,28 +98,17 @@
       "rationale": "Adaptateur ChatAnthropic. Installé si un tier de RuntimeTierMap résout vers anthropic.",
       "triggers": [
         "RuntimeProvider:\\s*anthropic",
-        "claude-"
+        "(deep|balanced|fast):\\s*claude-"
       ]
     },
     {
       "module": "langchain-openai",
       "ref": "langchain-openai",
       "capability": "provider-openai",
-      "rationale": "Adaptateur ChatOpenAI / AzureChatOpenAI. Installé si un tier résout vers openai ou azure.",
+      "rationale": "Aussi pour Gemini : le squelette sert `google` par l'endpoint compatible OpenAI (`agents/chat_model.py`).",
       "triggers": [
-        "RuntimeProvider:\\s*(openai|azure)",
-        "gpt-",
-        "o[0-9]-mini"
-      ]
-    },
-    {
-      "module": "langchain-google-genai",
-      "ref": "langchain-google-genai",
-      "capability": "provider-google",
-      "rationale": "Adaptateur ChatGoogleGenerativeAI. Installé si un tier résout vers google.",
-      "triggers": [
-        "RuntimeProvider:\\s*google",
-        "gemini-"
+        "RuntimeProvider:\\s*(openai|azure|google|gemini)",
+        "(deep|balanced|fast):\\s*(gpt-|o[0-9]-mini|gemini-)"
       ]
     },
     {

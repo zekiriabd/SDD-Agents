@@ -153,6 +153,25 @@ def test_pyproject_pins_the_active_catalogs_and_the_runtime_sdk(written: Path) -
     assert '"pytest-asyncio' in dev_line                  # socle dev, épinglé par le catalogue quand il le porte
 
 
+def test_a_gemini_runtime_installs_the_integration_chat_model_imports(project: Path) -> None:
+    """Premier run Python sous Gemini : `langchain-google-genai` installé, `langchain_openai` importé — absent.
+
+    `agents/chat_model.py` sert `google` par l'endpoint compatible OpenAI ; et un
+    `JudgeModel: claude-…` n'est pas un modèle de l'application.
+    """
+    stack = project / "workspace/stack/STACK.md"
+    text = markdown_io.read_text(stack).replace("RuntimeProvider: anthropic", "RuntimeProvider: google")
+    for tier, model in (("deep", "claude-opus-5"), ("balanced", "claude-sonnet-5"), ("fast", "claude-haiku-4-5")):
+        text = text.replace(f"{tier}: {model}", f"{tier}: gemini-2.5-flash")
+    stack.write_text(text, encoding="utf-8")
+    assert "JudgeModel: claude-" in text
+    assert gas.run(project, mode="write").ok
+    runtime = gas._declared_dependencies((project / SRC / "pyproject.toml").read_text(encoding="utf-8"))
+    names = {gas.package_name(r) for r in runtime}
+    assert "langchain-openai" in names
+    assert "langchain-anthropic" not in names, "le juge n'est pas un modèle de l'application"
+
+
 def test_a_catalog_not_active_contributes_nothing(project: Path) -> None:
     stack = project / "workspace/stack/STACK.md"
     stack.write_text(markdown_io.read_text(stack).replace(" - .sdda/stacks/vectorstore/pgvector.md", ""), encoding="utf-8")

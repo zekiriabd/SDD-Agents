@@ -17,7 +17,6 @@
     "langchain-text-splitters": "1.1.2",
     "langchain-anthropic": "1.7.2",
     "langchain-openai": "1.6.3",
-    "langchain-google-genai": "4.4.0",
     "pydantic": "2.13.5",
     "pydantic-settings": "2.15.0",
     "structlog": "26.1.0",
@@ -79,7 +78,7 @@
       "capability": "provider-anthropic",
       "triggers": [
         "RuntimeProvider:\\s*anthropic",
-        "claude-"
+        "(deep|balanced|fast):\\s*claude-"
       ]
     },
     {
@@ -87,19 +86,10 @@
       "ref": "langchain-openai",
       "capability": "provider-openai",
       "triggers": [
-        "RuntimeProvider:\\s*(openai|azure)",
-        "gpt-",
-        "o[0-9]-mini"
-      ]
-    },
-    {
-      "module": "langchain-google-genai",
-      "ref": "langchain-google-genai",
-      "capability": "provider-google",
-      "triggers": [
-        "RuntimeProvider:\\s*google",
-        "gemini-"
-      ]
+        "RuntimeProvider:\\s*(openai|azure|google|gemini)",
+        "(deep|balanced|fast):\\s*(gpt-|o[0-9]-mini|gemini-)"
+      ],
+      "rationale": "Aussi pour Gemini : `agents/chat_model.py` sert `google` par l'endpoint compatible OpenAI (`ChatOpenAI` + base_url Gemini). Déclencheurs ancrés sur RuntimeProvider et le RuntimeTierMap : un `JudgeModel: claude-…` ou un commentaire n'installe pas une intégration que l'application n'importe pas."
     }
   ],
   "plugins": [],

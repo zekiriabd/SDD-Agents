@@ -86,7 +86,7 @@
       "capability": "provider-anthropic",
       "triggers": [
         "RuntimeProvider:\\s*anthropic",
-        "claude-"
+        "(deep|balanced|fast):\\s*claude-"
       ]
     },
     {
@@ -95,8 +95,8 @@
       "capability": "provider-openai",
       "triggers": [
         "RuntimeProvider:\\s*(openai|azure)",
-        "gpt-",
-        "o[0-9]-mini"
+        "(deep|balanced|fast):\\s*gpt-",
+        "(deep|balanced|fast):\\s*o[0-9]-mini"
       ]
     },
     {
@@ -105,7 +105,7 @@
       "capability": "provider-google",
       "triggers": [
         "RuntimeProvider:\\s*google",
-        "gemini-"
+        "(deep|balanced|fast):\\s*gemini-"
       ]
     },
     {

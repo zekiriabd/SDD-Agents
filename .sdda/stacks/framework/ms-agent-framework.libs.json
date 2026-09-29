@@ -95,7 +95,7 @@
       "requiredBy": "STACK.md ## Runtime Models — RuntimeProvider: openai | azure-openai",
       "triggers": [
         "RuntimeProvider:\\s*(openai|azure-openai)",
-        "gpt-"
+        "(deep|balanced|fast):\\s*gpt-"
       ],
       "installCommand": "dotnet add workspace/src/{AppName} package Microsoft.Agents.AI.OpenAI --version 1.22.0"
     },
@@ -106,7 +106,7 @@
       "requiredBy": "STACK.md ## Runtime Models — RuntimeProvider: anthropic",
       "triggers": [
         "RuntimeProvider:\\s*anthropic",
-        "claude-"
+        "(deep|balanced|fast):\\s*claude-"
       ],
       "rationale": "SDK C# OFFICIEL d'Anthropic (auteur et propriétaire NuGet : Anthropic, compte vérifié ; dépôt anthropics/anthropic-sdk-csharp). Il dépend de Microsoft.Extensions.AI.Abstractions et fournit l'IChatClient par `AnthropicClient.AsIChatClient(modelId, maxTokens)` — le provider se branche donc derrière la même abstraction que les autres, sans paquet communautaire.",
       "note": "Microsoft.Agents.AI.Anthropic n'existe qu'en preview (1.22.0-preview.260918.1) : non retenu. La clé se passe par la propriété `ApiKey`, lue dans IOptions — jamais par un défaut du SDK.",
